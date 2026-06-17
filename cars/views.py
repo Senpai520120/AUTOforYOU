@@ -1,3 +1,5 @@
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import generics
@@ -5,7 +7,21 @@ from .models import Car
 from .serializers import CarSerializer
 
 
-
+@extend_schema(
+    tags=['legacy'],
+    summary='[УСТАРЕЛО] Калькулятор растаможки',
+    description='Устаревший эндпоинт. Используйте POST /api/v1/pricing/calculate/ вместо него.',
+    deprecated=True,
+    responses={200: inline_serializer(
+        name='LegacyCalcResponse',
+        fields={
+            'auction_fee': drf_serializers.FloatField(),
+            'delivery_to_ukraine': drf_serializers.FloatField(),
+            'customs_total': drf_serializers.FloatField(),
+            'total_cost': drf_serializers.FloatField(),
+        },
+    )},
+)
 class CustomsCalculatorView(APIView):
     def get(self, request):
         try:
@@ -21,7 +37,7 @@ class CustomsCalculatorView(APIView):
             age_coeff = 1 if age == 0 else (15 if age > 15 else age)
             excise = (base_rate * (engine / 1000.0) * age_coeff) * 1.1
 
-            duty = price * 0.10  # Пошлина 10%
+            duty = price * 0.10
             vat = (price + auction_fee + duty + excise) * 0.20
             customs_total = duty + excise + vat
 
@@ -37,7 +53,7 @@ class CustomsCalculatorView(APIView):
             return Response({"error": "Переданы некорректные параметры"}, status=400)
 
 
-
+@extend_schema(tags=['legacy'], summary='[УСТАРЕЛО] Список Car', deprecated=True)
 class CarListView(generics.ListAPIView):
     serializer_class = CarSerializer
 

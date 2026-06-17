@@ -1,7 +1,8 @@
-import json
 from datetime import date
 
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -27,14 +28,54 @@ def _active_on(qs, on_date=None):
     )
 
 
+@extend_schema(
+    tags=['pricing'],
+    summary='Калькулятор стоимости «под ключ»',
+    description=(
+        'Рассчитывает полную стоимость автомобиля в Украине: '
+        'аукционный сбор, логистика США, морской фрахт, доставка ЕС→UA, растаможка.\n\n'
+        '**Важно**: результат всегда `is_estimate: true`. '
+        'Ставки акциза и пенсионного сбора — плейсхолдеры, '
+        'требуют проверки по действующему законодательству Украины.'
+    ),
+    request=CalculateInputSerializer,
+    responses={
+        201: OpenApiResponse(description='Расчёт выполнен, снимок сохранён'),
+        400: OpenApiResponse(description='Ошибка валидации входных данных'),
+        422: OpenApiResponse(description='Отсутствуют активные тарифы в БД'),
+    },
+    examples=[
+        OpenApiExample(
+            'Toyota Camry 2019 бензин 2500cc $10 000',
+            value={
+                'auction_price_usd': '10000.00',
+                'engine_cc': 2500,
+                'fuel_type': 'petrol',
+                'vehicle_year': 2019,
+                'auction': 'copart',
+                'auction_location': 'general',
+                'us_port': 'houston',
+                'eu_port': 'klaipeda',
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            'Tesla Model 3 2022 электро $25 000',
+            value={
+                'auction_price_usd': '25000.00',
+                'engine_cc': 1,
+                'fuel_type': 'electric',
+                'vehicle_year': 2022,
+                'auction': 'copart',
+                'auction_location': 'california',
+                'us_port': 'houston',
+                'eu_port': 'gdansk',
+            },
+            request_only=True,
+        ),
+    ],
+)
 class CalculateView(APIView):
-    """
-    POST /api/v1/pricing/calculate/
-
-    Принимает параметры авто и логистики → возвращает детализацию стоимости «под ключ».
-    Сохраняет снимок расчёта в Calculation. Результат всегда помечен is_estimate=true.
-    """
-
     def post(self, request):
         serializer = CalculateInputSerializer(data=request.data)
         if not serializer.is_valid():
@@ -43,7 +84,6 @@ class CalculateView(APIView):
         data = serializer.validated_data
         today = date.today()
 
-        # Получаем активные тарифы из БД
         try:
             auction_fee = _active_on(
                 AuctionFeeTier.objects.filter(
@@ -84,8 +124,6 @@ class CalculateView(APIView):
                 CustomsExciseRate.objects.filter(fuel_type=data['fuel_type'])
             ).first()
 
-            # Определяем пенсионный брекет по ориентировочной стоимости авто в UAH
-            # (используем auction_price * usd_to_uah как грубую оценку)
             approx_uah = data['auction_price_usd'] * usd_to_uah.rate if usd_to_uah else None
             pension_bracket = None
             if approx_uah:
@@ -122,7 +160,6 @@ class CalculateView(APIView):
         except Exception as exc:
             return Response({'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Строим снимок ставок и считаем
         rates = build_rate_snapshot_from_db(
             auction_fee_tier=auction_fee,
             us_land_route=us_land,
@@ -170,9 +207,26 @@ class CalculateView(APIView):
         )
 
 
+@extend_schema(
+    tags=['pricing'],
+    summary='Активные тарифы',
+    description='Возвращает все тарифы, действующие на сегодняшний день.',
+    responses={
+        200: inline_serializer(
+            name='ActiveRatesResponse',
+            fields={
+                'auction_fees': drf_serializers.ListField(),
+                'us_land_routes': drf_serializers.ListField(),
+                'ocean_freight': drf_serializers.ListField(),
+                'eu_to_ua': drf_serializers.ListField(),
+                'exchange_rates': drf_serializers.ListField(),
+                'excise_rates': drf_serializers.ListField(),
+                'pension_brackets': drf_serializers.ListField(),
+            },
+        )
+    },
+)
 class ActiveRatesView(APIView):
-    """GET /api/v1/pricing/rates/ — текущие активные тарифы."""
-
     def get(self, request):
         today = date.today()
 

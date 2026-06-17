@@ -1,0 +1,1167 @@
+openapi: 3.0.3
+info:
+  title: AUTOforYOU API
+  version: 1.0.0
+  description: |-
+    Маркетплейс для автоперекупщиков: импорт битых авто с аукционов США (Copart/IAAI), калькулятор стоимости «под ключ» в Украину, каталог объявлений.
+
+    **Аутентификация**: Bearer JWT. Получить токен: `POST /api/v1/auth/token/`.
+paths:
+  /api/calculate/:
+    get:
+      operationId: calculate_retrieve
+      description: Устаревший эндпоинт. Используйте POST /api/v1/pricing/calculate/
+        вместо него.
+      summary: '[УСТАРЕЛО] Калькулятор растаможки'
+      tags:
+      - legacy
+      security:
+      - jwtAuth: []
+      - {}
+      deprecated: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyCalcResponse'
+          description: ''
+  /api/list/:
+    get:
+      operationId: list_list
+      summary: '[УСТАРЕЛО] Список Car'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - legacy
+      security:
+      - jwtAuth: []
+      - {}
+      deprecated: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCarList'
+          description: ''
+  /api/v1/auth/profile/:
+    get:
+      operationId: v1_auth_profile_retrieve
+      summary: Получить профиль текущего пользователя
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+    put:
+      operationId: v1_auth_profile_update
+      summary: Обновить профиль
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+    patch:
+      operationId: v1_auth_profile_partial_update
+      summary: Частично обновить профиль
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+  /api/v1/auth/register/:
+    post:
+      operationId: v1_auth_register_create
+      summary: Регистрация нового пользователя
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Register'
+          description: ''
+  /api/v1/auth/token/:
+    post:
+      operationId: v1_auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      summary: Получить JWT-токены (login)
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: v1_auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      summary: Обновить access-токен
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/listings/:
+    get:
+      operationId: v1_listings_list
+      description: Список объявлений с фильтрацией и поиском.
+      summary: Каталог объявлений
+      parameters:
+      - in: query
+        name: channel
+        schema:
+          type: string
+        description: retail | wholesale
+      - in: query
+        name: currency
+        schema:
+          type: string
+        description: USD | UAH | EUR
+      - in: query
+        name: fuel_type
+        schema:
+          type: string
+        description: petrol | diesel | electric | hybrid
+      - in: query
+        name: max_price
+        schema:
+          type: number
+        description: Максимальная цена
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Поиск по марке, модели, VIN
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: in_transit | in_stock | sold
+      tags:
+      - listings
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedListingList'
+          description: ''
+  /api/v1/listings/{id}/:
+    get:
+      operationId: v1_listings_retrieve
+      summary: Детали объявления
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - listings
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+  /api/v1/listings/create/:
+    post:
+      operationId: v1_listings_create_create
+      description: Требует авторизации.
+      summary: Создать объявление
+      tags:
+      - listings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ListingCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ListingCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingCreate'
+          description: ''
+  /api/v1/pricing/calculate/:
+    post:
+      operationId: v1_pricing_calculate_create
+      description: |-
+        Рассчитывает полную стоимость автомобиля в Украине: аукционный сбор, логистика США, морской фрахт, доставка ЕС→UA, растаможка.
+
+        **Важно**: результат всегда `is_estimate: true`. Ставки акциза и пенсионного сбора — плейсхолдеры, требуют проверки по действующему законодательству Украины.
+      summary: Калькулятор стоимости «под ключ»
+      tags:
+      - pricing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalculateInputRequest'
+            examples:
+              ToyotaCamry2019Бензин2500cc$10000:
+                value:
+                  auction_price_usd: '10000.00'
+                  engine_cc: 2500
+                  fuel_type: petrol
+                  vehicle_year: 2019
+                  auction: copart
+                  auction_location: general
+                  us_port: houston
+                  eu_port: klaipeda
+                summary: Toyota Camry 2019 бензин 2500cc $10 000
+              TeslaModel32022Электро$25000:
+                value:
+                  auction_price_usd: '25000.00'
+                  engine_cc: 1
+                  fuel_type: electric
+                  vehicle_year: 2022
+                  auction: copart
+                  auction_location: california
+                  us_port: houston
+                  eu_port: gdansk
+                summary: Tesla Model 3 2022 электро $25 000
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CalculateInputRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CalculateInputRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          description: Расчёт выполнен, снимок сохранён
+        '400':
+          description: Ошибка валидации входных данных
+        '422':
+          description: Отсутствуют активные тарифы в БД
+  /api/v1/pricing/rates/:
+    get:
+      operationId: v1_pricing_rates_retrieve
+      description: Возвращает все тарифы, действующие на сегодняшний день.
+      summary: Активные тарифы
+      tags:
+      - pricing
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveRatesResponse'
+          description: ''
+  /api/v1/vehicles/:
+    get:
+      operationId: v1_vehicles_list
+      description: Поиск по make, model, vin.
+      summary: Список автомобилей
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVehicleList'
+          description: ''
+  /api/v1/vehicles/{id}/:
+    get:
+      operationId: v1_vehicles_retrieve
+      summary: Детали автомобиля
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+          description: ''
+components:
+  schemas:
+    ActiveRatesResponse:
+      type: object
+      properties:
+        auction_fees:
+          type: array
+          items: {}
+        us_land_routes:
+          type: array
+          items: {}
+        ocean_freight:
+          type: array
+          items: {}
+        eu_to_ua:
+          type: array
+          items: {}
+        exchange_rates:
+          type: array
+          items: {}
+        excise_rates:
+          type: array
+          items: {}
+        pension_brackets:
+          type: array
+          items: {}
+      required:
+      - auction_fees
+      - eu_to_ua
+      - exchange_rates
+      - excise_rates
+      - ocean_freight
+      - pension_brackets
+      - us_land_routes
+    AuctionEnum:
+      enum:
+      - copart
+      - iaai
+      type: string
+      description: |-
+        * `copart` - copart
+        * `iaai` - iaai
+    CalculateInputRequest:
+      type: object
+      properties:
+        auction_price_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        engine_cc:
+          type: integer
+          maximum: 10000
+          minimum: 0
+        fuel_type:
+          $ref: '#/components/schemas/VehicleFuelTypeEnum'
+        vehicle_year:
+          type: integer
+          maximum: 2100
+          minimum: 1900
+        auction:
+          allOf:
+          - $ref: '#/components/schemas/AuctionEnum'
+          default: copart
+        auction_location:
+          type: string
+          minLength: 1
+          default: general
+          maxLength: 100
+        us_port:
+          type: string
+          minLength: 1
+          default: houston
+          maxLength: 50
+        eu_port:
+          allOf:
+          - $ref: '#/components/schemas/EuPortEnum'
+          default: klaipeda
+      required:
+      - auction_price_usd
+      - engine_cc
+      - fuel_type
+      - vehicle_year
+    Car:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/CarImage'
+          readOnly: true
+        title:
+          type: string
+          title: Марка и модель авто
+          maxLength: 100
+        vin:
+          type: string
+          title: VIN код
+          maxLength: 17
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Год выпуска
+        price_in_usa:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          title: Цена на аукционе ($)
+        total_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          title: Цена под ключ в Украине ($)
+        status:
+          allOf:
+          - $ref: '#/components/schemas/CarStatusEnum'
+          title: Статус доставки
+        lot_number:
+          type: string
+          nullable: true
+          title: Номер лота Copart/IAAI
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: Описание ремонта или состояния
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Дата добавления
+        owner:
+          type: integer
+          title: Продавец (Перекуп)
+      required:
+      - created_at
+      - id
+      - images
+      - owner
+      - price_in_usa
+      - title
+      - total_price
+      - vin
+      - year
+    CarImage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        image:
+          type: string
+          format: uri
+      required:
+      - id
+      - image
+    CarStatusEnum:
+      enum:
+      - IN_USA
+      - IN_TRANSIT
+      - IN_UKRAINE
+      type: string
+      description: |-
+        * `IN_USA` - На аукционе в США
+        * `IN_TRANSIT` - Плывет в Украину
+        * `IN_UKRAINE` - В Украине / На ремонте / Готов
+    ChannelEnum:
+      enum:
+      - retail
+      - wholesale
+      type: string
+      description: |-
+        * `retail` - Розница
+        * `wholesale` - Опт
+    EuPortEnum:
+      enum:
+      - klaipeda
+      - gdansk
+      type: string
+      description: |-
+        * `klaipeda` - klaipeda
+        * `gdansk` - gdansk
+    LegacyCalcResponse:
+      type: object
+      properties:
+        auction_fee:
+          type: number
+          format: double
+        delivery_to_ukraine:
+          type: number
+          format: double
+        customs_total:
+          type: number
+          format: double
+        total_cost:
+          type: number
+          format: double
+      required:
+      - auction_fee
+      - customs_total
+      - delivery_to_ukraine
+      - total_cost
+    Listing:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        vehicle:
+          type: integer
+          title: Автомобиль
+        vehicle_detail:
+          allOf:
+          - $ref: '#/components/schemas/Vehicle'
+          readOnly: true
+        seller:
+          type: integer
+          readOnly: true
+          title: Продавец
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Цена
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        channel:
+          allOf:
+          - $ref: '#/components/schemas/ChannelEnum'
+          title: Канал
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status4efEnum'
+          title: Статус
+        repair_description:
+          type: string
+          title: Описание ремонта
+        calculation:
+          type: integer
+          nullable: true
+          title: Расчёт стоимости
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - price
+      - seller
+      - updated_at
+      - vehicle
+      - vehicle_detail
+    ListingCreate:
+      type: object
+      properties:
+        vehicle:
+          type: integer
+          title: Автомобиль
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Цена
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        channel:
+          allOf:
+          - $ref: '#/components/schemas/ChannelEnum'
+          title: Канал
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status4efEnum'
+          title: Статус
+        repair_description:
+          type: string
+          title: Описание ремонта
+        calculation:
+          type: integer
+          nullable: true
+          title: Расчёт стоимости
+      required:
+      - price
+      - vehicle
+    ListingCreateRequest:
+      type: object
+      properties:
+        vehicle:
+          type: integer
+          title: Автомобиль
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Цена
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        channel:
+          allOf:
+          - $ref: '#/components/schemas/ChannelEnum'
+          title: Канал
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status4efEnum'
+          title: Статус
+        repair_description:
+          type: string
+          title: Описание ремонта
+        calculation:
+          type: integer
+          nullable: true
+          title: Расчёт стоимости
+      required:
+      - price
+      - vehicle
+    ListingCurrencyEnum:
+      enum:
+      - USD
+      - UAH
+      - EUR
+      type: string
+      description: |-
+        * `USD` - USD
+        * `UAH` - UAH
+        * `EUR` - EUR
+    PaginatedCarList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Car'
+    PaginatedListingList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Listing'
+    PaginatedVehicleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vehicle'
+    PatchedUserProfileRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 150
+        last_name:
+          type: string
+          title: Фамилия
+          maxLength: 150
+        phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          title: Роль
+    Register:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 150
+        last_name:
+          type: string
+          title: Фамилия
+          maxLength: 150
+        phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          title: Роль
+      required:
+      - email
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password2:
+          type: string
+          writeOnly: true
+          minLength: 1
+          title: Подтверждение пароля
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 150
+        last_name:
+          type: string
+          title: Фамилия
+          maxLength: 150
+        phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          title: Роль
+      required:
+      - email
+      - password
+      - password2
+    RoleEnum:
+      enum:
+      - buyer
+      - dealer
+      - admin
+      type: string
+      description: |-
+        * `buyer` - Покупатель
+        * `dealer` - Перекупщик
+        * `admin` - Администратор
+    SourceAuctionEnum:
+      enum:
+      - copart
+      - iaai
+      - other
+      type: string
+      description: |-
+        * `copart` - Copart
+        * `iaai` - IAAI
+        * `other` - Другой
+    Status4efEnum:
+      enum:
+      - in_transit
+      - in_stock
+      - sold
+      type: string
+      description: |-
+        * `in_transit` - В пути
+        * `in_stock` - В наличии
+        * `sold` - Продан
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 150
+        last_name:
+          type: string
+          title: Фамилия
+          maxLength: 150
+        phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          title: Роль
+        is_verified_dealer:
+          type: boolean
+          readOnly: true
+          title: Верифицированный дилер
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - id
+      - is_verified_dealer
+    UserProfileRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 150
+        last_name:
+          type: string
+          title: Фамилия
+          maxLength: 150
+        phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          title: Роль
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleImage'
+          readOnly: true
+        vin:
+          type: string
+          maxLength: 17
+        make:
+          type: string
+          title: Марка
+          maxLength: 50
+        model:
+          type: string
+          title: Модель
+          maxLength: 50
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Год выпуска
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Объём двигателя (см³)
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/VehicleFuelTypeEnum'
+          title: Тип топлива
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробег (км)
+        damage_type:
+          type: string
+          title: Тип повреждения
+          maxLength: 100
+        source_auction:
+          allOf:
+          - $ref: '#/components/schemas/SourceAuctionEnum'
+          title: Аукцион
+        lot_number:
+          type: string
+          title: Номер лота
+          maxLength: 50
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - engine_cc
+      - id
+      - images
+      - make
+      - model
+      - vin
+      - year
+    VehicleFuelTypeEnum:
+      enum:
+      - petrol
+      - diesel
+      - electric
+      - hybrid
+      type: string
+      description: |-
+        * `petrol` - petrol
+        * `diesel` - diesel
+        * `electric` - electric
+        * `hybrid` - hybrid
+    VehicleImage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        image:
+          type: string
+          format: uri
+        is_primary:
+          type: boolean
+          title: Главное фото
+      required:
+      - id
+      - image
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+tags:
+- name: auth
+  description: Регистрация и JWT-аутентификация
+- name: vehicles
+  description: Каталог автомобилей
+- name: pricing
+  description: Калькулятор стоимости «под ключ» и тарифы
+- name: listings
+  description: Объявления маркетплейса

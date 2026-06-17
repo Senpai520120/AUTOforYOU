@@ -27,6 +27,8 @@ INSTALLED_APPS = [
     'pricing',
     'listings',
     'cars',
+
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -101,6 +103,33 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'ENUM_NAME_OVERRIDES': {
+        'VehicleFuelTypeEnum': ['petrol', 'diesel', 'electric', 'hybrid'],
+        'VehicleSourceAuctionEnum': ['copart', 'iaai', 'other'],
+        'CarStatusEnum': ['IN_USA', 'IN_TRANSIT', 'IN_UKRAINE'],
+        'ListingStatusEnum': ['in_transit', 'in_stock', 'sold'],
+        'ListingChannelEnum': ['retail', 'wholesale'],
+        'ListingCurrencyEnum': ['USD', 'UAH', 'EUR'],
+    },
+    'TITLE': 'AUTOforYOU API',
+    'DESCRIPTION': (
+        'Маркетплейс для автоперекупщиков: импорт битых авто с аукционов США '
+        '(Copart/IAAI), калькулятор стоимости «под ключ» в Украину, каталог объявлений.\n\n'
+        '**Аутентификация**: Bearer JWT. Получить токен: `POST /api/v1/auth/token/`.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'TAGS': [
+        {'name': 'auth', 'description': 'Регистрация и JWT-аутентификация'},
+        {'name': 'vehicles', 'description': 'Каталог автомобилей'},
+        {'name': 'pricing', 'description': 'Калькулятор стоимости «под ключ» и тарифы'},
+        {'name': 'listings', 'description': 'Объявления маркетплейса'},
+    ],
 }
 
 SIMPLE_JWT = {
