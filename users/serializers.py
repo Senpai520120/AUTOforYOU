@@ -1,6 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import CustomUser
+from .models import CustomUser, TrustedShop
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -25,3 +25,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ('id', 'email', 'first_name', 'last_name', 'phone', 'role', 'is_verified_dealer', 'created_at')
         read_only_fields = ('id', 'email', 'is_verified_dealer', 'created_at')
+
+
+class TrustedShopSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TrustedShop
+        fields = ('id', 'name', 'type', 'contacts', 'rating', 'notes', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+    def create(self, validated_data):
+        validated_data['owner'] = self.context['request'].user
+        return super().create(validated_data)

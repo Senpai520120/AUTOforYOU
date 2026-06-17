@@ -1,118 +1,166 @@
-# AUTOforYOU — Целевая архитектура Фазы 1
+# AUTOforYOU — Архитектура
 
-## URL-пространство (v1)
-```
-/api/v1/auth/register/          POST  — регистрация
-/api/v1/auth/token/             POST  — получить JWT (login)
-/api/v1/auth/token/refresh/     POST  — обновить JWT
+## ⛔ ЗАПУСК ЗАБЛОКИРОВАН ДО:
+1. **Реальные ставки растаможки** — акциз, пенсионный сбор по действующему
+   законодательству Украины (проверить в ГТС/ВРУ)
+2. **Реальные тарифы фрахта/логистики** — Copart buyer fees, реальные ставки
+   UsLandRoute, OceanFreight, EuToUa (обновить seed_rates или внести вручную)
+3. **Реальные API-ключи интеграций** — VinCheck/CarVertical (VIN-отчёты),
+   BidFax (история торгов), Opendatabot (UA реестры)
+4. **Верификация дилеров** — процедура подтверждения is_verified_dealer
+5. **Платёжный шлюз** — не входит в Фазу 2, но нужен до продакшена
 
-/api/v1/vehicles/               GET   — список Vehicle
-/api/v1/vehicles/<id>/          GET   — детали Vehicle
+---
 
-/api/v1/pricing/calculate/      POST  — калькулятор (сохраняет Calculation)
-/api/v1/pricing/rates/          GET   — текущие активные тарифы
+## Фаза 1 — ЗАВЕРШЕНА ✓
+CustomUser, Vehicle, Listing, Calculation, справочники тарифов,
+калькулятор «под ключ», Swagger
 
-/api/v1/listings/               GET   — каталог (фильтры: status, fuel_type, max_price)
-/api/v1/listings/<id>/          GET   — детали Listing
-```
+## Фаза 2 — ТЕКУЩАЯ СЕССИЯ
 
-## Модели
+### A. Backend
+- A1. Shipment + TrackingEvent (логистика контейнеров)
+- A2. Личный кабинет байера (история расчётов, TrustedShop, мои контейнеры)
+- A3. B2B закрытый клуб (wholesale-гейтинг, доска, is_express_buyout)
+- A4. Интеграции-стабы (VinProvider, AuctionHistoryProvider, OpendatabotProvider)
 
-### users.CustomUser
-```
-id, email (unique, username), role (buyer/dealer/admin),
-is_verified_dealer, phone, created_at
-```
+### B. Frontend (Next.js)
+- B1. Каркас + JWT API-клиент + layout
+- B2. Каталог листингов + страница авто
+- B3. Калькулятор (с обязательным demo-баннером)
+- B4. Личный кабинет
+- B5. B2B-доска
 
-### vehicles.Vehicle
-```
-id, vin (unique), make, model, year,
-engine_cc (IntegerField, объём в см³),
-fuel_type (petrol/diesel/electric/hybrid),
-mileage_km, damage_type, source_auction (copart/iaai),
-lot_number, created_at
-```
+---
 
-### vehicles.VehicleImage
-```
-id, vehicle FK, image, is_primary, uploaded_at
-```
+## URL-пространство (v1) — полная карта
 
-### pricing.AuctionFeeTier
 ```
-id, auction (copart/iaai), min_price, max_price (null=unbounded),
-fee_fixed, fee_pct, valid_from, valid_to
-```
+# Auth
+POST /api/v1/auth/register/
+POST /api/v1/auth/token/
+POST /api/v1/auth/token/refresh/
+GET  /api/v1/auth/profile/
 
-### pricing.UsLandRoute
-```
-id, auction_location, us_port, cost_usd, valid_from, valid_to
-```
+# Vehicles
+GET  /api/v1/vehicles/
+GET  /api/v1/vehicles/<id>/
+GET  /api/v1/vehicles/<vin>/report/    ← A4
 
-### pricing.OceanFreightRate
-```
-id, us_port, eu_port (klaipeda/gdansk), cost_usd, valid_from, valid_to
-```
+# Pricing
+POST /api/v1/pricing/calculate/
+GET  /api/v1/pricing/rates/
 
-### pricing.EuToUaDeliveryRate
-```
-id, eu_port, cost_usd, valid_from, valid_to
-```
+# Listings
+GET  /api/v1/listings/
+GET  /api/v1/listings/<id>/
+POST /api/v1/listings/create/
 
-### pricing.ExchangeRate
-```
-id, from_currency, to_currency, rate (Decimal), date
-```
+# Shipments                            ← A1
+GET  /api/v1/shipments/
+GET  /api/v1/shipments/<id>/
 
-### pricing.CustomsExciseRate
-```
-id, fuel_type, eur_per_100cc,   # ПРОВЕРИТЬ по действующему законодательству
-age_0_1_coeff, age_1_3_coeff, age_3_5_coeff,
-age_5_7_coeff, age_7_plus_coeff,
-duty_rate, vat_rate, valid_from, valid_to
-```
+# Personal cabinet                     ← A2
+GET  /api/v1/me/calculations/
+GET  /api/v1/me/shipments/
+GET/POST/PUT/DELETE /api/v1/me/trusted-shops/
+GET/PUT/DELETE      /api/v1/me/trusted-shops/<id>/
 
-### pricing.PensionFundBracket
-```
-id, min_value_uah, max_value_uah (null=unbounded),
-rate,   # ПРОВЕРИТЬ по действующему законодательству
-valid_from, valid_to
+# B2B                                  ← A3
+GET  /api/v1/b2b/board/
+
+# Docs
+GET  /api/schema/
+GET  /api/docs/
+GET  /api/redoc/
 ```
 
-### pricing.Calculation
+---
+
+## Новые модели Фазы 2
+
+### shipments.Shipment
 ```
-id, user FK (null=anonymous),
-inputs_snapshot (JSONField),
-rates_snapshot (JSONField),
-breakdown (JSONField),
-total_usd, total_uah,
-is_estimate (bool, always True),
-created_at
+id, container_no (unique), vessel, us_warehouse, departure_port_us,
+arrival_port_eu (klaipeda/gdansk), eta, status (state-machine),
+vehicles M2M Vehicle, created_at
 ```
 
-### listings.Listing
+Статусы: at_us_warehouse → loading → in_ocean →
+          at_eu_port → on_truck_to_ua → cleared → delivered
+
+### shipments.TrackingEvent
 ```
-id, vehicle FK, seller FK (CustomUser),
-price, currency (USD/UAH/EUR),
-channel (retail/wholesale),
-status (in_transit/in_stock/sold),
-repair_description,
-calculation FK (null),
-created_at, updated_at
+id, shipment FK, status, note, photo (nullable), created_at
 ```
 
-## Сервис калькулятора (pricing/calculator.py)
-```python
-def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> LandedCostBreakdown:
-    ...
+### users.TrustedShop
 ```
-- Чистая функция, без БД, детерминированная
-- Принимает dataclass с входами и снимком ставок
-- Возвращает dataclass с полным breakdown (каждая статья расходов)
+id, owner FK (CustomUser), name,
+type (service/painter/parts/other),
+contacts, rating (1-5), notes, created_at
+```
+
+### integrations.VinReport (кэш)
+```
+id, vin, provider, report_data (JSONField), demo (bool), created_at
+```
+
+### listings.Listing — новые поля
+```
+is_express_buyout (bool, default False)
+express_buyout_until (DateTimeField, null)
+```
+
+---
+
+## Структура frontend/
+```
+frontend/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── layout.tsx          # Root layout (header/footer)
+│   │   ├── page.tsx            # Home → redirect to /listings
+│   │   ├── listings/
+│   │   │   ├── page.tsx        # Каталог
+│   │   │   └── [id]/page.tsx   # Детали авто
+│   │   ├── calculator/
+│   │   │   └── page.tsx        # Калькулятор + demo-баннер
+│   │   ├── login/page.tsx
+│   │   ├── register/page.tsx
+│   │   ├── me/
+│   │   │   ├── page.tsx        # Личный кабинет
+│   │   │   ├── calculations/page.tsx
+│   │   │   ├── trusted-shops/page.tsx
+│   │   │   └── shipments/page.tsx
+│   │   └── b2b/page.tsx        # B2B-доска (dealer only)
+│   ├── api/                    # API-клиент
+│   │   ├── client.ts           # JWT fetch wrapper + refresh
+│   │   ├── auth.ts
+│   │   ├── listings.ts
+│   │   ├── vehicles.ts
+│   │   ├── pricing.ts
+│   │   ├── shipments.ts
+│   │   └── me.ts
+│   ├── components/
+│   │   ├── layout/             # Header, Footer, Nav
+│   │   ├── listings/           # ListingCard, ListingFilters
+│   │   ├── calculator/         # CalcForm, CalcBreakdown, DemoBanner
+│   │   └── ui/                 # Button, Input, Badge, Spinner
+│   └── lib/
+│       ├── auth-context.tsx    # AuthProvider + useAuth hook
+│       └── types.ts            # Shared TypeScript types
+├── public/
+├── package.json
+├── tailwind.config.ts
+└── next.config.ts
+```
 
 ## Слои
 ```
-Views (DRF) → Serializers → Service (calculator.py) → Models
-                                    ↑
-                           Rate models (DB → snapshot)
+Next.js Pages → api/ client (JWT) → Django DRF API
+                                          ↓
+                              Services (calculator.py)
+                                          ↓
+                              Models (DB)
 ```

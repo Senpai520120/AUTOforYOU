@@ -26,6 +26,8 @@ INSTALLED_APPS = [
     'vehicles',
     'pricing',
     'listings',
+    'shipments',
+    'integrations',
     'cars',
 
     'drf_spectacular',
@@ -90,6 +92,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -114,21 +121,30 @@ SPECTACULAR_SETTINGS = {
         'ListingStatusEnum': ['in_transit', 'in_stock', 'sold'],
         'ListingChannelEnum': ['retail', 'wholesale'],
         'ListingCurrencyEnum': ['USD', 'UAH', 'EUR'],
+        'ShipmentStatusEnum': [
+            'at_us_warehouse', 'loading', 'in_ocean',
+            'at_eu_port', 'on_truck_to_ua', 'cleared', 'delivered',
+        ],
     },
     'TITLE': 'AUTOforYOU API',
     'DESCRIPTION': (
         'Маркетплейс для автоперекупщиков: импорт битых авто с аукционов США '
         '(Copart/IAAI), калькулятор стоимости «под ключ» в Украину, каталог объявлений.\n\n'
-        '**Аутентификация**: Bearer JWT. Получить токен: `POST /api/v1/auth/token/`.'
+        '**Аутентификация**: Bearer JWT. Получить токен: `POST /api/v1/auth/token/`.\n\n'
+        '⚠ **Тестовые тарифы** — все расчёты демонстрационные до подключения реальных ставок.'
     ),
-    'VERSION': '1.0.0',
+    'VERSION': '2.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'TAGS': [
         {'name': 'auth', 'description': 'Регистрация и JWT-аутентификация'},
-        {'name': 'vehicles', 'description': 'Каталог автомобилей'},
+        {'name': 'me', 'description': 'Личный кабинет (история расчётов, партнёры, контейнеры)'},
+        {'name': 'vehicles', 'description': 'Каталог автомобилей + VIN-отчёты'},
         {'name': 'pricing', 'description': 'Калькулятор стоимости «под ключ» и тарифы'},
         {'name': 'listings', 'description': 'Объявления маркетплейса'},
+        {'name': 'shipments', 'description': 'Логистика контейнеров'},
+        {'name': 'b2b', 'description': 'B2B-доска опта (только верифицированные дилеры)'},
+        {'name': 'legacy', 'description': 'Устаревшие эндпоинты'},
     ],
 }
 

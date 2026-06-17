@@ -39,6 +39,9 @@ class Listing(models.Model):
     channel = models.CharField(max_length=10, choices=Channel.choices, default=Channel.RETAIL, verbose_name='Канал')
     status = models.CharField(max_length=15, choices=ListingStatus.choices, default=ListingStatus.IN_TRANSIT, verbose_name='Статус')
     repair_description = models.TextField(blank=True, verbose_name='Описание ремонта')
+    # B2B поля
+    is_express_buyout = models.BooleanField(default=False, verbose_name='Срочный выкуп')
+    express_buyout_until = models.DateTimeField(null=True, blank=True, verbose_name='Срочный выкуп до')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -49,3 +52,7 @@ class Listing(models.Model):
 
     def __str__(self):
         return f'{self.vehicle} — {self.price} {self.currency} [{self.status}]'
+
+    @property
+    def is_wholesale(self):
+        return self.channel == self.Channel.WHOLESALE

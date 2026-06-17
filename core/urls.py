@@ -4,15 +4,20 @@ from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
+from listings.urls import b2b_urlpatterns
+from integrations.views import VinReportView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('users.urls')),
     path('api/v1/vehicles/', include('vehicles.urls')),
+    path('api/v1/vehicles/<str:vin>/report/', VinReportView.as_view(), name='vin-report'),
     path('api/v1/pricing/', include('pricing.urls')),
     path('api/v1/listings/', include('listings.urls')),
-    # Legacy — оставлен для обратной совместимости
+    path('api/v1/shipments/', include('shipments.urls')),
+    path('api/v1/b2b/', include((b2b_urlpatterns, 'b2b'))),
+    # Legacy
     path('api/', include('cars.urls')),
-
     # OpenAPI / Swagger
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),

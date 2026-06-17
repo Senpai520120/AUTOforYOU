@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(D:/pyCharm/AUTOforYOU/venv/Scripts/pip.exe list *)",
+      "Bash(D:/pyCharm/AUTOforYOU/venv/Scripts/pip.exe install *)",
+      "Bash(venv/Scripts/python.exe manage.py startapp users)",
+      "Bash(venv/Scripts/python.exe manage.py startapp vehicles)",
+      "Bash(venv/Scripts/python.exe manage.py startapp pricing)",
+      "Bash(venv/Scripts/python.exe manage.py startapp listings)",
+      "Bash(venv/Scripts/python.exe manage.py makemigrations users vehicles pricing listings cars)",
+      "Bash(venv/Scripts/python.exe manage.py migrate)",
+      "Bash(venv/Scripts/python.exe manage.py test pricing.tests -v 2)",
+      "Bash(venv/Scripts/python.exe manage.py check --deploy)",
+      "Bash(venv/Scripts/python.exe manage.py check)",
+      "Bash(venv/Scripts/python.exe manage.py seed_rates)",
+      "Bash(python -c \"import sys; data = sys.stdin.buffer.read\\(\\); print\\(data.decode\\('cp1251', errors='replace'\\)\\)\")",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/python.exe manage.py test --verbosity=2)",
+      "Bash(venv/Scripts/python.exe manage.py runserver 8000)",
+      "Bash(curl -s http://127.0.0.1:8000/api/v1/pricing/rates/)",
+      "Bash(python -c \"import sys,json; print\\(json.dumps\\(json.load\\(sys.stdin\\), indent=2, ensure_ascii=False\\)\\)\")",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/api/v1/pricing/calculate/ -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(curl *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(type\\(d\\).__name__, len\\(d\\) if isinstance\\(d,list\\) else d\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('count:', d['count'], '| results:', d['results']\\)\")",
+      "Bash(venv/Scripts/python.exe manage.py test --verbosity=1)",
+      "Bash(venv/Scripts/pip.exe freeze *)",
+      "Bash(python -c ' *)",
+      "Bash(venv/Scripts/pip.exe install *)",
+      "Bash(venv/Scripts/python.exe manage.py spectacular --validate --fail-on-warn)",
+      "Bash(venv/Scripts/python.exe manage.py spectacular --file openapi.yaml)",
+      "Bash(venv/Scripts/python.exe manage.py makemigrations)",
+      "Bash(venv/Scripts/python.exe manage.py startapp shipments)",
+      "Bash(venv/Scripts/python.exe manage.py startapp integrations)",
+      "Bash(venv/Scripts/python.exe manage.py makemigrations users shipments listings integrations)"
+    ]
+  }
+}

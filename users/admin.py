@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser
+from .models import CustomUser, TrustedShop
 
 
 @admin.register(CustomUser)
@@ -24,3 +24,11 @@ class CustomUserAdmin(UserAdmin):
             'fields': ('email', 'password1', 'password2', 'role'),
         }),
     )
+
+
+@admin.register(TrustedShop)
+class TrustedShopAdmin(admin.ModelAdmin):
+    list_display = ('name', 'type', 'rating', 'owner', 'created_at')
+    list_filter = ('type', 'rating')
+    search_fields = ('name', 'owner__email')
+    raw_id_fields = ('owner',)
