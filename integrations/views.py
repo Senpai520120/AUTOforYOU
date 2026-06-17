@@ -21,6 +21,7 @@ from .providers import get_vin_provider, get_auction_history_provider, get_opend
     },
 )
 class VinReportView(APIView):
+    # noinspection PyMethodMayBeStatic
     def get(self, request, vin: str):
         vin = vin.upper().strip()
         if len(vin) != 17:

@@ -227,6 +227,7 @@ class CalculateView(APIView):
     },
 )
 class ActiveRatesView(APIView):
+    # noinspection PyMethodMayBeStatic
     def get(self, request):
         today = date.today()
 
