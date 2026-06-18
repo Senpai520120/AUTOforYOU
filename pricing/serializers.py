@@ -10,8 +10,10 @@ from .models import (
 class CalculateInputSerializer(serializers.Serializer):
     auction_price_usd = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'))
     engine_cc = serializers.IntegerField(min_value=0, max_value=10000)
-    fuel_type = serializers.ChoiceField(choices=['petrol', 'diesel', 'electric', 'hybrid'])
+    fuel_type = serializers.ChoiceField(choices=['petrol', 'diesel', 'electric', 'hybrid', 'phev'])
     vehicle_year = serializers.IntegerField(min_value=1900, max_value=2100)
+    # Ёмкость батареи в кВт·ч — обязательно для EV/PHEV, для ДВС оставить 0
+    battery_capacity_kwh = serializers.IntegerField(min_value=0, max_value=200, default=0)
     auction = serializers.ChoiceField(choices=['copart', 'iaai'], default='copart')
     auction_location = serializers.CharField(max_length=100, default='general')
     us_port = serializers.CharField(max_length=50, default='houston')

@@ -1,7 +1,11 @@
 """
 Команда начального наполнения тарифных справочников.
 
-Все ставки растаможки помечены # ПРОВЕРИТЬ по действующему законодательству Украины.
+Ставки растаможки (акциз, пошлина, НДС, пенсионный сбор):
+  Источник: ставки растаможки Украины, актуальны на янв–июнь 2026.
+  Финальный расчёт подтверждает таможенный брокер.
+
+Ставки логистики (Copart/IAAI, фрахт) — ПЛЕЙСХОЛДЕРЫ, остаются блокерами.
 Запуск: python manage.py seed_rates
 """
 from datetime import date
@@ -13,6 +17,10 @@ from pricing.models import (
     AuctionFeeTier, CustomsExciseRate, EuToUaDeliveryRate,
     ExchangeRate, OceanFreightRate, PensionFundBracket, UsLandRoute,
 )
+
+# ПРОВЕРИТЬ — прожиточный минимум 2026 (Украина, грн/месяц)
+# https://minfin.com.ua/ua/economy/budget/subsistence/
+LIVING_WAGE_UAH = Decimal('3028')
 
 
 class Command(BaseCommand):
@@ -91,35 +99,54 @@ class Command(BaseCommand):
             defaults=dict(rate=Decimal('0.92'))
         )
 
-        # --- Ставки акциза — ПРОВЕРИТЬ по действующему законодательству Украины ---
+        # --- Ставки акциза ---
+        # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026;
+        # финал подтверждает таможенный брокер.
+        # Формула ДВС: акциз = eur_per_100cc × (engine_cc/100) × age_coeff
+        # Формула EV/PHEV: акциз = ev_excise_eur_per_kwh × battery_kwh
+        # age_coeff = max(1, год_расчёта − год_выпуска) — см. calculator.calc_age_coeff()
+        #
+        # Бензин ≤3000 см³ → base 50 EUR/л = 5.0 EUR/100cc
+        # Бензин >3000 см³ → base 100 EUR/л = 10.0 EUR/100cc
+        # Дизель ≤3500 см³ → base 75 EUR/л = 7.5 EUR/100cc
+        # Дизель >3500 см³ → base 150 EUR/л = 15.0 EUR/100cc
+        # Электро/PHEV → 1 EUR/кВт·ч, пошлина 0%
+        # Гибрид HEV → как бензин ≤3000 (гибриды — уточнить у брокера)
         excise_rates = [
-            # (fuel_type, eur_per_100cc, age_0_1, age_1_3, age_3_5, age_5_7, age_7+, duty, vat)
-            ('petrol', '0.7467', '1', '1', '1', '1.5', '2.25', '0.10', '0.20'),  # ПРОВЕРИТЬ
-            ('diesel', '1.0304', '1', '1', '1', '1.5', '2.25', '0.10', '0.20'),  # ПРОВЕРИТЬ
-            ('electric', '0.01', '1', '1', '1', '1', '1', '0', '0.20'),           # ПРОВЕРИТЬ
-            ('hybrid', '0.7467', '1', '1', '1', '1.5', '2.25', '0.10', '0.20'),   # ПРОВЕРИТЬ
+            # (fuel_type, engine_cc_min, engine_cc_max, eur_per_100cc, ev_kwh, duty, vat)
+            ('petrol',   0,    3000, '5.0000',  None,     '0.1000', '0.2000'),
+            ('petrol',   3001, None, '10.0000', None,     '0.1000', '0.2000'),
+            ('diesel',   0,    3500, '7.5000',  None,     '0.1000', '0.2000'),
+            ('diesel',   3501, None, '15.0000', None,     '0.1000', '0.2000'),
+            ('electric', 0,    None, '0.0000',  '1.0000', '0.0000', '0.2000'),
+            ('phev',     0,    None, '0.0000',  '1.0000', '0.0000', '0.2000'),  # гибриды — уточнить у брокера
+            ('hybrid',   0,    None, '5.0000',  None,     '0.1000', '0.2000'),  # HEV как бензин; уточнить у брокера
         ]
-        for fuel, eur_per_100cc, c01, c13, c35, c57, c7p, duty, vat in excise_rates:
+        for fuel, cc_min, cc_max, eur_per_100cc, ev_kwh, duty, vat in excise_rates:
             CustomsExciseRate.objects.get_or_create(
                 fuel_type=fuel,
+                engine_cc_min=cc_min,
+                engine_cc_max=cc_max,
                 defaults=dict(
                     eur_per_100cc=Decimal(eur_per_100cc),
-                    age_0_1_coeff=Decimal(c01),
-                    age_1_3_coeff=Decimal(c13),
-                    age_3_5_coeff=Decimal(c35),
-                    age_5_7_coeff=Decimal(c57),
-                    age_7_plus_coeff=Decimal(c7p),
+                    ev_excise_eur_per_kwh=Decimal(ev_kwh) if ev_kwh else None,
                     duty_rate=Decimal(duty),
                     vat_rate=Decimal(vat),
                     valid_from=today,
                 )
             )
 
-        # --- Пенсионный сбор — ПРОВЕРИТЬ по действующему законодательству Украины ---
+        # --- Пенсионный сбор ---
+        # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026.
+        # Пороги = кратное прожиточного минимума (LIVING_WAGE_UAH):
+        #   ≤165×  → 3%  |  165×–290×  → 4%  |  >290×  → 5%
+        # LIVING_WAGE_UAH = 3028 грн — ПРОВЕРИТЬ актуальный показатель на дату оформления.
+        bracket_1 = (LIVING_WAGE_UAH * 165).quantize(Decimal('0.01'))   # ≈ 499 620 грн
+        bracket_2 = (LIVING_WAGE_UAH * 290).quantize(Decimal('0.01'))   # ≈ 878 120 грн
         pension_brackets = [
-            (Decimal('0'), Decimal('375000'), Decimal('0.03')),           # ПРОВЕРИТЬ
-            (Decimal('375000'), Decimal('750000'), Decimal('0.04')),       # ПРОВЕРИТЬ
-            (Decimal('750000'), None, Decimal('0.05')),                    # ПРОВЕРИТЬ
+            (Decimal('0'),   bracket_1, Decimal('0.0300')),
+            (bracket_1,      bracket_2, Decimal('0.0400')),
+            (bracket_2,      None,      Decimal('0.0500')),
         ]
         for min_v, max_v, rate in pension_brackets:
             PensionFundBracket.objects.get_or_create(
@@ -128,6 +155,7 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(
-            'Тарифы созданы. ОБЯЗАТЕЛЬНО проверьте ставки акциза и пенсионного сбора '
-            'по действующему законодательству Украины!'
+            'Тарифы созданы. Ставки акциза/пошлины/НДС — актуальны на янв–июнь 2026. '
+            'Логистика (Copart/IAAI, фрахт) — плейсхолдеры, требуют уточнения у владельца. '
+            'Прожиточный минимум (LIVING_WAGE_UAH) — ПРОВЕРИТЬ перед деплоем!'
         ))

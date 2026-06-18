@@ -36,7 +36,11 @@ class ExchangeRateAdmin(admin.ModelAdmin):
 
 @admin.register(CustomsExciseRate)
 class CustomsExciseRateAdmin(admin.ModelAdmin):
-    list_display = ('fuel_type', 'eur_per_100cc', 'duty_rate', 'vat_rate', 'valid_from', 'valid_to')
+    list_display = (
+        'fuel_type', 'engine_cc_min', 'engine_cc_max',
+        'eur_per_100cc', 'ev_excise_eur_per_kwh',
+        'duty_rate', 'vat_rate', 'valid_from', 'valid_to',
+    )
     list_filter = ('fuel_type',)
 
 

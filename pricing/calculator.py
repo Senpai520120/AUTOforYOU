@@ -33,14 +33,18 @@ class RateSnapshot:
     eu_to_ua_cost_usd: Decimal
     usd_to_uah: Decimal
     usd_to_eur: Decimal
-    # Акциз: EUR за каждые 100 см³ — ПРОВЕРИТЬ по действующему законодательству
+    # Акциз ДВС: EUR за каждые 100 см³ (petrol/diesel/hybrid)
+    # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026; финал подтверждает таможенный брокер
     excise_eur_per_100cc: Decimal
+    # Акциз EV/PHEV: EUR за кВт·ч ёмкости батареи
+    ev_excise_eur_per_kwh: Decimal
+    # Коэффициент возраста: max(1, год_расчёта − год_выпуска)
     age_coefficient: Decimal
     duty_rate: Decimal
     vat_rate: Decimal
-    # Пенсионный сбор — ПРОВЕРИТЬ по действующему законодательству
-    pension_fund_rate: Decimal
-    # Источники данных для snaphot
+    # Дата актуальности ставок (дата оформления таможни)
+    rates_date: str = ''
+    pension_fund_rate: Decimal = ZERO
     meta: dict = field(default_factory=dict)
 
 
@@ -48,9 +52,10 @@ class RateSnapshot:
 class LandedCostInputs:
     auction_price_usd: Decimal
     engine_cc: int
-    fuel_type: str   # petrol / diesel / electric / hybrid
+    fuel_type: str   # petrol / diesel / electric / hybrid / phev
     vehicle_year: int
     calculation_year: int
+    battery_capacity_kwh: int = 0  # для EV/PHEV — ёмкость батареи в кВт·ч
 
 
 @dataclass
@@ -81,26 +86,15 @@ class LandedCostBreakdown:
         return {k: str(v) if isinstance(v, Decimal) else v for k, v in asdict(self).items()}
 
 
-def _get_age_coefficient(vehicle_year: int, calculation_year: int, rates: RateSnapshot) -> Decimal:
-    age = calculation_year - vehicle_year
-    if age <= 1:
-        return rates.age_coefficient   # snapshot already has the right coeff
-    return rates.age_coefficient
+def calc_age_coeff(vehicle_year: int, calculation_year: int) -> Decimal:
+    """
+    Коэффициент возраста = max(1, год_расчёта − год_выпуска).
 
-
-def _calc_age_coeff_from_excise_rate(excise_rate_obj, vehicle_year: int, calculation_year: int) -> Decimal:
-    """Helper used in views to pick the right coeff from CustomsExciseRate model."""
-    age = calculation_year - vehicle_year
-    if age <= 1:
-        return _d(excise_rate_obj.age_0_1_coeff)
-    elif age <= 3:
-        return _d(excise_rate_obj.age_1_3_coeff)
-    elif age <= 5:
-        return _d(excise_rate_obj.age_3_5_coeff)
-    elif age <= 7:
-        return _d(excise_rate_obj.age_5_7_coeff)
-    else:
-        return _d(excise_rate_obj.age_7_plus_coeff)
+    Уточнить у брокера: часть брокеров считает (год − год_выпуска − 1),
+    т.е. для авто 2017 года в 2026: либо 9, либо 8.
+    Держим формулу здесь, чтобы не дублировать логику.
+    """
+    return _d(max(1, calculation_year - vehicle_year))
 
 
 def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> LandedCostBreakdown:
@@ -120,29 +114,33 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> Land
     """
     price = _d(inputs.auction_price_usd)
     engine_cc = inputs.engine_cc
+    is_ev_type = inputs.fuel_type in ('electric', 'phev')
 
     # 1. Аукционный сбор
     auction_fee = (_d(rates.auction_fee.fee_fixed_usd) + price * _d(rates.auction_fee.fee_pct)).quantize(TWO_PLACES, ROUND_HALF_UP)
 
-    # 2. Таможенная стоимость (CIF до порта ЕС считаем как auction + US land + ocean)
+    # 2. Таможенная стоимость (CIF до порта ЕС = auction + US land + ocean)
     customs_value_usd = (price + _d(rates.us_land_cost_usd) + _d(rates.ocean_freight_usd)).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     # 3. Акциз
-    # ПРОВЕРИТЬ по действующему законодательству Украины
-    if inputs.fuel_type == 'electric':
-        # Для электро символический акциз 1 EUR — ПРОВЕРИТЬ по действующему законодательству
-        excise_eur = Decimal('1.00')
+    # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026; финал подтверждает таможенный брокер
+    # EV/PHEV: фиксированная ставка EUR × ёмкость батареи кВт·ч (гибриды — уточнить у брокера)
+    # ДВС (petrol/diesel/hybrid): base_rate × (engine_cc/100) × age_coeff
+    if is_ev_type:
+        excise_eur = (_d(rates.ev_excise_eur_per_kwh) * _d(inputs.battery_capacity_kwh)).quantize(TWO_PLACES, ROUND_HALF_UP)
     else:
         excise_eur = (_d(rates.excise_eur_per_100cc) * _d(engine_cc) / Decimal('100') * _d(rates.age_coefficient)).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     eur_to_uah = _d(rates.usd_to_uah) / _d(rates.usd_to_eur)
     excise_uah = (excise_eur * eur_to_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
 
-    # 4. Пошлина 10% от таможенной стоимости
+    # 4. Пошлина: EV/PHEV = 0%; US-origin ДВС = 10% (льгота EUR.1 не применяется для США)
+    # duty_rate берётся из снимка ставок — для EV/PHEV duty_rate=0 устанавливается в seed_rates
     duty_usd = (customs_value_usd * _d(rates.duty_rate)).quantize(TWO_PLACES, ROUND_HALF_UP)
     duty_uah = (duty_usd * _d(rates.usd_to_uah)).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     # 5. НДС 20% от (таможенная стоимость + пошлина + акциз) в UAH
+    # С 01.01.2026 льгота по НДС для EV отменена — все авто платят 20%
     customs_value_uah = (customs_value_usd * _d(rates.usd_to_uah)).quantize(TWO_PLACES, ROUND_HALF_UP)
     vat_base_uah = customs_value_uah + duty_uah + excise_uah
     vat_uah = (vat_base_uah * _d(rates.vat_rate)).quantize(TWO_PLACES, ROUND_HALF_UP)
@@ -192,10 +190,11 @@ def build_rate_snapshot_from_db(
     vehicle_year: int,
     calculation_year: int,
     pension_rate,
+    rates_date: str = '',
 ) -> RateSnapshot:
     """Собирает RateSnapshot из объектов моделей Django."""
-    age_coeff = _calc_age_coeff_from_excise_rate(excise_rate, vehicle_year, calculation_year)
-
+    from decimal import Decimal as _Dec
+    ev_kwh = excise_rate.ev_excise_eur_per_kwh
     return RateSnapshot(
         auction_fee=AuctionFeeRateSnapshot(
             fee_fixed_usd=_d(auction_fee_tier.fee_fixed_usd),
@@ -207,10 +206,12 @@ def build_rate_snapshot_from_db(
         usd_to_uah=_d(usd_to_uah_rate.rate),
         usd_to_eur=_d(usd_to_eur_rate.rate),
         excise_eur_per_100cc=_d(excise_rate.eur_per_100cc),
-        age_coefficient=age_coeff,
+        ev_excise_eur_per_kwh=_d(ev_kwh) if ev_kwh is not None else _Dec('0'),
+        age_coefficient=calc_age_coeff(vehicle_year, calculation_year),
         duty_rate=_d(excise_rate.duty_rate),
         vat_rate=_d(excise_rate.vat_rate),
         pension_fund_rate=_d(pension_rate.rate),
+        rates_date=rates_date,
         meta={
             'auction_fee_tier_id': auction_fee_tier.pk,
             'us_land_route_id': us_land_route.pk,
@@ -234,9 +235,11 @@ def rate_snapshot_to_dict(rates: RateSnapshot) -> dict:
         'usd_to_uah': str(rates.usd_to_uah),
         'usd_to_eur': str(rates.usd_to_eur),
         'excise_eur_per_100cc': str(rates.excise_eur_per_100cc),
+        'ev_excise_eur_per_kwh': str(rates.ev_excise_eur_per_kwh),
         'age_coefficient': str(rates.age_coefficient),
         'duty_rate': str(rates.duty_rate),
         'vat_rate': str(rates.vat_rate),
         'pension_fund_rate': str(rates.pension_fund_rate),
+        'rates_date': rates.rates_date,
         'meta': rates.meta,
     }

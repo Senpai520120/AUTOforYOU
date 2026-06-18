@@ -97,17 +97,22 @@ class CustomsExciseRate(DateRangeModel):
         PETROL = 'petrol', 'Бензин'
         DIESEL = 'diesel', 'Дизель'
         ELECTRIC = 'electric', 'Электро'
-        HYBRID = 'hybrid', 'Гибрид'
+        HYBRID = 'hybrid', 'Гибрид (HEV)'
+        PHEV = 'phev', 'Гибрид (PHEV, plug-in)'
 
     fuel_type = models.CharField(max_length=10, choices=FuelType.choices, verbose_name='Тип топлива')
-    # ПРОВЕРИТЬ по действующему законодательству Украины
-    eur_per_100cc = models.DecimalField(max_digits=8, decimal_places=4, verbose_name='EUR за каждые 100 см³')
-    # Коэффициенты возраста — ПРОВЕРИТЬ по действующему законодательству
-    age_0_1_coeff = models.DecimalField(max_digits=6, decimal_places=4, default=1, verbose_name='Коэфф. 0–1 год')
-    age_1_3_coeff = models.DecimalField(max_digits=6, decimal_places=4, default=1, verbose_name='Коэфф. 1–3 года')
-    age_3_5_coeff = models.DecimalField(max_digits=6, decimal_places=4, default=1, verbose_name='Коэфф. 3–5 лет')
-    age_5_7_coeff = models.DecimalField(max_digits=6, decimal_places=4, default=1, verbose_name='Коэфф. 5–7 лет')
-    age_7_plus_coeff = models.DecimalField(max_digits=6, decimal_places=4, default=1, verbose_name='Коэфф. 7+ лет')
+    # Диапазон объёма двигателя для разграничения ставок (напр. бензин ≤3000 vs >3000)
+    engine_cc_min = models.IntegerField(default=0, verbose_name='Объём от (см³)')
+    engine_cc_max = models.IntegerField(null=True, blank=True, verbose_name='Объём до (см³, пусто=без лимита)')
+    # Ставка акциза для ДВС: EUR за каждые 100 см³ × (engine_cc/100) × age_coeff
+    # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026; финал подтверждает таможенный брокер
+    eur_per_100cc = models.DecimalField(max_digits=8, decimal_places=4, default=0, verbose_name='EUR за каждые 100 см³ (ДВС)')
+    # Ставка акциза для EV/PHEV: EUR за кВт·ч ёмкости батареи
+    # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026; финал подтверждает таможенный брокер
+    ev_excise_eur_per_kwh = models.DecimalField(
+        max_digits=8, decimal_places=4, default='1.0000', null=True, blank=True,
+        verbose_name='EUR за кВт·ч (EV/PHEV, null=не применяется)',
+    )
     duty_rate = models.DecimalField(max_digits=5, decimal_places=4, default='0.1000', verbose_name='Ставка пошлины (10%=0.1000)')
     vat_rate = models.DecimalField(max_digits=5, decimal_places=4, default='0.2000', verbose_name='НДС (20%=0.2000)')
 
@@ -116,7 +121,8 @@ class CustomsExciseRate(DateRangeModel):
         verbose_name_plural = 'Ставки акциза/пошлины'
 
     def __str__(self):
-        return f'Акциз {self.fuel_type}: {self.eur_per_100cc} EUR/100cc ({self.valid_from})'
+        cc_range = f'{self.engine_cc_min}–{self.engine_cc_max or "∞"} cc'
+        return f'Акциз {self.fuel_type} [{cc_range}]: {self.eur_per_100cc} EUR/100cc ({self.valid_from})'
 
 
 class PensionFundBracket(DateRangeModel):

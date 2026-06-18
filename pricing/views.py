@@ -121,8 +121,13 @@ class CalculateView(APIView):
             ).order_by('-date').first()
 
             excise_rate = _active_on(
-                CustomsExciseRate.objects.filter(fuel_type=data['fuel_type'])
-            ).first()
+                CustomsExciseRate.objects.filter(
+                    fuel_type=data['fuel_type'],
+                    engine_cc_min__lte=data['engine_cc'],
+                ).filter(
+                    Q(engine_cc_max__isnull=True) | Q(engine_cc_max__gte=data['engine_cc'])
+                )
+            ).order_by('-engine_cc_min').first()
 
             approx_uah = data['auction_price_usd'] * usd_to_uah.rate if usd_to_uah else None
             pension_bracket = None
@@ -171,6 +176,7 @@ class CalculateView(APIView):
             vehicle_year=data['vehicle_year'],
             calculation_year=today.year,
             pension_rate=pension_bracket,
+            rates_date=str(today),
         )
 
         inputs = LandedCostInputs(
@@ -179,6 +185,7 @@ class CalculateView(APIView):
             fuel_type=data['fuel_type'],
             vehicle_year=data['vehicle_year'],
             calculation_year=today.year,
+            battery_capacity_kwh=data.get('battery_capacity_kwh', 0),
         )
 
         result = calculate_landed_cost(inputs, rates)
@@ -200,7 +207,11 @@ class CalculateView(APIView):
             {
                 'calculation_id': calc.pk,
                 'is_estimate': True,
-                'warning': 'Розрахунок є орієнтовним. Ставки акцизу та пенсійного збору потребують перевірки за чинним законодавством України.',
+                'rates_validity_date': str(today),
+                'warning': (
+                    'Розрахунок є орієнтовним. '
+                    'Ставки акцизу актуальні на янв–чер 2026; фінальний розрахунок підтверджує митний брокер.'
+                ),
                 'breakdown': breakdown,
             },
             status=status.HTTP_201_CREATED,
