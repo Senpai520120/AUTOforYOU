@@ -88,13 +88,12 @@ class LandedCostBreakdown:
 
 def calc_age_coeff(vehicle_year: int, calculation_year: int) -> Decimal:
     """
-    Коэффициент возраста = max(1, год_расчёта − год_выпуска).
+    Коэффициент возраста = min(15, max(1, год_расчёта − год_выпуска)).
 
-    Уточнить у брокера: часть брокеров считает (год − год_выпуска − 1),
-    т.е. для авто 2017 года в 2026: либо 9, либо 8.
-    Держим формулу здесь, чтобы не дублировать логику.
+    Потолок 15 — авто старше 15 лет таможатся с коэффициентом 15 (выше не растёт).
+    Уточнить у брокера: часть брокеров считает (год − год_выпуска − 1).
     """
-    return _d(max(1, calculation_year - vehicle_year))
+    return _d(min(15, max(1, calculation_year - vehicle_year)))
 
 
 def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> LandedCostBreakdown:

@@ -57,11 +57,20 @@ class TestCalcAgeCoeff(SimpleTestCase):
         self.assertEqual(calc_age_coeff(2018, 2026), D('8'))
 
     def test_age_1_minimum(self):
-        # max(1, 2026-2026) = 1
         self.assertEqual(calc_age_coeff(2026, 2026), D('1'))
 
     def test_age_negative_clamped_to_1(self):
         self.assertEqual(calc_age_coeff(2027, 2026), D('1'))
+
+    def test_age_20_capped_to_15(self):
+        # Авто 2006 года в 2026 = 20 лет → потолок 15
+        self.assertEqual(calc_age_coeff(2006, 2026), D('15'))
+
+    def test_age_exactly_15(self):
+        self.assertEqual(calc_age_coeff(2011, 2026), D('15'))
+
+    def test_age_14_not_capped(self):
+        self.assertEqual(calc_age_coeff(2012, 2026), D('14'))
 
 
 # ---------------------------------------------------------------------------
