@@ -8,17 +8,23 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .calculator import (
+    AuctionFeeBreakdown,
     LandedCostInputs,
     build_rate_snapshot_from_db,
+    calc_auction_fees,
     calculate_landed_cost,
     rate_snapshot_to_dict,
+    ZERO,
 )
 from .models import (
-    AuctionFeeTier, Calculation, CustomsExciseRate,
+    AuctionFeeTier, AuctionFixedFee, Calculation, CustomsExciseRate,
     EuToUaDeliveryRate, ExchangeRate, OceanFreightRate,
     PensionFundBracket, UsLandRoute,
 )
 from .serializers import CalculateInputSerializer, CalculationSerializer
+
+# Дефолтный тип участника для наших расчётов (broker — основной режим работы)
+DEFAULT_MEMBER_TYPE = 'broker'
 
 
 def _active_on(qs, on_date=None):
@@ -28,15 +34,49 @@ def _active_on(qs, on_date=None):
     )
 
 
+def _lookup_tier(auction, bid, member_type, payment_type, title_type, on_date):
+    """
+    Ищет подходящий AuctionFeeTier.
+    Приоритет: точный title_type → 'any'.
+    """
+    base_qs = _active_on(
+        AuctionFeeTier.objects.filter(
+            auction=auction,
+            member_type=member_type,
+            payment_type=payment_type,
+            bid_min__lte=bid,
+        ).filter(
+            Q(bid_max__isnull=True) | Q(bid_max__gte=bid)
+        ),
+        on_date,
+    ).order_by('bid_min')
+
+    return (
+        base_qs.filter(title_type=title_type).first()
+        or base_qs.filter(title_type='any').first()
+    )
+
+
+def _lookup_fixed_fees(auction, title_type, on_date):
+    """Возвращает применимые фиксированные сборы: gate по title_type + env + virtual_bid."""
+    active = _active_on(AuctionFixedFee.objects.filter(auction=auction), on_date)
+    gate = active.filter(fee_type='gate').filter(
+        Q(title_type=title_type) | Q(title_type='any')
+    )
+    others = active.filter(fee_type__in=['environmental', 'virtual_bid'])
+    return list(gate) + list(others)
+
+
 @extend_schema(
     tags=['pricing'],
     summary='Калькулятор стоимости «под ключ»',
     description=(
         'Рассчитывает полную стоимость автомобиля в Украине: '
-        'аукционный сбор, логистика США, морской фрахт, доставка ЕС→UA, растаможка.\n\n'
+        'аукционный сбор (buyer fee + gate + environmental + virtual bid), '
+        'логистика США, морской фрахт, доставка ЕС→UA, растаможка.\n\n'
         '**Важно**: результат всегда `is_estimate: true`. '
-        'Ставки акциза и пенсионного сбора — плейсхолдеры, '
-        'требуют проверки по действующему законодательству Украины.'
+        'Ставки аукционных сборов — baseline (сверить с тарифом брокера). '
+        'Ставки акциза и пенсионного сбора — требуют проверки по законодательству.'
     ),
     request=CalculateInputSerializer,
     responses={
@@ -46,13 +86,16 @@ def _active_on(qs, on_date=None):
     },
     examples=[
         OpenApiExample(
-            'Toyota Camry 2019 бензин 2500cc $10 000',
+            'Toyota Camry 2019 бензин 2500cc $10 000 (broker/secured/salvage)',
             value={
                 'auction_price_usd': '10000.00',
                 'engine_cc': 2500,
                 'fuel_type': 'petrol',
                 'vehicle_year': 2019,
                 'auction': 'copart',
+                'member_type': 'broker',
+                'payment_type': 'secured',
+                'title_type': 'salvage',
                 'auction_location': 'general',
                 'us_port': 'houston',
                 'eu_port': 'klaipeda',
@@ -67,6 +110,9 @@ def _active_on(qs, on_date=None):
                 'fuel_type': 'electric',
                 'vehicle_year': 2022,
                 'auction': 'copart',
+                'member_type': 'broker',
+                'payment_type': 'secured',
+                'title_type': 'salvage',
                 'auction_location': 'california',
                 'us_port': 'houston',
                 'eu_port': 'gdansk',
@@ -85,32 +131,47 @@ class CalculateView(APIView):
         today = date.today()
         calc_date = data.get('calculation_date') or today
 
+        # Параметры аукционного сбора
+        member_type = data.get('member_type', DEFAULT_MEMBER_TYPE)
+        payment_type = data.get('payment_type', 'secured')
+        title_type = data.get('title_type', 'salvage')
+        auction_price = data['auction_price_usd']
+
         try:
-            auction_fee = _active_on(
-                AuctionFeeTier.objects.filter(
-                    auction=data['auction'],
-                    min_price_usd__lte=data['auction_price_usd'],
-                ).filter(
-                    Q(max_price_usd__isnull=True) | Q(max_price_usd__gte=data['auction_price_usd'])
-                )
-            ).order_by('min_price_usd').first()
+            tier = _lookup_tier(
+                auction=data['auction'],
+                bid=auction_price,
+                member_type=member_type,
+                payment_type=payment_type,
+                title_type=title_type,
+                on_date=calc_date,
+            )
+
+            fixed_fees = _lookup_fixed_fees(
+                auction=data['auction'],
+                title_type=title_type,
+                on_date=calc_date,
+            )
 
             us_land = _active_on(
                 UsLandRoute.objects.filter(
                     auction_location__iexact=data['auction_location'],
                     us_port__iexact=data['us_port'],
-                )
+                ),
+                calc_date,
             ).first()
 
             ocean = _active_on(
                 OceanFreightRate.objects.filter(
                     us_port__iexact=data['us_port'],
                     eu_port=data['eu_port'],
-                )
+                ),
+                calc_date,
             ).first()
 
             eu_to_ua = _active_on(
-                EuToUaDeliveryRate.objects.filter(eu_port=data['eu_port'])
+                EuToUaDeliveryRate.objects.filter(eu_port=data['eu_port']),
+                calc_date,
             ).first()
 
             # Курс НБУ на дату оформления. Если нет — берём ближайший предыдущий.
@@ -130,7 +191,8 @@ class CalculateView(APIView):
                     engine_cc_min__lte=data['engine_cc'],
                 ).filter(
                     Q(engine_cc_max__isnull=True) | Q(engine_cc_max__gte=data['engine_cc'])
-                )
+                ),
+                calc_date,
             ).order_by('-engine_cc_min').first()
 
             approx_uah = data['auction_price_usd'] * usd_to_uah.rate if usd_to_uah else None
@@ -139,12 +201,15 @@ class CalculateView(APIView):
                 pension_bracket = _active_on(
                     PensionFundBracket.objects.filter(min_value_uah__lte=approx_uah).filter(
                         Q(max_value_uah__isnull=True) | Q(max_value_uah__gte=approx_uah)
-                    )
+                    ),
+                    calc_date,
                 ).order_by('-min_value_uah').first()
 
             missing = []
-            if not auction_fee:
-                missing.append(f'AuctionFeeTier для {data["auction"]} / ${data["auction_price_usd"]}')
+            if not tier:
+                missing.append(
+                    f'AuctionFeeTier для {data["auction"]} / {member_type}/{payment_type}/{title_type} / ${auction_price}'
+                )
             if not us_land:
                 missing.append(f'UsLandRoute для {data["auction_location"]} → {data["us_port"]}')
             if not ocean:
@@ -169,8 +234,15 @@ class CalculateView(APIView):
         except Exception as exc:
             return Response({'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # Рассчитываем аукционный сбор (чистая функция калькулятора)
+        fee_breakdown = calc_auction_fees(
+            bid=auction_price,
+            tier=tier,
+            fixed_fees=fixed_fees,
+        )
+
         rates = build_rate_snapshot_from_db(
-            auction_fee_tier=auction_fee,
+            auction_fee_breakdown=fee_breakdown,
             us_land_route=us_land,
             ocean_freight=ocean,
             eu_to_ua=eu_to_ua,
@@ -181,6 +253,17 @@ class CalculateView(APIView):
             calculation_year=calc_date.year,
             pension_rate=pension_bracket,
             rates_date=str(calc_date),
+            meta={
+                'auction_fee_tier_id': tier.pk,
+                'fixed_fee_ids': [f.pk for f in fixed_fees],
+                'us_land_route_id': us_land.pk,
+                'ocean_freight_id': ocean.pk,
+                'eu_to_ua_id': eu_to_ua.pk,
+                'usd_to_uah_rate_id': usd_to_uah.pk,
+                'usd_to_eur_rate_id': usd_to_eur.pk,
+                'excise_rate_id': excise_rate.pk,
+                'pension_bracket_id': pension_bracket.pk,
+            },
         )
 
         inputs = LandedCostInputs(
@@ -215,6 +298,7 @@ class CalculateView(APIView):
                 'exchange_rate_date': str(usd_to_uah.date),
                 'warning': (
                     'Розрахунок є орієнтовним. '
+                    'Ставки аукціонних зборів — baseline (звірити з тарифом брокера). '
                     'Ставки акцизу актуальні на янв–чер 2026; фінальний розрахунок підтверджує митний брокер.'
                 ),
                 'breakdown': breakdown,
@@ -231,7 +315,8 @@ class CalculateView(APIView):
         200: inline_serializer(
             name='ActiveRatesResponse',
             fields={
-                'auction_fees': drf_serializers.ListField(),
+                'auction_fee_tiers': drf_serializers.ListField(),
+                'auction_fixed_fees': drf_serializers.ListField(),
                 'us_land_routes': drf_serializers.ListField(),
                 'ocean_freight': drf_serializers.ListField(),
                 'eu_to_ua': drf_serializers.ListField(),
@@ -253,9 +338,15 @@ class ActiveRatesView(APIView):
             )
 
         return Response({
-            'auction_fees': list(
+            'auction_fee_tiers': list(
                 active(AuctionFeeTier.objects.all()).values(
-                    'id', 'auction', 'min_price_usd', 'max_price_usd', 'fee_fixed_usd', 'fee_pct'
+                    'id', 'auction', 'member_type', 'payment_type', 'title_type',
+                    'bid_min', 'bid_max', 'fee_flat', 'fee_percent',
+                )
+            ),
+            'auction_fixed_fees': list(
+                active(AuctionFixedFee.objects.all()).values(
+                    'id', 'auction', 'fee_type', 'title_type', 'amount',
                 )
             ),
             'us_land_routes': list(

@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
-    AuctionFeeTier, UsLandRoute, OceanFreightRate,
+    AuctionFeeTier, AuctionFixedFee,
+    UsLandRoute, OceanFreightRate,
     EuToUaDeliveryRate, ExchangeRate, CustomsExciseRate,
     PensionFundBracket, Calculation,
 )
@@ -8,8 +9,19 @@ from .models import (
 
 @admin.register(AuctionFeeTier)
 class AuctionFeeTierAdmin(admin.ModelAdmin):
-    list_display = ('auction', 'min_price_usd', 'max_price_usd', 'fee_fixed_usd', 'fee_pct', 'valid_from', 'valid_to')
-    list_filter = ('auction',)
+    list_display = (
+        'auction', 'member_type', 'payment_type', 'title_type',
+        'bid_min', 'bid_max', 'fee_flat', 'fee_percent',
+        'valid_from', 'valid_to',
+    )
+    list_filter = ('auction', 'member_type', 'payment_type', 'title_type')
+    ordering = ('auction', 'member_type', 'bid_min')
+
+
+@admin.register(AuctionFixedFee)
+class AuctionFixedFeeAdmin(admin.ModelAdmin):
+    list_display = ('auction', 'fee_type', 'title_type', 'amount', 'valid_from', 'valid_to')
+    list_filter = ('auction', 'fee_type', 'title_type')
 
 
 @admin.register(UsLandRoute)

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -11,23 +12,87 @@ class DateRangeModel(models.Model):
 
 
 class AuctionFeeTier(DateRangeModel):
+    """
+    Тиерный buyer fee аукциона.
+    # baseline — сверить с офиц. сеткой и тарифом брокера
+    """
     class Auction(models.TextChoices):
         COPART = 'copart', 'Copart'
         IAAI = 'iaai', 'IAAI'
 
+    class MemberType(models.TextChoices):
+        PUBLIC = 'public', 'Публичный'
+        LICENSED = 'licensed', 'Лицензированный дилер'
+        BROKER = 'broker', 'Брокер'
+
+    class PaymentType(models.TextChoices):
+        SECURED = 'secured', 'Обеспечённый'
+        UNSECURED = 'unsecured', 'Необеспечённый'
+
+    class TitleType(models.TextChoices):
+        CLEAN = 'clean', 'Чистый (clean)'
+        SALVAGE = 'salvage', 'Salvage / Rebuildable'
+        ANY = 'any', 'Любой (не различается)'
+
     auction = models.CharField(max_length=10, choices=Auction.choices, verbose_name='Аукцион')
-    min_price_usd = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Цена от ($)')
-    max_price_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='Цена до ($, пусто=без лимита)')
-    fee_fixed_usd = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='Фиксированный сбор ($)')
-    fee_pct = models.DecimalField(max_digits=5, decimal_places=4, default=0, verbose_name='% от цены (напр. 0.1000 = 10%)')
+    member_type = models.CharField(max_length=10, choices=MemberType.choices, default=MemberType.PUBLIC, verbose_name='Тип участника')
+    payment_type = models.CharField(max_length=10, choices=PaymentType.choices, default=PaymentType.SECURED, verbose_name='Тип оплаты')
+    title_type = models.CharField(max_length=10, choices=TitleType.choices, default=TitleType.ANY, verbose_name='Тип титула')
+    bid_min = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Ставка от ($)')
+    bid_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='Ставка до ($, пусто=без лимита)')
+    # Ровно одно из двух:
+    fee_flat = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, verbose_name='Фикс. сбор ($)')
+    fee_percent = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True, verbose_name='% от ставки (напр. 0.0600 = 6%)')
 
     class Meta:
-        verbose_name = 'Тариф аукционного сбора'
-        verbose_name_plural = 'Тарифы аукционных сборов'
-        ordering = ['auction', 'min_price_usd']
+        verbose_name = 'Тиер buyer fee'
+        verbose_name_plural = 'Тиеры buyer fee'
+        ordering = ['auction', 'member_type', 'bid_min']
+
+    def clean(self):
+        flat_set = self.fee_flat is not None
+        pct_set = self.fee_percent is not None
+        if flat_set == pct_set:
+            raise ValidationError('Задайте ровно одно из fee_flat / fee_percent (не оба и не ни одного).')
 
     def __str__(self):
-        return f'{self.auction} ${self.min_price_usd}–{self.max_price_usd or "∞"} ({self.valid_from})'
+        fee_str = f'${self.fee_flat}' if self.fee_flat is not None else f'{float(self.fee_percent)*100:.1f}%'
+        return (
+            f'{self.auction} [{self.member_type}/{self.payment_type}/{self.title_type}] '
+            f'${self.bid_min}–{self.bid_max or "∞"} → {fee_str}'
+        )
+
+
+class AuctionFixedFee(DateRangeModel):
+    """
+    Фиксированные сборы аукциона (gate, environmental, virtual bid).
+    # baseline — сверить с офиц. сеткой и тарифом брокера
+    """
+    class FeeType(models.TextChoices):
+        GATE = 'gate', 'Gate / Service fee'
+        ENVIRONMENTAL = 'environmental', 'Environmental fee'
+        VIRTUAL_BID = 'virtual_bid', 'Virtual bid fee'
+
+    class TitleType(models.TextChoices):
+        CLEAN = 'clean', 'Чистый (clean)'
+        SALVAGE = 'salvage', 'Salvage / Rebuildable'
+        ANY = 'any', 'Любой'
+
+    auction = models.CharField(max_length=10, choices=AuctionFeeTier.Auction.choices, verbose_name='Аукцион')
+    fee_type = models.CharField(max_length=20, choices=FeeType.choices, verbose_name='Тип сбора')
+    title_type = models.CharField(
+        max_length=10, choices=TitleType.choices, default=TitleType.ANY,
+        verbose_name='Тип титула (актуально для gate fee)',
+    )
+    amount = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Сумма ($)')
+
+    class Meta:
+        verbose_name = 'Фиксированный сбор аукциона'
+        verbose_name_plural = 'Фиксированные сборы аукциона'
+        ordering = ['auction', 'fee_type']
+
+    def __str__(self):
+        return f'{self.auction} {self.fee_type} [{self.title_type}]: ${self.amount} ({self.valid_from})'
 
 
 class UsLandRoute(DateRangeModel):

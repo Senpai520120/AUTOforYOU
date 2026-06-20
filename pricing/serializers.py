@@ -15,6 +15,10 @@ class CalculateInputSerializer(serializers.Serializer):
     # Ёмкость батареи в кВт·ч — обязательно для EV/PHEV, для ДВС оставить 0
     battery_capacity_kwh = serializers.IntegerField(min_value=0, max_value=200, default=0)
     auction = serializers.ChoiceField(choices=['copart', 'iaai'], default='copart')
+    # Тип участника аукциона (влияет на тиер buyer fee)
+    member_type = serializers.ChoiceField(choices=['public', 'licensed', 'broker'], default='broker')
+    payment_type = serializers.ChoiceField(choices=['secured', 'unsecured'], default='secured')
+    title_type = serializers.ChoiceField(choices=['clean', 'salvage', 'any'], default='salvage')
     auction_location = serializers.CharField(max_length=100, default='general')
     us_port = serializers.CharField(max_length=50, default='houston')
     eu_port = serializers.ChoiceField(choices=['klaipeda', 'gdansk'], default='klaipeda')
