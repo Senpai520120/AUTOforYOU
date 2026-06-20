@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'listings',
     'shipments',
     'integrations',
+    'payments',
     'cars',
 
     'drf_spectacular',
@@ -144,9 +145,15 @@ SPECTACULAR_SETTINGS = {
         {'name': 'listings', 'description': 'Объявления маркетплейса'},
         {'name': 'shipments', 'description': 'Логистика контейнеров'},
         {'name': 'b2b', 'description': 'B2B-доска опта (только верифицированные дилеры)'},
+        {'name': 'payments', 'description': 'Платёжный шлюз LiqPay (checkout + webhook)'},
         {'name': 'legacy', 'description': 'Устаревшие эндпоинты'},
     ],
 }
+
+# LiqPay — ключи из env. Для sandbox: LIQPAY_SANDBOX=true
+LIQPAY_PUBLIC_KEY = os.environ.get('LIQPAY_PUBLIC_KEY', '')
+LIQPAY_PRIVATE_KEY = os.environ.get('LIQPAY_PRIVATE_KEY', '')
+LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),

@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/v1/pricing/', include('pricing.urls')),
     path('api/v1/listings/', include('listings.urls')),
     path('api/v1/shipments/', include('shipments.urls')),
+    path('api/v1/payments/', include('payments.urls')),
     path('api/v1/b2b/', include((b2b_urlpatterns, 'b2b'))),
     # Legacy
     path('api/', include('cars.urls')),
