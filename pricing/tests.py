@@ -8,7 +8,8 @@
 """
 from decimal import Decimal
 from types import SimpleNamespace
-from django.test import SimpleTestCase
+from django.core.management import call_command
+from django.test import SimpleTestCase, TestCase
 
 from .calculator import (
     AuctionFeeBreakdown,
@@ -492,20 +493,30 @@ class TestCopartPublicUpperTier(SimpleTestCase):
 
 class TestIAAIPercentTier(SimpleTestCase):
     """
-    IAAI licensed, верхний диапазон (baseline ~8%).
-    $12000: buyer_fee = 12000 * 0.08 = 960.
+    IAAI licensed тиры по ставке:
+    $5000-$7499 → 8%;  $7500+ → 10%.
     """
 
-    def test_iaai_percent_upper(self):
-        tier = _tier(fee_percent='0.0800')
-        fixed = [
+    def _fixed_fees(self):
+        return [
             _fixed('gate', '95.00'),
             _fixed('environmental', '15.00'),
             _fixed('virtual_bid', '75.00'),
         ]
-        result = calc_auction_fees(D('12000'), tier, fixed)
-        self.assertEqual(result.buyer_fee, D('960.00'))
-        self.assertEqual(result.total, D('960.00') + D('95.00') + D('15.00') + D('75.00'))
+
+    def test_iaai_8pct_tier_bid_6000(self):
+        """$6000 попадает в тир 8% → buyer_fee = 480."""
+        tier = _tier(fee_percent='0.0800')
+        result = calc_auction_fees(D('6000'), tier, self._fixed_fees())
+        self.assertEqual(result.buyer_fee, D('480.00'))
+        self.assertEqual(result.total, D('480.00') + D('95.00') + D('15.00') + D('75.00'))
+
+    def test_iaai_10pct_tier_bid_12000(self):
+        """$12000 попадает в тир $7500+ → 10% → buyer_fee = 1200."""
+        tier = _tier(fee_percent='0.1000')
+        result = calc_auction_fees(D('12000'), tier, self._fixed_fees())
+        self.assertEqual(result.buyer_fee, D('1200.00'))
+        self.assertEqual(result.total, D('1200.00') + D('95.00') + D('15.00') + D('75.00'))
 
 
 class TestAuctionFeeBoundary(SimpleTestCase):
@@ -553,3 +564,184 @@ class TestAuctionFeeNoFixedFees(SimpleTestCase):
         self.assertEqual(result.environmental_fee, D('0'))
         self.assertEqual(result.virtual_bid_fee, D('0'))
         self.assertEqual(result.total, D('235.00'))
+
+
+class TestIAAITierBoundaryDB(TestCase):
+    """
+    Границы IAAI-тиров из реальных seed-данных.
+    $5000-$7499 → 8%;  $7500+ → 10%.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        call_command('seed_auction_fees', '--clear', verbosity=0)
+
+    def _tier(self, bid):
+        from datetime import date
+        from pricing.views import _lookup_tier
+        return _lookup_tier('iaai', D(str(bid)), 'broker', 'secured', 'any', date.today())
+
+    def test_bid_7499_is_8pct(self):
+        tier = self._tier(7499)
+        self.assertIsNotNone(tier)
+        self.assertIsNone(tier.fee_flat)
+        self.assertEqual(tier.fee_percent, D('0.0800'))
+
+    def test_bid_7500_is_10pct(self):
+        tier = self._tier(7500)
+        self.assertIsNotNone(tier)
+        self.assertIsNone(tier.fee_flat)
+        self.assertEqual(tier.fee_percent, D('0.1000'))
+
+    def test_bid_12000_calc_buyer_fee(self):
+        from pricing.views import _lookup_fixed_fees
+        from datetime import date
+        today = date.today()
+        tier = self._tier(12000)
+        fixed = _lookup_fixed_fees('iaai', 'any', today)
+        result = calc_auction_fees(D('12000'), tier, fixed)
+        self.assertEqual(result.buyer_fee, D('1200.00'))
+
+
+class TestCalculateInputSerializerDefaults(SimpleTestCase):
+    """Сериализатор должен использовать broker+secured по умолчанию."""
+
+    def _valid_data(self):
+        return {
+            'auction': 'copart',
+            'auction_price_usd': '5000',
+            'auction_location': 'general',
+            'us_port': 'houston',
+            'eu_port': 'klaipeda',
+            'fuel_type': 'petrol',
+            'engine_cc': 2000,
+            'vehicle_year': 2018,
+        }
+
+    def test_default_member_type_is_broker(self):
+        from pricing.serializers import CalculateInputSerializer
+        s = CalculateInputSerializer(data=self._valid_data())
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['member_type'], 'broker')
+
+    def test_default_payment_type_is_secured(self):
+        from pricing.serializers import CalculateInputSerializer
+        s = CalculateInputSerializer(data=self._valid_data())
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['payment_type'], 'secured')
+
+
+class TestLandedCostE2ECopartBroker(TestCase):
+    """
+    Интеграционный тест полной формулы «под ключ».
+    Сценарий: Copart broker salvage secured $5000 petrol 2.0L 2018.
+    Все данные из seed_rates + seed_auction_fees.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        call_command('seed_rates', verbosity=0)
+        call_command('seed_auction_fees', '--clear', verbosity=0)
+
+    def _build(self):
+        from datetime import date
+        from pricing.views import _lookup_tier, _lookup_fixed_fees, _active_on
+        from pricing.models import (
+            UsLandRoute, OceanFreightRate, EuToUaDeliveryRate,
+            ExchangeRate, CustomsExciseRate, PensionFundBracket,
+        )
+        from pricing.calculator import (
+            build_rate_snapshot_from_db, LandedCostInputs, calculate_landed_cost,
+        )
+        from django.db.models import Q
+
+        today = date.today()
+        bid = D('5000')
+
+        tier = _lookup_tier('copart', bid, 'broker', 'secured', 'salvage', today)
+        fixed = _lookup_fixed_fees('copart', 'salvage', today)
+        auction_fee = calc_auction_fees(bid, tier, fixed)
+
+        us_land = _active_on(UsLandRoute.objects.filter(auction_location='general', us_port='houston'), today).first()
+        ocean = _active_on(OceanFreightRate.objects.filter(us_port='houston', eu_port='klaipeda'), today).first()
+        eu_to_ua = _active_on(EuToUaDeliveryRate.objects.filter(eu_port='klaipeda'), today).first()
+        usd_to_uah = ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH').order_by('-date').first()
+        usd_to_eur = ExchangeRate.objects.filter(from_currency='USD', to_currency='EUR').order_by('-date').first()
+        excise_rate = _active_on(
+            CustomsExciseRate.objects.filter(fuel_type='petrol', engine_cc_min__lte=2000).filter(
+                Q(engine_cc_max__isnull=True) | Q(engine_cc_max__gte=2000)
+            ),
+            today,
+        ).order_by('-engine_cc_min').first()
+        pension_bracket = _active_on(
+            PensionFundBracket.objects.filter(min_value_uah__lte=D('207500')).filter(
+                Q(max_value_uah__isnull=True) | Q(max_value_uah__gte=D('207500'))
+            ),
+            today,
+        ).order_by('-min_value_uah').first()
+
+        rates = build_rate_snapshot_from_db(
+            auction_fee, us_land, ocean, eu_to_ua,
+            usd_to_uah, usd_to_eur, excise_rate,
+            vehicle_year=2018, calculation_year=2026,
+            pension_rate=pension_bracket, rates_date=str(today),
+        )
+        inputs = LandedCostInputs(
+            auction_price_usd=bid,
+            engine_cc=2000,
+            fuel_type='petrol',
+            vehicle_year=2018,
+            calculation_year=2026,
+        )
+        return calculate_landed_cost(inputs, rates), rates
+
+    def test_auction_fee_buyer_copart_broker_5000(self):
+        breakdown, _ = self._build()
+        # copart broker secured: $5000 → 6% → $300
+        self.assertEqual(breakdown.auction_fee_buyer_usd, D('300.00'))
+
+    def test_auction_fee_total_includes_fixed(self):
+        breakdown, _ = self._build()
+        # buyer $300 + gate salvage $95 + env $10 + vb $99 = $504
+        self.assertEqual(breakdown.auction_fee_usd, D('504.00'))
+
+    def test_customs_value_usd(self):
+        breakdown, _ = self._build()
+        # auction $5000 + us_land $500 + ocean $1300 = $6800
+        self.assertEqual(breakdown.customs_value_usd, D('6800.00'))
+
+    def test_duty_usd(self):
+        breakdown, _ = self._build()
+        # customs_value $6800 × 10% = $680
+        self.assertEqual(breakdown.duty_usd, D('680.00'))
+
+    def test_excise_eur_petrol_2l_2018(self):
+        breakdown, _ = self._build()
+        # 5.0 EUR/100cc × 20 (2000/100) × 8 (age_coeff 2026-2018) = 800 EUR
+        self.assertEqual(breakdown.excise_eur, D('800.00'))
+
+    def test_total_usd_includes_all_components(self):
+        breakdown, _ = self._build()
+        # $5000 + $504 + $500 + $1300 + $350 + $680 = $8334
+        self.assertEqual(breakdown.total_usd, D('8334.00'))
+
+    def test_total_uah_positive_and_above_usd_equivalent(self):
+        breakdown, rates = self._build()
+        usd_equiv = (breakdown.total_usd * rates.usd_to_uah).quantize(D('0.01'))
+        self.assertGreater(breakdown.total_uah, usd_equiv)
+
+    def test_is_estimate_flag(self):
+        breakdown, _ = self._build()
+        self.assertTrue(breakdown.is_estimate)
+
+    def test_rates_date_present(self):
+        _, rates = self._build()
+        self.assertTrue(rates.rates_date)
+
+    def test_all_uah_fields_positive(self):
+        breakdown, _ = self._build()
+        for field_name in ('excise_uah', 'duty_uah', 'vat_uah', 'pension_fund_uah', 'total_uah'):
+            val = getattr(breakdown, field_name)
+            self.assertGreater(val, D('0'), f'{field_name} должен быть > 0')

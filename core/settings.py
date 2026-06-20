@@ -155,6 +155,9 @@ LIQPAY_PUBLIC_KEY = os.environ.get('LIQPAY_PUBLIC_KEY', '')
 LIQPAY_PRIVATE_KEY = os.environ.get('LIQPAY_PRIVATE_KEY', '')
 LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
 
+# Аукционные сборы — тип участника по умолчанию (public / licensed / broker)
+AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),

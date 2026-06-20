@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.conf import settings
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse, inline_serializer
 from rest_framework import serializers as drf_serializers
@@ -23,8 +24,7 @@ from .models import (
 )
 from .serializers import CalculateInputSerializer, CalculationSerializer
 
-# Дефолтный тип участника для наших расчётов (broker — основной режим работы)
-DEFAULT_MEMBER_TYPE = 'broker'
+DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
 
 
 def _active_on(qs, on_date=None):
