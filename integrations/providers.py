@@ -3,6 +3,9 @@
 
 Реальные провайдеры подключаются через переменные окружения (API-ключи).
 До получения ключей все провайдеры возвращают демо-данные с флагом demo=True.
+
+NHTSAVinDecodeProvider — реальный бесплатный декодер NHTSA vPIC (без ключа).
+AuctionHistoryProvider — заглушка BidFax/Carfax (платный, ключ не подключён).
 """
 from abc import ABC, abstractmethod
 from datetime import date
@@ -43,6 +46,73 @@ class StubVinProvider(VinProvider):
             'last_auction': 'Copart Dallas',
             'auction_date': str(date.today()),
             'note': '⚠ Демо-данные. Підключіть реального провайдера (CarVertical / VinCheck).',
+        }
+
+
+
+# ─── NHTSA vPIC — реальный VIN-декодер (бесплатно, без ключа) ───────────────
+
+_NHTSA_URL = 'https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/{vin}?format=json'
+
+_FUEL_MAP = {
+    'gasoline': 'petrol',
+    'petrol': 'petrol',
+    'diesel': 'diesel',
+    'flex fuel (ffv)': 'petrol',
+    'electric': 'electric',
+    'plug-in hybrid electric': 'phev',
+    'hybrid (hev)': 'hybrid',
+    'natural gas': 'petrol',
+}
+
+
+class NHTSAVinDecodeProvider:
+    """
+    Декодирует VIN через NHTSA vPIC API.
+    Возвращает технические характеристики: make, model, year, engine_cc, fuel_type, body.
+    demo=False — данные реальные из федеральной базы США.
+    """
+
+    def decode(self, vin: str) -> dict:
+        import httpx
+
+        url = _NHTSA_URL.format(vin=vin.upper())
+        try:
+            resp = httpx.get(url, timeout=10.0)
+            resp.raise_for_status()
+            results = resp.json().get('Results', [{}])
+        except Exception as exc:
+            return {'error': str(exc), 'demo': False, 'provider': 'nhtsa_vpic'}
+
+        r = results[0] if results else {}
+
+        def _int(val):
+            try:
+                return int(float(val)) if val else None
+            except (ValueError, TypeError):
+                return None
+
+        raw_fuel = (r.get('FuelTypePrimary') or '').lower()
+        fuel_type = _FUEL_MAP.get(raw_fuel, 'petrol') if raw_fuel else None
+
+        engine_cc_raw = r.get('DisplacementCC') or ''
+        engine_cc = _int(engine_cc_raw)
+
+        return {
+            'demo': False,
+            'provider': 'nhtsa_vpic',
+            'vin': vin.upper(),
+            'make': r.get('Make') or None,
+            'model': r.get('Model') or None,
+            'year': _int(r.get('ModelYear')),
+            'engine_cc': engine_cc,
+            'fuel_type': fuel_type,
+            'body_class': r.get('BodyClass') or None,
+            'engine_cylinders': _int(r.get('EngineCylinders')),
+            'displacement_cc': engine_cc,
+            'fuel_type_primary_raw': r.get('FuelTypePrimary') or None,
+            'error_code': r.get('ErrorCode'),
+            'error_text': r.get('AdditionalErrorText') or r.get('ErrorText') or None,
         }
 
 

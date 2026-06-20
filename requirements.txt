@@ -6,3 +6,5 @@ Pillow==12.2.0
 psycopg2-binary==2.9.12
 PyJWT==2.13.0
 drf-spectacular==0.29.0
+httpx==0.28.1
+liqpay==1.0
