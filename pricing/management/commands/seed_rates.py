@@ -14,7 +14,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 
 from pricing.models import (
-    AuctionFeeTier, CustomsExciseRate, EuToUaDeliveryRate,
+    CustomsExciseRate, EuToUaDeliveryRate,
     ExchangeRate, OceanFreightRate, PensionFundBracket, UsLandRoute,
 )
 
@@ -29,29 +29,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         today = date.today()
 
-        # --- Аукционные сборы Copart (упрощённая шкала) ---
-        copart_tiers = [
-            (Decimal('0'), Decimal('499.99'), Decimal('50'), Decimal('0')),
-            (Decimal('500'), Decimal('999.99'), Decimal('75'), Decimal('0')),
-            (Decimal('1000'), Decimal('1499.99'), Decimal('100'), Decimal('0')),
-            (Decimal('1500'), Decimal('1999.99'), Decimal('125'), Decimal('0')),
-            (Decimal('2000'), Decimal('2999.99'), Decimal('150'), Decimal('0')),
-            (Decimal('3000'), Decimal('3999.99'), Decimal('175'), Decimal('0')),
-            (Decimal('4000'), Decimal('4999.99'), Decimal('200'), Decimal('0')),
-            (Decimal('5000'), None, Decimal('0'), Decimal('0.1000')),  # 10% от цены
-        ]
-        for min_p, max_p, fixed, pct in copart_tiers:
-            AuctionFeeTier.objects.get_or_create(
-                auction='copart', min_price_usd=min_p,
-                defaults=dict(max_price_usd=max_p, fee_fixed_usd=fixed, fee_pct=pct, valid_from=today)
-            )
-
-        # IAAI — аналогично упрощённо
-        AuctionFeeTier.objects.get_or_create(
-            auction='iaai', min_price_usd=Decimal('0'),
-            defaults=dict(max_price_usd=None, fee_fixed_usd=Decimal('0'),
-                          fee_pct=Decimal('0.1000'), valid_from=today)
-        )
+        # --- Аукционные сборы ---
+        # Используй отдельную команду: python manage.py seed_auction_fees
+        # (детальные сетки Copart/IAAI с member_type/payment_type/title_type)
 
         # --- Сухопутная логистика США ---
         routes = [
