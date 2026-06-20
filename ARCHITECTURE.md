@@ -4,10 +4,13 @@
 1. ~~**Реальные ставки растаможки**~~ — ✅ СНЯТ (акциз, пошлина, НДС, пенсионный сбор актуальны на янв–июнь 2026; финал у брокера)
 2. **Реальные тарифы фрахта/логистики** — Copart buyer fees, реальные ставки
    UsLandRoute, OceanFreight, EuToUa (обновить seed_rates или внести вручную)
-3. **Реальные API-ключи интеграций** — VinCheck/CarVertical (VIN-отчёты),
-   BidFax (история торгов), Opendatabot (UA реестры)
-4. **Верификация дилеров** — процедура подтверждения is_verified_dealer
-5. **Платёжный шлюз** — не входит в Фазу 2, но нужен до продакшена
+3. ~~**VIN-декод (технические данные)**~~ — ✅ СНЯТ (NHTSA vPIC, бесплатно, без ключа, GET /api/v1/vehicles/<vin>/decode/)
+   ⚠ История ДТП остаётся заглушкой — нужен Carfax/BidFax (платный, /report/)
+4. **Реальные API-ключи для истории** — BidFax (история торгов), Carfax/CarVertical (ДТП), Opendatabot (UA реестры)
+5. **Верификация дилеров** — процедура подтверждения is_verified_dealer
+6. ~~**Платёжный шлюз**~~ — ✅ СНЯТ после теста sandbox (LiqPay: checkout + webhook, /api/v1/payments/)
+   ⚠ Для продакшена: заменить LIQPAY_SANDBOX=false и вставить реальные ключи
+7. ~~**Курс НБУ**~~ — ✅ СНЯТ (management command fetch_nbu_rates, бесплатно, без ключа)
 
 ---
 
@@ -44,7 +47,8 @@ GET  /api/v1/auth/profile/
 # Vehicles
 GET  /api/v1/vehicles/
 GET  /api/v1/vehicles/<id>/
-GET  /api/v1/vehicles/<vin>/report/    ← A4
+GET  /api/v1/vehicles/<vin>/report/    ← A4 (заглушка: Carfax/BidFax)
+GET  /api/v1/vehicles/<vin>/decode/    ← РЕАЛЬНЫЙ (NHTSA vPIC, без ключа)
 
 # Pricing
 POST /api/v1/pricing/calculate/
@@ -67,6 +71,10 @@ GET/PUT/DELETE      /api/v1/me/trusted-shops/<id>/
 
 # B2B                                  ← A3
 GET  /api/v1/b2b/board/
+
+# Payments (LiqPay)
+POST /api/v1/payments/liqpay/checkout/ ← создать платёж (auth required)
+POST /api/v1/payments/liqpay/callback/ ← webhook от LiqPay (csrf_exempt, signature check)
 
 # Docs
 GET  /api/schema/

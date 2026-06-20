@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка — реальные ставки ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка — реальные ставки ✓ | Реальные источники подключены (Фаза 3)
 
 ---
 
@@ -9,13 +9,48 @@
 | # | Блокер | Что делать |
 |---|--------|------------|
 | 1 | ~~Ставки растаможки~~ | ✅ Снят — акциз/мито/НДС/ПФ актуальны на янв–июнь 2026 |
-| 2 | **Тарифы Copart/IAAI** | Запросить актуальный price list у владельца / с сайта Copart |
-| 3 | **Тарифы фрахта** | UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера |
-| 4 | **Живой курс НБУ** | Подключить API НБУ (`bank.gov.ua/NBUStatService/v1/statdataroot`) для авто-обновления ExchangeRate |
-| 5 | **Реальные API-ключи** | VinCheck/CarVertical, BidFax, Opendatabot — заключить договоры |
+| 2 | **Тарифы Copart/IAAI** | Запросить актуальный buyer fee price list у владельца / с сайта Copart |
+| 3 | **Тарифы фрахта** | UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера (от владельца) |
+| 4 | ~~Живой курс НБУ~~ | ✅ Снят — `fetch_nbu_rates --date YYYYMMDD` обновляет ExchangeRate из bank.gov.ua |
+| 5 | **Платные API для истории** | Carfax/BidFax (история ДТП и торгов), Opendatabot (UA реестры) — договоры |
 | 6 | **Верификация дилеров** | Задать процедуру проверки `is_verified_dealer` (документы, КЕП) |
-| 7 | **Платёжный шлюз** | WayForPay или LiqPay — интеграция для приёма оплаты |
+| 7 | ~~Платёжный шлюз~~ | ✅ Снят — LiqPay sandbox готов; для продакшена: LIQPAY_SANDBOX=false + реальные ключи |
 | 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
+
+---
+
+## Фаза 3 — Реальные источники данных (завершено 2026-06-20)
+
+### VIN-декод NHTSA vPIC
+- [x] `NHTSAVinDecodeProvider` в `integrations/providers.py` — httpx, без ключа
+- [x] Поля NHTSA → Vehicle: Make/Model/ModelYear/DisplacementCC/FuelTypePrimary/BodyClass
+- [x] Кэш в VinReport(provider='nhtsa_vpic', demo=False)
+- [x] GET /api/v1/vehicles/<vin>/decode/ — реальные данные из NHTSA
+- [x] StubVinProvider (история ДТП) не тронут — остаётся на /report/
+
+### Платёжный шлюз LiqPay
+- [x] `payments` app: модель Payment (order_id, amount, currency, status, listing FK, purpose)
+- [x] `LiqPayClient`: create_checkout (URL + form_data) + decode_callback (проверка подписи SHA1)
+- [x] POST /api/v1/payments/liqpay/checkout/ (auth required) → checkout_url
+- [x] POST /api/v1/payments/liqpay/callback/ (csrf_exempt, signature check) → pending→completed/failed
+- [x] unlock_listing() при completed — разблокирует листинг
+- [x] Env: LIQPAY_PUBLIC_KEY, LIQPAY_PRIVATE_KEY, LIQPAY_SANDBOX=true (dev default)
+- [x] .env.example с плейсхолдерами
+- [x] Примечание: официальный SDK (liqpay/sdk-python) Python 2 only; протокол реализован напрямую
+
+### Возрастной коэффициент — потолок 15
+- [x] `calc_age_coeff()`: `min(15, max(1, год_расчёта − год_выпуска))`
+- [x] Тест: авто 20 лет (2006→2026) → коэффициент = 15 (не 20)
+- [x] 3 новых теста: cap boundary, exactly 15, below cap
+
+### Курс НБУ (бесплатно, без ключа)
+- [x] Management command `fetch_nbu_rates [--date YYYYMMDD]`
+- [x] Источник: bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=USD/EUR&date=YYYYMMDD
+- [x] USD/UAH + EUR/UAH → кросс-курс USD/EUR
+- [x] Upserts в ExchangeRate с date-specific записями
+- [x] Calculator view: ExchangeRate по calc_date (fallback к latest)
+- [x] Добавлен опциональный `calculation_date` в CalculateInputSerializer
+- [x] В ответе калькулятора: `exchange_rate_date` — дата использованного курса
 
 ---
 
@@ -162,13 +197,14 @@
 
 ## Допущения (бизнес-дефолты)
 1. **Таможенная стоимость**: auction_price + us_land + ocean_freight (без EU→UA)
-2. **Курс валют**: последняя запись ExchangeRate по дате
+2. **Курс валют**: ExchangeRate для даты оформления; fallback — последняя запись
 3. **Пенсионный сбор**: применяется при каждом расчёте (считаем первой регистрацией)
-4. **Акциз для электро**: 1 EUR (символически) — ⚠ ПРОВЕРИТЬ по законодательству
-5. **Ставки акциза в seed_rates**: плейсхолдеры — ⚠ ОБЯЗАТЕЛЬНО ПРОВЕРИТЬ
+4. **Акциз для электро**: 1 EUR × кВт·ч (ставки из БД) — ⚠ ПРОВЕРИТЬ по законодательству
+5. **Ставки акциза в seed_rates**: актуальны янв–июнь 2026 — проверить у брокера на дату деплоя
 6. **Пенсионный сбор в seed_rates**: 3% / 4% / 5% по шкале — ⚠ ПРОВЕРИТЬ
-7. **VIN-провайдеры**: только заглушки (StubVinProvider). Реальная интеграция — Фаза 3.
+7. **VIN-декод**: NHTSA vPIC — реальные технические данные (demo=false). История ДТП — заглушка.
 8. **SQLite в dev**: PostgreSQL — продакшн
+9. **LiqPay**: sandbox=true по умолчанию в dev. Для продакшена: LIQPAY_SANDBOX=false.
 
 ## Известные ограничения
 - Swagger: одно предупреждение об enum-коллизии (CarStatusEnum), 0 ошибок
