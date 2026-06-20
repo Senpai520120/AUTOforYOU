@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка — реальные ставки ✓ | Реальные источники ✓ | Сетки Copart/IAAI — baseline готов
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка — реальные ставки ✓ | Реальные источники ✓ | Сетки Copart/IAAI — baseline + E2E верификация ✓
 
 ---
 
@@ -48,7 +48,7 @@
 - [x] `AuctionFeeTierAdmin`: list_filter по auction/member_type/payment_type/title_type
 - [x] `AuctionFixedFeeAdmin`: list_filter по auction/fee_type/title_type
 
-### Тесты (14 новых)
+### Тесты (14 новых в промте 2)
 - [x] Copart public $3200 salvage → buyer_fee=385, gate=95, env=10, vb=99, total=589
 - [x] Copart licensed $8000 → 6% = 480
 - [x] Copart public $7500 $5000+ тир → 10% = 750
@@ -57,8 +57,35 @@
 - [x] Нет фиксированных сборов → gate/env/vb = 0
 - [x] Все поля AuctionFeeBreakdown — Decimal
 
-### Следующий шаг (промт 3)
-Сквозной landed-cost end-to-end: реальные тарифы фрахта, интеграция в полный расчёт
+---
+
+## Промт 3 — Landed-cost E2E + фиксы ревью (завершено 2026-06-20)
+
+### Fix 1 — IAAI тир 10% для ставок ≥$7500
+- [x] Исправлен `TestIAAIPercentTier`: $12000 теперь тестируется с fee_percent=0.1000 → $1200 (было 0.0800→$960)
+- [x] Добавлен тест IAAI 8% тир: $6000 → buyer_fee=$480
+- [x] Добавлен `TestIAAITierBoundaryDB` (Django TestCase с реальной БД):
+  - $7499 → tier.fee_percent == 0.0800
+  - $7500 → tier.fee_percent == 0.1000
+  - $12000 calc → buyer_fee=$1200
+
+### Fix 2 — AUCTION_DEFAULT_MEMBER_TYPE в settings
+- [x] `AUCTION_DEFAULT_MEMBER_TYPE = 'broker'` добавлен в `core/settings.py` (env-переопределяем)
+- [x] `pricing/views.py`: `DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')`
+- [x] `TestCalculateInputSerializerDefaults`: дефолты member_type='broker', payment_type='secured'
+
+### E2E интеграционный тест
+- [x] `TestLandedCostE2ECopartBroker` — полный сценарий Copart broker/salvage/secured $5000 petrol 2.0L 2018:
+  - auction_fee_buyer=$300 (6%), total auction_fee=$504 (buyer+gate$95+env$10+vb$99)
+  - customs_value_usd=$6800, duty_usd=$680
+  - excise_eur=800 (5.0 EUR/100cc × 20 × age_coeff=8)
+  - total_usd=$8334 (все 6 компонентов)
+  - total_uah > total_usd×rate (акциз+НДС+пенсионный сверху)
+  - is_estimate=True, rates_date непустой
+- [x] Все тесты зелёные: 58 тестов OK
+
+### Следующий шаг (промт 4)
+Верификация дилеров: процедура is_verified_dealer + документы
 
 ---
 

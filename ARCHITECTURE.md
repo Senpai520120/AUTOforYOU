@@ -3,6 +3,9 @@
 ## ⛔ ЗАПУСК ЗАБЛОКИРОВАН ДО:
 1. ~~**Реальные ставки растаможки**~~ — ✅ СНЯТ (акциз, пошлина, НДС, пенсионный сбор актуальны на янв–июнь 2026; финал у брокера)
 2. **Baseline-сетки Copart/IAAI** — ✅ BASELINE ГОТОВО (seed_auction_fees, 50 тиров).
+   ✅ E2E формула верифицирована: Copart broker $5000 petrol 2.0L 2018 → total_usd=$8334, excise=800 EUR.
+   ✅ Граничные тиры IAAI ($7499→8%, $7500→10%) — протестированы в TestIAAITierBoundaryDB.
+   ✅ AUCTION_DEFAULT_MEMBER_TYPE=broker выведен в settings.py (env-переопределение).
    ⚠ Требует калибровки под реальный тариф брокера — не снят полностью.
    **Тарифы фрахта** — UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера
 3. ~~**VIN-декод (технические данные)**~~ — ✅ СНЯТ (NHTSA vPIC, бесплатно, без ключа, GET /api/v1/vehicles/<vin>/decode/)
