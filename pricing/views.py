@@ -83,6 +83,7 @@ class CalculateView(APIView):
 
         data = serializer.validated_data
         today = date.today()
+        calc_date = data.get('calculation_date') or today
 
         try:
             auction_fee = _active_on(
@@ -112,13 +113,16 @@ class CalculateView(APIView):
                 EuToUaDeliveryRate.objects.filter(eu_port=data['eu_port'])
             ).first()
 
-            usd_to_uah = ExchangeRate.objects.filter(
-                from_currency='USD', to_currency='UAH'
-            ).order_by('-date').first()
+            # Курс НБУ на дату оформления. Если нет — берём ближайший предыдущий.
+            usd_to_uah = (
+                ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH', date=calc_date).first()
+                or ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH').order_by('-date').first()
+            )
 
-            usd_to_eur = ExchangeRate.objects.filter(
-                from_currency='USD', to_currency='EUR'
-            ).order_by('-date').first()
+            usd_to_eur = (
+                ExchangeRate.objects.filter(from_currency='USD', to_currency='EUR', date=calc_date).first()
+                or ExchangeRate.objects.filter(from_currency='USD', to_currency='EUR').order_by('-date').first()
+            )
 
             excise_rate = _active_on(
                 CustomsExciseRate.objects.filter(
@@ -174,9 +178,9 @@ class CalculateView(APIView):
             usd_to_eur_rate=usd_to_eur,
             excise_rate=excise_rate,
             vehicle_year=data['vehicle_year'],
-            calculation_year=today.year,
+            calculation_year=calc_date.year,
             pension_rate=pension_bracket,
-            rates_date=str(today),
+            rates_date=str(calc_date),
         )
 
         inputs = LandedCostInputs(
@@ -184,7 +188,7 @@ class CalculateView(APIView):
             engine_cc=data['engine_cc'],
             fuel_type=data['fuel_type'],
             vehicle_year=data['vehicle_year'],
-            calculation_year=today.year,
+            calculation_year=calc_date.year,
             battery_capacity_kwh=data.get('battery_capacity_kwh', 0),
         )
 
@@ -207,7 +211,8 @@ class CalculateView(APIView):
             {
                 'calculation_id': calc.pk,
                 'is_estimate': True,
-                'rates_validity_date': str(today),
+                'rates_validity_date': str(calc_date),
+                'exchange_rate_date': str(usd_to_uah.date),
                 'warning': (
                     'Розрахунок є орієнтовним. '
                     'Ставки акцизу актуальні на янв–чер 2026; фінальний розрахунок підтверджує митний брокер.'

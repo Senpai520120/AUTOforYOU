@@ -18,6 +18,9 @@ class CalculateInputSerializer(serializers.Serializer):
     auction_location = serializers.CharField(max_length=100, default='general')
     us_port = serializers.CharField(max_length=50, default='houston')
     eu_port = serializers.ChoiceField(choices=['klaipeda', 'gdansk'], default='klaipeda')
+    # Дата оформления таможни (YYYY-MM-DD). По ней берётся курс НБУ.
+    # Если не указана или курс на дату отсутствует — используется последний доступный курс.
+    calculation_date = serializers.DateField(required=False, allow_null=True, default=None)
 
 
 class CalculationSerializer(serializers.ModelSerializer):
