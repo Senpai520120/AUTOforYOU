@@ -24,9 +24,13 @@ export default function Header() {
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
           <Link href="/listings" className="hover:text-amber-400 transition-colors">Каталог</Link>
           <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
-          {user && (user.is_verified_dealer || user.role === 'admin') && (
+          {user && (user.is_verified_dealer || user.role === 'admin') ? (
             <Link href="/b2b" className="hover:text-amber-400 transition-colors">B2B</Link>
-          )}
+          ) : user ? (
+            <Link href="/dealers/apply" className="text-amber-300 hover:text-amber-400 transition-colors text-xs border border-amber-400/40 px-2 py-1 rounded">
+              B2B-доступ
+            </Link>
+          ) : null}
         </nav>
 
         <div className="flex items-center gap-3 text-sm">

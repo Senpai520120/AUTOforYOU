@@ -127,6 +127,18 @@ export interface TrustedShop {
   updated_at: string;
 }
 
+export interface DealerApplication {
+  id: number;
+  company_name: string;
+  full_name: string;
+  contact_phone: string;
+  documents: string;
+  status: 'pending' | 'approved' | 'rejected';
+  review_notes: string;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
 export interface Tokens {
   access: string;
   refresh: string;

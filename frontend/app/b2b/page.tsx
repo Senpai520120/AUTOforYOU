@@ -34,10 +34,18 @@ export default function B2BPage() {
         <div className="text-5xl mb-4">🔒</div>
         <h1 className="text-2xl font-bold text-slate-900 mb-3">Доступ обмежено</h1>
         <p className="text-slate-500 mb-2">B2B-дошка доступна лише для верифікованих перекупників.</p>
-        <p className="text-slate-400 text-sm mb-6">Зверніться до менеджера для верифікації акаунту.</p>
-        <Link href="/me" className="bg-blue-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-800">
-          До кабінету
-        </Link>
+        <p className="text-slate-400 text-sm mb-6">Подайте заявку — менеджер розгляне її та активує доступ.</p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link
+            href="/dealers/apply"
+            className="bg-amber-500 hover:bg-amber-400 text-black px-6 py-2.5 rounded-xl font-semibold transition-colors"
+          >
+            Подати заявку на B2B
+          </Link>
+          <Link href="/me" className="bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-800 transition-colors">
+            До кабінету
+          </Link>
+        </div>
       </div>
     );
   }
