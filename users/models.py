@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
@@ -76,3 +77,42 @@ class TrustedShop(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.get_type_display()}) — {self.owner.email}'
+
+
+class DealerApplication(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'На рассмотрении'
+        APPROVED = 'approved', 'Одобрено'
+        REJECTED = 'rejected', 'Отклонено'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='dealer_applications',
+        verbose_name='Пользователь',
+    )
+    company_name = models.CharField(max_length=200, verbose_name='Название компании')
+    full_name = models.CharField(max_length=200, verbose_name='ФИО')
+    contact_phone = models.CharField(max_length=30, verbose_name='Контактный телефон')
+    documents = models.URLField(blank=True, verbose_name='Ссылка на документы')
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.PENDING, verbose_name='Статус'
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reviewed_applications',
+        verbose_name='Рассмотрел',
+    )
+    review_notes = models.TextField(blank=True, verbose_name='Заметки рассмотрения')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Заявка дилера'
+        verbose_name_plural = 'Заявки дилеров'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.email} — {self.company_name} [{self.get_status_display()}]'

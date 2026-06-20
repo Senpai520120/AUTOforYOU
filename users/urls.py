@@ -2,6 +2,7 @@ from django.urls import path
 from drf_spectacular.utils import extend_schema
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
+    DealerApplyView, DealerApplicationStatusView,
     RegisterView, ProfileView,
     MyCalculationsView, MyShipmentsView,
     TrustedShopListView, TrustedShopDetailView,
@@ -25,4 +26,9 @@ urlpatterns = [
     path('me/shipments/', MyShipmentsView.as_view(), name='me-shipments'),
     path('me/trusted-shops/', TrustedShopListView.as_view(), name='me-trusted-shops'),
     path('me/trusted-shops/<int:pk>/', TrustedShopDetailView.as_view(), name='me-trusted-shop-detail'),
+]
+
+dealer_urlpatterns = [
+    path('apply/', DealerApplyView.as_view(), name='dealer-apply'),
+    path('application/', DealerApplicationStatusView.as_view(), name='dealer-application'),
 ]

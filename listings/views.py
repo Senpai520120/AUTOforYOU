@@ -57,8 +57,9 @@ class ListingListView(generics.ListAPIView):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        # Retail виден всем; wholesale скрыт
-        qs = _base_queryset().filter(channel=Listing.Channel.RETAIL)
+        user = self.request.user
+        is_dealer = user.is_authenticated and (user.is_verified_dealer or user.role == 'admin')
+        qs = _base_queryset() if is_dealer else _base_queryset().filter(channel=Listing.Channel.RETAIL)
         return _apply_filters(qs, self.request.query_params)
 
 

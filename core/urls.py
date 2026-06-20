@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 from listings.urls import b2b_urlpatterns
+from users.urls import dealer_urlpatterns
 from integrations.views import VinReportView, VinDecodeView
 
 urlpatterns = [
@@ -18,6 +19,7 @@ urlpatterns = [
     path('api/v1/shipments/', include('shipments.urls')),
     path('api/v1/payments/', include('payments.urls')),
     path('api/v1/b2b/', include((b2b_urlpatterns, 'b2b'))),
+    path('api/v1/dealers/', include((dealer_urlpatterns, 'dealers'))),
     # Legacy
     path('api/', include('cars.urls')),
     # OpenAPI / Swagger

@@ -1,7 +1,14 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import generics, permissions
-from .models import CustomUser, TrustedShop
-from .serializers import RegisterSerializer, UserProfileSerializer, TrustedShopSerializer
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .models import CustomUser, DealerApplication, TrustedShop
+from .serializers import (
+    DealerApplicationCreateSerializer, DealerApplicationSerializer,
+    RegisterSerializer, UserProfileSerializer, TrustedShopSerializer,
+)
+from .services import DuplicatePendingError, apply_for_dealer
 
 
 @extend_schema(tags=['auth'], summary='Регистрация нового пользователя')
@@ -76,3 +83,47 @@ class TrustedShopDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return TrustedShop.objects.filter(owner=self.request.user)
+
+
+# --- Верификация дилеров ---
+
+@extend_schema(
+    tags=['dealers'],
+    summary='Подать заявку на статус дилера',
+    description=(
+        'Создаёт заявку со статусом pending. '
+        'Повторная подача при наличии pending-заявки возвращает 409.'
+    ),
+)
+class DealerApplyView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = DealerApplicationCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            application = apply_for_dealer(
+                user=request.user,
+                **serializer.validated_data,
+            )
+        except DuplicatePendingError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        return Response(DealerApplicationSerializer(application).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(
+    tags=['dealers'],
+    summary='Статус собственной заявки',
+    description='Возвращает последнюю заявку текущего пользователя (или 404).',
+)
+class DealerApplicationStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        application = (
+            DealerApplication.objects.filter(user=request.user).order_by('-created_at').first()
+        )
+        if not application:
+            return Response({'detail': 'Заявка не найдена.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(DealerApplicationSerializer(application).data)
