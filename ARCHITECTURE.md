@@ -11,7 +11,7 @@
 3. ~~**VIN-декод (технические данные)**~~ — ✅ СНЯТ (NHTSA vPIC, бесплатно, без ключа, GET /api/v1/vehicles/<vin>/decode/)
    ⚠ История ДТП остаётся заглушкой — нужен Carfax/BidFax (платный, /report/)
 4. **Реальные API-ключи для истории** — BidFax (история торгов), Carfax/CarVertical (ДТП), Opendatabot (UA реестры)
-5. **Верификация дилеров** — процедура подтверждения is_verified_dealer
+5. ~~**Верификация дилеров**~~ — ✅ СНЯТ (DealerApplication + approve/reject actions + B2B гейтинг)
 6. ~~**Платёжный шлюз**~~ — ✅ СНЯТ после теста sandbox (LiqPay: checkout + webhook, /api/v1/payments/)
    ⚠ Для продакшена: заменить LIQPAY_SANDBOX=false и вставить реальные ключи
 7. ~~**Курс НБУ**~~ — ✅ СНЯТ (management command fetch_nbu_rates, бесплатно, без ключа)

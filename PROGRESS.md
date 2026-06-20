@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка — реальные ставки ✓ | Реальные источники ✓ | Сетки Copart/IAAI — baseline + E2E верификация ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓
 
 ---
 
@@ -13,7 +13,7 @@
 | 3 | **Тарифы фрахта** | UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера |
 | 4 | ~~Живой курс НБУ~~ | ✅ Снят — `fetch_nbu_rates --date YYYYMMDD` обновляет ExchangeRate из bank.gov.ua |
 | 5 | **Платные API для истории** | Carfax/BidFax (история ДТП и торгов), Opendatabot (UA реестры) — договоры |
-| 6 | **Верификация дилеров** | Задать процедуру проверки `is_verified_dealer` (документы, КЕП) |
+| 6 | ~~**Верификация дилеров**~~ | ✅ Снят — DealerApplication + apply/approve/reject + B2B гейтинг |
 | 7 | ~~Платёжный шлюз~~ | ✅ Снят — LiqPay sandbox готов; для продакшена: LIQPAY_SANDBOX=false + реальные ключи |
 | 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
 
@@ -84,8 +84,45 @@
   - is_estimate=True, rates_date непустой
 - [x] Все тесты зелёные: 58 тестов OK
 
-### Следующий шаг (промт 4)
-Верификация дилеров: процедура is_verified_dealer + документы
+---
+
+## Промт 4 — Верификация дилеров (завершено 2026-06-20)
+
+### Модель и сервис
+- [x] `DealerApplication`: user/company_name/full_name/contact_phone/documents/status(pending|approved|rejected)/reviewed_by/review_notes/created_at/reviewed_at
+- [x] `users/services.py`: `apply_for_dealer` (DuplicatePendingError на pending), `approve_application` (is_verified_dealer=True+role=dealer+email), `reject_application` (review_notes+email)
+- [x] Email-уведомление: `EMAIL_BACKEND=console` в dev, env-переопределяемо; пометка «позже Telegram (промт 11)»
+
+### API
+- [x] POST /api/v1/dealers/apply/ — создаёт pending; 409 при наличии pending
+- [x] GET /api/v1/dealers/application/ — статус собственной заявки (404 если нет)
+- [x] `dealer_urlpatterns` в `users/urls.py`, подключены в `core/urls.py` под `/api/v1/dealers/`
+
+### Админка
+- [x] `DealerApplicationAdmin`: list_filter по status, actions «Одобрить» / «Отклонить»
+- [x] При одобрении: `approve_application` → is_verified_dealer=True, role=dealer, email
+- [x] При отклонении: `reject_application` → review_notes сохраняются
+
+### B2B гейтинг
+- [x] `IsVerifiedDealerOrAdmin` (listings/permissions.py) — DRF permission, перепроверен
+- [x] /api/v1/b2b/board/ → 403 для неверифицированных, 401 для неавторизованных
+- [x] `ListingListView`: verified dealers видят wholesale + retail; остальные только retail
+
+### Frontend
+- [x] `/dealers/apply` — форма заявки (company_name, full_name, contact_phone, documents)
+- [x] `api/dealers.ts` — API клиент (apply, getApplication)
+- [x] `lib/types.ts` — тип `DealerApplication`
+- [x] B2B-страница: CTA «Подати заявку на B2B» → /dealers/apply для неверифицированных
+- [x] Header: меню «B2B» для дилеров/admin; «B2B-доступ» (CTA) для авторизованных без верификации
+
+### Тесты (19 новых)
+- [x] Сервис: create pending, DuplicatePendingError, allow after rejection, approve→is_verified_dealer, reviewed_by/at, reject saves notes
+- [x] API: 201 apply, 409 duplicate, 401 unauth, 400 missing fields, 404 no application, 200 status
+- [x] B2B гейтинг: 401 unauth, 403 regular user, 200 verified dealer, 200 admin
+- [x] Wholesale фильтр: anon/buyer не видит wholesale, dealer видит; 77 тестов OK
+
+### Следующий шаг (промт 5)
+Opendatabot — реальный реестр авто Украины (VIN → история UA реестров)
 
 ---
 
