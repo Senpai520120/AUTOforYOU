@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка — реальные ставки ✓ | Реальные источники подключены (Фаза 3)
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка — реальные ставки ✓ | Реальные источники ✓ | Сетки Copart/IAAI — baseline готов
 
 ---
 
@@ -9,13 +9,56 @@
 | # | Блокер | Что делать |
 |---|--------|------------|
 | 1 | ~~Ставки растаможки~~ | ✅ Снят — акциз/мито/НДС/ПФ актуальны на янв–июнь 2026 |
-| 2 | **Тарифы Copart/IAAI** | Запросить актуальный buyer fee price list у владельца / с сайта Copart |
-| 3 | **Тарифы фрахта** | UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера (от владельца) |
+| 2 | ~~Тарифы Copart/IAAI~~ | Baseline готов (seed_auction_fees, 50 тиров). ⚠ Калибровать под реальный тариф брокера |
+| 3 | **Тарифы фрахта** | UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера |
 | 4 | ~~Живой курс НБУ~~ | ✅ Снят — `fetch_nbu_rates --date YYYYMMDD` обновляет ExchangeRate из bank.gov.ua |
 | 5 | **Платные API для истории** | Carfax/BidFax (история ДТП и торгов), Opendatabot (UA реестры) — договоры |
 | 6 | **Верификация дилеров** | Задать процедуру проверки `is_verified_dealer` (документы, КЕП) |
 | 7 | ~~Платёжный шлюз~~ | ✅ Снят — LiqPay sandbox готов; для продакшена: LIQPAY_SANDBOX=false + реальные ключи |
 | 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
+
+---
+
+## Промт 2 — Сетки аукционных сборов Copart/IAAI (завершено 2026-06-20)
+
+### Модели
+- [x] `AuctionFeeTier` v2: auction/member_type/payment_type/title_type/bid_min/bid_max/fee_flat/fee_percent
+  + `clean()` validation: ровно одно из fee_flat/fee_percent
+- [x] `AuctionFixedFee`: auction/fee_type(gate|environmental|virtual_bid)/title_type/amount
+- [x] Миграция 0004: DeleteModel старой + CreateModel обеих новых
+
+### Калькулятор
+- [x] `AuctionFeeBreakdown` dataclass (buyer_fee/gate/environmental/virtual_bid/total)
+- [x] `calc_auction_fees(bid, tier, fixed_fees)` — чистая функция в calculator.py
+- [x] `RateSnapshot.auction_fee: AuctionFeeBreakdown` (замена старого AuctionFeeRateSnapshot)
+- [x] `LandedCostBreakdown`: auction_fee_usd (total) + 4 sub-компонента
+- [x] `_lookup_tier()`: точный title_type → fallback 'any'
+- [x] `_lookup_fixed_fees()`: gate по title_type + env + virtual_bid
+
+### Seed
+- [x] `seed_auction_fees`: 50 тиров Copart/IAAI + 7 фиксированных сборов
+  - Copart public/salvage/secured: 11 flat тиров $0-$499→$75 .. $5000+→10%
+  - Copart licensed+broker/secured: flat $100 min + 6%; unsecured: 8%
+  - IAAI licensed+broker/secured: flat до $4999 + 8%/$7500+10%
+  - Fixed: gate clean $79/salvage $95, env $10, vb $99 (Copart); gate $95, env $15, vb $75 (IAAI)
+  - Все строки: `# baseline — сверить с офиц. сеткой и тарифом брокера`
+- [x] `seed_rates.py`: удалены старые тиры, ссылка на `seed_auction_fees`
+
+### Админка
+- [x] `AuctionFeeTierAdmin`: list_filter по auction/member_type/payment_type/title_type
+- [x] `AuctionFixedFeeAdmin`: list_filter по auction/fee_type/title_type
+
+### Тесты (14 новых)
+- [x] Copart public $3200 salvage → buyer_fee=385, gate=95, env=10, vb=99, total=589
+- [x] Copart licensed $8000 → 6% = 480
+- [x] Copart public $7500 $5000+ тир → 10% = 750
+- [x] IAAI licensed $12000 → 8% = 960 + fixed fees
+- [x] Граничные значения bid_min / bid_max / округление %
+- [x] Нет фиксированных сборов → gate/env/vb = 0
+- [x] Все поля AuctionFeeBreakdown — Decimal
+
+### Следующий шаг (промт 3)
+Сквозной landed-cost end-to-end: реальные тарифы фрахта, интеграция в полный расчёт
 
 ---
 
