@@ -158,6 +158,10 @@ LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
 # Аукционные сборы — тип участника по умолчанию (public / licensed / broker)
 AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
 
+# Opendatabot — реестры авто Украины (vin/plate → регистрации, ограничения)
+# Без ключа провайдер возвращает demo=True, не падает.
+OPENDATABOT_API_KEY = os.environ.get('OPENDATABOT_API_KEY', '')
+
 # Email — console backend для dev; в продакшене заменить на SMTP или SES
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',

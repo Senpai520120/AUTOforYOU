@@ -10,7 +10,8 @@
    **Тарифы фрахта** — UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера
 3. ~~**VIN-декод (технические данные)**~~ — ✅ СНЯТ (NHTSA vPIC, бесплатно, без ключа, GET /api/v1/vehicles/<vin>/decode/)
    ⚠ История ДТП остаётся заглушкой — нужен Carfax/BidFax (платный, /report/)
-4. **Реальные API-ключи для истории** — BidFax (история торгов), Carfax/CarVertical (ДТП), Opendatabot (UA реестры)
+4. **Реальные API-ключи для истории** — BidFax (история торгов), Carfax/CarVertical (ДТП) — нужен договор
+   ~~Opendatabot~~ — ✅ СНЯТ (реальный с OPENDATABOT_API_KEY / demo-режим без ключа, GET /api/v1/vehicles/<vin>/registry/)
 5. ~~**Верификация дилеров**~~ — ✅ СНЯТ (DealerApplication + approve/reject actions + B2B гейтинг)
 6. ~~**Платёжный шлюз**~~ — ✅ СНЯТ после теста sandbox (LiqPay: checkout + webhook, /api/v1/payments/)
    ⚠ Для продакшена: заменить LIQPAY_SANDBOX=false и вставить реальные ключи
@@ -53,6 +54,7 @@ GET  /api/v1/vehicles/
 GET  /api/v1/vehicles/<id>/
 GET  /api/v1/vehicles/<vin>/report/    ← A4 (заглушка: Carfax/BidFax)
 GET  /api/v1/vehicles/<vin>/decode/    ← РЕАЛЬНЫЙ (NHTSA vPIC, без ключа)
+GET  /api/v1/vehicles/<vin>/registry/ ← РЕАЛЬНЫЙ (Opendatabot UA реестры; ?plate= для поиска по номеру)
 
 # Pricing
 POST /api/v1/pricing/calculate/
@@ -115,6 +117,11 @@ contacts, rating (1-5), notes, created_at
 ### integrations.VinReport (кэш)
 ```
 id, vin, provider, report_data (JSONField), demo (bool), created_at
+```
+
+### integrations.RegistryReport (кэш UA реестров)
+```
+id, vin (nullable), plate (nullable), provider ('opendatabot'), payload (JSONField), demo (bool), created_at
 ```
 
 ### listings.Listing — новые поля

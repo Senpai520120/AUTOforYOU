@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓
 
 ---
 
@@ -12,7 +12,7 @@
 | 2 | ~~Тарифы Copart/IAAI~~ | Baseline готов (seed_auction_fees, 50 тиров). ⚠ Калибровать под реальный тариф брокера |
 | 3 | **Тарифы фрахта** | UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера |
 | 4 | ~~Живой курс НБУ~~ | ✅ Снят — `fetch_nbu_rates --date YYYYMMDD` обновляет ExchangeRate из bank.gov.ua |
-| 5 | **Платные API для истории** | Carfax/BidFax (история ДТП и торгов), Opendatabot (UA реестры) — договоры |
+| 5 | **Платные API для истории** | Carfax/BidFax (история ДТП и торгов) — договоры. ~~Opendatabot~~ — ✅ реализован |
 | 6 | ~~**Верификация дилеров**~~ | ✅ Снят — DealerApplication + apply/approve/reject + B2B гейтинг |
 | 7 | ~~Платёжный шлюз~~ | ✅ Снят — LiqPay sandbox готов; для продакшена: LIQPAY_SANDBOX=false + реальные ключи |
 | 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
@@ -86,6 +86,48 @@
 
 ---
 
+## Промт 5 — Opendatabot: реальный реестр авто UA (завершено 2026-06-22)
+
+### Закрытые пробелы гейтинга (ревью промта 4)
+- [x] B2B board 403 неверифицированным — уже был закрыт (IsVerifiedDealerOrAdmin + тест)
+- [x] GET /api/v1/listings/<id>/ wholesale → 404 для неверифицированных (queryset фильтр уже был)
+- [x] Добавлен тест `TestWholesaleListingDetailGating` (5 кейсов): anon/buyer→404, dealer/admin→200, retail→доступен всем
+
+### RegistryReport (кэш UA реестров)
+- [x] Модель `RegistryReport`: vin (nullable), plate (nullable), provider, payload (JSONField), demo, created_at
+- [x] Миграция 0002_registryreport
+- [x] `RegistryReportAdmin` в admin.py
+
+### RealOpendatabotProvider
+- [x] Реализован `RealOpendatabotProvider(OpendatabotProvider)` — httpx-клиент
+- [x] Без ключа (`OPENDATABOT_API_KEY=''`) → demo=True, no 500, понятный fallback
+- [x] С ключом → GET `_ODB_VIN_URL` или `_ODB_NUMBER_URL` (см. комментарий: сверить с актуальной документацией Opendatabot)
+- [x] Парсинг ответа: vin, plate, brand, model, year, color, fuel, engine_volume, stolen, restrictions, owners, odometer, raw
+- [x] Ошибка HTTP → dict с `error`, не исключение, не 500
+- [x] Фабрика `get_opendatabot_provider()` — возвращает `RealOpendatabotProvider` (с ключом или без)
+- [x] `StubOpendatabotProvider` сохранён для совместимости с legacy `/report/`
+
+### Эндпоинт
+- [x] GET /api/v1/vehicles/<vin>/registry/ → отчёт через RealOpendatabotProvider + кэш RegistryReport
+- [x] `?plate=` — поиск по госномеру (vin в пути = `_`)
+- [x] Кэш: повторный запрос по тому же VIN/номеру — из БД, без HTTP-запроса
+- [x] OPENDATABOT_API_KEY в settings.py (env) + плейсхолдер в .env.example
+
+### Тесты (20 новых, 97 всего)
+- [x] Без ключа → demo=True, не падает (VIN и plate)
+- [x] С ключом (замокан httpx): успешный VIN → парсинг всех полей
+- [x] С ключом: plate-запрос → plate в ответе
+- [x] HTTP-ошибка → dict с error, без исключения
+- [x] VIN в запросе приводится к UPPER
+- [x] Повторный запрос по VIN → провайдер вызван 1 раз (кэш)
+- [x] Второй запрос → cached=True
+- [x] Невалидный VIN (< 17 символов) → 400
+- [x] `_` без ?plate= → 400
+- [x] ?plate=AA1234BB → провайдер вызван с plate, vin=None
+- [x] Сохранение в RegistryReport после первого запроса
+
+---
+
 ## Промт 4 — Верификация дилеров (завершено 2026-06-20)
 
 ### Модель и сервис
@@ -121,8 +163,8 @@
 - [x] B2B гейтинг: 401 unauth, 403 regular user, 200 verified dealer, 200 admin
 - [x] Wholesale фильтр: anon/buyer не видит wholesale, dealer видит; 77 тестов OK
 
-### Следующий шаг (промт 5)
-Opendatabot — реальный реестр авто Украины (VIN → история UA реестров)
+### Следующий шаг (промт 6)
+Импорт лотов с аукционов, наполнение каталога «в пути»
 
 ---
 
