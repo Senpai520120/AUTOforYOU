@@ -8,3 +8,7 @@ PyJWT==2.13.0
 drf-spectacular==0.29.0
 httpx==0.28.1
 liqpay==1.0
+# Промт 7: PostgreSQL URL-парсер и S3-хранилище
+dj-database-url==2.3.0
+django-storages[s3]==1.14.4
+boto3==1.38.38

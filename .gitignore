@@ -29,3 +29,7 @@ Thumbs.db
 # Secrets
 .env
 .env.local
+*.env
+
+# Backups (содержат данные БД — никогда не коммитить)
+backups/

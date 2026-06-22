@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 готовы ✓
 
 ---
 
@@ -16,8 +16,9 @@
 | 6 | ~~**Верификация дилеров**~~ | ✅ Снят — DealerApplication + apply/approve/reject + B2B гейтинг |
 | 7 | ~~Платёжный шлюз~~ | ✅ Снят — LiqPay sandbox готов; для продакшена: LIQPAY_SANDBOX=false + реальные ключи |
 | 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
-| 9 | **S3 + PostgreSQL** | Промт 7: разделение dev/prod настроек, перекладывание фото (VehicleImage.source_url → S3) |
+| 9 | ~~**S3 + PostgreSQL**~~ | ✅ Снят — dj-database-url + django-storages, включаются env-переменными |
 | 10 | **Apify-токен** | Подключить реальный актор Copart/IAAI для `ApifyLotProvider` |
+| 11 | **Безопасность** | Промт 8: rate-limiting, заголовки безопасности, HTTPS-редиректы |
 
 ---
 
@@ -85,6 +86,52 @@
   - total_uah > total_usd×rate (акциз+НДС+пенсионный сверху)
   - is_estimate=True, rates_date непустой
 - [x] Все тесты зелёные: 58 тестов OK
+
+---
+
+## Промт 7 — PostgreSQL + S3 + разделение настроек (завершено 2026-06-22)
+
+### Безопасность данных
+- [x] git push (4 коммита отправлены на GitHub до начала работы)
+- [x] Резервная копия БД: `backups/db_20260622.sqlite3` + `backups/data_20260622.json`
+- [x] `.gitignore` дополнен: `backups/`, `*.env` — никогда не попадут в git
+
+### Настройки через env (core/settings.py переписан)
+- [x] `SECRET_KEY` — из env; старый insecure-ключ остаётся только если ключ не задан (dev fallback)
+- [x] `DEBUG` — `False` по умолчанию; для dev: `DEBUG=true` в `.env`
+- [x] `ALLOWED_HOSTS` — из env; при `DEBUG=true` → `['*']`
+- [x] `CORS_ALLOW_ALL_ORIGINS` — только при `DEBUG=True` (prod: явный список)
+
+### База данных (dj-database-url)
+- [x] `DATABASE_URL` не задан → SQLite (dev, без настройки, локальная разработка не сломана)
+- [x] `DATABASE_URL=postgres://...` → PostgreSQL (любой провайдер: Railway, Heroku, VPS)
+- [x] `conn_max_age=600` — connection pooling для Postgres
+
+### S3-хранилище (django-storages + boto3)
+- [x] S3-переменные (`S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) не заданы → `media/` локально
+- [x] S3-переменные заданы → `DEFAULT_FILE_STORAGE = S3Boto3Storage`
+- [x] `S3_ENDPOINT_URL` — поддержка Cloudflare R2 / MinIO (S3-совместимые)
+- [x] `AWS_DEFAULT_ACL = 'private'` + подписанные URL
+
+### Management command upload_lot_photos
+- [x] Скачивает фото из `VehicleImage.source_url` → сохраняет в хранилище (S3 или media/)
+- [x] `--dry-run` — показать список без скачивания
+- [x] `--limit N` — обработать первые N фото
+
+### requirements.txt
+- [x] `dj-database-url==2.3.0`
+- [x] `django-storages[s3]==1.14.4`
+- [x] `boto3==1.38.38`
+
+### .env.example
+- [x] Полный шаблон: SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_URL, S3_*, LiqPay, интеграции, Email
+
+### DEPLOY_NOTES.md
+- [x] Пошаговая инструкция простым языком (без жаргона): бэкап, Postgres, S3, откат
+
+### Тесты
+- [x] 119 тестов зелёные на SQLite (без DATABASE_URL и S3-переменных)
+- [x] `python manage.py check` — 0 ошибок
 
 ---
 
