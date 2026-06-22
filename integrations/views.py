@@ -1,14 +1,17 @@
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .importer import import_lot
 from .models import VinReport, RegistryReport
 from .providers import (
     NHTSAVinDecodeProvider,
-    get_vin_provider, get_auction_history_provider, get_opendatabot_provider,
+    ManualLotProvider,
+    get_vin_provider, get_auction_history_provider, get_opendatabot_provider, get_lot_provider,
 )
+from .serializers import LotImportRequestSerializer
 
 
 @extend_schema(
@@ -159,3 +162,61 @@ class RegistryReportView(APIView):
         )
 
         return Response({**data, 'cached': False})
+
+
+@extend_schema(
+    tags=['lots'],
+    summary='Імпорт лоту аукціону',
+    description=(
+        'Тільки для адміністраторів.\n\n'
+        '**source=manual** (за замовчуванням): приймає `lot_data` dict з полями лоту — '
+        'рабочий MVP без зовнішніх залежностей.\n\n'
+        '**source=apify**: `lot_url` — URL лоту на Copart/IAAI; '
+        'потребує `APIFY_TOKEN`; без токену повертає `demo=true`.\n\n'
+        'Повторний імпорт того ж VIN оновлює Vehicle, не плодить дублів.\n\n'
+        '⚠ Автоматичний імпорт за розкладом — Celery (промт 10).',
+    ),
+    request=LotImportRequestSerializer,
+    responses={
+        201: OpenApiResponse(description='Лот створено (новий Vehicle+Listing)'),
+        200: OpenApiResponse(description='Лот оновлено (Vehicle з таким VIN вже існував)'),
+        400: OpenApiResponse(description='Помилка валідації або провайдера'),
+        403: OpenApiResponse(description='Тільки адміністратори'),
+    },
+)
+class LotImportView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        ser = LotImportRequestSerializer(data=request.data)
+        if not ser.is_valid():
+            return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        source = ser.validated_data['source']
+
+        if source == 'manual':
+            provider = ManualLotProvider()
+            lot_data = provider.fetch_lot(ser.validated_data['lot_data'])
+        else:
+            provider = get_lot_provider()
+            lot_data = provider.fetch_lot(ser.validated_data['lot_url'])
+
+        if lot_data.get('error'):
+            return Response({'error': lot_data['error']}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            vehicle, listing, created = import_lot(lot_data, seller=request.user)
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'vehicle_id': vehicle.id,
+                'vin': vehicle.vin,
+                'listing_id': listing.id,
+                'listing_status': listing.status,
+                'created': created,
+                'demo': lot_data.get('demo', False),
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

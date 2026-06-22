@@ -162,6 +162,10 @@ AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'bro
 # Без ключа провайдер возвращает demo=True, не падает.
 OPENDATABOT_API_KEY = os.environ.get('OPENDATABOT_API_KEY', '')
 
+# Apify — управляемый скрейпер аукционов (лоты Copart/IAAI)
+# Без токена ApifyLotProvider возвращает demo=True, не падает.
+APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '')
+
 # Email — console backend для dev; в продакшене заменить на SMTP или SES
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',

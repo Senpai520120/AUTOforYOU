@@ -6,7 +6,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 
 from listings.urls import b2b_urlpatterns
 from users.urls import dealer_urlpatterns
-from integrations.views import VinReportView, VinDecodeView, RegistryReportView
+from integrations.views import VinReportView, VinDecodeView, RegistryReportView, LotImportView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -15,6 +15,7 @@ urlpatterns = [
     path('api/v1/vehicles/<str:vin>/report/', VinReportView.as_view(), name='vin-report'),
     path('api/v1/vehicles/<str:vin>/decode/', VinDecodeView.as_view(), name='vin-decode'),
     path('api/v1/vehicles/<str:vin>/registry/', RegistryReportView.as_view(), name='vin-registry'),
+    path('api/v1/lots/import/', LotImportView.as_view(), name='lot-import'),
     path('api/v1/pricing/', include('pricing.urls')),
     path('api/v1/listings/', include('listings.urls')),
     path('api/v1/shipments/', include('shipments.urls')),

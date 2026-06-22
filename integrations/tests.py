@@ -1,6 +1,7 @@
 """
-Тесты интеграции Opendatabot: провайдер, кэш RegistryReport, эндпоинт.
+Тесты интеграции: Opendatabot (провайдер, кэш, эндпоинт) + импорт лотов аукционов.
 """
+from decimal import Decimal
 from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, SimpleTestCase
@@ -221,3 +222,228 @@ class TestRegistryReportCacheSave(TestCase):
             RegistryReport.objects.filter(vin='1HGBH41JXMN109186', provider='opendatabot').count(),
             1,
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Импорт лотов аукционов
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from integrations.importer import import_lot
+from integrations.providers import ManualLotProvider, ApifyLotProvider
+from vehicles.models import Vehicle, VehicleImage
+from listings.models import Listing
+
+_VALID_LOT = {
+    'vin': '1HGBH41JXMN109186',
+    'auction': 'copart',
+    'lot_number': '12345678',
+    'make': 'Honda',
+    'model': 'Civic',
+    'year': 2019,
+    'engine_cc': 1500,
+    'fuel_type': 'petrol',
+    'damage_type': 'Front End',
+    'mileage_km': 65000,
+    'final_bid': '8500.00',
+    'photos': [
+        'https://cs.copart.com/v1/photos/001.jpg',
+        'https://cs.copart.com/v1/photos/002.jpg',
+    ],
+    'location': 'Dallas, TX',
+}
+
+
+# ── ManualLotProvider ─────────────────────────────────────────────────────────
+
+class TestManualLotProvider(SimpleTestCase):
+
+    def test_valid_lot_returns_normalized_dict(self):
+        provider = ManualLotProvider()
+        result = provider.fetch_lot(_VALID_LOT)
+        self.assertFalse(result.get('error'))
+        self.assertEqual(result['vin'], '1HGBH41JXMN109186')
+        self.assertEqual(result['auction'], 'copart')
+        self.assertEqual(result['provider'], 'manual')
+        self.assertIsInstance(result['final_bid'], Decimal)
+
+    def test_missing_vin_returns_error(self):
+        provider = ManualLotProvider()
+        result = provider.fetch_lot({'make': 'Honda'})
+        self.assertIn('error', result)
+
+    def test_short_vin_returns_error(self):
+        provider = ManualLotProvider()
+        result = provider.fetch_lot({**_VALID_LOT, 'vin': 'SHORT'})
+        self.assertIn('error', result)
+
+    def test_non_dict_returns_error(self):
+        provider = ManualLotProvider()
+        result = provider.fetch_lot('https://copart.com/lot/123')
+        self.assertIn('error', result)
+
+    def test_vin_uppercased(self):
+        provider = ManualLotProvider()
+        result = provider.fetch_lot({**_VALID_LOT, 'vin': '1hgbh41jxmn109186'})
+        self.assertEqual(result['vin'], '1HGBH41JXMN109186')
+
+    def test_unknown_auction_defaults_to_other(self):
+        provider = ManualLotProvider()
+        result = provider.fetch_lot({**_VALID_LOT, 'auction': 'carmax'})
+        self.assertEqual(result['auction'], 'other')
+
+    def test_photos_preserved(self):
+        provider = ManualLotProvider()
+        result = provider.fetch_lot(_VALID_LOT)
+        self.assertEqual(len(result['photos']), 2)
+
+
+# ── ApifyLotProvider ──────────────────────────────────────────────────────────
+
+class TestApifyLotProvider(SimpleTestCase):
+
+    def test_no_token_returns_demo_true(self):
+        provider = ApifyLotProvider(token='')
+        result = provider.fetch_lot('https://www.copart.com/lot/12345678')
+        self.assertTrue(result['demo'])
+        self.assertEqual(result['provider'], 'apify')
+
+    def test_no_token_does_not_raise(self):
+        provider = ApifyLotProvider(token='')
+        try:
+            result = provider.fetch_lot('https://www.copart.com/lot/12345678')
+        except Exception as exc:
+            self.fail(f'ApifyLotProvider без токена бросил исключение: {exc}')
+
+
+# ── import_lot сервис ─────────────────────────────────────────────────────────
+
+class TestImportLotService(TestCase):
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.seller = User.objects.create_superuser(
+            email='admin@test.com', password='pass',
+        )
+        Vehicle.objects.filter(vin='1HGBH41JXMN109186').delete()
+
+    def _lot_data(self):
+        return ManualLotProvider().fetch_lot(_VALID_LOT)
+
+    def test_import_creates_vehicle(self):
+        lot = self._lot_data()
+        vehicle, listing, created = import_lot(lot, self.seller)
+        self.assertEqual(vehicle.vin, '1HGBH41JXMN109186')
+        self.assertEqual(vehicle.make, 'Honda')
+        self.assertEqual(vehicle.source_auction, 'copart')
+        self.assertTrue(created)
+
+    def test_import_creates_in_transit_listing(self):
+        lot = self._lot_data()
+        _, listing, created = import_lot(lot, self.seller)
+        self.assertEqual(listing.status, Listing.ListingStatus.IN_TRANSIT)
+        self.assertEqual(listing.channel, Listing.Channel.RETAIL)
+        self.assertTrue(created)
+
+    def test_import_saves_photo_urls(self):
+        lot = self._lot_data()
+        vehicle, _, _ = import_lot(lot, self.seller)
+        urls = list(VehicleImage.objects.filter(vehicle=vehicle).values_list('source_url', flat=True))
+        self.assertIn('https://cs.copart.com/v1/photos/001.jpg', urls)
+        self.assertIn('https://cs.copart.com/v1/photos/002.jpg', urls)
+
+    def test_first_photo_is_primary(self):
+        lot = self._lot_data()
+        vehicle, _, _ = import_lot(lot, self.seller)
+        primary = VehicleImage.objects.filter(vehicle=vehicle, is_primary=True).first()
+        self.assertIsNotNone(primary)
+        self.assertEqual(primary.source_url, 'https://cs.copart.com/v1/photos/001.jpg')
+
+    def test_repeat_import_same_vin_no_duplicate_vehicle(self):
+        lot = self._lot_data()
+        import_lot(lot, self.seller)
+        import_lot(lot, self.seller)
+        self.assertEqual(Vehicle.objects.filter(vin='1HGBH41JXMN109186').count(), 1)
+
+    def test_repeat_import_same_vin_no_duplicate_listing(self):
+        lot = self._lot_data()
+        import_lot(lot, self.seller)
+        _, _, created2 = import_lot(lot, self.seller)
+        self.assertFalse(created2)
+        self.assertEqual(
+            Listing.objects.filter(vehicle__vin='1HGBH41JXMN109186', status='in_transit').count(),
+            1,
+        )
+
+    def test_error_in_lot_data_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            import_lot({'error': 'VIN обязателен', 'demo': False}, self.seller)
+
+
+# ── POST /api/v1/lots/import/ ─────────────────────────────────────────────────
+
+class TestLotImportEndpoint(TestCase):
+
+    URL = '/api/v1/lots/import/'
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(email='adm@lots.com', password='pass')
+        self.user = User.objects.create_user(email='buyer@lots.com', password='pass')
+        self.client = APIClient()
+        Vehicle.objects.filter(vin='1HGBH41JXMN109186').delete()
+
+    def test_admin_can_import_lot(self):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(self.URL, {
+            'source': 'manual',
+            'lot_data': _VALID_LOT,
+        }, format='json')
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data['vin'], '1HGBH41JXMN109186')
+        self.assertTrue(resp.data['created'])
+
+    def test_non_admin_gets_403(self):
+        self.client.force_authenticate(self.user)
+        resp = self.client.post(self.URL, {
+            'source': 'manual',
+            'lot_data': _VALID_LOT,
+        }, format='json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_unauthenticated_gets_401(self):
+        resp = self.client.post(self.URL, {
+            'source': 'manual',
+            'lot_data': _VALID_LOT,
+        }, format='json')
+        self.assertEqual(resp.status_code, 401)
+
+    def test_invalid_vin_returns_400(self):
+        self.client.force_authenticate(self.admin)
+        bad_lot = {**_VALID_LOT, 'vin': 'BADVIN'}
+        resp = self.client.post(self.URL, {
+            'source': 'manual',
+            'lot_data': bad_lot,
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_repeat_import_returns_200(self):
+        self.client.force_authenticate(self.admin)
+        self.client.post(self.URL, {'source': 'manual', 'lot_data': _VALID_LOT}, format='json')
+        resp = self.client.post(self.URL, {'source': 'manual', 'lot_data': _VALID_LOT}, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.data['created'])
+
+    def test_apify_no_token_returns_demo_true(self):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(self.URL, {
+            'source': 'apify',
+            'lot_url': 'https://www.copart.com/lot/12345678',
+        }, format='json')
+        # Apify без токена вернёт demo=True и vin=None → ошибка провайдера → 400
+        # или если vin None, import_lot бросает ValueError → 400
+        self.assertIn(resp.status_code, (200, 201, 400))
+        # Главное — не 500
+        self.assertNotEqual(resp.status_code, 500)

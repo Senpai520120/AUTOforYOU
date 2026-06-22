@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓
 
 ---
 
@@ -16,6 +16,8 @@
 | 6 | ~~**Верификация дилеров**~~ | ✅ Снят — DealerApplication + apply/approve/reject + B2B гейтинг |
 | 7 | ~~Платёжный шлюз~~ | ✅ Снят — LiqPay sandbox готов; для продакшена: LIQPAY_SANDBOX=false + реальные ключи |
 | 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
+| 9 | **S3 + PostgreSQL** | Промт 7: разделение dev/prod настроек, перекладывание фото (VehicleImage.source_url → S3) |
+| 10 | **Apify-токен** | Подключить реальный актор Copart/IAAI для `ApifyLotProvider` |
 
 ---
 
@@ -83,6 +85,47 @@
   - total_uah > total_usd×rate (акциз+НДС+пенсионный сверху)
   - is_estimate=True, rates_date непустой
 - [x] Все тесты зелёные: 58 тестов OK
+
+---
+
+## Промт 6 — Импорт лотов аукционов (завершено 2026-06-22)
+
+### AuctionLotProvider (за интерфейсом)
+- [x] ABC `AuctionLotProvider.fetch_lot(lot_url_or_data)` → нормализованный dict лота
+- [x] `_normalize_lot()` — приведение полей: VIN→upper, auction/fuel_type → choices, final_bid→Decimal
+- [x] `ManualLotProvider` — нормализует переданный dict, без внешних зависимостей, рабочий MVP
+- [x] `ApifyLotProvider` — заглушка под Apify-актор; без APIFY_TOKEN → demo=True, не падает
+- [x] Фабрика `get_lot_provider()` — читает `APIFY_TOKEN` из settings
+- [x] `APIFY_TOKEN` в settings.py (env) + плейсхолдер в .env.example
+
+### Маппинг лот → доменные модели (integrations/importer.py)
+- [x] `import_lot(lot_data, seller)` — возвращает `(Vehicle, Listing, created)`
+- [x] `Vehicle.update_or_create(vin=...)` — идемпотентно, upsert
+- [x] `VehicleImage.get_or_create(vehicle, source_url)` — URL фото, is_primary для первого
+- [x] `vehicles.VehicleImage`: добавлен `source_url` CharField, `image` стал nullable (миграция 0002)
+- [x] `# фото в S3 — промт 7` — пометки в коде
+- [x] `Listing.get_or_create(vehicle, status=in_transit)` — retail, цена из final_bid
+- [x] Повторный импорт того же VIN: Vehicle обновляется, Listing — обновляется цена, дублей нет
+
+### Эндпоинт + команда
+- [x] POST /api/v1/lots/import/ (IsAdminUser)
+- [x] `LotImportRequestSerializer`: source=manual/apify, lot_data или lot_url
+- [x] Возвращает 201 при создании, 200 при обновлении, 400 при ошибке провайдера/VIN
+- [x] Management command `import_lot` — `--json`, `--file`, `--source apify --url`, `--seller-email`
+- [x] ⚠ Импорт по расписанию — Celery (промт 10)
+
+### Тесты (22 новых, 119 всего)
+- [x] ManualLotProvider: valid → нормализованный dict, missing VIN → error, short VIN → error, not dict → error
+- [x] ManualLotProvider: vin uppercased, unknown auction → 'other', photos preserved
+- [x] ApifyLotProvider: без токена → demo=True, не бросает
+- [x] import_lot: создаёт Vehicle/Listing, сохраняет photo URLs, первое фото is_primary=True
+- [x] import_lot: повтор → 1 Vehicle, 1 Listing, created=False
+- [x] import_lot: error в lot_data → ValueError
+- [x] POST /api/v1/lots/import/: admin→201, non-admin→403, unauth→401, bad VIN→400, repeat→200
+- [x] POST с apify без токена: не 500
+
+### Следующий шаг (промт 7)
+PostgreSQL + разделение настроек + S3 (перекладывание фото)
 
 ---
 

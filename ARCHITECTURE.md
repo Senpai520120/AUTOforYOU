@@ -56,6 +56,9 @@ GET  /api/v1/vehicles/<vin>/report/    ← A4 (заглушка: Carfax/BidFax)
 GET  /api/v1/vehicles/<vin>/decode/    ← РЕАЛЬНЫЙ (NHTSA vPIC, без ключа)
 GET  /api/v1/vehicles/<vin>/registry/ ← РЕАЛЬНЫЙ (Opendatabot UA реестры; ?plate= для поиска по номеру)
 
+# Lots import                          ← промт 6 (Manual — рабочий MVP; Apify — заглушка до токена)
+POST /api/v1/lots/import/             ← только admin (ManualLotProvider / ApifyLotProvider)
+
 # Pricing
 POST /api/v1/pricing/calculate/
 GET  /api/v1/pricing/rates/
@@ -122,6 +125,12 @@ id, vin, provider, report_data (JSONField), demo (bool), created_at
 ### integrations.RegistryReport (кэш UA реестров)
 ```
 id, vin (nullable), plate (nullable), provider ('opendatabot'), payload (JSONField), demo (bool), created_at
+```
+
+### vehicles.VehicleImage — новые поля (промт 6)
+```
+source_url (CharField, blank) — URL внешнего фото до переноса в S3 (промт 7)
+image — теперь nullable (blank/null)
 ```
 
 ### listings.Listing — новые поля

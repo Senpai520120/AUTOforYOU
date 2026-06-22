@@ -6,9 +6,11 @@
 
 NHTSAVinDecodeProvider — реальный бесплатный декодер NHTSA vPIC (без ключа).
 AuctionHistoryProvider — заглушка BidFax/Carfax (платный, ключ не подключён).
+AuctionLotProvider — импорт лотов: ManualLotProvider (всегда), ApifyLotProvider (с токеном).
 """
 from abc import ABC, abstractmethod
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 
 # ─── VIN-провайдер ───────────────────────────────────────────────────────────
@@ -254,3 +256,120 @@ def get_opendatabot_provider() -> OpendatabotProvider:
     if api_key:
         return RealOpendatabotProvider(api_key=api_key)
     return RealOpendatabotProvider(api_key='')  # demo mode, safe without key
+
+
+# ─── Импорт аукционных лотов ─────────────────────────────────────────────────
+
+_VALID_AUCTIONS = {'copart', 'iaai', 'other'}
+_VALID_FUEL_TYPES = {'petrol', 'diesel', 'electric', 'hybrid', 'phev'}
+
+
+def _normalize_lot(raw: dict) -> dict:
+    """Приводит сырые поля лота к каноническому виду. Не кидает исключений."""
+    vin = (raw.get('vin') or '').strip().upper()
+    if not vin or len(vin) != 17:
+        return {'error': 'VIN обязателен (ровно 17 символов)', 'demo': False}
+
+    try:
+        final_bid = Decimal(str(raw.get('final_bid') or '0'))
+    except InvalidOperation:
+        final_bid = Decimal('0')
+
+    auction = (raw.get('auction') or 'other').lower()
+    if auction not in _VALID_AUCTIONS:
+        auction = 'other'
+
+    fuel_type = (raw.get('fuel_type') or 'petrol').lower()
+    if fuel_type not in _VALID_FUEL_TYPES:
+        fuel_type = 'petrol'
+
+    return {
+        'demo': bool(raw.get('demo', False)),
+        'provider': raw.get('provider', 'manual'),
+        'vin': vin,
+        'auction': auction,
+        'lot_number': str(raw.get('lot_number') or ''),
+        'make': str(raw.get('make') or ''),
+        'model': str(raw.get('model') or ''),
+        'year': int(raw.get('year') or 2000),
+        'engine_cc': int(raw.get('engine_cc') or 0),
+        'fuel_type': fuel_type,
+        'damage_type': str(raw.get('damage_type') or ''),
+        'mileage_km': int(raw.get('mileage_km') or 0),
+        'final_bid': final_bid,
+        'photos': list(raw.get('photos') or []),
+        'location': str(raw.get('location') or ''),
+    }
+
+
+class AuctionLotProvider(ABC):
+    @abstractmethod
+    def fetch_lot(self, lot_url_or_data) -> dict:
+        """
+        Возвращает нормализованный dict лота или {'error': ..., 'demo': False}.
+        Никогда не кидает исключение.
+        """
+
+
+class ManualLotProvider(AuctionLotProvider):
+    """
+    Нормализует вручную переданные данные лота (dict).
+    Нет внешних зависимостей — рабочий MVP-провайдер.
+    """
+
+    def fetch_lot(self, lot_url_or_data) -> dict:
+        if not isinstance(lot_url_or_data, dict):
+            return {'error': 'ManualLotProvider ожидает dict с данными лота', 'demo': False}
+        return _normalize_lot({**lot_url_or_data, 'provider': 'manual'})
+
+
+class ApifyLotProvider(AuctionLotProvider):
+    """
+    Заглушка под Apify-актор (управляемый скрейпер Copart/IAAI).
+
+    Прямой парсинг Copart/IAAI обходит Cloudflare — не делаем.
+    Без APIFY_TOKEN возвращает demo=True, не кидает 500.
+    Документация Apify: https://apify.com/docs/api
+    """
+
+    def __init__(self, token: str = ''):
+        self._token = token
+
+    def fetch_lot(self, lot_url_or_data) -> dict:
+        if not self._token:
+            return {
+                'demo': True,
+                'provider': 'apify',
+                'note': '⚠ APIFY_TOKEN не задан — демо-режим. Подключите токен для реального импорта.',
+                'vin': None,
+            }
+
+        import httpx
+
+        # Apify actor run endpoint (dataset v2).
+        # Замените YOUR_ACTOR_ID на актуальный ID актора Copart/IAAI.
+        # Сверьте с документацией вашего актора: https://apify.com
+        _apify_run_url = 'https://api.apify.com/v2/acts/YOUR_ACTOR_ID/run-sync-get-dataset-items'
+
+        try:
+            resp = httpx.post(
+                _apify_run_url,
+                json={'startUrls': [{'url': lot_url_or_data}]},
+                headers={'Authorization': f'Bearer {self._token}'},
+                timeout=60.0,
+            )
+            resp.raise_for_status()
+            items = resp.json()
+            if not items:
+                return {'error': 'Apify актор вернул пустой результат', 'demo': False}
+            return _normalize_lot({**items[0], 'provider': 'apify'})
+        except Exception as exc:
+            return {'error': str(exc), 'demo': False, 'provider': 'apify'}
+
+
+def get_lot_provider() -> AuctionLotProvider:
+    from django.conf import settings
+    token = getattr(settings, 'APIFY_TOKEN', '')
+    if token:
+        return ApifyLotProvider(token=token)
+    return ApifyLotProvider(token='')  # demo mode, safe without token
