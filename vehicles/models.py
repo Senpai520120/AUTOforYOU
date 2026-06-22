@@ -36,7 +36,9 @@ class Vehicle(models.Model):
 
 class VehicleImage(models.Model):
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='vehicle_photos/')
+    image = models.ImageField(upload_to='vehicle_photos/', blank=True, null=True)
+    # фото в S3 — промт 7 (здесь хранится URL источника до переноса в хранилище)
+    source_url = models.CharField(max_length=500, blank=True, verbose_name='URL источника фото')
     is_primary = models.BooleanField(default=False, verbose_name='Главное фото')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
