@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 готовы ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 готовы ✓ | Безопасность ✓
 
 ---
 
@@ -18,7 +18,8 @@
 | 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
 | 9 | ~~**S3 + PostgreSQL**~~ | ✅ Снят — dj-database-url + django-storages, включаются env-переменными |
 | 10 | **Apify-токен** | Подключить реальный актор Copart/IAAI для `ApifyLotProvider` |
-| 11 | **Безопасность** | Промт 8: rate-limiting, заголовки безопасности, HTTPS-редиректы |
+| 11 | ~~**Безопасность**~~ | ✅ Снят — промт 8: throttling, JWT blacklist, security headers |
+| 12 | **Кэш и производительность** | Промт 9: Redis/Memcached, DB-индексы, select_related |
 
 ---
 
@@ -86,6 +87,45 @@
   - total_uah > total_usd×rate (акциз+НДС+пенсионный сверху)
   - is_estimate=True, rates_date непустой
 - [x] Все тесты зелёные: 58 тестов OK
+
+---
+
+## Промт 8 — Безопасность (завершено 2026-06-23)
+
+### Throttling (защита платных API)
+- [x] DRF `AnonRateThrottle` (60/hr) + `UserRateThrottle` (300/hr) — дефолты, env-overridable
+- [x] `ScopedRateThrottle` scope `expensive` (10/hr) на `/registry/` и `/decode/`
+- [x] `/vehicles/<vin>/registry/` — только `IsAuthenticated` (Opendatabot платный)
+- [x] Кэш RegistryReport проверяется ДО внешнего вызова (подтверждено в views.py)
+- [x] Тесты: анон → 401/403; throttle deny → 429
+
+### CORS / ALLOWED_HOSTS
+- [x] `CORS_ALLOW_ALL_ORIGINS = DEBUG` (dev только)
+- [x] `CORS_ALLOWED_ORIGINS` env-overridable: `CORS_ALLOWED_ORIGINS=https://yourdomain.com,...`
+- [x] `ALLOWED_HOSTS` из env; при DEBUG=True → `['*']`; prod без env → `[]`
+
+### JWT
+- [x] Access: 15 мин (было 1 час), Refresh: 7 дней (было 30)
+- [x] `rest_framework_simplejwt.token_blacklist` добавлен в INSTALLED_APPS + миграция
+- [x] `BLACKLIST_AFTER_ROTATION = True`
+- [x] `POST /api/v1/auth/token/logout/` — кладёт refresh в blacklist
+- [x] Тест: отозванный refresh → 401 при попытке обновить access
+
+### Security-заголовки (только при DEBUG=False)
+- [x] `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS=31536000`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`
+- [x] `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_PROXY_SSL_HEADER`
+- [x] `X_FRAME_OPTIONS = 'DENY'`, `SECURE_CONTENT_TYPE_NOSNIFF`
+- [x] В dev (DEBUG=True) — все выключены, localhost работает по HTTP
+
+### Аудит
+- [x] `python manage.py check --deploy` — 0 ошибок, 13 warnings (2 безопасности: SECRET_KEY и ALLOWED_HOSTS — оба устраняются env-переменными перед продом)
+- [x] `.gitignore` проверен: `.env`, `*.sqlite3`, `backups/`, `*.log` не в git. В git только `.env.example`
+- [x] LiqPay callback: подпись SHA1 проверяется в `decode_callback()`. Идемпотентный guard добавлен — повторный COMPLETED-колбэк пропускается, листинг не разблокируется дважды
+
+### Тесты (10 новых, 127 всего)
+- [x] Анон на registry → 401; auth → 200
+- [x] ScopedRateThrottle deny → 429 (registry и decode)
+- [x] Logout → ok; blacklisted refresh → 401 на /token/refresh/; logout без auth → 401; logout без refresh → 400
 
 ---
 

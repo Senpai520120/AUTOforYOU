@@ -1,5 +1,13 @@
 # AUTOforYOU — Архитектура
 
+## Безопасность (промт 8)
+- **Throttling**: `AnonRateThrottle` 60/hr + `UserRateThrottle` 300/hr глобально. Дорогие платные эндпоинты (`/registry/`, `/decode/`) — отдельный `ScopedRateThrottle` scope `expensive` 10/hr. Лимиты env-overridable (`THROTTLE_ANON_RATE`, `THROTTLE_USER_RATE`, `THROTTLE_EXPENSIVE_RATE`).
+- **Auth на /registry/**: только авторизованные пользователи (Opendatabot платный).
+- **JWT**: access 15 мин, refresh 7 дней, blacklist при ротации. Logout-эндпоинт: `POST /api/v1/auth/token/logout/`.
+- **Security-заголовки**: HSTS, SSL redirect, secure cookies, X-Frame-Options=DENY, NOSNIFF — только при `DEBUG=False` (в dev localhost без https не ломается).
+- **CORS**: перед продом задать `CORS_ALLOWED_ORIGINS=https://yourdomain.com,...` в env.
+- **ALLOWED_HOSTS**: перед продом задать `ALLOWED_HOSTS=yourdomain.com,...` в env.
+
 ## Инфраструктура (промт 7)
 - **БД**: `DATABASE_URL` не задан → SQLite (dev, без настройки). Задан → PostgreSQL (prod).
 - **Медиа/S3**: S3-переменные не заданы → `media/` локально (dev). Заданы → AWS S3 / Cloudflare R2.
