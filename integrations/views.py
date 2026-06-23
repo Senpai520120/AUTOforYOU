@@ -2,6 +2,7 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParamet
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import status, permissions
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .importer import import_lot
@@ -77,6 +78,9 @@ class VinReportView(APIView):
     },
 )
 class VinDecodeView(APIView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'expensive'
+
     def get(self, request, vin: str):
         vin = vin.upper().strip()
         if len(vin) != 17:
@@ -123,6 +127,10 @@ class VinDecodeView(APIView):
     },
 )
 class RegistryReportView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'expensive'
+
     def get(self, request, vin: str):
         plate = request.query_params.get('plate', '').strip().upper() or None
         vin_clean = vin.upper().strip() if vin != '_' else None

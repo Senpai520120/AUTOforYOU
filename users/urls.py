@@ -3,6 +3,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     DealerApplyView, DealerApplicationStatusView,
+    LogoutView,
     RegisterView, ProfileView,
     MyCalculationsView, MyShipmentsView,
     TrustedShopListView, TrustedShopDetailView,
@@ -20,6 +21,7 @@ urlpatterns = [
     path('register/', RegisterView.as_view(), name='auth-register'),
     path('token/', TokenObtainPairView.as_view(), name='token-obtain'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
+    path('token/logout/', LogoutView.as_view(), name='token-logout'),
     path('profile/', ProfileView.as_view(), name='auth-profile'),
     # Личный кабинет
     path('me/calculations/', MyCalculationsView.as_view(), name='me-calculations'),

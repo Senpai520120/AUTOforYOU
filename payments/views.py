@@ -131,10 +131,17 @@ class LiqPayCallbackView(APIView):
             logger.warning('LiqPay callback: платёж order_id=%s не найден', order_id)
             return Response({'error': f'Платёж {order_id!r} не найден.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        new_status = LiqPayClient.map_status(liqpay_status)
+
+        # Idempotency: повторный COMPLETED-колбэк не вызывает unlock дважды
+        if payment.status == Payment.Status.COMPLETED and new_status == Payment.Status.COMPLETED:
+            logger.info('LiqPay callback: платёж %s уже завершён, дубликат проигнорирован', order_id)
+            return Response({'ok': True, 'status': payment.status})
+
         payment.liqpay_status = liqpay_status
         payment.liqpay_payment_id = liqpay_payment_id
         payment.liqpay_raw = decoded
-        payment.status = LiqPayClient.map_status(liqpay_status)
+        payment.status = new_status
         payment.save(update_fields=['status', 'liqpay_status', 'liqpay_payment_id', 'liqpay_raw', 'updated_at'])
 
         if payment.status == Payment.Status.COMPLETED:

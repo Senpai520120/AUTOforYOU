@@ -2,6 +2,8 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import CustomUser, DealerApplication, TrustedShop
 from .serializers import (
@@ -9,6 +11,27 @@ from .serializers import (
     RegisterSerializer, UserProfileSerializer, TrustedShopSerializer,
 )
 from .services import DuplicatePendingError, apply_for_dealer
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Выход из системы (отзыв refresh-токена)',
+    description='Помещает переданный refresh-токен в blacklist. После этого им нельзя получить новый access.',
+    responses={200: None, 400: None},
+)
+class LogoutView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        refresh = request.data.get('refresh')
+        if not refresh:
+            return Response({'error': 'refresh обязателен.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            token = RefreshToken(refresh)
+            token.blacklist()
+        except TokenError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'ok': True})
 
 
 @extend_schema(tags=['auth'], summary='Регистрация нового пользователя')

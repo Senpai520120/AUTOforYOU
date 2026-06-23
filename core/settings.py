@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'storages',
 
@@ -144,12 +146,21 @@ else:
     STATIC_URL = 'static/'
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # в dev разрешаем всё; в prod — только явный список
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+# Dev: разрешаем всё. Prod: задать CORS_ALLOWED_ORIGINS=https://yourdomain.com,...
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+_cors_env = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+CORS_ALLOWED_ORIGINS = (
+    [o.strip() for o in _cors_env.split(',') if o.strip()]
+    if _cors_env
+    else ['http://localhost:3000', 'http://127.0.0.1:3000']
+)
 CORS_ALLOW_CREDENTIALS = True
+
+# ─── Rate Limiting (throttling) ───────────────────────────────────────────────
+# Дефолты env-overridable. Дорогие внешние API (Opendatabot, NHTSA) — 10/час.
+_THROTTLE_ANON = os.environ.get('THROTTLE_ANON_RATE', '60/hour')
+_THROTTLE_USER = os.environ.get('THROTTLE_USER_RATE', '300/hour')
+_THROTTLE_EXPENSIVE = os.environ.get('THROTTLE_EXPENSIVE_RATE', '10/hour')
 
 # ─── DRF ──────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
@@ -162,6 +173,15 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
     ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': _THROTTLE_ANON,
+        'user': _THROTTLE_USER,
+        'expensive': _THROTTLE_EXPENSIVE,
+    },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -229,9 +249,22 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@autoforyou.ua
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,
+    'BLACKLIST_AFTER_ROTATION': True,   # отзывает старый refresh при ротации
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# ─── Заголовки безопасности (только в продакшене) ─────────────────────────────
+# В dev (DEBUG=True) не включаем — localhost работает по HTTP.
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31_536_000          # 1 год
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_CONTENT_TYPE_NOSNIFF = True
