@@ -4,12 +4,24 @@
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase, SimpleTestCase
 from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from integrations.models import RegistryReport
 from integrations.providers import RealOpendatabotProvider
+
+
+def _auth_client(email='registry_test@test.com'):
+    """Возвращает APIClient с JWT авторизованного тестового пользователя."""
+    User = get_user_model()
+    user = User.objects.create_user(email=email, password='pass')
+    refresh = RefreshToken.for_user(user)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(refresh.access_token)}')
+    return client
 
 
 # ── Провайдер: без ключа → demo ───────────────────────────────────────────────
@@ -118,7 +130,10 @@ class TestRegistryReportEndpoint(APITestCase):
     URL = '/api/v1/vehicles/1HGBH41JXMN109186/registry/'
 
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         RegistryReport.objects.all().delete()
+        self.client = _auth_client('endpoint_test@test.com')
 
     @patch('integrations.views.get_opendatabot_provider')
     def test_successful_response_has_required_fields(self, mock_factory):
@@ -215,7 +230,7 @@ class TestRegistryReportCacheSave(TestCase):
         }
         mock_factory.return_value = mock_provider
 
-        client = APIClient()
+        client = _auth_client()
         client.get('/api/v1/vehicles/1HGBH41JXMN109186/registry/')
 
         self.assertEqual(
@@ -447,3 +462,57 @@ class TestLotImportEndpoint(TestCase):
         self.assertIn(resp.status_code, (200, 201, 400))
         # Главное — не 500
         self.assertNotEqual(resp.status_code, 500)
+
+
+# ── Безопасность: auth + throttling ──────────────────────────────────────────
+
+REGISTRY_URL = '/api/v1/vehicles/1HGBH41JXMN109186/registry/'
+DECODE_URL = '/api/v1/vehicles/1HGBH41JXMN109186/decode/'
+
+
+class TestRegistryRequiresAuth(TestCase):
+    """Реестр (платный Opendatabot) доступен только авторизованным."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_anonymous_gets_401(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        resp = client.get(REGISTRY_URL)
+        self.assertIn(resp.status_code, [401, 403])
+
+    def test_authenticated_user_can_access(self):
+        client = _auth_client('registry_access_unique@test.com')
+        with patch('integrations.views.get_opendatabot_provider') as mock_prov:
+            mock_prov.return_value.get_vehicle_info.return_value = {
+                'vin': '1HGBH41JXMN109186', 'demo': True, 'provider': 'opendatabot',
+            }
+            resp = client.get(REGISTRY_URL)
+        self.assertEqual(resp.status_code, 200)
+
+
+class TestExpensiveEndpointThrottle(TestCase):
+    """ScopedRateThrottle применён — при deny возвращает 429."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_registry_throttle_deny_returns_429(self):
+        from rest_framework.throttling import ScopedRateThrottle
+        client = _auth_client('thr1@test.com')
+        with patch.object(ScopedRateThrottle, 'allow_request', return_value=False), \
+             patch.object(ScopedRateThrottle, 'wait', return_value=60.0):
+            resp = client.get(REGISTRY_URL)
+        self.assertEqual(resp.status_code, 429)
+
+    def test_decode_throttle_deny_returns_429(self):
+        from rest_framework.test import APIClient
+        from rest_framework.throttling import ScopedRateThrottle
+        client = APIClient()
+        with patch.object(ScopedRateThrottle, 'allow_request', return_value=False), \
+             patch.object(ScopedRateThrottle, 'wait', return_value=60.0):
+            resp = client.get(DECODE_URL)
+        self.assertEqual(resp.status_code, 429)

@@ -195,3 +195,42 @@ class TestWholesaleCatalogFilter(APITestCase):
         ids = [r['id'] for r in resp.data['results']] if 'results' in resp.data else [r['id'] for r in resp.data]
         self.assertIn(self.retail.id, ids)
         self.assertIn(self.wholesale.id, ids)
+
+
+# ── JWT Blacklist (logout) ────────────────────────────────────────────────────
+
+LOGOUT_URL = '/api/v1/auth/token/logout/'
+TOKEN_REFRESH_URL = '/api/v1/auth/token/refresh/'
+TOKEN_URL = '/api/v1/auth/token/'
+
+
+class TestJWTLogout(APITestCase):
+
+    def setUp(self):
+        self.user = _make_user('jwt@test.com')
+        from rest_framework_simplejwt.tokens import RefreshToken
+        self.refresh = RefreshToken.for_user(self.user)
+        self.access = str(self.refresh.access_token)
+        self.refresh_str = str(self.refresh)
+
+    def test_logout_returns_ok(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access}')
+        resp = self.client.post(LOGOUT_URL, {'refresh': self.refresh_str}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data['ok'])
+
+    def test_logout_blacklists_refresh(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access}')
+        self.client.post(LOGOUT_URL, {'refresh': self.refresh_str}, format='json')
+        # Отозванный refresh не позволяет получить новый access
+        resp = self.client.post(TOKEN_REFRESH_URL, {'refresh': self.refresh_str}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_requires_auth(self):
+        resp = self.client.post(LOGOUT_URL, {'refresh': self.refresh_str}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_missing_refresh_returns_400(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access}')
+        resp = self.client.post(LOGOUT_URL, {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
