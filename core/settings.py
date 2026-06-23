@@ -109,6 +109,23 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ─── Кэш ──────────────────────────────────────────────────────────────────────
+# Не задан REDIS_URL → LocMemCache (dev, в памяти процесса, без Redis).
+# Задан REDIS_URL → django-redis (prod / staging).
+_REDIS_URL = os.environ.get('REDIS_URL', '')
+CACHES = {
+    'default': (
+        {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': _REDIS_URL,
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+            'KEY_PREFIX': 'aut',
+        }
+        if _REDIS_URL else
+        {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}
+    )
+}
+
 # ─── Медиафайлы и хранилище ───────────────────────────────────────────────────
 # Не заданы S3_*-переменные → локальное хранилище /media/ (dev рабочий без S3).
 # Заданы все три (S3_BUCKET_NAME, S3_REGION, AWS_ACCESS_KEY_ID + SECRET_ACCESS_KEY)

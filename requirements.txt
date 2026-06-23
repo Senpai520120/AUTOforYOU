@@ -12,3 +12,5 @@ liqpay==1.0
 dj-database-url==2.3.0
 django-storages[s3]==1.14.4
 boto3==1.38.38
+# Промт 9: Redis-кэш (включается через REDIS_URL; без него — LocMemCache)
+django-redis==5.4.0
