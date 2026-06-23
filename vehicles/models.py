@@ -29,6 +29,9 @@ class Vehicle(models.Model):
         verbose_name = 'Автомобиль'
         verbose_name_plural = 'Автомобили'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['fuel_type'], name='vehicle_fuel_type_idx'),
+        ]
 
     def __str__(self):
         return f'{self.year} {self.make} {self.model} ({self.vin})'

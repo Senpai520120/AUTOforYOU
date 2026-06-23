@@ -49,6 +49,12 @@ class Listing(models.Model):
         verbose_name = 'Объявление'
         verbose_name_plural = 'Объявления'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status'], name='listing_status_idx'),
+            models.Index(fields=['channel'], name='listing_channel_idx'),
+            models.Index(fields=['channel', 'status'], name='listing_channel_status_idx'),
+            models.Index(fields=['price'], name='listing_price_idx'),
+        ]
 
     def __str__(self):
         return f'{self.vehicle} — {self.price} {self.currency} [{self.status}]'
