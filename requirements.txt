@@ -14,3 +14,7 @@ django-storages[s3]==1.14.4
 boto3==1.38.38
 # Промт 9: Redis-кэш (включается через REDIS_URL; без него — LocMemCache)
 django-redis==5.4.0
+# Промт 10: Celery (брокер Redis, переиспользует REDIS_URL; без него — eager mode)
+celery[redis]==5.4.0
+django-celery-beat==2.9.0
+# flower==2.0.1  # опционально: мониторинг задач в dev (pip install flower вручную)

@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -46,6 +47,7 @@ INSTALLED_APPS = [
     'cars',
 
     'drf_spectacular',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -273,9 +275,35 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+# ─── Celery ───────────────────────────────────────────────────────────────────
+# Нет REDIS_URL ИЛИ DEBUG=True → задачи выполняются синхронно (eager).
+# Тесты и локальная разработка работают без Redis-воркера.
+if _REDIS_URL and not DEBUG:
+    CELERY_BROKER_URL = _REDIS_URL
+    CELERY_RESULT_BACKEND = _REDIS_URL
+    CELERY_TASK_ALWAYS_EAGER = False
+else:
+    CELERY_BROKER_URL = 'memory://'
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+
+CELERY_TIMEZONE = 'Europe/Kyiv'
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Расписание фоновых задач
+from celery.schedules import crontab as _crontab  # noqa: E402
+CELERY_BEAT_SCHEDULE = {
+    # Курс НБУ: каждый день в 09:00 по Киеву
+    'fetch-nbu-rates-daily': {
+        'task': 'pricing.tasks.fetch_nbu_rates_task',
+        'schedule': _crontab(hour=9, minute=0),
+    },
+}
+
 # ─── Заголовки безопасности (только в продакшене) ─────────────────────────────
-# В dev (DEBUG=True) не включаем — localhost работает по HTTP.
-if not DEBUG:
+# В dev (DEBUG=True) и в тест-раннере не включаем — тесты работают по HTTP.
+_TESTING = 'test' in sys.argv
+if not DEBUG and not _TESTING:
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31_536_000          # 1 год
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True

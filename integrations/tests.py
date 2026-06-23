@@ -516,3 +516,52 @@ class TestExpensiveEndpointThrottle(TestCase):
              patch.object(ScopedRateThrottle, 'wait', return_value=60.0):
             resp = client.get(DECODE_URL)
         self.assertEqual(resp.status_code, 429)
+
+
+# ── Celery-задача: import_lot_task — идемпотентность ─────────────────────────
+
+class TestImportLotTaskIdempotency(TestCase):
+    """
+    import_lot_task с одним VIN дважды:
+    - первый вызов создаёт Vehicle + Listing;
+    - второй вызов обновляет Vehicle, не создаёт дубль Listing.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.seller = User.objects.create_user(email='seller_celery@test.com', password='pass')
+
+    _LOT = {
+        'vin': 'CELERYTEST00001',
+        'make': 'Toyota',
+        'model': 'Camry',
+        'year': 2020,
+        'engine_cc': 2500,
+        'fuel_type': 'petrol',
+        'mileage_km': 30000,
+        'damage_type': 'front',
+        'auction': 'copart',
+        'lot_number': 'LOT001',
+        'photos': [],
+        'final_bid': Decimal('8000'),
+    }
+
+    def test_two_calls_one_listing(self):
+        from integrations.tasks import import_lot_task
+        from vehicles.models import Vehicle
+        from listings.models import Listing
+
+        result1 = import_lot_task(self._LOT, self.seller.pk)
+        result2 = import_lot_task(self._LOT, self.seller.pk)
+
+        self.assertTrue(result1['created'])
+        self.assertFalse(result2['created'])
+
+        self.assertEqual(Vehicle.objects.filter(vin='CELERYTEST00001').count(), 1)
+        self.assertEqual(Listing.objects.filter(vehicle__vin='CELERYTEST00001').count(), 1)
+
+    def test_missing_seller_returns_error(self):
+        from integrations.tasks import import_lot_task
+
+        result = import_lot_task(self._LOT, seller_id=999999)
+        self.assertIn('error', result)

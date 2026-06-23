@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓ | Celery ✓
 
 ---
 
@@ -20,7 +20,8 @@
 | 10 | **Apify-токен** | Подключить реальный актор Copart/IAAI для `ApifyLotProvider` |
 | 11 | ~~**Безопасность**~~ | ✅ Снят — промт 8: throttling, JWT blacklist, security headers |
 | 12 | ~~**Кэш и производительность**~~ | ✅ Снят — промт 9: Redis/кэш тарифов, индексы, N+1 |
-| 13 | **Celery — фоновые задачи** | Промт 10: import лотов по расписанию, beat, flower |
+| 13 | ~~**Celery — фоновые задачи**~~ | ✅ Снят — промт 10: Celery+beat, fetch_nbu_rates_task (daily, cache invalidate), import_lot_task, send_notification stub |
+| 14 | **Telegram-уведомления** | Промт 11: реализовать send_notification через Bot API |
 
 ---
 

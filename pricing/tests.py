@@ -827,3 +827,74 @@ class TestPricingCacheInvalidation(TestCase):
         tier.fee_flat = D('80.00')
         tier.save()
         self.assertIsNone(cache.get(KEYS['tiers']))
+
+
+# ── Celery-задача: fetch_nbu_rates_task ───────────────────────────────────────
+
+class TestFetchNbuRatesTask(TestCase):
+    """
+    fetch_nbu_rates_task должна:
+    1) Сохранить курсы в ExchangeRate (USD/UAH, EUR/UAH, USD/EUR).
+    2) Сбросить кэш pricing:exchange_rates после записи.
+    """
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def _nbu_side_effect(self, url, *args, **kwargs):
+        """Возвращает фиктивный ответ НБУ в зависимости от valcode в URL."""
+        from unittest.mock import MagicMock
+        if 'valcode=USD' in url:
+            body = b'[{"r030":840,"txt":"Dollar USA","rate":41.5,"cc":"USD","exchangedate":"23.06.2026"}]'
+        else:
+            body = b'[{"r030":978,"txt":"Euro","rate":45.0,"cc":"EUR","exchangedate":"23.06.2026"}]'
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = body
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        return mock_resp
+
+    def test_task_saves_rates_and_invalidates_cache(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+        from pricing.models import ExchangeRate
+        from pricing.cache import get_exchange_rates, KEYS
+        from pricing.tasks import fetch_nbu_rates_task
+
+        # Прогреваем кэш
+        get_exchange_rates()
+        self.assertIsNotNone(cache.get(KEYS['exchange']))
+
+        with patch('pricing.nbu.urlopen', side_effect=self._nbu_side_effect):
+            result = fetch_nbu_rates_task()
+
+        # Курсы сохранены
+        usd = ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH').first()
+        eur = ExchangeRate.objects.filter(from_currency='EUR', to_currency='UAH').first()
+        self.assertIsNotNone(usd)
+        self.assertIsNotNone(eur)
+        self.assertEqual(usd.rate, D('41.5'))
+        self.assertEqual(eur.rate, D('45.0'))
+
+        # Кросс-курс сохранён
+        cross = ExchangeRate.objects.filter(from_currency='USD', to_currency='EUR').first()
+        self.assertIsNotNone(cross)
+
+        # Кэш сброшен
+        self.assertIsNone(cache.get(KEYS['exchange']))
+
+        # Задача вернула список
+        self.assertIsInstance(result, list)
+        self.assertTrue(any('USD/UAH' in r for r in result))
+
+    def test_task_retries_on_url_error(self):
+        from unittest.mock import patch
+        from urllib.error import URLError
+        from celery.exceptions import Retry
+        from pricing.tasks import fetch_nbu_rates_task
+
+        with patch('pricing.nbu.urlopen', side_effect=URLError('timeout')):
+            with self.assertRaises((URLError, Retry)):
+                fetch_nbu_rates_task()

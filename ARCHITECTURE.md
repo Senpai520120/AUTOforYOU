@@ -1,5 +1,15 @@
 # AUTOforYOU — Архитектура
 
+## Celery — фоновые задачи (промт 10)
+- **Брокер**: `REDIS_URL` → Redis; нет `REDIS_URL` ИЛИ `DEBUG=True` → `CELERY_TASK_ALWAYS_EAGER=True` (синхронный режим, воркер не нужен — dev и тесты работают без Redis).
+- **Расписание**: `django-celery-beat` с `DatabaseScheduler`; расписание хранится в БД, правится из админки.
+- **Задачи**:
+  - `pricing.tasks.fetch_nbu_rates_task` — ежедневно в 09:00 (Kyiv), ретрай ×3 при `URLError`. **После записи явно сбрасывает кэш `pricing:exchange_rates`** (промт 9).
+  - `integrations.tasks.import_lot_task` — импорт одного лота через Apify; идемпотентен по VIN; ретрай ×3 при сетевых ошибках.
+  - `integrations.tasks.send_notification` — заглушка Telegram (реализация — промт 11).
+- **Prod-команды**: `celery -A core worker -l info` + `celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler`.
+- **Flower** (опционально, dev): `pip install flower && celery -A core flower`.
+
 ## Кэш и производительность (промт 9)
 - **Кэш-бэкенд**: `REDIS_URL` → django-redis; не задан → LocMemCache (dev без Redis).
 - **Тарифные справочники кэшируются**: AuctionFeeTier, AuctionFixedFee, логистика, ExchangeRate, акциз, пенсионный сбор — TTL 24ч. `CalculateView` делает 0 DB-запросов на cache hit (было 8+).
