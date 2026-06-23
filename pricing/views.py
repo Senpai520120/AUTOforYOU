@@ -23,11 +23,18 @@ from .models import (
     PensionFundBracket, UsLandRoute,
 )
 from .serializers import CalculateInputSerializer, CalculationSerializer
+from . import cache as pricing_cache
 
 DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
 
 
+def _is_active(obj, on_date):
+    """True, если запись активна на дату on_date."""
+    return obj.valid_from <= on_date and (obj.valid_to is None or obj.valid_to >= on_date)
+
+
 def _active_on(qs, on_date=None):
+    """Вспомогательный ORM-фильтр (используется в ActiveRatesView)."""
     on_date = on_date or date.today()
     return qs.filter(valid_from__lte=on_date).filter(
         Q(valid_to__isnull=True) | Q(valid_to__gte=on_date)
@@ -36,35 +43,44 @@ def _active_on(qs, on_date=None):
 
 def _lookup_tier(auction, bid, member_type, payment_type, title_type, on_date):
     """
-    Ищет подходящий AuctionFeeTier.
+    Ищет AuctionFeeTier в кэше (in-memory фильтрация).
     Приоритет: точный title_type → 'any'.
     """
-    base_qs = _active_on(
-        AuctionFeeTier.objects.filter(
-            auction=auction,
-            member_type=member_type,
-            payment_type=payment_type,
-            bid_min__lte=bid,
-        ).filter(
-            Q(bid_max__isnull=True) | Q(bid_max__gte=bid)
-        ),
-        on_date,
-    ).order_by('bid_min')
+    all_tiers = pricing_cache.get_auction_fee_tiers()
+
+    candidates = sorted(
+        [
+            t for t in all_tiers
+            if (
+                t.auction == auction
+                and t.member_type == member_type
+                and t.payment_type == payment_type
+                and t.bid_min <= bid
+                and (t.bid_max is None or t.bid_max >= bid)
+                and _is_active(t, on_date)
+            )
+        ],
+        key=lambda t: t.bid_min,
+    )
 
     return (
-        base_qs.filter(title_type=title_type).first()
-        or base_qs.filter(title_type='any').first()
+        next((t for t in candidates if t.title_type == title_type), None)
+        or next((t for t in candidates if t.title_type == 'any'), None)
     )
 
 
 def _lookup_fixed_fees(auction, title_type, on_date):
-    """Возвращает применимые фиксированные сборы: gate по title_type + env + virtual_bid."""
-    active = _active_on(AuctionFixedFee.objects.filter(auction=auction), on_date)
-    gate = active.filter(fee_type='gate').filter(
-        Q(title_type=title_type) | Q(title_type='any')
-    )
-    others = active.filter(fee_type__in=['environmental', 'virtual_bid'])
-    return list(gate) + list(others)
+    """Возвращает применимые фиксированные сборы из кэша."""
+    all_fees = pricing_cache.get_auction_fixed_fees()
+    result = []
+    for f in all_fees:
+        if not (f.auction == auction and _is_active(f, on_date)):
+            continue
+        if f.fee_type == 'gate' and f.title_type in (title_type, 'any'):
+            result.append(f)
+        elif f.fee_type in ('environmental', 'virtual_bid'):
+            result.append(f)
+    return result
 
 
 @extend_schema(
@@ -153,57 +169,82 @@ class CalculateView(APIView):
                 on_date=calc_date,
             )
 
-            us_land = _active_on(
-                UsLandRoute.objects.filter(
-                    auction_location__iexact=data['auction_location'],
-                    us_port__iexact=data['us_port'],
-                ),
-                calc_date,
-            ).first()
+            loc = data['auction_location'].lower()
+            us_p = data['us_port'].lower()
+            eu_p = data['eu_port']
 
-            ocean = _active_on(
-                OceanFreightRate.objects.filter(
-                    us_port__iexact=data['us_port'],
-                    eu_port=data['eu_port'],
-                ),
-                calc_date,
-            ).first()
-
-            eu_to_ua = _active_on(
-                EuToUaDeliveryRate.objects.filter(eu_port=data['eu_port']),
-                calc_date,
-            ).first()
-
-            # Курс НБУ на дату оформления. Если нет — берём ближайший предыдущий.
-            usd_to_uah = (
-                ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH', date=calc_date).first()
-                or ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH').order_by('-date').first()
+            us_land = next(
+                (r for r in sorted(pricing_cache.get_us_land_routes(), key=lambda x: x.valid_from)
+                 if r.auction_location.lower() == loc
+                 and r.us_port.lower() == us_p
+                 and _is_active(r, calc_date)),
+                None,
             )
 
-            usd_to_eur = (
-                ExchangeRate.objects.filter(from_currency='USD', to_currency='EUR', date=calc_date).first()
-                or ExchangeRate.objects.filter(from_currency='USD', to_currency='EUR').order_by('-date').first()
+            ocean = next(
+                (r for r in pricing_cache.get_ocean_freight()
+                 if r.us_port.lower() == us_p
+                 and r.eu_port == eu_p
+                 and _is_active(r, calc_date)),
+                None,
             )
 
-            excise_rate = _active_on(
-                CustomsExciseRate.objects.filter(
-                    fuel_type=data['fuel_type'],
-                    engine_cc_min__lte=data['engine_cc'],
-                ).filter(
-                    Q(engine_cc_max__isnull=True) | Q(engine_cc_max__gte=data['engine_cc'])
-                ),
-                calc_date,
-            ).order_by('-engine_cc_min').first()
+            eu_to_ua = next(
+                (r for r in pricing_cache.get_eu_to_ua()
+                 if r.eu_port == eu_p and _is_active(r, calc_date)),
+                None,
+            )
+
+            # Курс НБУ: сначала точный по дате, затем ближайший предыдущий
+            all_rates = pricing_cache.get_exchange_rates()
+            usd_to_uah = next(
+                (r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'UAH' and r.date == calc_date),
+                None,
+            ) or next(
+                iter(sorted(
+                    [r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'UAH'],
+                    key=lambda r: r.date, reverse=True,
+                )),
+                None,
+            )
+
+            usd_to_eur = next(
+                (r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'EUR' and r.date == calc_date),
+                None,
+            ) or next(
+                iter(sorted(
+                    [r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'EUR'],
+                    key=lambda r: r.date, reverse=True,
+                )),
+                None,
+            )
+
+            engine_cc = data['engine_cc']
+            excise_rate = next(
+                iter(sorted(
+                    [r for r in pricing_cache.get_customs_excise()
+                     if r.fuel_type == data['fuel_type']
+                     and r.engine_cc_min <= engine_cc
+                     and (r.engine_cc_max is None or r.engine_cc_max >= engine_cc)
+                     and _is_active(r, calc_date)],
+                    key=lambda r: r.engine_cc_min, reverse=True,
+                )),
+                None,
+            )
 
             approx_uah = data['auction_price_usd'] * usd_to_uah.rate if usd_to_uah else None
             pension_bracket = None
             if approx_uah:
-                pension_bracket = _active_on(
-                    PensionFundBracket.objects.filter(min_value_uah__lte=approx_uah).filter(
-                        Q(max_value_uah__isnull=True) | Q(max_value_uah__gte=approx_uah)
-                    ),
-                    calc_date,
-                ).order_by('-min_value_uah').first()
+                pension_bracket = next(
+                    iter(sorted(
+                        [r for r in pricing_cache.get_pension_brackets()
+                         if r.min_value_uah <= approx_uah
+                         and (r.max_value_uah is None or r.max_value_uah >= approx_uah)
+                         and _is_active(r, calc_date)],
+                        key=lambda r: r.min_value_uah, reverse=True,
+                    )),
+                    None,
+                )
 
             missing = []
             if not tier:
