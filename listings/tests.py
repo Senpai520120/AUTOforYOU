@@ -71,3 +71,44 @@ class TestWholesaleListingDetailGating(APITestCase):
         retail = _make_listing(v2, self.seller, channel='retail')
         resp = self.client.get(f'/api/v1/listings/{retail.id}/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+
+# ── Измерение N+1: каталог листингов ─────────────────────────────────────────
+
+class TestListingListQueryCount(APITestCase):
+    """
+    Проверяем, что список листингов не даёт N+1 запросов.
+    select_related('vehicle', 'seller') + prefetch_related('vehicle__images')
+    должны уложить весь каталог в ≤ 4 запроса.
+    """
+
+    def setUp(self):
+        self.seller = _make_user('seller_qc@test.com')
+        # Создаём 5 листингов с разными автомобилями
+        for i in range(5):
+            v = _make_vehicle(f'QCVIN0000000{i:04d}')
+            _make_listing(v, self.seller, channel='retail')
+
+    def test_listing_list_query_count(self):
+        # 3 запроса: COUNT (пагинация) + Listing JOIN Vehicle+Seller + prefetch VehicleImage
+        # JWT stateless — не даёт отдельного DB-запроса
+        with self.assertNumQueries(3):
+            resp = self.client.get('/api/v1/listings/')
+            _ = resp.data
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        results = resp.data.get('results', resp.data)
+        self.assertEqual(len(results), 5)
+
+    def test_listing_list_scales_flat(self):
+        """15 листингов — всё равно ровно 3 запроса (нет N+1)."""
+        for i in range(10):
+            v = _make_vehicle(f'SCALEVIN{i:08d}')
+            _make_listing(v, self.seller, channel='retail')
+
+        with self.assertNumQueries(3):
+            resp = self.client.get('/api/v1/listings/')
+            _ = resp.data
+
+        results = resp.data.get('results', resp.data)
+        self.assertGreaterEqual(len(results), 10)

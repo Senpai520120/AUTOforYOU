@@ -745,3 +745,85 @@ class TestLandedCostE2ECopartBroker(TestCase):
         for field_name in ('excise_uah', 'duty_uah', 'vat_uah', 'pension_fund_uah', 'total_uah'):
             val = getattr(breakdown, field_name)
             self.assertGreater(val, D('0'), f'{field_name} должен быть > 0')
+
+
+# ── Кэш справочников + инвалидация ───────────────────────────────────────────
+
+class TestPricingCacheInvalidation(TestCase):
+    """Изменение ставки в БД → кэш сброшен → следующий запрос берёт новое значение."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_save_exchange_rate_invalidates_cache(self):
+        from django.core.cache import cache
+        from .cache import get_exchange_rates, KEYS
+        from .models import ExchangeRate
+
+        rate = ExchangeRate.objects.create(
+            from_currency='USD', to_currency='UAH',
+            rate=D('40.00'), date='2026-01-01',
+        )
+        get_exchange_rates()  # заполнить кэш
+        self.assertIsNotNone(cache.get(KEYS['exchange']))
+
+        # Изменяем ставку — сигнал должен сбросить кэш
+        rate.rate = D('41.50')
+        rate.save()
+
+        self.assertIsNone(cache.get(KEYS['exchange']), 'Кэш не сброшен после save()')
+
+    def test_delete_exchange_rate_invalidates_cache(self):
+        from django.core.cache import cache
+        from .cache import get_exchange_rates, KEYS
+        from .models import ExchangeRate
+
+        rate = ExchangeRate.objects.create(
+            from_currency='USD', to_currency='EUR',
+            rate=D('0.92'), date='2026-01-01',
+        )
+        get_exchange_rates()
+        self.assertIsNotNone(cache.get(KEYS['exchange']))
+
+        rate.delete()
+        self.assertIsNone(cache.get(KEYS['exchange']), 'Кэш не сброшен после delete()')
+
+    def test_cache_repopulates_after_invalidation(self):
+        from django.core.cache import cache
+        from .cache import get_exchange_rates, KEYS
+        from .models import ExchangeRate
+
+        rate = ExchangeRate.objects.create(
+            from_currency='USD', to_currency='UAH',
+            rate=D('40.00'), date='2026-02-01',
+        )
+        get_exchange_rates()  # cache miss → populate
+        rate.rate = D('42.00')
+        rate.save()  # invalidate
+
+        # Следующий get_exchange_rates() должен переcчитать из БД
+        rates = get_exchange_rates()
+        match = next(
+            (r for r in rates if r.from_currency == 'USD' and r.to_currency == 'UAH' and str(r.date) == '2026-02-01'),
+            None,
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.rate, D('42.00'))
+
+    def test_auction_fee_tier_save_invalidates_cache(self):
+        from django.core.cache import cache
+        from .cache import get_auction_fee_tiers, KEYS
+        from .models import AuctionFeeTier
+
+        tier = AuctionFeeTier.objects.create(
+            auction='copart', member_type='broker', payment_type='secured',
+            title_type='any', bid_min=D('0'), bid_max=D('999'),
+            fee_flat=D('75.00'), valid_from='2026-01-01',
+        )
+        get_auction_fee_tiers()
+        self.assertIsNotNone(cache.get(KEYS['tiers']))
+
+        tier.fee_flat = D('80.00')
+        tier.save()
+        self.assertIsNone(cache.get(KEYS['tiers']))

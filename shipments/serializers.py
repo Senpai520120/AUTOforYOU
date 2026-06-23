@@ -30,6 +30,9 @@ class ShipmentSerializer(serializers.ModelSerializer):
         )
 
     def get_vehicle_count(self, obj):
+        # vehicles prefetched — используем кэш prefetch_related
+        if hasattr(obj, '_prefetched_objects_cache') and 'vehicles' in obj._prefetched_objects_cache:
+            return len(obj._prefetched_objects_cache['vehicles'])
         return obj.vehicles.count()
 
     def get_next_statuses(self, obj):
@@ -48,4 +51,6 @@ class ShipmentListSerializer(serializers.ModelSerializer):
         )
 
     def get_vehicle_count(self, obj):
+        if hasattr(obj, '_prefetched_objects_cache') and 'vehicles' in obj._prefetched_objects_cache:
+            return len(obj._prefetched_objects_cache['vehicles'])
         return obj.vehicles.count()
