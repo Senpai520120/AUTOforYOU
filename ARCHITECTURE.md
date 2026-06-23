@@ -1,5 +1,12 @@
 # AUTOforYOU — Архитектура
 
+## Кэш и производительность (промт 9)
+- **Кэш-бэкенд**: `REDIS_URL` → django-redis; не задан → LocMemCache (dev без Redis).
+- **Тарифные справочники кэшируются**: AuctionFeeTier, AuctionFixedFee, логистика, ExchangeRate, акциз, пенсионный сбор — TTL 24ч. `CalculateView` делает 0 DB-запросов на cache hit (было 8+).
+- **Автоматическая инвалидация**: `post_save`/`post_delete` на каждой модели сбрасывает соответствующий ключ. Правка ставки в админке → следующий расчёт берёт новое значение без перезапуска.
+- **DB-индексы**: Listing — `(status)`, `(channel)`, `(channel, status)`, `(price)`; Vehicle — `(fuel_type)`. VIN уже уникальный.
+- **N+1 устранён**: ShipmentListSerializer.vehicle_count использует prefetch cache. Каталог листингов = 3 DB-запроса независимо от числа объектов (доказано `assertNumQueries`).
+
 ## Безопасность (промт 8)
 - **Throttling**: `AnonRateThrottle` 60/hr + `UserRateThrottle` 300/hr глобально. Дорогие платные эндпоинты (`/registry/`, `/decode/`) — отдельный `ScopedRateThrottle` scope `expensive` 10/hr. Лимиты env-overridable (`THROTTLE_ANON_RATE`, `THROTTLE_USER_RATE`, `THROTTLE_EXPENSIVE_RATE`).
 - **Auth на /registry/**: только авторизованные пользователи (Opendatabot платный).

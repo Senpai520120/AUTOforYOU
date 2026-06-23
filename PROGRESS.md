@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 готовы ✓ | Безопасность ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓
 
 ---
 
@@ -19,7 +19,8 @@
 | 9 | ~~**S3 + PostgreSQL**~~ | ✅ Снят — dj-database-url + django-storages, включаются env-переменными |
 | 10 | **Apify-токен** | Подключить реальный актор Copart/IAAI для `ApifyLotProvider` |
 | 11 | ~~**Безопасность**~~ | ✅ Снят — промт 8: throttling, JWT blacklist, security headers |
-| 12 | **Кэш и производительность** | Промт 9: Redis/Memcached, DB-индексы, select_related |
+| 12 | ~~**Кэш и производительность**~~ | ✅ Снят — промт 9: Redis/кэш тарифов, индексы, N+1 |
+| 13 | **Celery — фоновые задачи** | Промт 10: import лотов по расписанию, beat, flower |
 
 ---
 
@@ -87,6 +88,35 @@
   - total_uah > total_usd×rate (акциз+НДС+пенсионный сверху)
   - is_estimate=True, rates_date непустой
 - [x] Все тесты зелёные: 58 тестов OK
+
+---
+
+## Промт 9 — Кэш и производительность (завершено 2026-06-23)
+
+### Кэш-бэкенд
+- [x] `django-redis==5.4.0` добавлен в requirements.txt
+- [x] `CACHES`: `REDIS_URL` задан → django-redis; не задан → LocMemCache (dev без Redis)
+- [x] `.env.example`: `REDIS_URL` плейсхолдером с объяснением
+
+### Кэширование тарифных справочников (с инвалидацией)
+- [x] `pricing/cache.py`: 8 геттеров (AuctionFeeTier, AuctionFixedFee, UsLandRoute, OceanFreight, EuToUa, ExchangeRate, CustomsExcise, PensionBracket) — TTL 24ч
+- [x] `pricing/signals.py`: `post_save` + `post_delete` на все 8 моделей → `cache.delete(key)`
+- [x] `pricing/apps.py`: `ready()` регистрирует сигналы
+- [x] `pricing/views.py`: `CalculateView` использует in-memory фильтрацию по кэшу — 0 запросов к БД на cache hit (было 8+)
+- [x] Инвалидация мгновенная: правка ставки в админке → следующий расчёт сразу использует новую
+
+### DB-индексы
+- [x] `Listing`: индексы на `status`, `channel`, составной `(channel, status)`, `price` → миграция 0005
+- [x] `Vehicle`: индекс на `fuel_type` → миграция 0003 (VIN уже уникальный = индекс)
+
+### Устранение N+1
+- [x] `ShipmentListSerializer.get_vehicle_count`: заменён `obj.vehicles.count()` (N DB-хитов) → prefetch cache (`len` из `_prefetched_objects_cache`)
+- [x] Листинги: `select_related('vehicle','seller') + prefetch_related('vehicle__images')` уже было — подтверждено тестом
+- [x] **Доказательство**: `assertNumQueries(3)` для каталога — 3 запроса для любого числа листингов (COUNT + JOIN + prefetch_images), не растёт при 5 или 15 объектах
+
+### Тесты (10 новых, 133 всего)
+- [x] Кэш тарифов: save → invalidate; delete → invalidate; переcчитывает из БД с новым значением
+- [x] `TestListingListQueryCount`: 5 листингов = 3 запроса; 15 листингов = 3 запроса (N+1 отсутствует)
 
 ---
 
