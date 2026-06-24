@@ -1,5 +1,26 @@
 # AUTOforYOU — Архитектура
 
+## Telegram-бот (промт 11)
+- **Отдельный процесс**: `python manage.py run_bot` — polling-режим (dev/prod без SSL).
+  Прод: `set_webhook https://yourdomain.com/api/v1/telegram/webhook/` → webhook через Django.
+- **Включается токеном**: без `TELEGRAM_BOT_TOKEN` — бот не стартует; сайт и API не затронуты.
+- **Привязка аккаунта**: `GET /api/v1/telegram/link-token/` → JWT-защищённый эндпоинт генерирует
+  `TelegramLinkToken` (UUID, 30 мин, одноразовый) и deep-link `t.me/<bot>?start=link_<uuid>`.
+  `/start link_<uuid>` в боте записывает `CustomUser.telegram_id`, помечает токен `used=True`.
+- **Middleware** (`UserBindingMiddleware`): по `telegram_id` находит Django-пользователя,
+  кладёт в `data['telegram_user']` / `data['is_linked']`; без привязки — только `/start`, `/help`.
+- **Команды**: `/start` (+ deeplink), `/help`, `/latest` (3–5 свежих retail-листингов с фото/ценой).
+- **Уведомления** (`integrations.tasks.send_notification`): отправляет привязанному пользователю
+  через `Bot.send_message`; не привязан / нет токена → no-op.
+  Триггеры: смена статуса Shipment, одобрение/отклонение заявки дилера.
+- **Автопостинг** (`telegram_bot.tasks.post_listing_to_channel`): новый retail-листинг → пост в
+  `TELEGRAM_CHANNEL_ID`; `is_express_buyout` → `TELEGRAM_B2B_CHANNEL_ID` (или основной).
+  Throttling обязателен: пауза 3 с между постами, ретрай на `TelegramRetryAfter`.
+- **Webhook**: `POST /api/v1/telegram/webhook/` проверяет `X-Telegram-Bot-Api-Secret-Token`.
+- **Docker-compose**: отдельный контейнер `bot:` (промт 15, docker-compose).
+- **Env**: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_CHANNEL_ID`,
+  `TELEGRAM_B2B_CHANNEL_ID` (опц.), `TELEGRAM_WEBHOOK_SECRET` (прод), `SITE_URL`.
+
 ## Celery — фоновые задачи (промт 10)
 - **Брокер**: `REDIS_URL` → Redis; нет `REDIS_URL` ИЛИ `DEBUG=True` → `CELERY_TASK_ALWAYS_EAGER=True` (синхронный режим, воркер не нужен — dev и тесты работают без Redis).
 - **Расписание**: `django-celery-beat` с `DatabaseScheduler`; расписание хранится в БД, правится из админки.

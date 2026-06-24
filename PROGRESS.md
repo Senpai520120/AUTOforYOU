@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓ | Celery ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓ | Celery ✓ | Telegram-бот ✓
 
 ---
 
@@ -21,7 +21,59 @@
 | 11 | ~~**Безопасность**~~ | ✅ Снят — промт 8: throttling, JWT blacklist, security headers |
 | 12 | ~~**Кэш и производительность**~~ | ✅ Снят — промт 9: Redis/кэш тарифов, индексы, N+1 |
 | 13 | ~~**Celery — фоновые задачи**~~ | ✅ Снят — промт 10: Celery+beat, fetch_nbu_rates_task (daily, cache invalidate), import_lot_task, send_notification stub |
-| 14 | **Telegram-уведомления** | Промт 11: реализовать send_notification через Bot API |
+| 14 | ~~**Telegram-уведомления**~~ | ✅ Снят — промт 11: telegram_bot, deep-link привязка, send_notification, автопостинг |
+| 15 | **Фронтенд: продакшн-полировка, SEO** | Промт 12 |
+
+---
+
+## Промт 11 — Telegram-бот (завершено 2026-06-24)
+
+### App telegram_bot
+- [x] `aiogram==3.29.0` добавлен в requirements.txt
+- [x] Django-приложение `telegram_bot` (отдельный процесс, включается `TELEGRAM_BOT_TOKEN`)
+
+### Привязка аккаунта (deep-link)
+- [x] `CustomUser.telegram_id` (BigIntegerField, nullable, unique) + миграция 0005
+- [x] `TelegramLinkToken(token UUID, user FK, expires_at, used)` + миграция 0001
+- [x] `GET /api/v1/telegram/link-token/` — JWT-защищённый, генерирует токен и deep-link (30 мин)
+- [x] `/start link_<uuid>` → записывает `telegram_id`, помечает токен `used=True`
+- [x] Просроченный / уже использованный → вежливый отказ
+
+### Middleware
+- [x] `UserBindingMiddleware`: по `telegram_id` → Django User в `data['telegram_user']` + `is_linked`
+
+### Команды бота (v1)
+- [x] `/start` (с deeplink и без)
+- [x] `/help`
+- [x] `/latest` — 3–5 свежих retail-листингов (in_stock/in_transit) с фото/ценой/ссылкой
+
+### Уведомления
+- [x] `integrations.tasks.send_notification` реализован через `aiogram Bot.send_message`
+- [x] Без токена / не привязан → `{sent: False}` (no-op)
+- [x] Поддержка inline-кнопок (параметр `buttons=[{text, url}]`)
+
+### Автопостинг в канал
+- [x] `telegram_bot.tasks.post_listing_to_channel` (Celery-задача)
+- [x] Retail-листинг → `TELEGRAM_CHANNEL_ID`; `is_express_buyout` → `TELEGRAM_B2B_CHANNEL_ID`
+- [x] Throttling: пауза 3 с между постами, ретрай на `TelegramRetryAfter`
+- [x] Сигнал `post_save(Listing, created=True)` → `.delay()` задачи
+
+### Webhook (прод)
+- [x] `POST /api/v1/telegram/webhook/` с проверкой `X-Telegram-Bot-Api-Secret-Token`
+- [x] `python manage.py set_webhook <url>` — установить webhook; `--delete` — удалить
+- [x] В dev — polling (`python manage.py run_bot`)
+
+### Management commands
+- [x] `python manage.py run_bot` — polling; без токена — понятное сообщение, сайт не ломается
+- [x] `python manage.py set_webhook <url>` — установить/удалить webhook для прод
+
+### Тесты (20 новых, 157 всего)
+- [x] `TelegramLinkToken`: valid / expired / used
+- [x] Link-token API: 401 без auth, 200 с токеном
+- [x] Link flow: токен помечается used, telegram_id записывается
+- [x] `send_notification`: нет токена → no-op; не привязан → no-op; привязан → отправка (мок)
+- [x] `post_listing_to_channel`: нет токена / листинг не найден / нет channel_id → no-op
+- [x] Сигнал: retail → delay() вызван; wholesale+express → delay() вызван; обычный wholesale → нет; update → нет
 
 ---
 
