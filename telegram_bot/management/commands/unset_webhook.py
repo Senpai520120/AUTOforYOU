@@ -35,11 +35,11 @@ class Command(BaseCommand):
             info_after = await bot.get_webhook_info()
             if not info_after.url:
                 self.stdout.write(
-                    self.style.SUCCESS('✅ Webhook снят. Теперь можно запускать: python manage.py run_bot')
+                    self.style.SUCCESS('OK: webhook снят. Теперь можно запускать: python manage.py run_bot')
                 )
             else:
                 self.stdout.write(
-                    self.style.WARNING(f'Webhook всё ещё активен: {info_after.url}')
+                    self.style.WARNING(f'ВНИМАНИЕ: webhook всё ещё активен: {info_after.url}')
                 )
         finally:
             await bot.session.close()
