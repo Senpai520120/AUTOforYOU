@@ -40,6 +40,11 @@ class Command(BaseCommand):
         from telegram_bot.middleware import UserBindingMiddleware
 
         bot = Bot(token=token)
+
+        # Idempotent: снимаем webhook перед polling, чтобы не было конфликта
+        # если предыдущий бот работал в webhook-режиме.
+        await bot.delete_webhook(drop_pending_updates=True)
+
         dp = Dispatcher()
         dp.include_router(router)
         dp.message.middleware(UserBindingMiddleware())
