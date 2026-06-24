@@ -1,9 +1,18 @@
+import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import ListingFilters from '@/components/listings/ListingFilters';
 import ListingsGrid from './ListingsGrid';
-import Spinner from '@/components/ui/Spinner';
+import { ListingsGridSkeleton } from '@/components/ui/Skeleton';
 
-export const metadata = { title: 'Каталог авто — AUTOforYOU' };
+export const metadata: Metadata = {
+  title: 'Каталог авто',
+  description: 'Каталог автомобілів з аукціонів США Copart та IAAI. Фільтри за статусом, типом палива, ціною. В наявності та в дорозі.',
+  openGraph: {
+    title: 'Каталог авто — AUTOforYOU',
+    description: 'Автомобілі з США: Copart, IAAI. Фільтри за ціною, паливом, статусом.',
+    type: 'website',
+  },
+};
 
 export default function ListingsPage() {
   return (
@@ -13,7 +22,7 @@ export default function ListingsPage() {
         <ListingFilters />
       </Suspense>
       <div className="mt-6">
-        <Suspense fallback={<div className="flex justify-center py-20"><Spinner size="lg" /></div>}>
+        <Suspense fallback={<ListingsGridSkeleton />}>
           <ListingsGrid />
         </Suspense>
       </div>

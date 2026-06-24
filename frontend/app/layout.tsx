@@ -4,9 +4,27 @@ import { AuthProvider } from '@/lib/auth-context';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
+
 export const metadata: Metadata = {
-  title: 'AUTOforYOU — авто з США під ключ',
-  description: 'Маркетплейс автомобілів з аукціонів США (Copart/IAAI). Доставка, розмитнення, калькулятор вартості.',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'AUTOforYOU — авто з США під ключ',
+    template: '%s | AUTOforYOU',
+  },
+  description: 'Маркетплейс автомобілів з аукціонів США (Copart/IAAI). Доставка, розмитнення, калькулятор вартості під ключ в Україну.',
+  openGraph: {
+    siteName: 'AUTOforYOU',
+    type: 'website',
+    locale: 'uk_UA',
+  },
+  twitter: {
+    card: 'summary_large_image',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

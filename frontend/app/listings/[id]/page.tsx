@@ -1,102 +1,73 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import Image from 'next/image';
-import { listingsApi } from '@/api/listings';
-import { Listing } from '@/lib/types';
-import Badge from '@/components/ui/Badge';
-import Spinner from '@/components/ui/Spinner';
-import Link from 'next/link';
+import { cache } from 'react';
+import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import ListingDetail from '@/components/listings/ListingDetail';
+import type { Listing } from '@/lib/types';
 
-const FUEL: Record<string, string> = { petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид' };
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
 
-export default function ListingDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [imgIdx, setImgIdx] = useState(0);
+// cache() deduplicates the fetch — called once for metadata + once for the page = 1 request
+const getListing = cache(async (id: number): Promise<Listing | null> => {
+  try {
+    const res = await fetch(`${apiUrl}/api/v1/listings/${id}/`, {
+      next: { revalidate: 300 },
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+});
 
-  useEffect(() => {
-    listingsApi.detail(Number(id)).then(setListing).finally(() => setLoading(false));
-  }, [id]);
+type Props = { params: Promise<{ id: string }> };
 
-  if (loading) return <div className="flex justify-center py-20"><Spinner size="lg" /></div>;
-  if (!listing) return <p className="text-center py-20 text-slate-500">Оголошення не знайдено</p>;
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id: rawId } = await params;
+  // Support slug format "123-toyota-camry-2020" — parse numeric prefix
+  const id = parseInt(rawId, 10);
+  if (isNaN(id)) return { title: 'Оголошення не знайдено' };
+
+  const listing = await getListing(id);
+  if (!listing) return { title: 'Оголошення не знайдено' };
 
   const v = listing.vehicle_detail;
-  const imgs = v.images;
+  const title = `${v.year} ${v.make} ${v.model} — ${Number(listing.price).toLocaleString('uk-UA')} ${listing.currency}`;
+  const description = `${v.make} ${v.model} ${v.year}, ${(v.engine_cc / 1000).toFixed(1)}л, ${v.fuel_type === 'petrol' ? 'бензин' : v.fuel_type === 'diesel' ? 'дизель' : v.fuel_type}. Купити авто з США: аукціон ${v.source_auction.toUpperCase()}, доставка під ключ в Україну.`;
 
-  return (
-    <div>
-      <Link href="/listings" className="text-blue-600 text-sm hover:underline">← Каталог</Link>
+  const primaryImg = v.images.find(i => i.is_primary) ?? v.images[0];
+  const ogImage = primaryImg?.image || primaryImg?.source_url || null;
 
-      <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Gallery */}
-        <div>
-          <div className="relative h-80 bg-slate-100 rounded-xl overflow-hidden">
-            {imgs[imgIdx] ? (
-              <Image src={imgs[imgIdx].image} alt={`${v.make} ${v.model}`} fill className="object-cover" />
-            ) : (
-              <div className="flex items-center justify-center h-full text-6xl text-slate-300">🚗</div>
-            )}
-          </div>
-          {imgs.length > 1 && (
-            <div className="flex gap-2 mt-3 flex-wrap">
-              {imgs.map((img, i) => (
-                <button key={img.id} onClick={() => setImgIdx(i)}
-                  className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${i === imgIdx ? 'border-blue-600' : 'border-transparent'}`}>
-                  <Image src={img.image} alt="" fill className="object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+  const canonicalUrl = `${siteUrl}/listings/${id}`;
 
-        {/* Info */}
-        <div>
-          <div className="flex items-start gap-3 flex-wrap">
-            <h1 className="text-2xl font-extrabold text-slate-900">{v.year} {v.make} {v.model}</h1>
-            {listing.is_express_active && <Badge variant="danger">🔥 Срочный выкуп</Badge>}
-          </div>
-          <p className="text-3xl font-extrabold text-blue-800 mt-2">
-            {Number(listing.price).toLocaleString()} {listing.currency}
-          </p>
+  return {
+    title,
+    description,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      type: 'website',
+      ...(ogImage ? { images: [{ url: ogImage, width: 1200, height: 630, alt: title }] } : {}),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
+  };
+}
 
-          <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            {[
-              ['VIN', v.vin],
-              ['Паливо', FUEL[v.fuel_type]],
-              ['Двигун', `${(v.engine_cc / 1000).toFixed(1)} л (${v.engine_cc} см³)`],
-              ['Пробіг', `${v.mileage_km.toLocaleString()} км`],
-              ['Аукціон', v.source_auction.toUpperCase()],
-              ['Лот', v.lot_number || '—'],
-              ['Пошкодження', v.damage_type || '—'],
-              ['Статус', listing.status],
-            ].map(([label, val]) => (
-              <div key={label}>
-                <dt className="text-xs text-slate-500 font-semibold uppercase tracking-wide">{label}</dt>
-                <dd className="mt-0.5 text-slate-900">{val}</dd>
-              </div>
-            ))}
-          </dl>
+export default async function ListingDetailPage({ params }: Props) {
+  const { id: rawId } = await params;
+  const id = parseInt(rawId, 10);
+  if (isNaN(id)) notFound();
 
-          {listing.repair_description && (
-            <div className="mt-5 bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Опис ремонту</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{listing.repair_description}</p>
-            </div>
-          )}
+  const listing = await getListing(id);
+  if (!listing) notFound();
 
-          <div className="mt-6 flex gap-3">
-            <Link
-              href={`/calculator?price=${listing.price}&engine_cc=${v.engine_cc}&fuel_type=${v.fuel_type}&year=${v.year}`}
-              className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm"
-            >
-              Порахувати вартість
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <ListingDetail listing={listing} />;
 }

@@ -1,4 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'AUTOforYOU — авто з США під ключ',
+  description: 'Маркетплейс автомобілів з аукціонів США Copart та IAAI. Доставка, розмитнення та калькулятор вартості під ключ в Україну.',
+  openGraph: {
+    title: 'AUTOforYOU — авто з США під ключ',
+    description: 'Маркетплейс автомобілів з аукціонів США Copart та IAAI. Калькулятор вартості під ключ.',
+    type: 'website',
+  },
+};
 
 export default function Home() {
   return (
@@ -12,13 +23,13 @@ export default function Home() {
         <div className="flex flex-wrap gap-4 justify-center">
           <Link
             href="/listings"
-            className="bg-amber-400 hover:bg-amber-300 text-black font-bold px-8 py-3 rounded-xl text-lg transition-colors"
+            className="bg-amber-400 hover:bg-amber-300 text-black font-bold px-8 py-3 rounded-xl text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200"
           >
             Переглянути каталог
           </Link>
           <Link
             href="/calculator"
-            className="bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-lg transition-colors"
+            className="bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
           >
             Калькулятор
           </Link>
@@ -29,18 +40,21 @@ export default function Home() {
       </section>
 
       {/* Features */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        {[
-          { icon: '🚗', title: 'Каталог авто', desc: 'Всі статуси: в дорозі, є в наявності, продано', href: '/listings' },
-          { icon: '🧮', title: 'Калькулятор', desc: 'Повна розбивка: аукціон, логістика, розмитнення', href: '/calculator' },
-          { icon: '📦', title: 'Трекінг', desc: 'Відстежуйте контейнери від складу до вашого гаража', href: '/me/shipments' },
-        ].map(f => (
-          <Link key={f.href} href={f.href} className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group">
-            <div className="text-4xl mb-3">{f.icon}</div>
-            <h3 className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors mb-1">{f.title}</h3>
-            <p className="text-sm text-slate-500">{f.desc}</p>
-          </Link>
-        ))}
+      <section aria-label="Можливості">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          {[
+            { icon: '🚗', title: 'Каталог авто', desc: 'Всі статуси: в дорозі, є в наявності, продано', href: '/listings' },
+            { icon: '🧮', title: 'Калькулятор', desc: 'Повна розбивка: аукціон, логістика, розмитнення', href: '/calculator' },
+            { icon: '📦', title: 'Трекінг', desc: 'Відстежуйте контейнери від складу до вашого гаража', href: '/me/shipments' },
+          ].map(f => (
+            <Link key={f.href} href={f.href}
+              className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <div className="text-4xl mb-3" aria-hidden="true">{f.icon}</div>
+              <h2 className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors mb-1">{f.title}</h2>
+              <p className="text-sm text-slate-500">{f.desc}</p>
+            </Link>
+          ))}
+        </div>
       </section>
     </div>
   );

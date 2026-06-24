@@ -11,7 +11,8 @@ export interface User {
 
 export interface VehicleImage {
   id: number;
-  image: string;
+  image: string | null;   // null when photo lives only in source_url
+  source_url: string;     // original URL from auction lot import
   is_primary: boolean;
 }
 
