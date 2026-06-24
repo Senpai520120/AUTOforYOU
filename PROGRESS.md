@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓ | Celery ✓ | Telegram-бот ✓
+## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓ | Celery ✓ | Telegram-бот ✓ | SEO+полировка ✓
 
 ---
 
@@ -22,7 +22,53 @@
 | 12 | ~~**Кэш и производительность**~~ | ✅ Снят — промт 9: Redis/кэш тарифов, индексы, N+1 |
 | 13 | ~~**Celery — фоновые задачи**~~ | ✅ Снят — промт 10: Celery+beat, fetch_nbu_rates_task (daily, cache invalidate), import_lot_task, send_notification stub |
 | 14 | ~~**Telegram-уведомления**~~ | ✅ Снят — промт 11: telegram_bot, deep-link привязка, send_notification, автопостинг |
-| 15 | **Фронтенд: продакшн-полировка, SEO** | Промт 12 |
+| 15 | ~~**Фронтенд: продакшн-полировка, SEO**~~ | ✅ Снят — промт 12: SEO, OG-карточки, sitemap, 404/error, скелетоны, DemoBanner-флаг |
+| 16 | **Юридические страницы** | Промт 13: ToS, Privacy, Cookie |
+
+---
+
+## Промт 12 — Frontend SEO + продакшн-полировка (завершено 2026-06-24)
+
+### SEO — мета и шеринг
+- [x] `layout.tsx`: `metadataBase`, title template `%s | AUTOforYOU`, OpenGraph defaults, Twitter card
+- [x] `listings/[id]/page.tsx` → Server Component: `generateMetadata` с OG-тегами
+  (og:title, og:description, og:image = фото авто, og:url canonical)
+  → красивая превью-карточка при шеринге ссылки в Telegram
+- [x] Metadata на всех страницах: каталог, главная, калькулятор, кабинет, login, register
+- [x] Slug URL листингов: `/listings/42-toyota-camry-2020` (parseInt-совместим с `/listings/42`)
+- [x] Canonical URL на базе `NEXT_PUBLIC_SITE_URL`
+
+### Sitemap и robots
+- [x] `app/sitemap.ts` — динамический: статические маршруты + активные листинги с бэкенда (revalidate 1h)
+- [x] `app/robots.ts` — Allow `/`, `/listings`, `/calculator`; Disallow `/me/`, `/b2b/`, `/admin/`, `/api/`
+
+### Состояния загрузки и ошибок
+- [x] `app/not-found.tsx` — кастомная 404 с брендингом и ссылкой на каталог
+- [x] `app/error.tsx` + `app/global-error.tsx` — «Щось пішло не так» + кнопка «Повторити»
+- [x] `components/ui/Skeleton.tsx` + `ListingCardSkeleton` + `ListingsGridSkeleton`
+- [x] `app/listings/loading.tsx`, `app/listings/[id]/loading.tsx`, `app/me/loading.tsx`
+- [x] ListingsGrid: скелетон вместо спиннера; кнопка «Спробувати ще раз» при ошибке API
+- [x] Пустое состояние с иконкой 🚗 и подсказкой «Спробуйте змінити фільтри»
+
+### Изображения и производительность
+- [x] ListingCard + ListingDetail: `image || source_url` с SVG-плейсхолдером (нет эмодзи в alt)
+- [x] `next.config.ts`: паттерны для AWS S3, Cloudflare R2, Copart/IAAI CDN, CloudFront
+- [x] `VehicleImage.source_url` добавлен в TypeScript-типы
+- [x] `sizes`, `priority` на главном фото; `fill` + `object-cover` на всех карточках
+
+### DemoBanner
+- [x] `NEXT_PUBLIC_DEMO_MODE=false` скрывает баннер на проде (реальные тарифы)
+- [x] По умолчанию включён (`=true`). `is_estimate` в ответе API остаётся всегда.
+
+### Доступность и адаптив
+- [x] `focus:ring` на всех интерактивных элементах (кнопки, ссылки, тумбнейлы)
+- [x] `aria-label`, `role=alert`, `role=group`, `<nav aria-label>`, `<article>` в ListingCard
+- [x] `aria-hidden` на декоративных иконках; SVG-плейсхолдер вместо эмодзи
+- [x] Пагинация в `<nav>`, семантические заголовки `<h1>`/`<h2>`
+
+### Build
+- [x] `npm run build` — 16 роутов, 0 ошибок TypeScript
+- [x] `python manage.py test` — 157 тестов OK
 
 ---
 

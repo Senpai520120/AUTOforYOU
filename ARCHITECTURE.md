@@ -1,5 +1,17 @@
 # AUTOforYOU — Архитектура
 
+## Frontend SEO + полировка (промт 12)
+- **Метаданные**: `metadataBase` + title template в layout. `generateMetadata` на странице листинга — Server Component с OG-тегами (title/description/og:image/canonical). Остальные страницы: статические `metadata` экспорты или route-level layouts.
+- **Telegram-шеринг**: листинг, опубликованный ботом → при вставке URL в Telegram-чат показывается превью: фото авто + название + цена.
+- **Slug URL**: `/listings/42-toyota-camry-2020` — человекочитаемый, `parseInt()` возвращает ID.
+- **Sitemap**: `app/sitemap.ts` — динамический (статика + активные листинги, revalidate 1h).
+- **Robots**: Allow публичные страницы; Disallow кабинет/B2B/API/admin.
+- **404/Error**: кастомные `not-found.tsx`, `error.tsx`, `global-error.tsx` с кнопкой «Повторити».
+- **Скелетоны**: `Skeleton.tsx`, `loading.tsx` для каталога/карточки/кабинета — нет «мигания» при загрузке.
+- **DemoBanner**: `NEXT_PUBLIC_DEMO_MODE=false` выключает баннер когда тарифы реальные; флаг в `.env`.
+- **Изображения**: `source_url` (лот-импорт) как fallback к `image`. SVG-плейсхолдер. `sizes`, `priority`.
+- **a11y**: `focus:ring`, `aria-*`, `role=alert`, семантические теги.
+
 ## Telegram-бот (промт 11)
 - **Отдельный процесс**: `python manage.py run_bot` — polling-режим (dev/prod без SSL).
   Прод: `set_webhook https://yourdomain.com/api/v1/telegram/webhook/` → webhook через Django.
