@@ -18,3 +18,5 @@ django-redis==5.4.0
 celery[redis]==5.4.0
 django-celery-beat==2.9.0
 # flower==2.0.1  # опционально: мониторинг задач в dev (pip install flower вручную)
+# Промт 11: Telegram-бот (aiogram 3.x; без TELEGRAM_BOT_TOKEN бот не стартует, сайт работает)
+aiogram==3.29.0

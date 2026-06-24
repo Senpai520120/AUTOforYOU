@@ -41,13 +41,62 @@ def import_lot_task(self, lot_data: dict, seller_id: int):
     return {'vehicle_id': vehicle.pk, 'listing_id': listing.pk, 'created': created}
 
 
-# ─── Уведомления (заглушка — реализация в промте 11) ─────────────────────────
+# ─── Уведомления (реализация промта 11) ──────────────────────────────────────
 
-@shared_task(name='integrations.tasks.send_notification')
-def send_notification(user_id: int, message: str, channel: str = 'telegram'):
+@shared_task(
+    bind=True,
+    autoretry_for=(OSError, ConnectionError),
+    retry_kwargs={'max_retries': 3, 'countdown': 60},
+    name='integrations.tasks.send_notification',
+)
+def send_notification(self, user_id: int, text: str, buttons=None):
     """
-    Заглушка для отправки уведомлений пользователю.
-    Промт 11: реализовать отправку через Telegram Bot API.
+    Отправляет Telegram-уведомление привязанному пользователю.
+    Если пользователь не привязан или TELEGRAM_BOT_TOKEN не задан → молча пропускает.
+
+    Args:
+        user_id: PK CustomUser.
+        text: текст сообщения.
+        buttons: список dict {text, url} для inline-кнопок (необязательно).
     """
-    logger.info('send_notification [%s] → user=%s: %s', channel, user_id, message)
-    return {'sent': False, 'reason': 'not implemented — see prompt 11'}
+    import asyncio
+    from django.conf import settings
+    from django.contrib.auth import get_user_model
+
+    token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
+    if not token:
+        logger.info('send_notification: TELEGRAM_BOT_TOKEN не задан, пропуск')
+        return {'sent': False, 'reason': 'no token'}
+
+    User = get_user_model()
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        logger.error('send_notification: user pk=%s не найден', user_id)
+        return {'sent': False, 'reason': 'user not found'}
+
+    telegram_id = getattr(user, 'telegram_id', None)
+    if not telegram_id:
+        logger.info('send_notification: user pk=%s не привязан к Telegram, пропуск', user_id)
+        return {'sent': False, 'reason': 'not linked'}
+
+    async def _send() -> bool:
+        from aiogram import Bot
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+        bot = Bot(token=token)
+        kb = None
+        if buttons:
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=b['text'], url=b['url'])]
+                for b in buttons
+            ])
+        try:
+            await bot.send_message(chat_id=telegram_id, text=text, reply_markup=kb)
+            return True
+        finally:
+            await bot.session.close()
+
+    sent = asyncio.run(_send())
+    logger.info('send_notification: user pk=%s (telegram_id=%s) → sent=%s', user_id, telegram_id, sent)
+    return {'sent': sent}

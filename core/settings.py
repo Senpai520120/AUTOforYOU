@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'integrations',
     'payments',
     'cars',
+    'telegram_bot',
 
     'drf_spectacular',
     'django_celery_beat',
@@ -299,6 +300,18 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': _crontab(hour=9, minute=0),
     },
 }
+
+# ─── Telegram-бот ─────────────────────────────────────────────────────────────
+# Без TELEGRAM_BOT_TOKEN бот не стартует; run_bot завершается с понятным сообщением.
+# Сайт и все API работают как обычно — токен нужен только боту.
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_BOT_USERNAME = os.environ.get('TELEGRAM_BOT_USERNAME', '')
+TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '')      # @channel или -100xxx
+TELEGRAM_B2B_CHANNEL_ID = os.environ.get('TELEGRAM_B2B_CHANNEL_ID', '')  # опц. B2B-канал
+TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')   # для прод. webhook
+
+# URL сайта — используется в Telegram-постах (ссылки на листинги)
+SITE_URL = os.environ.get('SITE_URL', 'https://autoforyou.ua')
 
 # ─── Заголовки безопасности (только в продакшене) ─────────────────────────────
 # В dev (DEBUG=True) и в тест-раннере не включаем — тесты работают по HTTP.

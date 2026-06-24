@@ -34,6 +34,7 @@ class CustomUser(AbstractUser):
     phone = models.CharField(max_length=20, blank=True, verbose_name='Телефон')
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.BUYER, verbose_name='Роль')
     is_verified_dealer = models.BooleanField(default=False, verbose_name='Верифицированный дилер')
+    telegram_id = models.BigIntegerField(null=True, blank=True, unique=True, verbose_name='Telegram ID')
     created_at = models.DateTimeField(auto_now_add=True)
 
     USERNAME_FIELD = 'email'
