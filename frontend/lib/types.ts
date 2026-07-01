@@ -200,6 +200,7 @@ export interface LocalListing {
   seller_type: LocalSellerType;
   owner_name: string;
   contact_phone: string | null;
+  rejection_reason: string | null;
   images: LocalListingImage[];
   created_at: string;
   updated_at: string;

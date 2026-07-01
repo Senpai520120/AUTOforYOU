@@ -41,4 +41,7 @@ export const localApi = {
 
   vinPrefill: (vin: string) =>
     apiGet<VinPrefillResult>(`/api/v1/local/vin-prefill/${vin}/`),
+
+  myListings: () =>
+    apiGet<PaginatedResponse<LocalListing>>('/api/v1/local/my-listings/'),
 };

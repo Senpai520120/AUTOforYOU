@@ -32,6 +32,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const [city, setCity] = useState(String(initial?.city ?? ''));
   const [description, setDescription] = useState(initial?.description ?? '');
   const [contactPhone, setContactPhone] = useState(initial?.contact_phone ?? '');
+  const [agreedToRules, setAgreedToRules] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const [vin, setVin] = useState('');
   const [vinLoading, setVinLoading] = useState(false);
@@ -82,14 +84,16 @@ export default function LocalListingForm({ initial, listingId }: Props) {
       price, currency, price_type: priceType,
       region: Number(region), city: Number(city),
       description, contact_phone: contactPhone,
+      ...(!isEdit ? { agreed_to_rules: agreedToRules } : {}),
     };
     try {
       if (isEdit) {
         await localApi.update(listingId, payload);
         router.push(`/local/${listingId}`);
       } else {
-        const created = await localApi.create(payload);
-        router.push(`/local/${created.id}`);
+        await localApi.create(payload);
+        setSubmitted(true);
+        return;
       }
     } catch (err: unknown) {
       const apiError = err as { data?: Record<string, string[]> };
@@ -110,6 +114,21 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
   const errCls = 'text-xs text-red-600 mt-1';
+
+  if (submitted) {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center max-w-md mx-auto">
+        <p className="text-4xl mb-4">🕐</p>
+        <h2 className="text-xl font-bold text-blue-900 mb-2">Оголошення надіслано на модерацію</h2>
+        <p className="text-sm text-blue-700 mb-4">
+          Ми перевіримо оголошення і опублікуємо його незабаром. Ви отримаєте сповіщення.
+        </p>
+        <a href="/me/local-listings" className="text-blue-700 underline text-sm">
+          Переглянути мої оголошення →
+        </a>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
@@ -280,6 +299,29 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         />
         <p className="text-xs text-slate-400 mt-1">Показується тільки авторизованим покупцям</p>
       </div>
+
+      {!isEdit && (
+        <div>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+              checked={agreedToRules}
+              onChange={e => setAgreedToRules(e.target.checked)}
+              required
+            />
+            <span className="text-sm text-slate-700">
+              Погоджуюсь з{' '}
+              {/* TODO: C2C-промт 7 (юридичний) — замінити посилання на реальні правила */}
+              <a href="/terms" target="_blank" className="text-blue-600 underline">
+                правилами розміщення оголошень
+              </a>{' '}
+              (заглушка — повна версія правил у C2C-промті 7)
+            </span>
+          </label>
+          {errors.agreed_to_rules && <p className={errCls}>{errors.agreed_to_rules}</p>}
+        </div>
+      )}
 
       <div className="flex gap-3 pt-2">
         <button
