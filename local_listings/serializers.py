@@ -1,6 +1,11 @@
+import datetime
+
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
+
 from .models import Region, City, LocalListing, LocalListingImage
+from .services import SUBSTANTIVE_FIELDS
 
 
 class RegionSerializer(serializers.ModelSerializer):
@@ -24,7 +29,7 @@ class LocalListingImageSerializer(serializers.ModelSerializer):
 
 
 class LocalListingListSerializer(serializers.ModelSerializer):
-    """Публічний список — без телефону власника."""
+    """Публічний список — тільки active, без телефону та причини відхилення."""
     images = LocalListingImageSerializer(many=True, read_only=True)
     region_name = serializers.CharField(source='region.name', read_only=True)
     city_name = serializers.CharField(source='city.name', read_only=True)
@@ -50,24 +55,40 @@ class LocalListingListSerializer(serializers.ModelSerializer):
 
 class LocalListingDetailSerializer(LocalListingListSerializer):
     """
-    Деталь: телефон повертається тільки авторизованим.
+    Деталь: телефон і причина відхилення повертаються авторизованим/власнику.
     Повна реалізація захисту контактів — C2C-промт 6.
     """
 
     class Meta(LocalListingListSerializer.Meta):
-        fields = LocalListingListSerializer.Meta.fields + ['contact_phone']
+        fields = LocalListingListSerializer.Meta.fields + ['contact_phone', 'rejection_reason']
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request')
+        is_auth = request and request.user and request.user.is_authenticated
+        is_owner = is_auth and request.user == instance.owner
+        is_staff = is_auth and request.user.is_staff
+
         # TODO: C2C-промт 6 — розкривати телефон тільки авторизованим і по явному запиту
-        if not (request and request.user and request.user.is_authenticated):
+        if not is_auth:
             data['contact_phone'] = None
+
+        # Причину відхилення бачить тільки власник або адмін
+        if not (is_owner or is_staff):
+            data['rejection_reason'] = None
+
         return data
+
+
+class LocalListingOwnerSerializer(LocalListingDetailSerializer):
+    """Серіалізатор для кабінету власника — бачить всі статуси та причину відхилення."""
+    class Meta(LocalListingDetailSerializer.Meta):
+        pass
 
 
 class LocalListingCreateSerializer(serializers.ModelSerializer):
     images = LocalListingImageSerializer(many=True, read_only=True)
+    agreed_to_rules = serializers.BooleanField(write_only=True)
 
     class Meta:
         model = LocalListing
@@ -78,8 +99,16 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
             'region', 'city',
             'description', 'status', 'seller_type', 'contact_phone',
             'images', 'created_at', 'updated_at',
+            'agreed_to_rules',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'images']
+        read_only_fields = ['id', 'status', 'created_at', 'updated_at', 'images']
+
+    def validate_agreed_to_rules(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                'Необхідно погодитися з правилами розміщення оголошень.'
+            )
+        return value
 
     def validate(self, attrs):
         city = attrs.get('city')
@@ -89,24 +118,32 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_year(self, value):
-        import datetime
         current_year = datetime.date.today().year
         if value < 1900 or value > current_year + 1:
             raise serializers.ValidationError(f'Рік має бути між 1900 та {current_year + 1}.')
         return value
 
     def create(self, validated_data):
+        agreed = validated_data.pop('agreed_to_rules')
         max_active = getattr(settings, 'LOCAL_LISTING_MAX_ACTIVE', 10)
         owner = self.context['request'].user
-        active_count = LocalListing.objects.filter(owner=owner, status=LocalListing.Status.ACTIVE).count()
+
+        # Рахуємо active + pending (щоб уникнути обходу ліміту через spam pending)
+        active_count = LocalListing.objects.filter(
+            owner=owner,
+            status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+        ).count()
         if active_count >= max_active:
             raise serializers.ValidationError(
                 f'Досягнуто ліміт активних оголошень ({max_active}). '
                 f'Закрийте або видаліть існуючі перед подачею нового.'
             )
-        # TODO: C2C-промт 2 — після впровадження модерації замінити на status=PENDING
+
         validated_data['owner'] = owner
-        validated_data.setdefault('status', LocalListing.Status.ACTIVE)
+        validated_data['status'] = LocalListing.Status.PENDING
+        if agreed:
+            validated_data['agreed_to_rules'] = True
+            validated_data['agreed_to_rules_at'] = timezone.now()
         return super().create(validated_data)
 
 
@@ -129,7 +166,24 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_status(self, value):
-        allowed = {LocalListing.Status.ACTIVE, LocalListing.Status.HIDDEN, LocalListing.Status.SOLD}
-        if value not in allowed:
-            raise serializers.ValidationError('Можна встановити: active, hidden, sold.')
+        # Власник може тільки знімати/продавати — не модерувати
+        allowed_owner = {LocalListing.Status.HIDDEN, LocalListing.Status.SOLD}
+        if value not in allowed_owner:
+            raise serializers.ValidationError('Можна встановити: hidden, sold.')
         return value
+
+    def update(self, instance, validated_data):
+        current_status = instance.status
+        substantive_changed = bool(SUBSTANTIVE_FIELDS & set(validated_data.keys()))
+
+        # Суттєва правка active → ремодерація
+        if substantive_changed and current_status == LocalListing.Status.ACTIVE:
+            validated_data['status'] = LocalListing.Status.PENDING
+            validated_data['rejection_reason'] = ''
+
+        # Будь-яка правка rejected → ремодерація (власник виправив)
+        elif current_status == LocalListing.Status.REJECTED:
+            validated_data['status'] = LocalListing.Status.PENDING
+            validated_data['rejection_reason'] = ''
+
+        return super().update(instance, validated_data)

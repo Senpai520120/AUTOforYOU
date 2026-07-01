@@ -120,6 +120,19 @@ class LocalListing(models.Model):
     )
     # Телефон — не повертається в публічному списку (захист контактів — C2C-промт 6)
     contact_phone = models.CharField(max_length=20, blank=True, verbose_name='Телефон')
+    # ── Модерація ──
+    rejection_reason = models.TextField(blank=True, verbose_name='Причина відхилення')
+    moderated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='moderated_local_listings',
+        verbose_name='Перевірив',
+    )
+    moderated_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата модерації')
+    # ── Згода з правилами розміщення ──
+    agreed_to_rules = models.BooleanField(default=False, verbose_name='Погодився з правилами')
+    agreed_to_rules_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата згоди')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

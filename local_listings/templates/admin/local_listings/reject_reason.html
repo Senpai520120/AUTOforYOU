@@ -1,0 +1,32 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>Відхилити оголошення — вказати причину</h1>
+
+<p>Оголошення, що будуть відхилені:</p>
+<ul>
+{% for obj in queryset %}
+  <li><strong>{{ obj }}</strong> (власник: {{ obj.owner.email }})</li>
+{% endfor %}
+</ul>
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="reject_with_reason" />
+  {% for obj in queryset %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}" />
+  {% endfor %}
+  <input type="hidden" name="confirm" value="yes" />
+
+  <p>
+    <label for="reason"><strong>Причина відхилення:</strong></label><br>
+    <textarea id="reason" name="reason" rows="4" cols="60"
+      placeholder="Вкажіть причину (буде надіслана власнику)"></textarea>
+  </p>
+
+  <input type="submit" value="Відхилити" class="button" />
+  &nbsp;
+  <a href="../">Скасувати</a>
+</form>
+{% endblock %}

@@ -1,4 +1,3 @@
-from django.conf import settings
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import generics, permissions, status
@@ -14,6 +13,7 @@ from .serializers import (
     LocalListingDetailSerializer,
     LocalListingCreateSerializer,
     LocalListingUpdateSerializer,
+    LocalListingOwnerSerializer,
     RegionSerializer,
     CitySerializer,
 )
@@ -23,11 +23,11 @@ def _base_queryset():
     return LocalListing.objects.select_related('owner', 'region', 'city').prefetch_related('images')
 
 
-class IsOwnerOrReadOnly(permissions.BasePermission):
+class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.owner == request.user
+        return obj.owner == request.user or request.user.is_staff
 
 
 @extend_schema_view(
@@ -48,16 +48,14 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
             OpenApiParameter('city', OpenApiTypes.INT),
             OpenApiParameter('mileage_max', OpenApiTypes.INT),
             OpenApiParameter('search', OpenApiTypes.STR),
-            OpenApiParameter('ordering', OpenApiTypes.STR, description='-created_at | created_at | price | -price'),
+            OpenApiParameter('ordering', OpenApiTypes.STR,
+                             description='-created_at | created_at | price | -price'),
         ],
     ),
     post=extend_schema(
         tags=['local'],
         summary='Подати місцеве оголошення (авторизований)',
-        description=(
-            'Публікується одразу як active. '
-            '# TODO модерація промт 2'
-        ),
+        description='Нове оголошення отримує статус pending і проходить модерацію.',
     ),
 )
 class LocalListingListCreateView(generics.ListCreateAPIView):
@@ -84,11 +82,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 )
 class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
     http_method_names = ['get', 'patch', 'delete', 'head', 'options']
-
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [permissions.AllowAny()]
-        return [permissions.IsAuthenticated(), IsOwnerOrReadOnly()]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrAdmin]
 
     def get_serializer_class(self):
         if self.request.method == 'PATCH':
@@ -100,8 +94,26 @@ class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
-        if request.method not in permissions.SAFE_METHODS and obj.owner != request.user:
-            self.permission_denied(request, message='Тільки власник може редагувати оголошення.', code=403)
+        if request.method not in permissions.SAFE_METHODS:
+            if obj.owner != request.user and not request.user.is_staff:
+                self.permission_denied(
+                    request,
+                    message='Тільки власник може редагувати оголошення.',
+                    code=403,
+                )
+
+
+@extend_schema(
+    tags=['local'],
+    summary='Мої оголошення (усі статуси)',
+    description='Повертає всі оголошення поточного авторизованого користувача, включаючи pending та rejected.',
+)
+class MyListingsView(generics.ListAPIView):
+    serializer_class = LocalListingOwnerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return _base_queryset().filter(owner=self.request.user).order_by('-created_at')
 
 
 @extend_schema_view(
@@ -121,8 +133,7 @@ class VinPrefillView(APIView):
 
         cached = VinReport.objects.filter(vin=vin, provider='nhtsa_vpic').first()
         if cached:
-            data = cached.report_data
-            return Response({**data, 'cached': True})
+            return Response({**cached.report_data, 'cached': True})
 
         provider = NHTSAVinDecodeProvider()
         data = provider.decode(vin)
