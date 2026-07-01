@@ -22,7 +22,8 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-          <Link href="/listings" className="hover:text-amber-400 transition-colors">Каталог</Link>
+          <Link href="/listings" className="hover:text-amber-400 transition-colors">Пригін/аукціон</Link>
+          <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
           <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
           {user && (user.is_verified_dealer || user.role === 'admin') ? (
             <Link href="/b2b" className="hover:text-amber-400 transition-colors">B2B</Link>

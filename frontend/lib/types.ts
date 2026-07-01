@@ -144,3 +144,92 @@ export interface Tokens {
   access: string;
   refresh: string;
 }
+
+// ─── C2C: місцеві оголошення ─────────────────────────────────────────────────
+
+export interface Region {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface City {
+  id: number;
+  name: string;
+  slug: string;
+  region: number;
+  region_name: string;
+}
+
+export type LocalFuelType = 'petrol' | 'diesel' | 'electric' | 'hybrid' | 'gas';
+export type LocalTransmission = 'auto' | 'manual' | 'cvt' | 'robot';
+export type LocalBodyType = 'sedan' | 'suv' | 'hatchback' | 'wagon' | 'coupe' | 'minivan' | 'pickup' | 'convertible' | 'other';
+export type LocalCondition = 'new' | 'used' | 'damaged';
+export type LocalStatus = 'draft' | 'active' | 'pending' | 'rejected' | 'expired' | 'sold' | 'hidden';
+export type LocalCurrency = 'UAH' | 'USD' | 'EUR';
+export type LocalPriceType = 'fixed' | 'negotiable';
+export type LocalSellerType = 'private' | 'dealer';
+
+export interface LocalListingImage {
+  id: number;
+  image: string | null;
+  source_url: string;
+  is_primary: boolean;
+}
+
+export interface LocalListing {
+  id: number;
+  make: string;
+  model: string;
+  year: number;
+  mileage_km: number;
+  engine_cc: number | null;
+  fuel_type: LocalFuelType;
+  transmission: LocalTransmission;
+  body_type: LocalBodyType;
+  condition: LocalCondition;
+  price: string;
+  currency: LocalCurrency;
+  price_type: LocalPriceType;
+  region: number;
+  region_name: string;
+  city: number;
+  city_name: string;
+  description: string;
+  status: LocalStatus;
+  seller_type: LocalSellerType;
+  owner_name: string;
+  contact_phone: string | null;
+  images: LocalListingImage[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocalListingFilters {
+  make?: string;
+  model?: string;
+  year_min?: string;
+  year_max?: string;
+  price_min?: string;
+  price_max?: string;
+  fuel_type?: string;
+  transmission?: string;
+  body_type?: string;
+  region?: string;
+  city?: string;
+  mileage_max?: string;
+  search?: string;
+  ordering?: string;
+  page?: number;
+}
+
+export interface VinPrefillResult {
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  engine_cc: number | null;
+  fuel_type: string | null;
+  body_class: string | null;
+  cached: boolean;
+  error?: string;
+}
