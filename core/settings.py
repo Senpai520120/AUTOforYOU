@@ -4,9 +4,14 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env from the project root (next to manage.py).
+# encoding='utf-8' is explicit — avoids any system-locale surprises on Windows.
+load_dotenv(BASE_DIR / '.env', encoding='utf-8', override=False)
 
 # ─── Безопасность ─────────────────────────────────────────────────────────────
 # В продакшене задать через env: SECRET_KEY=<случайная_строка>
@@ -18,9 +23,18 @@ SECRET_KEY = os.environ.get(
 # DEBUG=False по умолчанию; для локальной разработки добавить DEBUG=true в .env
 DEBUG = os.environ.get('DEBUG', 'false').lower() in ('true', '1', 'yes')
 
-# В продакшене задать: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+# In production set: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 _raw_hosts = os.environ.get('ALLOWED_HOSTS', '')
-ALLOWED_HOSTS = [h.strip() for h in _raw_hosts.split(',') if h.strip()] or (['*'] if DEBUG else [])
+_testing = 'test' in sys.argv
+_explicit_hosts = [h.strip() for h in _raw_hosts.split(',') if h.strip()]
+if _explicit_hosts:
+    ALLOWED_HOSTS = _explicit_hosts
+elif DEBUG:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+elif _testing:
+    ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
+else:
+    ALLOWED_HOSTS = []   # prod without env var → Django will raise, as intended
 
 # ─── Приложения ───────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
@@ -41,6 +55,7 @@ INSTALLED_APPS = [
     'vehicles',
     'pricing',
     'listings',
+    'local_listings',
     'shipments',
     'integrations',
     'payments',
@@ -240,6 +255,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'b2b', 'description': 'B2B-доска опта (только верифицированные дилеры)'},
         {'name': 'payments', 'description': 'Платёжный шлюз LiqPay (checkout + webhook)'},
         {'name': 'lots', 'description': 'Импорт лотов аукционов (только admin)'},
+        {'name': 'local', 'description': 'C2C: місцеві оголошення від користувачів (Каталог Україна)'},
         {'name': 'legacy', 'description': 'Устаревшие эндпоинты'},
     ],
 }
@@ -251,6 +267,10 @@ LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
 
 # ─── Аукционные сборы ─────────────────────────────────────────────────────────
 AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
+
+# ─── C2C: місцеві оголошення ──────────────────────────────────────────────────
+# Максимум активних оголошень на акаунт. Повний антиспам — C2C-промт 6.
+LOCAL_LISTING_MAX_ACTIVE = int(os.environ.get('LOCAL_LISTING_MAX_ACTIVE', '10'))
 
 # ─── Внешние API ──────────────────────────────────────────────────────────────
 # Opendatabot — реестры авто Украины. Без ключа → demo=True, не падает.
