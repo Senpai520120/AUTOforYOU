@@ -58,12 +58,36 @@ region, city, mileage_max, search (make/model/description), ordering (-created_a
 ### Ліміт оголошень
 `LOCAL_LISTING_MAX_ACTIVE` (env, дефолт 10) — перевіряється при POST. Повний антиспам — C2C-промт 6.
 
+### Модерація (C2C-промт 2) — готово
+
+**Статус-машина**: `pending` → `active` (approve) або `rejected` (reject + причина).
+Власник може знімати (`hidden`) або позначати проданим (`sold`).
+
+**Ремодерація**: суттєва правка `active` → повертає в `pending`.
+Суттєві поля: `{make, model, year, price, description}`.
+Будь-яка правка `rejected` → повертає в `pending` (власник виправив).
+
+**Згода з правилами**: `agreed_to_rules` + `agreed_to_rules_at`. Без згоди → 400.
+Текст правил — заглушка, повна версія у C2C-промті 7.
+
+**Сервіс** (`local_listings/services.py`):
+- `approve_listing(listing, admin)` → active + email + Telegram
+- `reject_listing(listing, admin, reason)` → rejected + збереження причини + email + Telegram
+
+**Admin**:
+- `PendingLocalListingProxy` → окрема секція «Черга модерації» (тільки pending, sorted by created_at)
+- Дія «Одобрити» (масова, без форми)
+- Дія «Відхилити» → проміжна HTML-форма з полем причини відхилення
+
+**API**: `GET /api/v1/local/my-listings/` — всі оголошення власника (всі статуси).
+`rejection_reason` видно тільки власнику та адміну.
+
 ### Що далі (наступні C2C-промти)
-- C2C-промт 2: модерація (pending → active/rejected, черга в адмін-кабінеті)
 - C2C-промт 3: повідомлення між покупцем і продавцем
 - C2C-промт 4: верифікація дилерів (LocalListing.seller_type=dealer)
 - C2C-промт 5: строк дії оголошення (expired), продовження
 - C2C-промт 6: захист контактів (телефон тільки авторизованим, антиспам)
+- C2C-промт 7: юридичні правила розміщення (замінити заглушку agreed_to_rules)
 
 ---
 

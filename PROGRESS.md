@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C-промт 1 ✓ (місцеві оголошення, регіони, VIN-prefill, фільтри, фронтенд)
+## Статус: ФАЗА 2 ✓ | C2C-промт 1 ✓ | C2C-промт 2 ✓ (модерація: pending→active/rejected, адмін-черга, сповіщення, кабінет)
 
 ---
 
@@ -33,12 +33,40 @@
 
 ---
 
+## C2C-промт 2 — Модерація місцевих оголошень (завершено 2026-07-01)
+
+### Backend
+- [x] Нові поля `LocalListing`: `rejection_reason`, `moderated_by` FK, `moderated_at`, `agreed_to_rules` (bool), `agreed_to_rules_at`
+- [x] Міграція `0002_moderation_fields`
+- [x] `local_listings/services.py`: `approve_listing()` → active + email + Telegram; `reject_listing()` → rejected + причина + сповіщення
+- [x] Серіалізатор: новий запис → `status=pending`; `agreed_to_rules=True` — обов'язково; `rejection_reason` прихований від чужих
+- [x] Ремодерація: суттєва правка `active` → `pending`; будь-яка правка `rejected` → `pending`; суттєві поля: `{make, model, year, price, description}`
+- [x] `GET /api/v1/local/my-listings/` — усі оголошення власника (всі статуси, пагінація)
+- [x] `PendingLocalListingProxy` — окрема секція «Черга модерації» в Django Admin
+- [x] Дії адміна: «Одобрити» (bulk, без форми) та «Відхилити з причиною» (intermediate TemplateResponse + POST confirm)
+- [x] Email + Telegram сповіщення власнику через `integrations.tasks.send_notification`
+- [x] **233 тести всього — OK**
+
+### Frontend
+- [x] `/me/local-listings` — «Мої оголошення»: статус-бейджі (active/pending/rejected/hidden/sold/expired/draft)
+- [x] Причина відхилення: виводиться власнику у вигляді червоного блоку
+- [x] Кнопки дій залежно від статусу: «Редагувати і надіслати знову» (rejected), «Редагувати» (active/pending/hidden), «Видалити»
+- [x] Форма `/local/new`: чекбокс «Погоджуюсь з правилами» (required), після submit → екран «На модерації» замість redirect
+- [x] `/me` — додано пункт «Мої оголошення» у меню кабінету
+- [x] **23 Next.js роути, 0 TS-помилок, npm run build OK**
+
+### Архітектурне рішення
+- Proxy-модель `PendingLocalListingProxy` → окрема адмін-секція без дублювання реєстрації моделі
+- `TemplateResponse` + POST `confirm` — intermediate форма для причини відхилення (без окремого view)
+- `agreed_to_rules_at = timezone.now()` — патерн з промту 13 (`agreed_to_terms_at`)
+
+---
+
 ## Дальше (C2C-черга)
 
 | # | Промт | Що робити |
 |---|-------|-----------|
-| C2C-2 | Модерація | Черга модерації local_listings у адмін-кабінеті, pending→active/rejected, email |
-| C2C-3 | Повідомлення | Чат між покупцем і продавцем (в рамках оголошення) |
+| **C2C-3** | **Повідомлення** | **Non-realtime чат: діалоги покупець↔автор і покупець↔адмін** |
 | C2C-4 | Верифікація дилерів | LocalListing.seller_type=dealer + верифікація |
 | C2C-5 | Строк дії | auto-expired після N днів, продовження оголошення |
 | C2C-6 | Захист контактів | Телефон тільки авторизованим + антиспам |
