@@ -1,5 +1,96 @@
 # AUTOforYOU — Архитектура
 
+## C2C-модуль (C2C-промт 1)
+
+### Рішення: LocalListing — окремий додаток, не розширення Listing
+
+Існуючий `listings.Listing` = імпортний каталог (авто з США, Copart/IAAI). Він залишається без змін.
+`local_listings.LocalListing` = місцеві оголошення від користувачів (стиль Auto.ria). Це **окремий Django-додаток** зі своїми моделями, серіалізаторами, URLs та фільтрами.
+
+**Чому окремий додаток:** різна природа даних (імпорт vs. C2C), різна логіка статусів, різні ендпоінти, майбутня модерація/монетизація не перетинаються з імпортним каталогом.
+
+### Моделі C2C
+
+#### local_listings.Region / City (справочник)
+```
+Region: name (unique), slug
+City:   region FK, name, slug  # unique_together (region, slug)
+```
+- Засівається командою `seed_regions` (25 областей + 96 міст КАТОТТГ-lite)
+- # Неповний довідник: дозасіяти повним КАТОТТГ
+
+#### local_listings.LocalListing
+```
+owner FK (CustomUser), make, model, year, mileage_km, engine_cc (nullable)
+fuel_type: petrol/diesel/electric/hybrid/gas
+transmission: auto/manual/cvt/robot
+body_type: sedan/suv/hatchback/wagon/coupe/minivan/pickup/convertible/other
+condition: new/used/damaged
+price (Decimal), currency (UAH/USD/EUR), price_type (fixed/negotiable)
+region FK, city FK
+description (text), status, seller_type, contact_phone (private!)
+status: draft/active/pending*/rejected*/expired*/sold/hidden
+        * TODO: C2C-промт 2 (модерація), C2C-промт 5 (строк дії)
+contact_phone — НЕ входить до публічного списку; детальний захист — C2C-промт 6
+```
+- Індекси БД: status, make, year, price, region, fuel_type
+
+#### local_listings.LocalListingImage
+```
+listing FK, image (ImageField, nullable), source_url, is_primary
+```
+
+### URL-простір C2C (v1)
+```
+GET/POST  /api/v1/local/listings/              # список активних / створити
+GET       /api/v1/local/listings/<id>/         # деталь
+PATCH     /api/v1/local/listings/<id>/         # редагувати (тільки власник)
+DELETE    /api/v1/local/listings/<id>/         # видалити (тільки власник)
+GET       /api/v1/local/vin-prefill/<vin>/     # NHTSA vPIC автозаповнення (безкоштовно)
+GET       /api/v1/local/regions/               # список областей
+GET       /api/v1/local/regions/<id>/cities/   # міста за областю
+```
+
+### Фільтри LocalListing
+make, model, year_min/max, price_min/max, fuel_type, transmission, body_type,
+region, city, mileage_max, search (make/model/description), ordering (-created_at/created_at/price/-price)
+
+### Ліміт оголошень
+`LOCAL_LISTING_MAX_ACTIVE` (env, дефолт 10) — перевіряється при POST. Повний антиспам — C2C-промт 6.
+
+### Що далі (наступні C2C-промти)
+- C2C-промт 2: модерація (pending → active/rejected, черга в адмін-кабінеті)
+- C2C-промт 3: повідомлення між покупцем і продавцем
+- C2C-промт 4: верифікація дилерів (LocalListing.seller_type=dealer)
+- C2C-промт 5: строк дії оголошення (expired), продовження
+- C2C-промт 6: захист контактів (телефон тільки авторизованим, антиспам)
+
+---
+
+## QA и E2E-тесты (промт 14)
+- **Backend E2E** (`tests/test_e2e.py`, 38 тестов): критичные пути целиком через APIClient.
+  - Auth chain: регистрация (с consent) → JWT → профиль
+  - Калькулятор: полный landed-cost (Copart broker $5 000, все статьи, total = сумма, is_estimate=true)
+  - LiqPay: checkout → valid callback → listing unlocked; invalid sig → 400, listing intact; duplicate → idempotent
+  - B2B гейтинг: anon/buyer → 403/404; verified dealer/admin → 200
+  - Dealer flow: apply → admin approves → is_verified_dealer=True → wholesale доступен
+  - Throttle: `ScopedRateThrottle` deny → 429 для /registry/
+- **Frontend E2E** (`frontend/e2e/`, Playwright `@playwright/test`):
+  - `catalog.spec.ts`: каталог → калькулятор → 404-страница
+  - `register.spec.ts`: чекбокс consent присутствует, required, ссылки /terms и /privacy, footer-ссылки
+  - Требует: `npx playwright install chromium` + работающий фронт (`npm run dev`) + бэкенд (`runserver`)
+  - Запуск: `npm run test:e2e` (из `frontend/`)
+- **Итог**: 199 backend-тестов OK; TypeScript 0 ошибок
+- **Блокер перед продом**: живая проверка LiqPay в sandbox на публичном URL (см. `docs/PRODUCTION_ROADMAP.md`)
+
+## Юридические страницы (промт 13)
+- **Шаблоны**: `/terms`, `/privacy`, `/cookies` — три отдельные Next.js Server Component страницы на украинском языке. Каждая начинается с янтарного баннера «Шаблон — потребує перевірки юристом». **Перед продакшеном: юридическая проверка обязательна.**
+- **Согласие с условиями**: `CustomUser.agreed_to_terms_at` (DateTimeField, null=True). `RegisterSerializer` принимает `agreed_to_terms: bool`; при False/отсутствии → 400; при True → устанавливает `agreed_to_terms_at = timezone.now()` в `create()`. Дата согласия фиксируется в БД.
+- **Cookie-баннер**: `CookieBanner.tsx` — клиентский компонент, появляется при первом визите (localStorage). Две опции: «Лише необхідні» / «Прийняти всі». Состояние сохраняется 1 год в `localStorage('cookie_consent')`.
+- **Footer**: юридические ссылки через Next.js `<Link>` в `<nav aria-label="Юридичні документи">`.
+- **Форма регистрации**: обязательный чекбокс с двумя ссылками (/terms, /privacy, `target="_blank"`); `agreed_to_terms: true` передаётся на бэкенд.
+- **Robots**: все три страницы — `robots: { index: false }` (не индексируются до юридической проверки).
+
 ## Frontend SEO + полировка (промт 12)
 - **Метаданные**: `metadataBase` + title template в layout. `generateMetadata` на странице листинга — Server Component с OG-тегами (title/description/og:image/canonical). Остальные страницы: статические `metadata` экспорты или route-level layouts.
 - **Telegram-шеринг**: листинг, опубликованный ботом → при вставке URL в Telegram-чат показывается превью: фото авто + название + цена.
@@ -64,7 +155,7 @@
 - **Пакеты**: `dj-database-url`, `django-storages[s3]`, `boto3` добавлены в requirements.txt.
 - **Документация**: `DEPLOY_NOTES.md` — пошаговая инструкция для продакшен-деплоя.
 
-## ⛔ ЗАПУСК ЗАБЛОКИРОВАН ДО:
+## ⛔ ЗАПУСК ЗАБЛОКИРОВАН ДО (финальный список):
 1. ~~**Реальные ставки растаможки**~~ — ✅ СНЯТ (акциз, пошлина, НДС, пенсионный сбор актуальны на янв–июнь 2026; финал у брокера)
 2. **Baseline-сетки Copart/IAAI** — ✅ BASELINE ГОТОВО (seed_auction_fees, 50 тиров).
    ✅ E2E формула верифицирована: Copart broker $5000 petrol 2.0L 2018 → total_usd=$8334, excise=800 EUR.

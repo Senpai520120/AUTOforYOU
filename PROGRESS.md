@@ -1,8 +1,48 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ЗАВЕРШЕНА ✓ | Растаможка ✓ | Реальные источники ✓ | Copart/IAAI E2E ✓ | Верификация дилеров ✓ | Opendatabot ✓ | Импорт лотов ✓ | PostgreSQL+S3 ✓ | Безопасность ✓ | Кэш+Перф ✓ | Celery ✓ | Telegram-бот ✓ | SEO+полировка ✓
+## Статус: ФАЗА 2 ✓ | C2C-промт 1 ✓ (місцеві оголошення, регіони, VIN-prefill, фільтри, фронтенд)
 
 ---
+
+## C2C-промт 1 — Місцеві оголошення (завершено 2026-07-01)
+
+### Backend
+- [x] Новий Django-додаток `local_listings` (Region, City, LocalListing, LocalListingImage)
+- [x] 25 областей + 96 міст, management-команда `seed_regions` (# неповний КАТОТТГ)
+- [x] DRF-ендпоінти: CRUD /api/v1/local/listings/, /vin-prefill/<vin>/, /regions/, /cities/
+- [x] Ліміт активних оголошень: LOCAL_LISTING_MAX_ACTIVE (env, дефолт 10)
+- [x] contact_phone відсутній у публічному списку (захист — C2C-промт 6)
+- [x] Фільтри: make, model, year range, price range, fuel, transmission, body_type, region, city, mileage_max, search, ordering
+- [x] Індекси БД: status, make, year, price, region, fuel_type
+- [x] VIN-prefill: GET /api/v1/local/vin-prefill/<vin>/ — NHTSA vPIC (бесплатно, без ключа), кеш VinReport
+- [x] Статуси: draft/active (C2C-1), pending/rejected/expired/sold/hidden (заглушки — C2C-2/5)
+- [x] 18 нових тестів, **217 тестів всього — OK**
+
+### Frontend
+- [x] `/ua` — Каталог Україна: список з фільтрами (панель критеріїв), карточки, пусте стан
+- [x] `/local/new` — форма подачі (авторизований): VIN-поле + кнопка «Заповнити за VIN», виладушки область→місто
+- [x] `/local/[id]` — деталь: галерея, характеристики, кнопка «Показати телефон» (заглушка — C2C-6)
+- [x] `/local/[id]/edit` — редагування свого оголошення
+- [x] Header: навігація розділена «Пригін/аукціон» (існуючий) / «Каталог Україна» (новий)
+- [x] api/local.ts, types.ts, компоненти LocalListingCard/Filters/Form
+- [x] **22 Next.js роути, 0 TS-помилок, npm run build OK**
+
+### Архітектурне рішення
+- `LocalListing` — окремий Django-додаток, НЕ розширення `listings.Listing`
+- Існуючий імпортний каталог (Listing + Vehicle) не зачеплений
+
+---
+
+## Дальше (C2C-черга)
+
+| # | Промт | Що робити |
+|---|-------|-----------|
+| C2C-2 | Модерація | Черга модерації local_listings у адмін-кабінеті, pending→active/rejected, email |
+| C2C-3 | Повідомлення | Чат між покупцем і продавцем (в рамках оголошення) |
+| C2C-4 | Верифікація дилерів | LocalListing.seller_type=dealer + верифікація |
+| C2C-5 | Строк дії | auto-expired після N днів, продовження оголошення |
+| C2C-6 | Захист контактів | Телефон тільки авторизованим + антиспам |
+| C2C-7 | Монетизація | Платне просування, підняття в топ (LiqPay) |
 
 ## Дальше (очередь задач до продакшена)
 
@@ -23,7 +63,80 @@
 | 13 | ~~**Celery — фоновые задачи**~~ | ✅ Снят — промт 10: Celery+beat, fetch_nbu_rates_task (daily, cache invalidate), import_lot_task, send_notification stub |
 | 14 | ~~**Telegram-уведомления**~~ | ✅ Снят — промт 11: telegram_bot, deep-link привязка, send_notification, автопостинг |
 | 15 | ~~**Фронтенд: продакшн-полировка, SEO**~~ | ✅ Снят — промт 12: SEO, OG-карточки, sitemap, 404/error, скелетоны, DemoBanner-флаг |
-| 16 | **Юридические страницы** | Промт 13: ToS, Privacy, Cookie |
+| 16 | ~~**Юридические страницы**~~ | ✅ Снят — промт 13: /terms, /privacy, /cookies + cookie-баннер + consent |
+| 17 | ~~**QA E2E-тесты**~~ | ✅ Снят — промт 14: 38 E2E-тестов + Playwright + PRODUCTION_ROADMAP.md |
+| 18 | **DevOps и деплой** | Промт 15: Docker Compose, Dockerfile, deploy.sh, Railway/VPS инструкция |
+
+---
+
+## Промт 14 — QA E2E-тесты (завершено 2026-06-24)
+
+### Backend E2E (tests/test_e2e.py — 38 тестов)
+- [x] **Auth chain**: регистрация (с consent) → JWT → профиль → agreed_to_terms_at записан
+- [x] Без токена → 401; неверный пароль → 401; без consent → 400
+- [x] **Калькулятор API**: POST /api/v1/pricing/calculate/ → 201 → все поля breakdown; total_usd = сумма компонентов; is_estimate=true; known auction_fee=$504; customs_value=$6800; сохраняется в Calculation
+- [x] **LiqPay checkout**: создаёт Payment(pending), возвращает checkout_url; duplicate order_id → 400; без auth → 401
+- [x] **LiqPay callback валидный**: статус → completed, listing → in_stock
+- [x] **LiqPay callback невалидная подпись**: 400, статус остаётся pending, listing не трогается
+- [x] **LiqPay идемпотентность**: двойной callback → payment не задваивается, listing = in_stock ровно один раз
+- [x] **B2B гейтинг**: anon → 401/403; buyer → 403 /b2b/board/ и 404 wholesale detail; dealer → 200; admin → 200; каталог anon — wholesale не виден
+- [x] **Dealer flow**: apply → 403 перед одобрением → approve → is_verified_dealer=True → 200 на B2B
+- [x] **Throttle**: ScopedRateThrottle deny → 429; anon → 401 (не throttle)
+- [x] `LiqPayClient.from_settings()` исправлен: читает из Django settings (override_settings работает в тестах)
+
+### Frontend E2E (Playwright)
+- [x] `@playwright/test` установлен как devDependency
+- [x] `playwright.config.ts` — baseURL localhost:3000, chromium
+- [x] `e2e/catalog.spec.ts`: каталог загружается; demo-banner; калькулятор form; 404-страница
+- [x] `e2e/register.spec.ts`: чекбокс consent есть, required, ссылки /terms /privacy; footer-ссылки
+- [x] `package.json`: scripts `test:e2e`, `test:e2e:ui`
+
+### Документация
+- [x] `docs/PRODUCTION_ROADMAP.md` — простым языком для владельца:
+  - Таблица «что проверяется автоматически»
+  - Пошаговая инструкция ручной проверки LiqPay sandbox (ключи, ngrok, тестовая карта 4242...)
+  - Финальный чеклист «GO LIVE» (12 пунктов)
+  - Что дальше: промт 15 (DevOps)
+
+### Итог
+- [x] 199 backend-тестов OK (`python manage.py test`)
+- [x] 38 новых E2E-тестов
+- [x] TypeScript 0 ошибок (`npx tsc --noEmit`)
+
+---
+
+## Промт 13 — Юридические страницы (завершено 2026-06-24)
+
+### Бэкенд
+- [x] `CustomUser.agreed_to_terms_at` (DateTimeField, null=True, blank=True) + миграция 0006
+- [x] `RegisterSerializer`: новое поле `agreed_to_terms` (bool, write_only); валидация — 400 если False/отсутствует; при success `agreed_to_terms_at = timezone.now()`
+- [x] Тесты (4): без поля → 400; False → 400; True → 201; `agreed_to_terms_at` устанавливается
+
+### Frontend — страницы
+- [x] `/terms` — «Умови використання» (шаблон, 7 разделов, предупреждение «перевірки юристом»)
+- [x] `/privacy` — «Політика конфіденційності» (шаблон, 8 разделов, ЛЗПД ссылка)
+- [x] `/cookies` — «Політика щодо файлів cookie» (шаблон, таблица cookie, 4 раздела)
+- [x] Все три: `robots: { index: false }`, начинаются с янтарного баннера «Шаблон — потребує перевірки юристом»
+
+### Frontend — cookie-баннер
+- [x] `CookieBanner.tsx` — клиентский компонент; показывается при первом визите
+- [x] Две кнопки: «Лише необхідні» и «Прийняти всі» → запись в `localStorage('cookie_consent')`
+- [x] После выбора баннер скрывается; при повторном визите — не появляется
+- [x] Добавлен в `app/layout.tsx` (работает на всех страницах)
+
+### Frontend — Footer
+- [x] Добавлены ссылки: «Умови використання», «Конфіденційність», «Cookie» с `<Link>` (Next.js)
+- [x] `<nav aria-label="Юридичні документи">` для семантики
+
+### Frontend — форма регистрации
+- [x] Чекбокс «Погоджуюсь з Умовами використання та Політикою конфіденційності» (required)
+- [x] Ссылки /terms и /privacy открываются в новой вкладке (`target="_blank"`)
+- [x] Фронтенд-валидация: кнопка submit недоступна только по HTML required; сообщение об ошибке на уровне JS
+- [x] `agreed_to_terms: true` включается в тело запроса к API
+
+### Build
+- [x] `npx tsc --noEmit` — 0 ошибок
+- [x] `python manage.py test` — 161 тест OK
 
 ---
 
