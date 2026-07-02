@@ -3,6 +3,8 @@ import {
   LocalListing,
   LocalListingFilters,
   LocalListingImage,
+  PromotionTariff,
+  PromoteCheckout,
   PaginatedResponse,
   Region,
   City,
@@ -57,4 +59,10 @@ export const localApi = {
 
   setPrimaryImage: (listingId: number, imgId: number) =>
     apiFetch<LocalListingImage>(`/api/v1/local/listings/${listingId}/images/${imgId}/`, { method: 'PATCH' }),
+
+  tariffs: () =>
+    apiGet<PromotionTariff[]>('/api/v1/local/tariffs/'),
+
+  promote: (listingId: number, tariffCode: string) =>
+    apiPost<PromoteCheckout>(`/api/v1/local/listings/${listingId}/promote/`, { tariff: tariffCode }),
 };

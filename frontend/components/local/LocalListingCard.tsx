@@ -17,9 +17,10 @@ export default function LocalListingCard({ listing }: { listing: LocalListing })
   const imgSrc = primary?.image || primary?.source_url || PLACEHOLDER_SVG;
 
   const price = Number(listing.price).toLocaleString('uk-UA');
+  const isTop = listing.promoted_until && new Date(listing.promoted_until) > new Date();
 
   return (
-    <article className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+    <article className={`bg-white rounded-xl overflow-hidden shadow-sm border transition-shadow hover:shadow-md ${isTop ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-100'}`}>
       <Link href={`/local/${listing.id}`} className="block relative aspect-[4/3]">
         <Image
           src={imgSrc}
@@ -29,6 +30,11 @@ export default function LocalListingCard({ listing }: { listing: LocalListing })
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER_SVG; }}
         />
+        {isTop && (
+          <span className="absolute top-2 left-2 bg-amber-400 text-black text-[11px] font-bold px-2 py-0.5 rounded-full shadow">
+            ТОП
+          </span>
+        )}
       </Link>
       <div className="p-4">
         <Link href={`/local/${listing.id}`} className="hover:text-blue-700">

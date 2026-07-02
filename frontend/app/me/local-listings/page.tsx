@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { localApi } from '@/api/local';
 import { LocalListing } from '@/lib/types';
+import PromoteModal from '@/components/local/PromoteModal';
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   active:   { label: 'Активне',         cls: 'bg-green-100 text-green-800' },
@@ -16,11 +17,23 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   draft:    { label: 'Чернетка',        cls: 'bg-slate-100 text-slate-500' },
 };
 
+function daysUntil(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+}
+
+interface ModalState {
+  listingId: number;
+  listingTitle: string;
+  defaultType: 'renew' | 'bump' | 'top';
+}
+
 export default function MyLocalListingsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [listings, setListings] = useState<LocalListing[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [modal, setModal] = useState<ModalState | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.push('/login');
@@ -45,10 +58,23 @@ export default function MyLocalListingsPage() {
     }
   }
 
+  function openPromote(l: LocalListing, type: 'renew' | 'bump' | 'top') {
+    setModal({ listingId: l.id, listingTitle: `${l.make} ${l.model} ${l.year}`, defaultType: type });
+  }
+
   if (loading || fetching) return <div className="text-center py-20 text-slate-400">Завантаження...</div>;
 
   return (
     <div className="max-w-3xl mx-auto">
+      {modal && (
+        <PromoteModal
+          listingId={modal.listingId}
+          listingTitle={modal.listingTitle}
+          defaultType={modal.defaultType}
+          onClose={() => setModal(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Мої оголошення</h1>
         <Link
@@ -71,8 +97,12 @@ export default function MyLocalListingsPage() {
         <div className="space-y-4">
           {listings.map(l => {
             const badge = STATUS_BADGE[l.status] ?? { label: l.status, cls: 'bg-slate-100 text-slate-500' };
+            const daysLeft = daysUntil(l.expires_at);
+            const expiringSoon = l.status === 'active' && daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
+            const isTop = l.promoted_until && new Date(l.promoted_until) > new Date();
+
             return (
-              <div key={l.id} className="bg-white border border-slate-200 rounded-xl p-4">
+              <div key={l.id} className={`bg-white border rounded-xl p-4 ${expiringSoon ? 'border-amber-300' : 'border-slate-200'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -82,12 +112,29 @@ export default function MyLocalListingsPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
                         {badge.label}
                       </span>
+                      {isTop && (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+                          ⭐ ТОП
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-slate-500 mt-1">
                       {Number(l.price).toLocaleString('uk-UA')} {l.currency}
                       {' · '}{l.city_name}, {l.region_name}
                       {' · '}{l.mileage_km.toLocaleString()} км
                     </p>
+
+                    {/* Термін дії */}
+                    {l.expires_at && l.status === 'active' && daysLeft !== null && (
+                      <p className={`mt-1 text-xs ${expiringSoon ? 'text-amber-700 font-medium' : 'text-slate-400'}`}>
+                        {expiringSoon ? '⚠️ ' : ''}
+                        Дійсне до {new Date(l.expires_at).toLocaleDateString('uk-UA')}
+                        {daysLeft > 0 ? ` (${daysLeft} дн.)` : ' — закінчується сьогодні'}
+                      </p>
+                    )}
+                    {l.status === 'expired' && (
+                      <p className="mt-1 text-xs text-red-600">Термін дії закінчився. Продовжте оголошення.</p>
+                    )}
 
                     {/* Причина відхилення */}
                     {l.status === 'rejected' && l.rejection_reason && (
@@ -96,7 +143,6 @@ export default function MyLocalListingsPage() {
                       </div>
                     )}
 
-                    {/* Pending info */}
                     {l.status === 'pending' && (
                       <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 inline-block">
                         Очікує перевірки модератором
@@ -104,7 +150,6 @@ export default function MyLocalListingsPage() {
                     )}
                   </div>
 
-                  {/* Дата */}
                   <span className="text-xs text-slate-400 whitespace-nowrap">
                     {new Date(l.created_at).toLocaleDateString('uk-UA')}
                   </span>
@@ -127,6 +172,41 @@ export default function MyLocalListingsPage() {
                       Редагувати
                     </Link>
                   ) : null}
+
+                  {/* Кнопки просування */}
+                  {l.status === 'expired' && (
+                    <button
+                      onClick={() => openPromote(l, 'renew')}
+                      className="text-sm bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      🔄 Продовжити
+                    </button>
+                  )}
+                  {l.status === 'active' && expiringSoon && (
+                    <button
+                      onClick={() => openPromote(l, 'renew')}
+                      className="text-sm border border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      🔄 Продовжити (скоро закінчиться)
+                    </button>
+                  )}
+                  {l.status === 'active' && (
+                    <>
+                      <button
+                        onClick={() => openPromote(l, 'bump')}
+                        className="text-sm border border-blue-200 hover:bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        ⬆️ Підняти
+                      </button>
+                      <button
+                        onClick={() => openPromote(l, 'top')}
+                        className="text-sm border border-amber-300 hover:bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        ⭐ ТОП
+                      </button>
+                    </>
+                  )}
+
                   {(l.status !== 'sold' && l.status !== 'expired') && (
                     <button
                       onClick={() => handleDelete(l.id)}

@@ -202,8 +202,34 @@ export interface LocalListing {
   contact_phone: string | null;
   rejection_reason: string | null;
   images: LocalListingImage[];
+  expires_at: string | null;
+  expiry_warned: boolean;
+  promoted_until: string | null;
+  bumped_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PromotionTariff {
+  id: number;
+  code: string;
+  name: string;
+  type: 'renew' | 'bump' | 'top';
+  price: string;
+  currency: string;
+  duration_days: number;
+  description: string;
+}
+
+export interface PromoteCheckout {
+  payment_id: number;
+  order_id: string;
+  tariff: string;
+  amount: string;
+  currency: string;
+  checkout_url: string;
+  form_data: Record<string, string>;
+  sandbox: boolean;
 }
 
 export interface LocalListingFilters {
