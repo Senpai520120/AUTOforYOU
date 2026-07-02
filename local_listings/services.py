@@ -61,6 +61,15 @@ def _notify_owner(listing: LocalListing, *, approved: bool, reason: str = '') ->
 
     send_mail(subject, body, 'noreply@autoforyou.ua', [user.email], fail_silently=True)
 
+    # In-app сповіщення
+    try:
+        from notifications.services import create_notification
+        from notifications.models import Notification as NotifModel
+        ntype = NotifModel.Type.LISTING_APPROVED if approved else NotifModel.Type.LISTING_REJECTED
+        create_notification(user.pk, ntype, subject, body[:500], f'/local/{listing.pk}')
+    except Exception:
+        pass
+
     # Telegram-сповіщення (реального токена може не бути — send_notification no-op)
     try:
         from integrations.tasks import send_notification

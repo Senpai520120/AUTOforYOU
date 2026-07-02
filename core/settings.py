@@ -61,6 +61,10 @@ INSTALLED_APPS = [
     'payments',
     'cars',
     'telegram_bot',
+    'messaging',
+    'notifications',
+    'favorites',
+    'saved_searches',
 
     'drf_spectacular',
     'django_celery_beat',
@@ -216,6 +220,7 @@ REST_FRAMEWORK = {
         'anon': _THROTTLE_ANON,
         'user': _THROTTLE_USER,
         'expensive': _THROTTLE_EXPENSIVE,
+        'messages': os.environ.get('THROTTLE_MESSAGES_RATE', '30/hour'),
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
@@ -318,6 +323,11 @@ CELERY_BEAT_SCHEDULE = {
     'fetch-nbu-rates-daily': {
         'task': 'pricing.tasks.fetch_nbu_rates_task',
         'schedule': _crontab(hour=9, minute=0),
+    },
+    # Saved searches: щодня о 10:00 — перевірка нових оголошень і надсилання алертів
+    'check-saved-searches-daily': {
+        'task': 'saved_searches.tasks.check_saved_searches',
+        'schedule': _crontab(hour=10, minute=0),
     },
 }
 

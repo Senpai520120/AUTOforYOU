@@ -114,19 +114,31 @@ def _notify_recipients(sender, conversation: Conversation, message: Message) -> 
     try:
         from integrations.tasks import send_notification
     except ImportError:
-        return
+        send_notification = None
+
+    try:
+        from notifications.services import create_notification
+        from notifications.models import Notification as NotifModel
+    except ImportError:
+        create_notification = None
+        NotifModel = None
 
     if conversation.local_listing_id and conversation.local_listing:
         ll = conversation.local_listing
         subject_label = f'{ll.make} {ll.model} {ll.year}'
+        conv_link = f'/me/messages?conv={conversation.pk}'
     elif conversation.imported_listing_id:
         subject_label = f'Оголошення #{conversation.imported_listing_id}'
+        conv_link = f'/me/messages?conv={conversation.pk}'
     else:
         subject_label = 'оголошення'
+        conv_link = '/me/messages'
 
     sender_label = sender.first_name or sender.email.split('@')[0]
     preview = message.text[:80]
     tg_text = f'Нове повідомлення від {sender_label} по {subject_label}:\n«{preview}»'
+    notif_title = f'Нове повідомлення від {sender_label}'
+    notif_text = f'{subject_label}: «{preview}»'
 
     recipients = list(conversation.participants.exclude(pk=sender.pk))
     # Для імпортних — додатково адміни, які не є учасниками
@@ -134,13 +146,20 @@ def _notify_recipients(sender, conversation: Conversation, message: Message) -> 
         existing_ids = {r.pk for r in recipients} | {sender.pk}
         extra_admins = User.objects.filter(role='admin').exclude(pk__in=existing_ids)
         for admin in extra_admins:
-            try:
-                send_notification.delay(admin.pk, tg_text)
-            except Exception:
-                pass
+            _send_one(admin.pk, tg_text, notif_title, notif_text, conv_link, send_notification, create_notification, NotifModel)
 
     for recipient in recipients:
+        _send_one(recipient.pk, tg_text, notif_title, notif_text, conv_link, send_notification, create_notification, NotifModel)
+
+
+def _send_one(user_id, tg_text, notif_title, notif_text, link, send_notification, create_notification, NotifModel):
+    if create_notification and NotifModel:
         try:
-            send_notification.delay(recipient.pk, tg_text)
+            create_notification(user_id, NotifModel.Type.NEW_MESSAGE, notif_title, notif_text, link)
+        except Exception:
+            pass
+    if send_notification:
+        try:
+            send_notification.delay(user_id, tg_text)
         except Exception:
             pass
