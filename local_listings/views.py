@@ -10,7 +10,9 @@ from rest_framework.views import APIView
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
 from .filters import LocalListingFilter
-from .models import LocalListing, LocalListingImage, Region, City
+import uuid
+
+from .models import LocalListing, LocalListingImage, Region, City, PromotionTariff
 from .serializers import (
     LocalListingImageSerializer,
     LocalListingListSerializer,
@@ -18,6 +20,7 @@ from .serializers import (
     LocalListingCreateSerializer,
     LocalListingUpdateSerializer,
     LocalListingOwnerSerializer,
+    PromotionTariffSerializer,
     RegionSerializer,
     CitySerializer,
 )
@@ -277,3 +280,78 @@ class LocalListingImageDetailView(APIView):
         img.is_primary = True
         img.save(update_fields=['is_primary'])
         return Response(LocalListingImageSerializer(img).data)
+
+
+# ─── Тарифи просування ────────────────────────────────────────────────────────
+
+@extend_schema(tags=['local'], summary='Тарифи просування оголошень')
+class PromotionTariffListView(generics.ListAPIView):
+    serializer_class = PromotionTariffSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        return PromotionTariff.objects.filter(active=True)
+
+
+@extend_schema(
+    tags=['local'],
+    summary='Замовити просування оголошення (LiqPay SANDBOX)',
+    description=(
+        'Тільки власник оголошення. Body: `{"tariff": "<code>"}`. '
+        'Повертає LiqPay checkout_url і form_data. '
+        'Оплата в ТЕСТОВОМУ режимі (LIQPAY_SANDBOX=true).'
+    ),
+)
+class LocalListingPromoteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        listing = get_object_or_404(LocalListing, pk=pk)
+        if listing.owner != request.user and not request.user.is_staff:
+            return Response(
+                {'detail': 'Тільки власник може просувати оголошення.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tariff_code = request.data.get('tariff')
+        if not tariff_code:
+            return Response({'detail': 'Поле tariff обов\'язкове.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        tariff = get_object_or_404(PromotionTariff, code=tariff_code, active=True)
+        order_id = f'promo-{listing.pk}-{tariff.code}-{uuid.uuid4().hex[:8]}'
+        description = f'{tariff.name}: {listing.make} {listing.model} {listing.year}'
+
+        from payments.models import Payment
+        from payments.liqpay_client import LiqPayClient
+
+        payment = Payment.objects.create(
+            user=request.user,
+            local_listing=listing,
+            tariff=tariff,
+            order_id=order_id,
+            amount=tariff.price,
+            currency=tariff.currency,
+            description=description,
+            purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
+        )
+
+        client = LiqPayClient.from_settings()
+        checkout = client.create_checkout(
+            order_id=order_id,
+            amount=str(tariff.price),
+            currency=tariff.currency,
+            description=description,
+        )
+
+        return Response(
+            {
+                'payment_id': payment.pk,
+                'order_id': order_id,
+                'tariff': tariff_code,
+                'amount': str(tariff.price),
+                'currency': tariff.currency,
+                **checkout,
+            },
+            status=status.HTTP_201_CREATED,
+        )

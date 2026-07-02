@@ -1,5 +1,7 @@
 import logging
+from datetime import timedelta
 
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from drf_spectacular.utils import extend_schema, OpenApiResponse
@@ -12,6 +14,39 @@ from .liqpay_client import LiqPayClient, LiqPaySignatureError
 from .models import Payment
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_local_listing_promote(payment):
+    """Застосувати ефект тарифу після успішної оплати просування."""
+    if payment.purpose != payment.Purpose.LOCAL_LISTING_PROMOTE:
+        return
+    if not payment.local_listing or not payment.tariff:
+        return
+
+    from local_listings.models import LocalListing, PromotionTariff
+
+    listing = payment.local_listing
+    tariff = payment.tariff
+    now = timezone.now()
+
+    if tariff.type == PromotionTariff.TariffType.RENEW:
+        base = max(listing.expires_at or now, now)
+        listing.expires_at = base + timedelta(days=tariff.duration_days)
+        listing.expiry_warned = False
+        if listing.status == LocalListing.Status.EXPIRED:
+            listing.status = LocalListing.Status.ACTIVE
+        listing.save(update_fields=['expires_at', 'expiry_warned', 'status'])
+
+    elif tariff.type == PromotionTariff.TariffType.BUMP:
+        listing.bumped_at = now
+        listing.save(update_fields=['bumped_at'])
+
+    elif tariff.type == PromotionTariff.TariffType.TOP:
+        base = max(listing.promoted_until or now, now)
+        listing.promoted_until = base + timedelta(days=tariff.duration_days)
+        listing.save(update_fields=['promoted_until'])
+
+    logger.info('Tariff %s applied to listing %s', tariff.code, listing.pk)
 
 
 @extend_schema(
@@ -146,6 +181,7 @@ class LiqPayCallbackView(APIView):
 
         if payment.status == Payment.Status.COMPLETED:
             payment.unlock_listing()
-            logger.info('LiqPay: payment %s completed, listing unlocked', order_id)
+            _apply_local_listing_promote(payment)
+            logger.info('LiqPay: payment %s completed', order_id)
 
         return Response({'ok': True, 'status': payment.status})

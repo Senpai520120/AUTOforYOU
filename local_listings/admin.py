@@ -3,8 +3,19 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.contrib.admin import helpers
 
-from .models import Region, City, LocalListing, LocalListingImage
+from .models import Region, City, LocalListing, LocalListingImage, PromotionTariff
 from .services import approve_listing, reject_listing
+
+
+# ─── Тарифи просування ────────────────────────────────────────────────────────
+
+@admin.register(PromotionTariff)
+class PromotionTariffAdmin(admin.ModelAdmin):
+    list_display = ['code', 'name', 'type', 'price', 'currency', 'duration_days', 'active']
+    list_filter = ['type', 'active', 'currency']
+    list_editable = ['price', 'active']
+    search_fields = ['code', 'name']
+    ordering = ['type', 'price']
 
 
 # ─── Регіони / Міста ──────────────────────────────────────────────────────────
@@ -86,7 +97,7 @@ class LocalListingAdmin(admin.ModelAdmin):
     ]
     list_filter = ['status', 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region']
     search_fields = ['make', 'model', 'owner__email', 'contact_phone']
-    readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at']
+    readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
     inlines = [LocalListingImageInline]
     raw_id_fields = ['owner', 'region', 'city', 'moderated_by']
     actions = [approve_listings, reject_with_reason]
@@ -108,6 +119,10 @@ class LocalListingAdmin(admin.ModelAdmin):
         }),
         ('Згода з правилами', {
             'fields': ('agreed_to_rules', 'agreed_to_rules_at'),
+            'classes': ('collapse',),
+        }),
+        ('Термін дії і просування', {
+            'fields': ('expires_at', 'expiry_warned', 'promoted_until', 'bumped_at'),
             'classes': ('collapse',),
         }),
         ('Дати', {

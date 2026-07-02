@@ -580,3 +580,252 @@ class TestListingImageSetPrimary(APITestCase):
         _auth(self.client, other)
         r = self.client.patch(self._url(self.img2.pk))
         self.assertEqual(r.status_code, 403)
+
+
+# ─── Тести: термін дії та Celery-задачі ──────────────────────────────────────
+
+from datetime import timedelta
+from django.utils import timezone
+from local_listings.tasks import warn_expiring_listings, expire_listings
+from local_listings.models import PromotionTariff
+
+
+def _make_tariff(code='test_renew', ttype='renew', price='49.00', days=30):
+    return PromotionTariff.objects.get_or_create(
+        code=code,
+        defaults=dict(name=code, type=ttype, price=price, currency='UAH',
+                      duration_days=days, active=True),
+    )[0]
+
+
+class TestExpiresAt(APITestCase):
+    def setUp(self):
+        self.region = _make_region('exp-обл')
+        self.city = _make_city(self.region, 'exp-місто')
+        self.owner = _make_user('exp@test.com')
+
+    def test_expires_at_set_on_create(self):
+        listing = _make_listing(self.owner, self.region, self.city)
+        self.assertIsNotNone(listing.expires_at)
+        self.assertGreater(listing.expires_at, timezone.now())
+
+    def test_active_listing_excluded_after_expiry(self):
+        listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.ACTIVE)
+        listing.expires_at = timezone.now() - timedelta(days=1)
+        listing.save(update_fields=['expires_at'])
+        # Run expire task
+        expire_listings()
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, LocalListing.Status.EXPIRED)
+
+    def test_expired_not_in_catalog(self):
+        listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.EXPIRED)
+        r = self.client.get('/api/v1/local/listings/')
+        ids = [item['id'] for item in r.data['results']]
+        self.assertNotIn(listing.id, ids)
+
+
+class TestExpiryTasks(APITestCase):
+    def setUp(self):
+        self.region = _make_region('task-обл')
+        self.city = _make_city(self.region, 'task-місто')
+        self.owner = _make_user('task_owner@test.com')
+
+    def test_warn_expiring_sends_once(self):
+        listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.ACTIVE)
+        listing.expires_at = timezone.now() + timedelta(days=2)
+        listing.expiry_warned = False
+        listing.save(update_fields=['expires_at', 'expiry_warned'])
+
+        warn_expiring_listings()
+        listing.refresh_from_db()
+        self.assertTrue(listing.expiry_warned)
+
+        # Second run — no duplicate (flag already True)
+        from notifications.models import Notification
+        count_before = Notification.objects.filter(user=self.owner).count()
+        warn_expiring_listings()
+        count_after = Notification.objects.filter(user=self.owner).count()
+        self.assertEqual(count_before, count_after)
+
+    def test_expire_task_idempotent(self):
+        listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.ACTIVE)
+        listing.expires_at = timezone.now() - timedelta(hours=1)
+        listing.save(update_fields=['expires_at'])
+
+        expire_listings()
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, LocalListing.Status.EXPIRED)
+
+        # Second run — stays expired, no error
+        expire_listings()
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, LocalListing.Status.EXPIRED)
+
+    def test_warn_not_sent_for_non_active(self):
+        listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.PENDING)
+        listing.expires_at = timezone.now() + timedelta(days=1)
+        listing.expiry_warned = False
+        listing.save(update_fields=['expires_at', 'expiry_warned'])
+
+        warn_expiring_listings()
+        listing.refresh_from_db()
+        self.assertFalse(listing.expiry_warned)
+
+
+# ─── Тести: promote endpoint + callback ──────────────────────────────────────
+
+from payments.models import Payment
+
+
+class TestPromoteEndpoint(APITestCase):
+    def setUp(self):
+        self.owner = _make_user('promo_owner@test.com')
+        self.other = _make_user('promo_other@test.com')
+        region = _make_region('promo-обл')
+        city = _make_city(region, 'promo-місто')
+        self.listing = _make_listing(self.owner, region, city)
+        self.tariff = _make_tariff()
+        self.url = f'/api/v1/local/listings/{self.listing.pk}/promote/'
+
+    def test_promote_creates_payment(self):
+        _auth(self.client, self.owner)
+        r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertIn('checkout_url', r.data)
+        self.assertIn('order_id', r.data)
+        self.assertTrue(Payment.objects.filter(
+            local_listing=self.listing,
+            tariff=self.tariff,
+            purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
+        ).exists())
+
+    def test_promote_non_owner_403(self):
+        _auth(self.client, self.other)
+        r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_promote_missing_tariff_400(self):
+        _auth(self.client, self.owner)
+        r = self.client.post(self.url, {}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_tariffs_list_public(self):
+        r = self.client.get('/api/v1/local/tariffs/')
+        self.assertEqual(r.status_code, 200)
+        # Seeds 4 tariffs
+        self.assertGreaterEqual(len(r.data), 4)
+
+
+class TestCallbackAppliesTariff(APITestCase):
+    def setUp(self):
+        from payments.liqpay_client import LiqPayClient
+        import base64, json, hashlib
+
+        self.owner = _make_user('cb_owner@test.com')
+        region = _make_region('cb-обл')
+        city = _make_city(region, 'cb-місто')
+        self.listing = _make_listing(self.owner, region, city, status_val=LocalListing.Status.ACTIVE)
+        self.listing.expires_at = timezone.now() + timedelta(days=30)
+        self.listing.save(update_fields=['expires_at'])
+
+    def _make_callback(self, payment, liqpay_status='sandbox'):
+        """Build a valid LiqPay callback payload (test keys)."""
+        from django.conf import settings
+        import base64, json, hashlib
+        private_key = settings.LIQPAY_PRIVATE_KEY
+        payload = {
+            'order_id': payment.order_id,
+            'status': liqpay_status,
+            'payment_id': '12345',
+            'amount': str(payment.amount),
+            'currency': payment.currency,
+        }
+        data = base64.b64encode(json.dumps(payload).encode()).decode()
+        sig_str = private_key + data + private_key
+        signature = base64.b64encode(hashlib.sha1(sig_str.encode()).digest()).decode()
+        return {'data': data, 'signature': signature}
+
+    def _create_payment(self, tariff):
+        return Payment.objects.create(
+            user=self.owner,
+            local_listing=self.listing,
+            tariff=tariff,
+            order_id=f'test-promo-{tariff.code}-cb',
+            amount=tariff.price,
+            currency=tariff.currency,
+            purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
+        )
+
+    def test_renew_extends_expires_at(self):
+        tariff = _make_tariff('cb_renew', 'renew', '49.00', 30)
+        payment = self._create_payment(tariff)
+        old_expires = self.listing.expires_at
+        cb = self._make_callback(payment)
+        self.client.post('/api/v1/payments/liqpay/callback/', cb)
+        self.listing.refresh_from_db()
+        self.assertGreater(self.listing.expires_at, old_expires)
+
+    def test_top_sets_promoted_until(self):
+        tariff = _make_tariff('cb_top', 'top', '99.00', 7)
+        payment = self._create_payment(tariff)
+        cb = self._make_callback(payment)
+        self.client.post('/api/v1/payments/liqpay/callback/', cb)
+        self.listing.refresh_from_db()
+        self.assertIsNotNone(self.listing.promoted_until)
+        self.assertGreater(self.listing.promoted_until, timezone.now())
+
+    def test_bump_sets_bumped_at(self):
+        tariff = _make_tariff('cb_bump', 'bump', '29.00', 0)
+        payment = self._create_payment(tariff)
+        cb = self._make_callback(payment)
+        self.client.post('/api/v1/payments/liqpay/callback/', cb)
+        self.listing.refresh_from_db()
+        self.assertIsNotNone(self.listing.bumped_at)
+
+    def test_renew_revives_expired_listing(self):
+        self.listing.status = LocalListing.Status.EXPIRED
+        self.listing.expires_at = timezone.now() - timedelta(days=1)
+        self.listing.save(update_fields=['status', 'expires_at'])
+        tariff = _make_tariff('cb_renew2', 'renew', '49.00', 30)
+        payment = self._create_payment(tariff)
+        cb = self._make_callback(payment)
+        self.client.post('/api/v1/payments/liqpay/callback/', cb)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.ACTIVE)
+
+    def test_duplicate_callback_idempotent(self):
+        tariff = _make_tariff('cb_bump2', 'bump', '29.00', 0)
+        payment = self._create_payment(tariff)
+        cb = self._make_callback(payment)
+        self.client.post('/api/v1/payments/liqpay/callback/', cb)
+        self.listing.refresh_from_db()
+        first_bumped = self.listing.bumped_at
+        # Second call — payment already COMPLETED, callback ignored
+        self.client.post('/api/v1/payments/liqpay/callback/', cb)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.bumped_at, first_bumped)
+
+
+class TestCatalogTopSorting(APITestCase):
+    def setUp(self):
+        self.region = _make_region('sort-обл')
+        self.city = _make_city(self.region, 'sort-місто')
+        self.owner = _make_user('sort@test.com')
+
+    def test_top_listing_appears_first(self):
+        normal = _make_listing(self.owner, self.region, self.city,
+                               status_val=LocalListing.Status.ACTIVE,
+                               make='Звичайне')
+        top = _make_listing(self.owner, self.region, self.city,
+                            status_val=LocalListing.Status.ACTIVE,
+                            make='Топове')
+        top.promoted_until = timezone.now() + timedelta(days=7)
+        top.save(update_fields=['promoted_until'])
+
+        r = self.client.get('/api/v1/local/listings/')
+        self.assertEqual(r.status_code, 200)
+        ids = [item['id'] for item in r.data['results']]
+        self.assertIn(top.id, ids)
+        self.assertIn(normal.id, ids)
+        self.assertLess(ids.index(top.id), ids.index(normal.id))

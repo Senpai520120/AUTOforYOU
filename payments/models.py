@@ -12,6 +12,7 @@ class Payment(models.Model):
     class Purpose(models.TextChoices):
         LISTING_VIP = 'listing_vip', 'VIP-листинг'
         LISTING_UNLOCK = 'listing_unlock', 'Разблокировка листинга'
+        LOCAL_LISTING_PROMOTE = 'local_listing_promote', 'Просування оголошення'
         OTHER = 'other', 'Прочее'
 
     user = models.ForeignKey(
@@ -28,12 +29,26 @@ class Payment(models.Model):
         related_name='payments',
         verbose_name='Листинг',
     )
+    local_listing = models.ForeignKey(
+        'local_listings.LocalListing',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='payments',
+        verbose_name='Місцеве оголошення',
+    )
+    tariff = models.ForeignKey(
+        'local_listings.PromotionTariff',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='payments',
+        verbose_name='Тариф',
+    )
     order_id = models.CharField(max_length=100, unique=True, verbose_name='Номер заказа')
     amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Сумма')
     currency = models.CharField(max_length=3, default='USD', verbose_name='Валюта')
     description = models.CharField(max_length=255, blank=True, verbose_name='Описание')
     purpose = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=Purpose.choices,
         default=Purpose.OTHER,
         verbose_name='Назначение платежа',

@@ -276,6 +276,10 @@ AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'bro
 # ─── C2C: місцеві оголошення ──────────────────────────────────────────────────
 # Максимум активних оголошень на акаунт. Повний антиспам — C2C-промт 6.
 LOCAL_LISTING_MAX_ACTIVE = int(os.environ.get('LOCAL_LISTING_MAX_ACTIVE', '10'))
+# Фото: максимальна кількість на оголошення і розмір файлу
+LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
+LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '8'))
+LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'))
 
 # ─── Внешние API ──────────────────────────────────────────────────────────────
 # Opendatabot — реестры авто Украины. Без ключа → demo=True, не падает.
@@ -328,6 +332,16 @@ CELERY_BEAT_SCHEDULE = {
     'check-saved-searches-daily': {
         'task': 'saved_searches.tasks.check_saved_searches',
         'schedule': _crontab(hour=10, minute=0),
+    },
+    # Попередження про закінчення оголошення (за 3 дні), один раз
+    'warn-expiring-listings-daily': {
+        'task': 'local_listings.tasks.warn_expiring_listings',
+        'schedule': _crontab(hour=9, minute=15),
+    },
+    # Авто-зняття прострочених оголошень
+    'expire-listings-daily': {
+        'task': 'local_listings.tasks.expire_listings',
+        'schedule': _crontab(hour=9, minute=20),
     },
 }
 

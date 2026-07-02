@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Region(models.Model):
@@ -29,6 +32,34 @@ class City(models.Model):
     def __str__(self):
         return f'{self.name} ({self.region.name})'
 
+
+# ─── Тарифи просування ────────────────────────────────────────────────────────
+
+class PromotionTariff(models.Model):
+    class TariffType(models.TextChoices):
+        RENEW = 'renew', 'Продовження'
+        BUMP = 'bump', 'Підняти'
+        TOP = 'top', 'ТОП'
+
+    code = models.CharField(max_length=50, unique=True, verbose_name='Код')
+    name = models.CharField(max_length=100, verbose_name='Назва')
+    type = models.CharField(max_length=20, choices=TariffType.choices, verbose_name='Тип')
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Ціна')  # підігнати під реальні ціни
+    currency = models.CharField(max_length=3, default='UAH', verbose_name='Валюта')
+    duration_days = models.PositiveIntegerField(default=30, verbose_name='Днів дії')
+    description = models.TextField(blank=True, verbose_name='Опис')
+    active = models.BooleanField(default=True, verbose_name='Активний')
+
+    class Meta:
+        verbose_name = 'Тариф просування'
+        verbose_name_plural = 'Тарифи просування'
+        ordering = ['type', 'price']
+
+    def __str__(self):
+        return f'{self.name} ({self.price} {self.currency})'
+
+
+# ─── Оголошення ───────────────────────────────────────────────────────────────
 
 class LocalListing(models.Model):
     class FuelType(models.TextChoices):
@@ -72,17 +103,14 @@ class LocalListing(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Чернетка'
         ACTIVE = 'active', 'Активне'
-        # TODO: C2C-промт 2 — реалізувати модерацію (pending → active/rejected)
         PENDING = 'pending', 'На модерації'
         REJECTED = 'rejected', 'Відхилено'
-        # TODO: C2C-промт 5 — термін дії оголошення, автоматичне переведення в expired
         EXPIRED = 'expired', 'Закінчилося'
         SOLD = 'sold', 'Продано'
         HIDDEN = 'hidden', 'Приховане'
 
     class SellerType(models.TextChoices):
         PRIVATE = 'private', 'Приватна особа'
-        # TODO: верифікація дилерів буде в C2C-промтах 3/4
         DEALER = 'dealer', 'Дилер'
 
     owner = models.ForeignKey(
@@ -133,6 +161,13 @@ class LocalListing(models.Model):
     # ── Згода з правилами розміщення ──
     agreed_to_rules = models.BooleanField(default=False, verbose_name='Погодився з правилами')
     agreed_to_rules_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата згоди')
+    # ── Термін дії ──
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='Дійсне до')
+    expiry_warned = models.BooleanField(default=False, verbose_name='Попередження надіслано')
+    # ── Платне просування ──
+    promoted_until = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='ТОП до')
+    bumped_at = models.DateTimeField(null=True, blank=True, verbose_name='Піднято')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -148,6 +183,12 @@ class LocalListing(models.Model):
             models.Index(fields=['region'], name='ll_region_idx'),
             models.Index(fields=['fuel_type'], name='ll_fuel_idx'),
         ]
+
+    def save(self, *args, **kwargs):
+        if not self.pk and self.expires_at is None:
+            days = getattr(settings, 'LOCAL_LISTING_EXPIRY_DAYS', 30)
+            self.expires_at = timezone.now() + timedelta(days=days)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.make} {self.model} {self.year} — {self.price} {self.currency} [{self.status}]'

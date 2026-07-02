@@ -4,8 +4,14 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Region, City, LocalListing, LocalListingImage
+from .models import Region, City, LocalListing, LocalListingImage, PromotionTariff
 from .services import SUBSTANTIVE_FIELDS
+
+
+class PromotionTariffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PromotionTariff
+        fields = ['id', 'code', 'name', 'type', 'price', 'currency', 'duration_days', 'description']
 
 
 class RegionSerializer(serializers.ModelSerializer):
@@ -43,7 +49,9 @@ class LocalListingListSerializer(serializers.ModelSerializer):
             'price', 'currency', 'price_type',
             'region', 'region_name', 'city', 'city_name',
             'description', 'status', 'seller_type',
-            'owner_name', 'images', 'created_at', 'updated_at',
+            'owner_name', 'images',
+            'expires_at', 'promoted_until', 'bumped_at',
+            'created_at', 'updated_at',
         ]
         # contact_phone intentionally excluded from public list
 
@@ -83,7 +91,7 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
 class LocalListingOwnerSerializer(LocalListingDetailSerializer):
     """Серіалізатор для кабінету власника — бачить всі статуси та причину відхилення."""
     class Meta(LocalListingDetailSerializer.Meta):
-        pass
+        fields = LocalListingDetailSerializer.Meta.fields + ['expiry_warned']
 
 
 class LocalListingCreateSerializer(serializers.ModelSerializer):

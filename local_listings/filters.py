@@ -1,4 +1,5 @@
-from django.db.models import Q
+from django.db.models import Q, Case, When, Value, IntegerField, F
+from django.utils import timezone
 from rest_framework.filters import BaseFilterBackend
 
 
@@ -73,8 +74,23 @@ class LocalListingFilter(BaseFilterBackend):
                 Q(make__icontains=search) | Q(model__icontains=search) | Q(description__icontains=search)
             )
 
+        # Annotate is_top: 1 if promoted_until is in the future, else 0
+        now = timezone.now()
+        queryset = queryset.annotate(
+            _is_top=Case(
+                When(promoted_until__gt=now, then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+        )
+
+        # Priority: TOP → recently bumped → user-requested ordering
         allowed_orderings = {'created_at', '-created_at', 'price', '-price'}
-        if ordering in allowed_orderings:
-            queryset = queryset.order_by(ordering)
+        base_order = ordering if ordering in allowed_orderings else '-created_at'
+        queryset = queryset.order_by(
+            '-_is_top',
+            F('bumped_at').desc(nulls_last=True),
+            base_order,
+        )
 
         return queryset
