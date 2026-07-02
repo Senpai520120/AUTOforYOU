@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C-промт 1 ✓ | C2C-промт 2 ✓ | C2C-промт 3 ✓ (non-realtime месенджер: діалоги, треди, бейдж, кнопки «Написати»)
+## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ (обране, центр сповіщень, збережені пошуки + алерти)
 
 ---
 
@@ -91,12 +91,45 @@
 
 ---
 
+## C2C-промт 4 — Обране + центр сповіщень + збережені пошуки (завершено 2026-07-02)
+
+### Backend
+- [x] `notifications` app: Notification(user, type, title, text, link, is_read, created_at) — 5 типів
+- [x] `notifications/services.py`: `create_notification()`, `unread_count()`
+- [x] 3 ендпоінти: GET /api/v1/notifications/, POST mark-read, GET unread-count
+- [x] `favorites` app: Favorite(user, local_listing nullable, imported_listing nullable) + UniqueConstraint
+- [x] GET/POST/DELETE /api/v1/favorites/ + GET /api/v1/favorites/status/
+- [x] `saved_searches` app: SavedSearch(user, name, filters JSON, notify, last_notified_at)
+- [x] CRUD /api/v1/saved-searches/ + <id>/
+- [x] Celery task `check_saved_searches` щодня о 10:00: нові оголошення → Notification + send_notification. Ідемпотентно через last_notified_at
+- [x] messaging/services.py → також створює NEW_MESSAGE Notification для отримувача
+- [x] local_listings/services.py → approve/reject також створює LISTING_APPROVED/REJECTED Notification
+- [x] **28 нових тестів; 284 тести всього — OK**
+
+### Frontend
+- [x] `api/notifications.ts`, `api/favorites.ts`, `api/saved-searches.ts`
+- [x] `app/me/notifications/` — центр сповіщень (list, mark-read, mark-all, icons per type)
+- [x] `app/me/favorites/` — список обраного з кнопкою «Прибрати»
+- [x] `app/me/saved-searches/` — список збережених пошуків, toggle notify, delete, «Відкрити пошук»
+- [x] `HeartButton.tsx` — серце на картках/деталях (local + imported), polling статусу
+- [x] `SaveSearchButton.tsx` — «Зберегти пошук» на /ua (видно тільки при активних фільтрах)
+- [x] Header: колокольчик сповіщень + бейдж (polling 30с) поряд з іконкою чату
+- [x] **27 Next.js роутів, 0 TS-помилок, npm run build OK**
+
+### Допущення (C2C-4)
+- Saved searches перевіряються щодня о 10:00 Kyiv time (Celery beat, EAGER у dev/тестах)
+- Сповіщення зберігаються останні 50 (лімітовано в API); архівація/пагінація — майбутня ітерація
+- HeartButton для авторизованих: не-авторизований → redirect to /login
+
+---
+
 ## Дальше (C2C-черга)
 
 | # | Промт | Що робити |
 |---|-------|-----------|
 | ~~C2C-3~~ | ~~Повідомлення~~ | ~~Non-realtime чат~~ ✓ |
-| **C2C-4** | **Верифікація дилерів** | LocalListing.seller_type=dealer + верифікація |
+| ~~C2C-4~~ | ~~Обране + сповіщення~~ | ✓ |
+| **C2C-5** | **Строк дії оголошення** | auto-expired після 30 днів, попередження за 3 дні, платне продовження (LiqPay) |
 | C2C-5 | Строк дії | auto-expired після N днів, продовження оголошення |
 | C2C-6 | Захист контактів | Телефон тільки авторизованим + антиспам |
 | C2C-7 | Монетизація | Платне просування, підняття в топ (LiqPay) |

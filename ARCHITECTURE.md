@@ -1,5 +1,27 @@
 # AUTOforYOU — Архитектура
 
+## Favorites / Notifications / Saved Searches (C2C-промт 4)
+
+### favorites app
+- `Favorite(user, local_listing nullable FK, imported_listing nullable FK, created_at)`. UniqueConstraint на (user, local_listing) та (user, imported_listing).
+- API: GET/POST/DELETE `/api/v1/favorites/` + GET `/api/v1/favorites/status/`
+- Frontend: `HeartButton` на деталях local/imported оголошень. Список у `/me/favorites`.
+
+### notifications app
+- `Notification(user, type, title, text, link, is_read, created_at)`.
+- Типи: `new_message`, `listing_approved`, `listing_rejected`, `listing_expiring` (заглушка C2C-5), `saved_search_match`.
+- `create_notification(user_id, type, title, text, link)` — сервісна функція; викликається з messaging та local_listings.
+- API: GET `/api/v1/notifications/`, POST `mark-read/`, GET `unread-count/`
+- Frontend: колокольчик у Header з бейджем (polling 30с). Сторінка `/me/notifications`.
+
+### saved_searches app
+- `SavedSearch(user, name, filters JSON, notify bool, last_notified_at, created_at)`.
+- API CRUD: `/api/v1/saved-searches/` + `<id>/`
+- Celery beat task `check_saved_searches` щодня о 10:00: для кожного SavedSearch(notify=True) знаходить LocalListing.created_at > last_notified_at → `create_notification()` + `send_notification.delay()`. Ідемпотентно — оновлює last_notified_at після обробки.
+- Frontend: `SaveSearchButton` на `/ua` (видима тільки при активних URL-фільтрах). Список у `/me/saved-searches`.
+
+---
+
 ## Messaging — non-realtime месенджер (C2C-промт 3)
 
 ### Моделі
