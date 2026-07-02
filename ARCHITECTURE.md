@@ -1,5 +1,42 @@
 # AUTOforYOU — Архитектура
 
+## Messaging — non-realtime месенджер (C2C-промт 3)
+
+### Моделі
+- `Conversation`: initiator FK, local_listing FK (nullable), imported_listing FK (nullable), participants M2M, last_message_at, created_at. UniqueConstraint на (initiator, local_listing) та (initiator, imported_listing).
+- `Message`: conversation FK, sender FK, text, created_at, read_at (nullable).
+
+### Бізнес-логіка (messaging/services.py)
+- `get_or_create_conversation(initiator, listing_type, listing_id, first_text)` — один діалог на пару (покупець, оголошення); повторний start відкриває той самий.
+- Місцеве оголошення → participants: покупець + автор. Заборона писати самому собі.
+- Імпортне оголошення → participants: покупець + перший admin. Всі адміни бачать через queryset.
+- `mark_as_read(user, conv)` — позначає вхідні прочитаними при відкритті.
+- `unread_count_for_user(user)` — для бейджа.
+- `_add_message` → `_notify_recipients`: тригерить `send_notification.delay` для всіх отримувачів.
+- `# Anti-spam (phone/link filter) — повноцінно C2C-промт 6` — заглушка в коді.
+
+### Ендпоінти (messaging/urls.py → /api/v1/messages/)
+```
+POST /api/v1/messages/start/                   # почати/відкрити діалог
+GET  /api/v1/messages/conversations/           # мої діалоги
+GET  /api/v1/messages/conversations/<id>/      # читати + позначити прочитаними
+POST /api/v1/messages/conversations/<id>/      # надіслати повідомлення
+GET  /api/v1/messages/unread-count/            # бейдж
+```
+Throttle scope `messages`: 30/год (env `THROTTLE_MESSAGES_RATE`).
+
+### Фронтенд
+- `app/me/messages/` — split-pane месенджер: список діалогів (зліва) + тред + поле вводу (справа). Polling 15 с, без WebSocket.
+- `components/messaging/WriteSellerButton.tsx` — модальне вікно з першим повідомленням → redirect до треду.
+- Кнопка «Написати продавцю» на `/local/[id]` (не власник, статус active).
+- Кнопка «Написати менеджеру» на `/listings/[id]` (імпортне оголошення).
+- Бейдж непрочитаних у Header (polling 30 с).
+
+### Real-time — можлива 2-я ітерація
+WebSocket/SSE — не реалізовано. Поточна версія non-realtime: нові повідомлення з'являються при відкритті/оновленні діалогу або через polling.
+
+---
+
 ## C2C-модуль (C2C-промт 1)
 
 ### Рішення: LocalListing — окремий додаток, не розширення Listing

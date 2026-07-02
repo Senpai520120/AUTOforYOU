@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C-промт 1 ✓ | C2C-промт 2 ✓ (модерація: pending→active/rejected, адмін-черга, сповіщення, кабінет)
+## Статус: ФАЗА 2 ✓ | C2C-промт 1 ✓ | C2C-промт 2 ✓ | C2C-промт 3 ✓ (non-realtime месенджер: діалоги, треди, бейдж, кнопки «Написати»)
 
 ---
 
@@ -62,12 +62,41 @@
 
 ---
 
+## C2C-промт 3 — Повідомлення (завершено 2026-07-02)
+
+### Backend
+- [x] `messaging` Django-додаток: Conversation + Message моделі
+- [x] Один діалог на пару (ініціатор, оголошення) — UniqueConstraint
+- [x] Місцеве: покупець ↔ автор; імпортне: покупець ↔ перший адмін (всі адміни бачать)
+- [x] Заборона писати самому собі по своєму оголошенню
+- [x] `mark_as_read` при відкритті діалогу
+- [x] `unread_count_for_user` для бейджа
+- [x] Сповіщення через `send_notification.delay` при кожному новому повідомленні
+- [x] Anti-spam throttle scope `messages` 30/год + заглушка фільтра посилань (`# C2C-промт 6`)
+- [x] 5 ендпоінтів: start, list, detail, post, unread-count
+- [x] ConversationAdmin + MessageInline в Django Admin
+- [x] **23 тести всього для messaging — OK; 256 тестів по всьому проекту — OK**
+
+### Frontend
+- [x] `api/messages.ts`: getConversations, getConversation, sendMessage, startConversation, getUnreadCount
+- [x] `lib/types.ts`: ConversationSummary, ConversationDetail, ChatMessage, MessageParticipant
+- [x] `app/me/messages/` — split-pane месенджер: список діалогів + тред + поле вводу
+- [x] Polling 15 с на активний тред, polling 30 с на бейдж (без WebSocket)
+- [x] `WriteSellerButton.tsx` — модальне вікно для першого повідомлення → redirect до треду
+- [x] «Написати продавцю» на сторінці місцевого оголошення (не власник, active)
+- [x] «Написати менеджеру» на сторінці імпортного оголошення
+- [x] Бейдж непрочитаних у Header (іконка чату з лічильником)
+- [x] «Повідомлення» у меню кабінету `/me`
+- [x] **24 Next.js роути, 0 TS-помилок, npm run build OK**
+
+---
+
 ## Дальше (C2C-черга)
 
 | # | Промт | Що робити |
 |---|-------|-----------|
-| **C2C-3** | **Повідомлення** | **Non-realtime чат: діалоги покупець↔автор і покупець↔адмін** |
-| C2C-4 | Верифікація дилерів | LocalListing.seller_type=dealer + верифікація |
+| ~~C2C-3~~ | ~~Повідомлення~~ | ~~Non-realtime чат~~ ✓ |
+| **C2C-4** | **Верифікація дилерів** | LocalListing.seller_type=dealer + верифікація |
 | C2C-5 | Строк дії | auto-expired після N днів, продовження оголошення |
 | C2C-6 | Захист контактів | Телефон тільки авторизованим + антиспам |
 | C2C-7 | Монетизація | Платне просування, підняття в топ (LiqPay) |
