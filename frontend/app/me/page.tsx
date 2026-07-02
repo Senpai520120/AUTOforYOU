@@ -15,7 +15,10 @@ export default function MePage() {
   if (loading || !user) return null;
 
   const menuItems = [
+    { href: '/me/notifications', icon: '🔔', title: 'Сповіщення', desc: 'Алерти про оголошення, повідомлення' },
     { href: '/me/messages', icon: '💬', title: 'Повідомлення', desc: 'Переписка по оголошеннях' },
+    { href: '/me/favorites', icon: '♥', title: 'Обране', desc: 'Збережені оголошення' },
+    { href: '/me/saved-searches', icon: '🔍', title: 'Збережені пошуки', desc: 'Алерти про нові авто' },
     { href: '/me/local-listings', icon: '📋', title: 'Мої оголошення', desc: 'Каталог Україна — мої авто' },
     { href: '/me/calculations', icon: '🧮', title: 'Мої розрахунки', desc: 'Історія калькуляцій' },
     { href: '/me/trusted-shops', icon: '🔧', title: 'Мої партнери', desc: 'СТО, маляри, запчастини' },

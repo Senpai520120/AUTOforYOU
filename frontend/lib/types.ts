@@ -267,6 +267,50 @@ export interface StartConversationResult {
   created: boolean;
 }
 
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'new_message'
+  | 'listing_approved'
+  | 'listing_rejected'
+  | 'listing_expiring'
+  | 'saved_search_match';
+
+export interface AppNotification {
+  id: number;
+  type: NotificationType;
+  title: string;
+  text: string;
+  link: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+// ─── Favorites ───────────────────────────────────────────────────────────────
+
+export interface FavoriteItem {
+  id: number;
+  listing_type: 'local' | 'imported';
+  listing_id: number;
+  title: string;
+  url: string;
+  price: string | null;
+  currency: string | null;
+  image_url: string | null;
+  created_at: string;
+}
+
+// ─── Saved searches ──────────────────────────────────────────────────────────
+
+export interface SavedSearch {
+  id: number;
+  name: string;
+  filters: Record<string, string>;
+  notify: boolean;
+  last_notified_at: string | null;
+  created_at: string;
+}
+
 export interface VinPrefillResult {
   make: string | null;
   model: string | null;

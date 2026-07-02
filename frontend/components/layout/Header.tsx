@@ -3,18 +3,21 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { getUnreadCount } from '@/api/messages';
+import { getUnreadCount as getMsgUnread } from '@/api/messages';
+import { getUnreadCount as getNotifUnread } from '@/api/notifications';
 
 export default function Header() {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [unread, setUnread] = useState(0);
+  const [msgUnread, setMsgUnread] = useState(0);
+  const [notifUnread, setNotifUnread] = useState(0);
 
   useEffect(() => {
-    if (!user) { setUnread(0); return; }
+    if (!user) { setMsgUnread(0); setNotifUnread(0); return; }
     let cancelled = false;
     const load = () => {
-      getUnreadCount().then(d => { if (!cancelled) setUnread(d.unread_count); }).catch(() => {});
+      getMsgUnread().then(d => { if (!cancelled) setMsgUnread(d.unread_count); }).catch(() => {});
+      getNotifUnread().then(d => { if (!cancelled) setNotifUnread(d.unread_count); }).catch(() => {});
     };
     load();
     const interval = setInterval(load, 30000);
@@ -51,13 +54,25 @@ export default function Header() {
         <div className="flex items-center gap-3 text-sm">
           {user ? (
             <>
+              {/* Notifications bell */}
+              <Link href="/me/notifications" className="relative hover:text-amber-400 transition-colors" aria-label="Сповіщення">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {notifUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                    {notifUnread > 9 ? '9+' : notifUnread}
+                  </span>
+                )}
+              </Link>
+              {/* Chat icon */}
               <Link href="/me/messages" className="relative hover:text-amber-400 transition-colors" aria-label="Повідомлення">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
-                {unread > 0 && (
+                {msgUnread > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                    {unread > 9 ? '9+' : unread}
+                    {msgUnread > 9 ? '9+' : msgUnread}
                   </span>
                 )}
               </Link>
@@ -68,17 +83,17 @@ export default function Header() {
                 onClick={handleLogout}
                 className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors"
               >
-                Выйти
+                Вийти
               </button>
             </>
           ) : (
             <>
-              <Link href="/login" className="hover:text-amber-400 transition-colors">Войти</Link>
+              <Link href="/login" className="hover:text-amber-400 transition-colors">Увійти</Link>
               <Link
                 href="/register"
                 className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded font-semibold text-xs transition-colors"
               >
-                Регистрация
+                Реєстрація
               </Link>
             </>
           )}

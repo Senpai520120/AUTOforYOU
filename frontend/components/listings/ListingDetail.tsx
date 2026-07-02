@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Listing } from '@/lib/types';
 import Badge from '@/components/ui/Badge';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
+import HeartButton from '@/components/favorites/HeartButton';
 
 const FUEL: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид',
@@ -112,6 +113,9 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
               Порахувати вартість
             </Link>
             <WriteSellerButton listingType="imported" listingId={listing.id} />
+            <div className="flex justify-center">
+              <HeartButton listingType="imported" listingId={listing.id} />
+            </div>
           </div>
         </div>
       </div>
