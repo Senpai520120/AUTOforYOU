@@ -224,6 +224,49 @@ export interface LocalListingFilters {
   page?: number;
 }
 
+// ─── Messaging ───────────────────────────────────────────────────────────────
+
+export interface MessageParticipant {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  sender: number;
+  sender_name: string;
+  text: string;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface ConversationSummary {
+  id: number;
+  subject_title: string;
+  subject_url: string;
+  other_participant: MessageParticipant | null;
+  last_message_text: string;
+  last_message_at: string;
+  unread_count: number;
+}
+
+export interface ConversationDetail {
+  id: number;
+  subject_title: string;
+  subject_url: string;
+  participants: MessageParticipant[];
+  messages: ChatMessage[];
+  created_at: string;
+  last_message_at: string;
+}
+
+export interface StartConversationResult {
+  conversation_id: number;
+  created: boolean;
+}
+
 export interface VinPrefillResult {
   make: string | null;
   model: string | null;

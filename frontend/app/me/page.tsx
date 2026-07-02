@@ -15,6 +15,7 @@ export default function MePage() {
   if (loading || !user) return null;
 
   const menuItems = [
+    { href: '/me/messages', icon: '💬', title: 'Повідомлення', desc: 'Переписка по оголошеннях' },
     { href: '/me/local-listings', icon: '📋', title: 'Мої оголошення', desc: 'Каталог Україна — мої авто' },
     { href: '/me/calculations', icon: '🧮', title: 'Мої розрахунки', desc: 'Історія калькуляцій' },
     { href: '/me/trusted-shops', icon: '🔧', title: 'Мої партнери', desc: 'СТО, маляри, запчастини' },

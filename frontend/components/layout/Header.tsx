@@ -2,10 +2,24 @@
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { getUnreadCount } from '@/api/messages';
 
 export default function Header() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!user) { setUnread(0); return; }
+    let cancelled = false;
+    const load = () => {
+      getUnreadCount().then(d => { if (!cancelled) setUnread(d.unread_count); }).catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user]);
 
   const handleLogout = () => {
     logout();
@@ -37,6 +51,16 @@ export default function Header() {
         <div className="flex items-center gap-3 text-sm">
           {user ? (
             <>
+              <Link href="/me/messages" className="relative hover:text-amber-400 transition-colors" aria-label="Повідомлення">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                {unread > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </Link>
               <Link href="/me" className="hover:text-amber-400 transition-colors">
                 {user.email.split('@')[0]}
               </Link>

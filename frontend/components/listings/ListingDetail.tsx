@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Listing } from '@/lib/types';
 import Badge from '@/components/ui/Badge';
+import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 
 const FUEL: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид',
@@ -103,13 +104,14 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
             </div>
           )}
 
-          <div className="mt-6 flex gap-3 flex-wrap">
+          <div className="mt-6 flex flex-col gap-3">
             <Link
               href={`/calculator?price=${listing.price}&engine_cc=${v.engine_cc}&fuel_type=${v.fuel_type}&year=${v.year}`}
-              className="bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm"
+              className="bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm text-center"
             >
               Порахувати вартість
             </Link>
+            <WriteSellerButton listingType="imported" listingId={listing.id} />
           </div>
         </div>
       </div>

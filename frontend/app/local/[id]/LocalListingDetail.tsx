@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { LocalListing } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 
 const PLACEHOLDER_SVG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%2394a3b8'%3EФото відсутнє%3C/text%3E%3C/svg%3E";
@@ -143,6 +144,12 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               )}
             </div>
           </div>
+
+          {!isOwner && listing.status === 'active' && (
+            <div className="mt-3">
+              <WriteSellerButton listingType="local" listingId={listing.id} />
+            </div>
+          )}
 
           {isOwner && (
             <div className="mt-3 flex gap-2">
