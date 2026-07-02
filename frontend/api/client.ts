@@ -66,3 +66,15 @@ export function apiPatch<T>(path: string, body: unknown) {
 export function apiDelete(path: string) {
   return apiFetch<void>(path, { method: 'DELETE' });
 }
+
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const access = localStorage.getItem('access');
+  const headers: Record<string, string> = {};
+  if (access) headers['Authorization'] = `Bearer ${access}`;
+  const res = await fetch(`${API}${path}`, { method: 'POST', headers, body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(res.statusText), { status: res.status, data: err });
+  }
+  return res.json();
+}

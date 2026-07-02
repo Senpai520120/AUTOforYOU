@@ -1,14 +1,18 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
+from django.conf import settings
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
 from .filters import LocalListingFilter
-from .models import LocalListing, Region, City
+from .models import LocalListing, LocalListingImage, Region, City
 from .serializers import (
+    LocalListingImageSerializer,
     LocalListingListSerializer,
     LocalListingDetailSerializer,
     LocalListingCreateSerializer,
@@ -165,3 +169,111 @@ class CityListView(generics.ListAPIView):
     def get_queryset(self):
         region_id = self.kwargs.get('region_id')
         return City.objects.filter(region_id=region_id).select_related('region')
+
+
+# ─── Фото оголошень ───────────────────────────────────────────────────────────
+
+ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
+
+
+def _get_owned_listing(pk, user):
+    listing = get_object_or_404(LocalListing, pk=pk)
+    if listing.owner != user and not user.is_staff:
+        return None, Response({'detail': 'Тільки власник може керувати фото.'}, status=status.HTTP_403_FORBIDDEN)
+    return listing, None
+
+
+@extend_schema(
+    tags=['local'],
+    summary='Завантажити фото до оголошення (multipart)',
+    description='Завантажити одне або кілька фото. Перше фото стає головним, якщо головного ще немає.',
+)
+class LocalListingImageUploadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pk):
+        listing, err = _get_owned_listing(pk, request.user)
+        if err:
+            return err
+
+        files = request.FILES.getlist('images')
+        if not files:
+            return Response({'detail': 'Файли не передані (поле: images).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        max_photos = getattr(settings, 'LOCAL_LISTING_MAX_PHOTOS', 15)
+        max_size_mb = getattr(settings, 'LOCAL_LISTING_PHOTO_MAX_SIZE_MB', 8)
+        max_size_bytes = max_size_mb * 1024 * 1024
+
+        current_count = listing.images.count()
+        if current_count + len(files) > max_photos:
+            return Response(
+                {'detail': f'Перевищено ліміт {max_photos} фото. Зараз: {current_count}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        errors = []
+        for f in files:
+            if f.content_type not in ALLOWED_IMAGE_TYPES:
+                errors.append(f'{f.name}: тип {f.content_type} не підтримується (тільки jpg/png/webp).')
+            if f.size > max_size_bytes:
+                errors.append(f'{f.name}: розмір {f.size // 1024 // 1024} МБ перевищує ліміт {max_size_mb} МБ.')
+        if errors:
+            return Response({'detail': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        has_primary = listing.images.filter(is_primary=True).exists()
+        created = []
+        for i, f in enumerate(files):
+            is_primary = not has_primary and i == 0
+            img = LocalListingImage.objects.create(
+                listing=listing,
+                image=f,
+                is_primary=is_primary,
+            )
+            if is_primary:
+                has_primary = True
+            created.append(img)
+
+        return Response(
+            LocalListingImageSerializer(created, many=True).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(
+    tags=['local'],
+    summary='Видалити або призначити головним фото оголошення',
+)
+class LocalListingImageDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get(self, pk, img_id, user):
+        listing, err = _get_owned_listing(pk, user)
+        if err:
+            return None, None, err
+        img = get_object_or_404(LocalListingImage, pk=img_id, listing=listing)
+        return listing, img, None
+
+    def delete(self, request, pk, img_id):
+        _, img, err = self._get(pk, img_id, request.user)
+        if err:
+            return err
+        was_primary = img.is_primary
+        img.delete()
+        # якщо видалили головне — зробити наступне головним
+        if was_primary:
+            remaining = LocalListingImage.objects.filter(listing_id=pk).order_by('created_at').first()
+            if remaining:
+                remaining.is_primary = True
+                remaining.save(update_fields=['is_primary'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, pk, img_id):
+        """Призначити фото головним (is_primary=true). Знімає прапор з решти."""
+        listing, img, err = self._get(pk, img_id, request.user)
+        if err:
+            return err
+        LocalListingImage.objects.filter(listing=listing, is_primary=True).update(is_primary=False)
+        img.is_primary = True
+        img.save(update_fields=['is_primary'])
+        return Response(LocalListingImageSerializer(img).data)

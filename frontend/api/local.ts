@@ -1,7 +1,8 @@
-import { apiFetch, apiGet, apiPost, apiPatch, apiDelete } from './client';
+import { apiFetch, apiGet, apiPost, apiPatch, apiDelete, apiUpload } from './client';
 import {
   LocalListing,
   LocalListingFilters,
+  LocalListingImage,
   PaginatedResponse,
   Region,
   City,
@@ -44,4 +45,16 @@ export const localApi = {
 
   myListings: () =>
     apiGet<PaginatedResponse<LocalListing>>('/api/v1/local/my-listings/'),
+
+  uploadImages: (listingId: number, files: File[]) => {
+    const fd = new FormData();
+    files.forEach(f => fd.append('images', f));
+    return apiUpload<LocalListingImage[]>(`/api/v1/local/listings/${listingId}/images/`, fd);
+  },
+
+  deleteImage: (listingId: number, imgId: number) =>
+    apiDelete(`/api/v1/local/listings/${listingId}/images/${imgId}/`),
+
+  setPrimaryImage: (listingId: number, imgId: number) =>
+    apiFetch<LocalListingImage>(`/api/v1/local/listings/${listingId}/images/${imgId}/`, { method: 'PATCH' }),
 };

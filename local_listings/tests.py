@@ -437,3 +437,146 @@ class TestRegionsAPI(APITestCase):
         City.objects.create(region=region, name='Тест-місто', slug='test-city-api')
         r = self.client.get(f'/api/v1/local/regions/{region.pk}/cities/')
         self.assertEqual(len(r.data), 1)
+
+
+# ─── Тест: фото оголошень ─────────────────────────────────────────────────────
+
+import io
+from PIL import Image as PILImage
+from .models import LocalListingImage
+
+
+def _make_image_file(name='photo.jpg', fmt='JPEG', size=(100, 100), content_type='image/jpeg'):
+    buf = io.BytesIO()
+    img = PILImage.new('RGB', size, color=(200, 100, 50))
+    img.save(buf, format=fmt)
+    buf.seek(0)
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    return SimpleUploadedFile(name, buf.read(), content_type=content_type)
+
+
+class TestListingImageUpload(APITestCase):
+    def setUp(self):
+        self.owner = _make_user('owner@img.com')
+        self.other = _make_user('other@img.com')
+        self.admin = _make_admin('adm@img.com')
+        region = _make_region('img-область')
+        city = _make_city(region, 'img-місто')
+        self.listing = _make_listing(self.owner, region, city)
+        self.url = f'/api/v1/local/listings/{self.listing.pk}/images/'
+
+    def _auth(self, user):
+        _auth(self.client, user)
+
+    def test_upload_single_image_owner(self):
+        self._auth(self.owner)
+        r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(len(r.data), 1)
+        self.assertTrue(r.data[0]['is_primary'])
+
+    def test_first_image_becomes_primary(self):
+        self._auth(self.owner)
+        self.client.post(self.url, {'images': _make_image_file('a.jpg')}, format='multipart')
+        self.client.post(self.url, {'images': _make_image_file('b.jpg')}, format='multipart')
+        imgs = LocalListingImage.objects.filter(listing=self.listing)
+        self.assertEqual(imgs.filter(is_primary=True).count(), 1)
+
+    def test_upload_multiple_images(self):
+        self._auth(self.owner)
+        files = [_make_image_file(f'p{i}.jpg') for i in range(3)]
+        r = self.client.post(self.url, {'images': files}, format='multipart')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(len(r.data), 3)
+
+    def test_non_owner_gets_403(self):
+        self._auth(self.other)
+        r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+        self.assertEqual(r.status_code, 403)
+
+    def test_unauthenticated_gets_401(self):
+        r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+        self.assertEqual(r.status_code, 401)
+
+    def test_wrong_content_type_rejected(self):
+        self._auth(self.owner)
+        bad = _make_image_file('file.gif', fmt='GIF', content_type='image/gif')
+        r = self.client.post(self.url, {'images': bad}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+
+    def test_no_files_returns_400(self):
+        self._auth(self.owner)
+        r = self.client.post(self.url, {}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+
+    def test_exceeding_limit_rejected(self):
+        self._auth(self.owner)
+        for i in range(15):
+            LocalListingImage.objects.create(listing=self.listing, image=f'fake{i}.jpg')
+        r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('ліміт', r.data['detail'])
+
+    def test_admin_can_upload(self):
+        self._auth(self.admin)
+        r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+        self.assertEqual(r.status_code, 201)
+
+
+class TestListingImageDelete(APITestCase):
+    def setUp(self):
+        self.owner = _make_user('del_owner@img.com')
+        self.other = _make_user('del_other@img.com')
+        region = _make_region('del-область')
+        city = _make_city(region, 'del-місто')
+        self.listing = _make_listing(self.owner, region, city)
+        self.img1 = LocalListingImage.objects.create(listing=self.listing, image='a.jpg', is_primary=True)
+        self.img2 = LocalListingImage.objects.create(listing=self.listing, image='b.jpg', is_primary=False)
+
+    def _url(self, img_id):
+        return f'/api/v1/local/listings/{self.listing.pk}/images/{img_id}/'
+
+    def test_delete_non_primary(self):
+        _auth(self.client, self.owner)
+        r = self.client.delete(self._url(self.img2.pk))
+        self.assertEqual(r.status_code, 204)
+        self.assertFalse(LocalListingImage.objects.filter(pk=self.img2.pk).exists())
+
+    def test_delete_primary_promotes_next(self):
+        _auth(self.client, self.owner)
+        self.client.delete(self._url(self.img1.pk))
+        self.img2.refresh_from_db()
+        self.assertTrue(self.img2.is_primary)
+
+    def test_non_owner_delete_gets_403(self):
+        _auth(self.client, self.other)
+        r = self.client.delete(self._url(self.img1.pk))
+        self.assertEqual(r.status_code, 403)
+
+
+class TestListingImageSetPrimary(APITestCase):
+    def setUp(self):
+        self.owner = _make_user('prim_owner@img.com')
+        region = _make_region('prim-область')
+        city = _make_city(region, 'prim-місто')
+        self.listing = _make_listing(self.owner, region, city)
+        self.img1 = LocalListingImage.objects.create(listing=self.listing, image='x.jpg', is_primary=True)
+        self.img2 = LocalListingImage.objects.create(listing=self.listing, image='y.jpg', is_primary=False)
+
+    def _url(self, img_id):
+        return f'/api/v1/local/listings/{self.listing.pk}/images/{img_id}/'
+
+    def test_set_primary(self):
+        _auth(self.client, self.owner)
+        r = self.client.patch(self._url(self.img2.pk))
+        self.assertEqual(r.status_code, 200)
+        self.img1.refresh_from_db()
+        self.img2.refresh_from_db()
+        self.assertFalse(self.img1.is_primary)
+        self.assertTrue(self.img2.is_primary)
+
+    def test_non_owner_set_primary_gets_403(self):
+        other = _make_user('prim_other@img.com')
+        _auth(self.client, other)
+        r = self.client.patch(self._url(self.img2.pk))
+        self.assertEqual(r.status_code, 403)

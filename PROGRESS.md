@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ (обране, центр сповіщень, збережені пошуки + алерти)
+## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ | C2C-Extra ✓ (завантаження фото LocalListing)
 
 ---
 
@@ -120,6 +120,27 @@
 - Saved searches перевіряються щодня о 10:00 Kyiv time (Celery beat, EAGER у dev/тестах)
 - Сповіщення зберігаються останні 50 (лімітовано в API); архівація/пагінація — майбутня ітерація
 - HeartButton для авторизованих: не-авторизований → redirect to /login
+
+---
+
+## C2C-Extra — Фото LocalListing (завершено 2026-07-02)
+
+### Backend
+- [x] `POST /api/v1/local/listings/<pk>/images/` — завантаження одного/кількох фото (multipart)
+- [x] `DELETE /api/v1/local/listings/<pk>/images/<img_id>/` — видалення; авто-просування наступного в головне
+- [x] `PATCH /api/v1/local/listings/<pk>/images/<img_id>/` — призначити головним (знімає з решти)
+- [x] Валідація: jpg/png/webp, ≤8 МБ, ≤15 фото; env-overridable (`LOCAL_LISTING_MAX_PHOTOS`, `LOCAL_LISTING_PHOTO_MAX_SIZE_MB`)
+- [x] Перше фото авто-primary якщо жодного немає
+- [x] Тільки власник або адмін; чужий → 403
+- [x] 14 нових тестів (upload/delete/set-primary/limit/type/403); **298 тестів всього — OK**
+
+### Frontend
+- [x] `api/client.ts`: `apiUpload()` — multipart POST без Content-Type header (дозволяє браузеру встановити boundary)
+- [x] `api/local.ts`: `uploadImages()`, `deleteImage()`, `setPrimaryImage()`
+- [x] `PhotoUploadBlock.tsx` — блок для edit mode: сітка превью, hover-кнопки «Гол.» / «✕», авто-рефреш
+- [x] `CreateModePhotoPicker` (inline в LocalListingForm) — буферує файли до submit, превью з blob URL
+- [x] `LocalListingForm.tsx` — edit mode: `<PhotoUploadBlock>` з існуючими фото; create mode: `<CreateModePhotoPicker>`, фото завантажуються після create
+- [x] **27 Next.js роутів, 0 TS-помилок, npm run build OK**
 
 ---
 

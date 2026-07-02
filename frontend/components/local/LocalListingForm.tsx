@@ -1,8 +1,64 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
-import { Region, City, LocalListing } from '@/lib/types';
+import { Region, City, LocalListing, LocalListingImage } from '@/lib/types';
+import PhotoUploadBlock from './PhotoUploadBlock';
+
+function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? []);
+    const next = [...files, ...selected].slice(0, 15);
+    setFiles(next);
+    onChange(next);
+  }
+
+  function remove(idx: number) {
+    const next = files.filter((_, i) => i !== idx);
+    setFiles(next);
+    onChange(next);
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={files.length >= 15}
+          className="text-sm bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors"
+        >
+          + Вибрати фото
+        </button>
+        <span className="text-xs text-slate-400">{files.length}/15 · jpg/png/webp · до 8 МБ</span>
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={handleChange} />
+      </div>
+      {files.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {files.map((f, i) => (
+            <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={URL.createObjectURL(f)} alt={f.name} className="object-cover w-full h-full" />
+              {i === 0 && (
+                <span className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Головне</span>
+              )}
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="absolute top-1 right-1 bg-white/90 hover:bg-white text-red-600 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   initial?: Partial<LocalListing>;
@@ -41,6 +97,11 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // photo upload: in edit mode listingId is known upfront; in create mode we get it after creation
+  const [createdListingId, setCreatedListingId] = useState<number | null>(listingId ?? null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [photoError, setPhotoError] = useState('');
 
   useEffect(() => {
     localApi.regions().then(setRegions).catch(() => {});
@@ -91,7 +152,15 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         await localApi.update(listingId, payload);
         router.push(`/local/${listingId}`);
       } else {
-        await localApi.create(payload);
+        const created = await localApi.create(payload);
+        setCreatedListingId(created.id);
+        if (pendingFiles.length > 0) {
+          try {
+            await localApi.uploadImages(created.id, pendingFiles);
+          } catch {
+            setPhotoError('Оголошення створено, але фото не завантажились. Додайте їх у «Мої оголошення».');
+          }
+        }
         setSubmitted(true);
         return;
       }
@@ -275,6 +344,20 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </select>
           {errors.city && <p className={errCls}>{errors.city}</p>}
         </div>
+      </div>
+
+      {/* Photo block — edit mode: immediate upload; create mode: buffer until submit */}
+      <div>
+        <label className={labelCls}>Фото</label>
+        {isEdit && createdListingId ? (
+          <PhotoUploadBlock
+            listingId={createdListingId}
+            initial={(initial as LocalListing | undefined)?.images ?? []}
+          />
+        ) : (
+          <CreateModePhotoPicker onChange={setPendingFiles} />
+        )}
+        {photoError && <p className="text-xs text-red-600 mt-1">{photoError}</p>}
       </div>
 
       <div>
