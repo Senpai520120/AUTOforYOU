@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ | C2C-Extra ✓ (завантаження фото LocalListing)
+## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ | C2C-Extra ✓ | C2C-5 ✓ (lifecycle + платне просування SANDBOX)
 
 ---
 
@@ -144,16 +144,45 @@
 
 ---
 
+## C2C-промт 5 — Lifecycle + платне просування (завершено 2026-07-02)
+
+### Backend
+- [x] `LocalListing`: `expires_at` (created_at + 30 дн., `LOCAL_LISTING_EXPIRY_DAYS`), `expiry_warned`, `promoted_until`, `bumped_at`
+- [x] `PromotionTariff(code, name, type[renew/bump/top], price, currency, duration_days)` — редагується в адмінці
+- [x] Data migration: 4 seed-тарифи (заглушки ціни; підігнати перед продом)
+- [x] Celery beat: `warn_expiring_listings` (за 3 дні, один раз) о 9:15 + `expire_listings` (авто-зняття) о 9:20
+- [x] `Payment`: +`local_listing` FK, +`tariff` FK, +`LOCAL_LISTING_PROMOTE` purpose
+- [x] `POST /api/v1/local/listings/<pk>/promote/` → Payment + LiqPay checkout (тільки власник)
+- [x] `GET /api/v1/local/tariffs/` — список активних тарифів
+- [x] LiqPay callback: застосовує ефект тарифу (renew→extends expires_at, top→promoted_until, bump→bumped_at); idempotent
+- [x] Сортування /ua: TOP (promoted_until > now) → bumped_at → created_at; фільтри не зламані
+- [x] 16 нових тестів; **314 тестів всього — OK**
+
+### Frontend
+- [x] `types.ts`: `expires_at`, `expiry_warned`, `promoted_until`, `bumped_at`, `PromotionTariff`, `PromoteCheckout`
+- [x] `api/local.ts`: `tariffs()`, `promote()`
+- [x] `LocalListingCard`: ТОП-бейдж (золота рамка + мітка «ТОП»)
+- [x] `PromoteModal`: вибір тарифу → redirect на LiqPay checkout; **sandbox-попередження** жирним
+- [x] `/me/local-listings`: термін дії, ⚠️ за 3 дні, кнопки «Продовжити» (expired/expiring) / «Підняти» / «ТОП»
+- [x] **27 Next.js роутів, 0 TS-помилок, npm run build OK**
+
+### Архітектурне рішення
+- Тарифи в БД (не хардкод) — ціни змінюються без деплою
+- `_apply_local_listing_promote()` у `payments/views.py` — логіка callback у одному місці
+- Idempotency: повторний COMPLETED-колбек ігнорується (Payment вже COMPLETED)
+- **SANDBOX**: `LIQPAY_SANDBOX=true` за замовчуванням. LiqPay не достукається до localhost — повноцінний тест тільки на публічному URL
+
+---
+
 ## Дальше (C2C-черга)
 
 | # | Промт | Що робити |
 |---|-------|-----------|
 | ~~C2C-3~~ | ~~Повідомлення~~ | ~~Non-realtime чат~~ ✓ |
 | ~~C2C-4~~ | ~~Обране + сповіщення~~ | ✓ |
-| **C2C-5** | **Строк дії оголошення** | auto-expired після 30 днів, попередження за 3 дні, платне продовження (LiqPay) |
-| C2C-5 | Строк дії | auto-expired після N днів, продовження оголошення |
-| C2C-6 | Захист контактів | Телефон тільки авторизованим + антиспам |
-| C2C-7 | Монетизація | Платне просування, підняття в топ (LiqPay) |
+| ~~C2C-5~~ | ~~Lifecycle + просування~~ | ✓ (SANDBOX) |
+| **C2C-6** | **Захист контактів + антиспам** | Телефон тільки авторизованим по явному запиту; фільтр посилань/телефонів у повідомленнях; скарги на оголошення; блокування користувача |
+| C2C-7 | Правила розміщення | Замінити заглушку /terms на реальні правила + юридичні сторінки |
 
 ## Дальше (очередь задач до продакшена)
 
