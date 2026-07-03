@@ -93,9 +93,9 @@ class LocalListingImageInline(admin.TabularInline):
 class LocalListingAdmin(admin.ModelAdmin):
     list_display = [
         'short_title', 'owner', 'status', 'region', 'city',
-        'seller_type', 'agreed_to_rules', 'moderated_by', 'created_at',
+        'seller_type', 'agreed_to_rules', 'has_contact_in_text', 'moderated_by', 'created_at',
     ]
-    list_filter = ['status', 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region']
+    list_filter = ['status', 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region', 'has_contact_in_text']
     search_fields = ['make', 'model', 'owner__email', 'contact_phone']
     readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
     inlines = [LocalListingImageInline]
@@ -116,6 +116,10 @@ class LocalListingAdmin(admin.ModelAdmin):
                 'status', 'rejection_reason',
                 'moderated_by', 'moderated_at',
             ),
+        }),
+        ('Антиспам', {
+            'fields': ('has_contact_in_text',),
+            'classes': ('collapse',),
         }),
         ('Згода з правилами', {
             'fields': ('agreed_to_rules', 'agreed_to_rules_at'),
@@ -148,8 +152,8 @@ class PendingLocalListingProxy(LocalListing):
 
 @admin.register(PendingLocalListingProxy)
 class ModerationQueueAdmin(admin.ModelAdmin):
-    list_display = ['short_title', 'owner_email', 'region', 'price', 'currency', 'created_at']
-    list_filter = ['region', 'fuel_type']
+    list_display = ['short_title', 'owner_email', 'region', 'price', 'currency', 'has_contact_in_text', 'created_at']
+    list_filter = ['region', 'fuel_type', 'has_contact_in_text']
     search_fields = ['make', 'model', 'owner__email']
     readonly_fields = [
         'owner', 'make', 'model', 'year', 'mileage_km', 'engine_cc',
@@ -157,6 +161,7 @@ class ModerationQueueAdmin(admin.ModelAdmin):
         'price', 'currency', 'price_type', 'region', 'city',
         'description', 'contact_phone', 'seller_type',
         'agreed_to_rules', 'agreed_to_rules_at',
+        'has_contact_in_text',
         'created_at', 'updated_at',
     ]
     actions = [approve_listings, reject_with_reason]
@@ -171,6 +176,7 @@ class ModerationQueueAdmin(admin.ModelAdmin):
                 'region', 'city', 'description', 'contact_phone', 'seller_type',
             ),
         }),
+        ('Антиспам', {'fields': ('has_contact_in_text',)}),
         ('Дата подачі', {'fields': ('created_at',)}),
     )
 

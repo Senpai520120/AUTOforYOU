@@ -829,3 +829,127 @@ class TestCatalogTopSorting(APITestCase):
         self.assertIn(top.id, ids)
         self.assertIn(normal.id, ids)
         self.assertLess(ids.index(top.id), ids.index(normal.id))
+
+
+# ─── C2C-6: Захист контактів ──────────────────────────────────────────────────
+
+class TestContactEndpoint(APITestCase):
+    def setUp(self):
+        self.owner = _make_user('cowner@test.com')
+        self.buyer = _make_user('cbuyer@test.com')
+        self.region = _make_region('Контакт-область')
+        self.city = _make_city(self.region, 'Контакт-місто')
+        self.listing = _make_listing(
+            self.owner, self.region, self.city,
+            status_val=LocalListing.Status.ACTIVE,
+            contact_phone='+380501234567',
+        )
+
+    def test_phone_not_in_list(self):
+        r = self.client.get('/api/v1/local/listings/')
+        for item in r.data.get('results', []):
+            self.assertNotIn('contact_phone', item)
+
+    def test_phone_not_in_detail(self):
+        r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/')
+        self.assertIsNone(r.data.get('contact_phone'))
+
+    def test_contact_endpoint_anon_401(self):
+        r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
+        self.assertEqual(r.status_code, 401)
+
+    def test_contact_endpoint_auth_returns_phone(self):
+        _auth(self.client, self.buyer)
+        r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['contact_phone'], '+380501234567')
+
+    def test_contact_endpoint_owner_returns_own_phone(self):
+        _auth(self.client, self.owner)
+        r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['contact_phone'], '+380501234567')
+
+    def test_contact_endpoint_nonexistent_404(self):
+        _auth(self.client, self.buyer)
+        r = self.client.get('/api/v1/local/listings/99999/contact/')
+        self.assertEqual(r.status_code, 404)
+
+
+# ─── C2C-6: Антиспам у оголошеннях ───────────────────────────────────────────
+
+class TestAntispamListing(APITestCase):
+    def setUp(self):
+        self.user = _make_user('spam@test.com')
+        self.region = _make_region('Спам-область')
+        self.city = _make_city(self.region, 'Спам-місто')
+        _auth(self.client, self.user)
+
+    def _post(self, description):
+        payload = _listing_payload(self.region, self.city, description=description)
+        return self.client.post('/api/v1/local/listings/', payload, format='json')
+
+    def test_phone_in_description_flags_listing(self):
+        r = self._post('Чудова машина, тел. +380501234567 для зв\'язку')
+        self.assertEqual(r.status_code, 201)
+        pk = r.data['id']
+        listing = LocalListing.objects.get(pk=pk)
+        self.assertTrue(listing.has_contact_in_text)
+        self.assertEqual(listing.status, LocalListing.Status.PENDING)
+
+    def test_url_in_description_flags_listing(self):
+        r = self._post('Докладніше на https://olx.ua/listing/123')
+        self.assertEqual(r.status_code, 201)
+        listing = LocalListing.objects.get(pk=r.data['id'])
+        self.assertTrue(listing.has_contact_in_text)
+
+    def test_normal_numbers_do_not_flag(self):
+        r = self._post('Рік 2020, пробіг 120000 км, двигун 2500 куб, ціна 450000 грн')
+        self.assertEqual(r.status_code, 201)
+        listing = LocalListing.objects.get(pk=r.data['id'])
+        self.assertFalse(listing.has_contact_in_text)
+
+    def test_year_not_flagged(self):
+        r = self._post('Авто 2019 року, стан відмінний')
+        self.assertEqual(r.status_code, 201)
+        listing = LocalListing.objects.get(pk=r.data['id'])
+        self.assertFalse(listing.has_contact_in_text)
+
+
+# ─── C2C-6: Бан користувача ───────────────────────────────────────────────────
+
+class TestBannedUser(APITestCase):
+    def setUp(self):
+        self.banned = _make_user('banned@test.com')
+        self.region = _make_region('Бан-область')
+        self.city = _make_city(self.region, 'Бан-місто')
+        self.listing = _make_listing(
+            self.banned, self.region, self.city,
+            status_val=LocalListing.Status.ACTIVE,
+        )
+        self.banned.is_banned = True
+        self.banned.is_active = False
+        self.banned.save(update_fields=['is_banned', 'is_active'])
+        LocalListing.objects.filter(
+            owner=self.banned,
+            status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+        ).update(status=LocalListing.Status.HIDDEN)
+
+    def test_banned_user_cannot_get_jwt(self):
+        r = self.client.post('/api/v1/auth/token/', {
+            'email': 'banned@test.com', 'password': 'pass'
+        }, format='json')
+        self.assertIn(r.status_code, [400, 401])
+
+    def test_banned_user_listings_hidden(self):
+        r = self.client.get('/api/v1/local/listings/')
+        ids = [item['id'] for item in r.data.get('results', [])]
+        self.assertNotIn(self.listing.pk, ids)
+
+    def test_banned_user_cannot_create_listing(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(self.banned).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        payload = _listing_payload(self.region, self.city)
+        r = self.client.post('/api/v1/local/listings/', payload, format='json')
+        self.assertIn(r.status_code, [401, 403])

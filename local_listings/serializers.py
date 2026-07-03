@@ -77,9 +77,8 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
         is_owner = is_auth and request.user == instance.owner
         is_staff = is_auth and request.user.is_staff
 
-        # TODO: C2C-промт 6 — розкривати телефон тільки авторизованим і по явному запиту
-        if not is_auth:
-            data['contact_phone'] = None
+        # Phone is always None in detail — use /contact/ endpoint instead
+        data['contact_phone'] = None
 
         # Причину відхилення бачить тільки власник або адмін
         if not (is_owner or is_staff):
@@ -132,6 +131,9 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        from .antispam import detect_contacts
+        from django.conf import settings as dj_settings
+
         agreed = validated_data.pop('agreed_to_rules')
         max_active = getattr(settings, 'LOCAL_LISTING_MAX_ACTIVE', 10)
         owner = self.context['request'].user
@@ -152,6 +154,17 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         if agreed:
             validated_data['agreed_to_rules'] = True
             validated_data['agreed_to_rules_at'] = timezone.now()
+
+        antispam_mode = getattr(dj_settings, 'ANTISPAM_MODE', 'soft')
+        description = validated_data.get('description', '')
+        detected = detect_contacts(description) if antispam_mode != 'off' else []
+        if detected:
+            if antispam_mode == 'hard':
+                raise serializers.ValidationError({
+                    'description': 'Текст містить контактні дані (телефон, посилання або месенджер). Видаліть їх.'
+                })
+            validated_data['has_contact_in_text'] = True
+
         return super().create(validated_data)
 
 
@@ -181,6 +194,9 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
+        from .antispam import detect_contacts
+        from django.conf import settings as dj_settings
+
         current_status = instance.status
         substantive_changed = bool(SUBSTANTIVE_FIELDS & set(validated_data.keys()))
 
@@ -193,5 +209,17 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         elif current_status == LocalListing.Status.REJECTED:
             validated_data['status'] = LocalListing.Status.PENDING
             validated_data['rejection_reason'] = ''
+
+        antispam_mode = getattr(dj_settings, 'ANTISPAM_MODE', 'soft')
+        if antispam_mode != 'off' and 'description' in validated_data:
+            detected = detect_contacts(validated_data['description'])
+            if detected:
+                if antispam_mode == 'hard':
+                    raise serializers.ValidationError({
+                        'description': 'Текст містить контактні дані. Видаліть їх.'
+                    })
+                validated_data['has_contact_in_text'] = True
+            else:
+                validated_data['has_contact_in_text'] = False
 
         return super().update(instance, validated_data)

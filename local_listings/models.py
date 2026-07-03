@@ -167,6 +167,8 @@ class LocalListing(models.Model):
     # ── Платне просування ──
     promoted_until = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='ТОП до')
     bumped_at = models.DateTimeField(null=True, blank=True, verbose_name='Піднято')
+    # ── Антиспам ──
+    has_contact_in_text = models.BooleanField(default=False, db_index=True, verbose_name='Контакт у тексті (антиспам)')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

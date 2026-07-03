@@ -2,6 +2,7 @@ from django.urls import path
 from .views import (
     LocalListingListCreateView,
     LocalListingDetailView,
+    LocalListingContactView,
     MyListingsView,
     VinPrefillView,
     RegionListView,
@@ -15,6 +16,7 @@ from .views import (
 urlpatterns = [
     path('listings/', LocalListingListCreateView.as_view(), name='local-listing-list'),
     path('listings/<int:pk>/', LocalListingDetailView.as_view(), name='local-listing-detail'),
+    path('listings/<int:pk>/contact/', LocalListingContactView.as_view(), name='local-listing-contact'),
     path('listings/<int:pk>/images/', LocalListingImageUploadView.as_view(), name='local-listing-images'),
     path('listings/<int:pk>/images/<int:img_id>/', LocalListingImageDetailView.as_view(), name='local-listing-image-detail'),
     path('listings/<int:pk>/promote/', LocalListingPromoteView.as_view(), name='local-listing-promote'),

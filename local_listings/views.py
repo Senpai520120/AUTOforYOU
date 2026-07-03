@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from integrations.models import VinReport
@@ -280,6 +281,28 @@ class LocalListingImageDetailView(APIView):
         img.is_primary = True
         img.save(update_fields=['is_primary'])
         return Response(LocalListingImageSerializer(img).data)
+
+
+# ─── Контакт (захист телефону) ───────────────────────────────────────────────
+
+@extend_schema(
+    tags=['local'],
+    summary='Отримати телефон продавця (тільки авторизований)',
+    description='Повертає contact_phone. Обмеження: 20 запитів/год на акаунт.',
+)
+class LocalListingContactView(APIView):
+    """GET /api/v1/local/listings/<id>/contact/ — повертає телефон тільки авторизованому."""
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'contact'
+
+    def get(self, request, pk):
+        listing = get_object_or_404(
+            LocalListing,
+            pk=pk,
+            status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+        )
+        return Response({'contact_phone': listing.contact_phone or None})
 
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────
