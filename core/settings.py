@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'favorites',
     'saved_searches',
     'reports',
+    'deals',
 
     'drf_spectacular',
     'django_celery_beat',
@@ -280,6 +281,10 @@ AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'bro
 # 'hard' = block listing creation, refuse to send message
 # 'off'  = detection disabled
 ANTISPAM_MODE = os.environ.get('ANTISPAM_MODE', 'soft')
+
+# ─── Рейтинги продавця ────────────────────────────────────────────────────────
+# Кількість підтверджених угод для отримання бейджа «Перевірений продавець»
+SELLER_BADGE_THRESHOLD = int(os.environ.get('SELLER_BADGE_THRESHOLD', '3'))
 
 # ─── C2C: місцеві оголошення ──────────────────────────────────────────────────
 # Максимум активних оголошень на акаунт.

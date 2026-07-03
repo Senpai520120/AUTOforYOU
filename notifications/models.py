@@ -9,6 +9,10 @@ class Notification(models.Model):
         LISTING_REJECTED = 'listing_rejected', 'Оголошення відхилено'
         LISTING_EXPIRING = 'listing_expiring', 'Оголошення скоро закінчується'  # stub, C2C-промт 5
         SAVED_SEARCH_MATCH = 'saved_search_match', 'Нове авто за збереженим пошуком'
+        DEAL_PROPOSED = 'deal_proposed', 'Пропозиція угоди'
+        DEAL_CONFIRMED = 'deal_confirmed', 'Угода підтверджена'
+        DEAL_CANCELLED = 'deal_cancelled', 'Угода скасована'
+        REVIEW_RECEIVED = 'review_received', 'Новий відгук'
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
