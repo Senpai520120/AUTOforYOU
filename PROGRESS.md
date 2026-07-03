@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ | C2C-Extra ✓ | C2C-5 ✓ (lifecycle + платне просування SANDBOX)
+## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ | C2C-Extra ✓ | C2C-5 ✓ | C2C-6 ✓ (захист контактів + антиспам + скарги + баны)
 
 ---
 
@@ -174,6 +174,43 @@
 
 ---
 
+## C2C-промт 6 — Захист контактів + антиспам + скарги + баны (завершено 2026-07-03)
+
+### Backend
+- [x] `CustomUser`: `is_banned` + `is_email_verified` (мітка; повноцінна email-верифікація — окремо)
+- [x] `LocalListing`: `has_contact_in_text` (BooleanField, db_index) — прапор антиспаму
+- [x] `local_listings/antispam.py`: `detect_contacts(text)` — детект телефону, URL, месенджерів
+  - **Що вважається контактом**: `+380...` / `0XX-XXX-XX-XX`, `http(s)://`, `www.`, `.com/.ua/.net` TLD, `telegram/viber/whatsapp + @username/link`
+  - **НЕ спрацьовує** на: рік (4 цифри), пробіг (ціле без телефонного формату), ціну, об'єм двигуна
+- [x] Режим антиспаму: `ANTISPAM_MODE=soft` (дефолт env) — прапор без блокування; `hard` — ValidationError; `off` — вимкнено
+- [x] Оголошення з контактом у тексті → `has_contact_in_text=True` (лишається pending на модерацію)
+- [x] Повідомлення з контактом → попередження в відповіді (`warning` ключ), повідомлення надсилається
+- [x] `GET /api/v1/local/listings/<id>/contact/` — телефон тільки авторизованому (rate-limit 20/год, scope `contact`)
+- [x] `contact_phone` ЗАВЖДИ `null` у публічному detail та list (тільки через /contact/)
+- [x] `reports` app: `Report(reporter, listing?, reported_user?, reason, comment, status[new|reviewed|dismissed])`
+- [x] `POST /api/v1/reports/` — авторизований; один активний звіт на (reporter, об'єкт)
+- [x] Django Admin: черга скарг — дії «Сховати оголошення», «Забанити користувача», «Відхилити»
+- [x] Ban: `is_banned=True` + `is_active=False` + активні оголошення → `hidden`; забанений не може увійти
+- [x] Users Admin: `ban_users` / `unban_users` bulk actions
+- [x] Throttle scope `contact`: 20/год (env `THROTTLE_CONTACT_RATE`)
+- [x] **334 тести всього — OK**
+
+### Frontend
+- [x] `api/local.ts`: `getContact(id)` — GET /contact/ ендпоінт
+- [x] `api/reports.ts`: `reportsApi.create()`
+- [x] `lib/types.ts`: `ReportReason`, `ReportPayload`
+- [x] `LocalListingDetail.tsx`: «Показати телефон» → клік → GET /contact/ (авторизованому показує номер; анониму → /login)
+- [x] `ReportButton.tsx` — модальне вікно з вибором причини і коментарем; z'являється для не-власників
+- [x] **0 TS-помилок, npm run build OK**
+
+### Архітектурне рішення
+- Контакт НЕ повертається в жодному серіалізаторі (list/detail/owner) — тільки через окремий /contact/ ендпоінт
+- Rate-limit на /contact/ захищає від масового витягу телефонів скриптом
+- Антиспам «м'який»: підозріле оголошення не блокується, а іде на модерацію з прапором `has_contact_in_text` — рішення за адміном
+- Бан реалізований через Django's `is_active=False` (JWT автоматично відхиляє неактивних)
+
+---
+
 ## Дальше (C2C-черга)
 
 | # | Промт | Що робити |
@@ -181,8 +218,8 @@
 | ~~C2C-3~~ | ~~Повідомлення~~ | ~~Non-realtime чат~~ ✓ |
 | ~~C2C-4~~ | ~~Обране + сповіщення~~ | ✓ |
 | ~~C2C-5~~ | ~~Lifecycle + просування~~ | ✓ (SANDBOX) |
-| **C2C-6** | **Захист контактів + антиспам** | Телефон тільки авторизованим по явному запиту; фільтр посилань/телефонів у повідомленнях; скарги на оголошення; блокування користувача |
-| C2C-7 | Правила розміщення | Замінити заглушку /terms на реальні правила + юридичні сторінки |
+| ~~C2C-6~~ | ~~Захист контактів + антиспам~~ | ✓ |
+| **C2C-7** | **Рейтинги/відгуки + юридичні доповнення** | Відгуки через підтверджені угоди + правила розміщення, відмова від відповідальності |
 
 ## Дальше (очередь задач до продакшена)
 

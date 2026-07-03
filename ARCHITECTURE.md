@@ -1,5 +1,39 @@
 # AUTOforYOU — Архитектура
 
+## Захист контактів / Скарги / Баны / Антиспам (C2C-промт 6)
+
+### Захист контактів
+- `contact_phone` НЕ повертається в жодному публічному серіалізаторі (list, detail, owner — завжди `null`).
+- `GET /api/v1/local/listings/<id>/contact/` — єдиний спосіб отримати телефон; тільки авторизований.
+- Rate-limit scope `contact`: 20/год (env `THROTTLE_CONTACT_RATE`). Захищає від скриптового збору.
+- Frontend: кнопка «Показати телефон» → GET /contact/ → показує номер або веде на /login для аноніма.
+
+### Антиспам (`local_listings/antispam.py`)
+- `detect_contacts(text)` → список типів: `phone`, `url`, `messenger`. Порожній список = чисто.
+- **Що є контактом**: `+380...` / `0XX-XXX-XX-XX` (UA-формат), `http(s)://` / `www.` / домен із TLD, `telegram/viber/whatsapp + @username`.
+- **НЕ спрацьовує** на: рік (4 цифри), пробіг/ціна/об'єм без телефонного шаблону.
+- Режим (env `ANTISPAM_MODE`, дефолт `soft`):
+  - `soft` — оголошення позначається прапором `has_contact_in_text=True` (залишається pending, іде на перевірку); у повідомленнях — відповідь містить `warning`, але повідомлення надсилається.
+  - `hard` — ValidationError при створенні оголошення; повідомлення не надсилається.
+  - `off` — детекція вимкнена.
+
+### reports app
+- `Report(reporter FK, listing nullable FK, reported_user nullable FK, reason, comment, status[new|reviewed|dismissed])`.
+- Унікальна активна скарга: один `reporter` — одна `new`-скарга на кожен об'єкт.
+- `POST /api/v1/reports/` — тільки авторизований. Валідація: тільки listing АБО reported_user, не обидва.
+- Django Admin (`ReportAdmin`): фільтр за status/reason, три дії:
+  - **«Сховати оголошення»** → `listing.status = hidden` + скарга `reviewed`.
+  - **«Забанити користувача»** → `is_banned=True`, `is_active=False`, активні оголошення → `hidden` + скарга `reviewed`.
+  - **«Відхилити»** → скарга `dismissed`.
+
+### Бан користувача
+- `CustomUser.is_banned` (bool) + `is_active=False` при бані. Django/JWT автоматично відхиляє неактивних.
+- Users Admin: bulk actions `ban_users` / `unban_users`.
+- При бані: всі `active`/`pending` оголошення → `hidden`.
+- `CustomUser.is_email_verified` — заготовка для email-верифікації; повноцінна реалізація — окремо.
+
+---
+
 ## Favorites / Notifications / Saved Searches (C2C-промт 4)
 
 ### favorites app
