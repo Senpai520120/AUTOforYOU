@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Черга: деплой (промт 15)
+## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Docker ✓ | Черга: деплой на Railway
 
 ---
 
@@ -262,7 +262,42 @@
 | ~~C2C-6~~ | ~~Захист контактів + антиспам~~ | ✓ |
 | ~~C2C-7~~ | ~~Рейтинги/відгуки + юридичні доповнення~~ | ✓ ЗАВЕРШЕНО |
 
-**C2C-блок 1–7 повністю завершено. Далі — деплой (промт 15).**
+**C2C-блок 1–7 повністю завершено. Далі — деплой на Railway.**
+
+---
+
+## Промт 15 — Docker Compose: повний стек (завершено 2026-07-03)
+
+### Що створено
+- [x] `Dockerfile.backend` — multi-stage (python:3.12-slim): builder → runtime; gunicorn 26.0.0
+- [x] `Dockerfile.frontend` — multi-stage (node:20-alpine): deps → builder → runtime; `npm start`
+- [x] `.dockerignore` — виключає venv, __pycache__, .env, media, db.sqlite3, frontend/ з бекенд-контексту
+- [x] `frontend/.dockerignore` — виключає node_modules, .next, .env.local з фронтенд-контексту
+- [x] `docker-compose.yml` — 7 сервісів: db, redis, backend, frontend, bot, celery_worker, celery_beat, nginx
+- [x] `nginx/nginx.conf` — reverse proxy: `/api`, `/admin` → backend:8000; `/static/`, `/media/` → volumes; `/` → frontend:3000. Місце для SSL (коментар)
+- [x] `docker/entrypoint.sh` — backend startup: migrate → collectstatic → gunicorn
+- [x] `docker/bot_entrypoint.sh` — перевіряє TELEGRAM_BOT_TOKEN; без токену → exit 0 (без restart-loop)
+- [x] `.env.docker.example` — робочі дефолти (сайт піднімається без ручного редагування)
+- [x] `core/settings.py`: додано `STATIC_ROOT` + виправлено `STATIC_URL='/static/'`
+- [x] SSR-fix: `INTERNAL_API_URL` в 3 серверних компонентах (`local/[id]/page.tsx`, `listings/[id]/page.tsx`, `sitemap.ts`) — SSR-запити через Docker-мережу `http://backend:8000`
+- [x] `requirements.txt`: `gunicorn==26.0.0`
+
+### Перевірка (результат)
+- [x] `docker compose build` — обидва образи зібрані без помилок
+- [x] `docker compose up -d` — 7 сервісів запущені
+- [x] `http://localhost/` → **200** (фронтенд через nginx) ✅
+- [x] `http://localhost/api/v1/local/listings/` → **200** (DRF API) ✅
+- [x] `http://localhost/admin/` → **302** (Django admin → login) ✅
+- [x] Bot: exit 0 без TELEGRAM_BOT_TOKEN (не перезапускається) ✅
+- [x] Звичайна розробка (runserver / npm run dev) — не зачеплена ✅
+
+### Архітектурне рішення
+- `NEXT_PUBLIC_API_URL=http://localhost` — бекується у клієнтський JS (браузер → nginx → backend)
+- `INTERNAL_API_URL=http://backend:8000` — runtime env для SSR (Next.js сервер → backend напряму по Docker-мережі)
+- Бот: `restart: on-failure` — не перезапускується при exit 0; при крашу (exit non-0) — перезапускується
+- Спільні Docker-volumes: `static` і `media` між backend і nginx
+
+---
 
 ## Дальше (очередь задач до продакшена)
 
@@ -285,7 +320,8 @@
 | 15 | ~~**Фронтенд: продакшн-полировка, SEO**~~ | ✅ Снят — промт 12: SEO, OG-карточки, sitemap, 404/error, скелетоны, DemoBanner-флаг |
 | 16 | ~~**Юридические страницы**~~ | ✅ Снят — промт 13: /terms, /privacy, /cookies + cookie-баннер + consent |
 | 17 | ~~**QA E2E-тесты**~~ | ✅ Снят — промт 14: 38 E2E-тестов + Playwright + PRODUCTION_ROADMAP.md |
-| 18 | **DevOps и деплой** | Промт 15: Docker Compose, Dockerfile, deploy.sh, Railway/VPS инструкция |
+| ~~18~~ | ~~**DevOps: Docker Compose**~~ | ✅ Знятий — docker-compose.yml, Dockerfile.backend/frontend, nginx, entrypoint. Сайт на http://localhost |
+| **19** | **Деплой на Railway** | Переиспользує Dockerfile'и. railway.toml + env → push → prod |
 
 ---
 

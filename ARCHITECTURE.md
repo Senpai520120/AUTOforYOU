@@ -1,5 +1,48 @@
 # AUTOforYOU — Архитектура
 
+## Docker Compose — повний стек (промт 15)
+
+### Сервіси (`docker-compose.yml`)
+| Сервіс | Образ | Роль |
+|---|---|---|
+| `db` | postgres:16-alpine | PostgreSQL + health-check |
+| `redis` | redis:7-alpine | Кеш + брокер Celery |
+| `backend` | Dockerfile.backend | Gunicorn + міграції + collectstatic |
+| `frontend` | Dockerfile.frontend | Next.js production (`npm start`) |
+| `bot` | Dockerfile.backend | Telegram polling (exit 0 без токену) |
+| `celery_worker` | Dockerfile.backend | Celery worker |
+| `celery_beat` | Dockerfile.backend | Celery beat (DatabaseScheduler) |
+| `nginx` | nginx:alpine | Reverse proxy, порт 80 на хості |
+
+### Маршрутизація nginx
+- `/static/` → Docker volume `static` (collectstatic output)
+- `/media/` → Docker volume `media` (user uploads)
+- `/api/*`, `/admin/*` → `backend:8000` (Gunicorn)
+- `/` → `frontend:3000` (Next.js)
+
+### SSR та мережа Docker
+- Браузерний JS: `NEXT_PUBLIC_API_URL=http://localhost` (baked at build, через nginx)
+- Next.js SSR: `INTERNAL_API_URL=http://backend:8000` (runtime, Docker internal network)
+- Три серверні компоненти оновлені: `local/[id]/page.tsx`, `listings/[id]/page.tsx`, `sitemap.ts`
+
+### Запуск
+```bash
+cp .env.docker.example .env          # або залиш дефолти
+docker compose up --build            # перший запуск (довго — збирає образи)
+# Сайт: http://localhost
+# API:  http://localhost/api/v1/
+# Admin: http://localhost/admin/
+docker compose down                  # зупинити (дані в volumes зберігаються)
+docker compose down -v               # зупинити + видалити дані БД
+```
+
+### Обмеження локального Docker
+- Бот без `TELEGRAM_BOT_TOKEN`: exit 0, не рестартує, решта стеку працює
+- LiqPay sandbox: потребує публічного URL для webhook (ngrok у dev)
+- SSL: nginx.conf містить закоментований SSL-блок — для деплою з реальним сертифікатом
+
+---
+
 ## ✅ C2C-блок ЗАВЕРШЕНО (C2C-промт 1–7)
 
 C2C-функціонал повністю реалізований. Блокери перед запуском:
