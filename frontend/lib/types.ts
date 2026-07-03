@@ -347,3 +347,14 @@ export interface VinPrefillResult {
   cached: boolean;
   error?: string;
 }
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+export type ReportReason = 'spam' | 'wrong_info' | 'inappropriate' | 'fraud' | 'duplicate' | 'other';
+
+export interface ReportPayload {
+  listing?: number;
+  reported_user?: number;
+  reason: ReportReason;
+  comment?: string;
+}

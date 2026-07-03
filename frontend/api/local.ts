@@ -65,4 +65,7 @@ export const localApi = {
 
   promote: (listingId: number, tariffCode: string) =>
     apiPost<PromoteCheckout>(`/api/v1/local/listings/${listingId}/promote/`, { tariff: tariffCode }),
+
+  getContact: (listingId: number) =>
+    apiGet<{ contact_phone: string | null }>(`/api/v1/local/listings/${listingId}/contact/`),
 };

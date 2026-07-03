@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { LocalListing } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import { localApi } from '@/api/local';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
+import ReportButton from '@/components/reports/ReportButton';
 
 const PLACEHOLDER_SVG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%2394a3b8'%3EФото відсутнє%3C/text%3E%3C/svg%3E";
@@ -27,7 +29,9 @@ const CONDITION_LABELS: Record<string, string> = {
 export default function LocalListingDetail({ listing }: { listing: LocalListing }) {
   const { user } = useAuth();
   const [activeImg, setActiveImg] = useState(0);
-  const [showPhone, setShowPhone] = useState(false);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
 
   const images = listing.images.length > 0 ? listing.images : [{ id: 0, image: null, source_url: '', is_primary: true }];
   const mainImg = images[activeImg]?.image || images[activeImg]?.source_url || PLACEHOLDER_SVG;
@@ -44,6 +48,23 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
     { label: 'Стан', value: CONDITION_LABELS[listing.condition] ?? listing.condition },
     listing.engine_cc ? { label: "Об'єм двигуна", value: `${(listing.engine_cc / 1000).toFixed(1)} л (${listing.engine_cc} куб.см)` } : null,
   ].filter(Boolean) as { label: string; value: string | number }[];
+
+  const handleShowPhone = async () => {
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+    setPhoneLoading(true);
+    setPhoneError('');
+    try {
+      const data = await localApi.getContact(listing.id);
+      setPhone(data.contact_phone || 'Номер не вказано');
+    } catch {
+      setPhoneError('Не вдалося завантажити номер. Спробуйте ще раз.');
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -127,26 +148,23 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               )}
             </div>
             <div className="mt-3">
-              {/* TODO: C2C-промт 6 — повна реалізація захисту контактів */}
-              {listing.contact_phone ? (
-                showPhone ? (
-                  <a href={`tel:${listing.contact_phone}`} className="block bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 rounded-lg text-center transition-colors">
-                    {listing.contact_phone}
-                  </a>
-                ) : (
-                  <button
-                    onClick={() => {
-                      if (!user) { window.location.href = '/login'; return; }
-                      setShowPhone(true);
-                    }}
-                    className="w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg transition-colors"
-                  >
-                    Показати телефон
-                  </button>
-                )
+              {phone ? (
+                <a
+                  href={`tel:${phone}`}
+                  className="block bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
+                >
+                  {phone}
+                </a>
               ) : (
-                <div className="text-xs text-slate-400 text-center">Контакт не вказано</div>
+                <button
+                  onClick={handleShowPhone}
+                  disabled={phoneLoading}
+                  className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
+                >
+                  {phoneLoading ? 'Завантаження...' : user ? 'Показати телефон' : 'Увійдіть, щоб побачити телефон'}
+                </button>
               )}
+              {phoneError && <p className="mt-1 text-xs text-red-500">{phoneError}</p>}
             </div>
           </div>
 
@@ -164,6 +182,12 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               >
                 Редагувати
               </Link>
+            </div>
+          )}
+
+          {!isOwner && (
+            <div className="mt-3 flex justify-end">
+              <ReportButton listingId={listing.id} />
             </div>
           )}
         </div>
