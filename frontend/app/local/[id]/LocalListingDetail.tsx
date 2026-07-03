@@ -141,12 +141,22 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
           </div>
 
           <div className="mt-4 p-4 bg-blue-50 rounded-xl">
-            <div className="text-sm text-slate-600">
-              Продавець: <strong>{listing.owner_name}</strong>
+            <div className="text-sm text-slate-600 flex flex-wrap items-center gap-1.5">
+              <span>Продавець: <strong>{listing.owner_name}</strong></span>
               {listing.seller_type === 'dealer' && (
-                <span className="ml-1 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Дилер</span>
+                <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Дилер</span>
+              )}
+              {listing.seller_has_badge && (
+                <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-semibold">✓ Перевірений продавець</span>
               )}
             </div>
+            {listing.seller_has_badge && listing.seller_avg_rating && (
+              <div className="mt-1 text-xs text-slate-500 flex items-center gap-1">
+                <span className="text-amber-400">{'★'.repeat(Math.round(listing.seller_avg_rating))}{'☆'.repeat(5 - Math.round(listing.seller_avg_rating))}</span>
+                <span>{listing.seller_avg_rating.toFixed(1)}</span>
+                {listing.seller_deal_count ? <span>· {listing.seller_deal_count} угод</span> : null}
+              </div>
+            )}
             <div className="mt-3">
               {phone ? (
                 <a

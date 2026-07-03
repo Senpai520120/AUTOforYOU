@@ -206,6 +206,9 @@ export interface LocalListing {
   expiry_warned: boolean;
   promoted_until: string | null;
   bumped_at: string | null;
+  seller_has_badge: boolean;
+  seller_avg_rating?: number | null;
+  seller_deal_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -300,7 +303,11 @@ export type NotificationType =
   | 'listing_approved'
   | 'listing_rejected'
   | 'listing_expiring'
-  | 'saved_search_match';
+  | 'saved_search_match'
+  | 'deal_proposed'
+  | 'deal_confirmed'
+  | 'deal_cancelled'
+  | 'review_received';
 
 export interface AppNotification {
   id: number;
@@ -357,4 +364,54 @@ export interface ReportPayload {
   reported_user?: number;
   reason: ReportReason;
   comment?: string;
+}
+
+// ─── Deals & Reviews ─────────────────────────────────────────────────────────
+
+export type DealStatus = 'proposed' | 'confirmed' | 'cancelled';
+
+export interface DealUser {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface DealListing {
+  id: number;
+  make: string;
+  model: string;
+  year: number;
+}
+
+export interface DealReview {
+  id: number;
+  rating: number;
+  text: string;
+  author_email: string;
+  created_at: string;
+}
+
+export interface Deal {
+  id: number;
+  listing: DealListing;
+  seller: DealUser;
+  buyer: DealUser;
+  status: DealStatus;
+  created_at: string;
+  confirmed_at: string | null;
+  review: DealReview | null;
+}
+
+export interface ReviewPayload {
+  rating: number;
+  text?: string;
+}
+
+export interface SellerRating {
+  confirmed_deal_count: number;
+  review_count: number;
+  avg_rating: number | null;
+  has_badge: boolean;
+  badge_threshold: number;
 }

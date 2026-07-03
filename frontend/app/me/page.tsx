@@ -20,6 +20,7 @@ export default function MePage() {
     { href: '/me/favorites', icon: '♥', title: 'Обране', desc: 'Збережені оголошення' },
     { href: '/me/saved-searches', icon: '🔍', title: 'Збережені пошуки', desc: 'Алерти про нові авто' },
     { href: '/me/local-listings', icon: '📋', title: 'Мої оголошення', desc: 'Каталог Україна — мої авто' },
+    { href: '/me/deals', icon: '🤝', title: 'Угоди та відгуки', desc: 'Підтвердження продажу і відгуки' },
     { href: '/me/calculations', icon: '🧮', title: 'Мої розрахунки', desc: 'Історія калькуляцій' },
     { href: '/me/trusted-shops', icon: '🔧', title: 'Мої партнери', desc: 'СТО, маляри, запчастини' },
     { href: '/me/shipments', icon: '📦', title: 'Мої контейнери', desc: 'Відстежувані шипменти' },

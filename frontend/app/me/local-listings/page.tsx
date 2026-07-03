@@ -4,8 +4,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { localApi } from '@/api/local';
+import { dealsApi } from '@/api/deals';
 import { LocalListing } from '@/lib/types';
 import PromoteModal from '@/components/local/PromoteModal';
+
+interface Buyer { id: number; email: string; first_name: string; last_name: string; }
+interface SoldModalState { listing: LocalListing; buyers: Buyer[]; loading: boolean; }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   active:   { label: 'Активне',         cls: 'bg-green-100 text-green-800' },
@@ -34,6 +38,9 @@ export default function MyLocalListingsPage() {
   const [listings, setListings] = useState<LocalListing[]>([]);
   const [fetching, setFetching] = useState(true);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [soldModal, setSoldModal] = useState<SoldModalState | null>(null);
+  const [proposingTo, setProposingTo] = useState<number | null>(null);
+  const [soldError, setSoldError] = useState('');
 
   useEffect(() => {
     if (!loading && !user) router.push('/login');
@@ -58,6 +65,33 @@ export default function MyLocalListingsPage() {
     }
   }
 
+  async function openSoldModal(l: LocalListing) {
+    setSoldModal({ listing: l, buyers: [], loading: true });
+    setSoldError('');
+    try {
+      const buyers = await dealsApi.listingBuyers(l.id);
+      setSoldModal({ listing: l, buyers, loading: false });
+    } catch {
+      setSoldModal(prev => prev ? { ...prev, loading: false } : null);
+    }
+  }
+
+  async function handleProposeDeal(buyerId: number) {
+    if (!soldModal) return;
+    setProposingTo(buyerId);
+    setSoldError('');
+    try {
+      await dealsApi.propose(soldModal.listing.id, buyerId);
+      setSoldModal(null);
+      alert('Пропозицію угоди надіслано покупцю!');
+    } catch (err: unknown) {
+      const e = err as { data?: { detail?: string } };
+      setSoldError(e?.data?.detail || 'Не вдалося запропонувати угоду.');
+    } finally {
+      setProposingTo(null);
+    }
+  }
+
   function openPromote(l: LocalListing, type: 'renew' | 'bump' | 'top') {
     setModal({ listingId: l.id, listingTitle: `${l.make} ${l.model} ${l.year}`, defaultType: type });
   }
@@ -73,6 +107,42 @@ export default function MyLocalListingsPage() {
           defaultType={modal.defaultType}
           onClose={() => setModal(null)}
         />
+      )}
+
+      {/* Sold / Propose Deal Modal */}
+      {soldModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-bold mb-1">Позначити як продано</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              {soldModal.listing.make} {soldModal.listing.model} {soldModal.listing.year} — оберіть покупця:
+            </p>
+            {soldModal.loading && <p className="text-slate-400 text-sm py-4 text-center">Завантаження...</p>}
+            {!soldModal.loading && soldModal.buyers.length === 0 && (
+              <p className="text-slate-500 text-sm py-3 text-center">Ніхто ще не писав по цьому оголошенню.</p>
+            )}
+            {soldError && <p className="text-red-600 text-sm mb-2">{soldError}</p>}
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {soldModal.buyers.map(b => (
+                <button
+                  key={b.id}
+                  onClick={() => handleProposeDeal(b.id)}
+                  disabled={proposingTo === b.id}
+                  className="w-full flex items-center justify-between border border-slate-200 hover:bg-blue-50 rounded-lg px-4 py-2.5 text-sm text-left disabled:opacity-60"
+                >
+                  <span>{b.first_name ? `${b.first_name} ${b.last_name}`.trim() : b.email}</span>
+                  <span className="text-xs text-slate-400">{b.email}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setSoldModal(null)}
+              className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700"
+            >
+              Закрити
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="flex items-center justify-between mb-6">
@@ -192,6 +262,12 @@ export default function MyLocalListingsPage() {
                   )}
                   {l.status === 'active' && (
                     <>
+                      <button
+                        onClick={() => openSoldModal(l)}
+                        className="text-sm bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        ✅ Позначити проданим
+                      </button>
                       <button
                         onClick={() => openPromote(l, 'bump')}
                         className="text-sm border border-blue-200 hover:bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg transition-colors"

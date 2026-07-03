@@ -395,11 +395,13 @@ export default function LocalListingForm({ initial, listingId }: Props) {
             />
             <span className="text-sm text-slate-700">
               Погоджуюсь з{' '}
-              {/* TODO: C2C-промт 7 (юридичний) — замінити посилання на реальні правила */}
-              <a href="/terms" target="_blank" className="text-blue-600 underline">
+              <a href="/rules" target="_blank" className="text-blue-600 underline">
                 правилами розміщення оголошень
               </a>{' '}
-              (заглушка — повна версія правил у C2C-промті 7)
+              та{' '}
+              <a href="/terms" target="_blank" className="text-blue-600 underline">
+                умовами використання
+              </a>
             </span>
           </label>
           {errors.agreed_to_rules && <p className={errCls}>{errors.agreed_to_rules}</p>}

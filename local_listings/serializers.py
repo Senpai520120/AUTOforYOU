@@ -40,6 +40,7 @@ class LocalListingListSerializer(serializers.ModelSerializer):
     region_name = serializers.CharField(source='region.name', read_only=True)
     city_name = serializers.CharField(source='city.name', read_only=True)
     owner_name = serializers.SerializerMethodField()
+    seller_has_badge = serializers.SerializerMethodField()
 
     class Meta:
         model = LocalListing
@@ -52,6 +53,7 @@ class LocalListingListSerializer(serializers.ModelSerializer):
             'owner_name', 'images',
             'expires_at', 'promoted_until', 'bumped_at',
             'created_at', 'updated_at',
+            'seller_has_badge',
         ]
         # contact_phone intentionally excluded from public list
 
@@ -60,15 +62,38 @@ class LocalListingListSerializer(serializers.ModelSerializer):
         full = f'{u.first_name} {u.last_name}'.strip()
         return full or u.email.split('@')[0]
 
+    def get_seller_has_badge(self, obj):
+        from deals.services import seller_rating
+        from django.conf import settings
+        threshold = getattr(settings, 'SELLER_BADGE_THRESHOLD', 3)
+        from deals.models import Deal
+        count = Deal.objects.filter(seller=obj.owner, status='confirmed').count()
+        return count >= threshold
+
 
 class LocalListingDetailSerializer(LocalListingListSerializer):
     """
     Деталь: телефон і причина відхилення повертаються авторизованим/власнику.
     Повна реалізація захисту контактів — C2C-промт 6.
     """
+    seller_avg_rating = serializers.SerializerMethodField()
+    seller_deal_count = serializers.SerializerMethodField()
 
     class Meta(LocalListingListSerializer.Meta):
-        fields = LocalListingListSerializer.Meta.fields + ['contact_phone', 'rejection_reason']
+        fields = LocalListingListSerializer.Meta.fields + [
+            'contact_phone', 'rejection_reason',
+            'seller_avg_rating', 'seller_deal_count',
+        ]
+
+    def get_seller_avg_rating(self, obj):
+        from django.db.models import Avg
+        from deals.models import Review
+        agg = Review.objects.filter(target=obj.owner).aggregate(avg=Avg('rating'))
+        return round(agg['avg'], 1) if agg['avg'] else None
+
+    def get_seller_deal_count(self, obj):
+        from deals.models import Deal
+        return Deal.objects.filter(seller=obj.owner, status='confirmed').count()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
