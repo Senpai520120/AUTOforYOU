@@ -105,7 +105,7 @@ class ConversationDetailView(APIView):
         sr = SendMessageSerializer(data=request.data)
         sr.is_valid(raise_exception=True)
         try:
-            msg = send_message_to_conversation(
+            msg, detected = send_message_to_conversation(
                 sender=request.user,
                 conversation=conv,
                 text=sr.validated_data['text'],
@@ -113,7 +113,13 @@ class ConversationDetailView(APIView):
         except PermissionError as e:
             return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
 
-        return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
+        resp = MessageSerializer(msg).data
+        if detected:
+            resp['warning'] = (
+                'Повідомлення містить контактні дані. '
+                'Для безпеки угоди рекомендуємо спілкуватися на платформі.'
+            )
+        return Response(resp, status=status.HTTP_201_CREATED)
 
 
 class UnreadCountView(APIView):

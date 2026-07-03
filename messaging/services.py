@@ -40,7 +40,8 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
             initiator=initiator, local_listing=listing
         ).first()
         if conv:
-            return conv, False, _add_message(initiator, conv, first_text)
+            msg, _ = _add_message(initiator, conv, first_text)
+            return conv, False, msg
 
         conv = Conversation.objects.create(initiator=initiator, local_listing=listing)
         conv.participants.set([initiator.pk, listing.owner_id])
@@ -55,7 +56,8 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
             initiator=initiator, imported_listing=listing
         ).first()
         if conv:
-            return conv, False, _add_message(initiator, conv, first_text)
+            msg, _ = _add_message(initiator, conv, first_text)
+            return conv, False, msg
 
         conv = Conversation.objects.create(initiator=initiator, imported_listing=listing)
         admin = _first_admin()
@@ -64,12 +66,12 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
     else:
         raise ValueError('Невідомий тип оголошення.')
 
-    msg = _add_message(initiator, conv, first_text)
+    msg, _ = _add_message(initiator, conv, first_text)
     return conv, True, msg
 
 
-def send_message_to_conversation(sender, conversation: Conversation, text: str) -> Message:
-    """Надіслати повідомлення в існуючий діалог. Raises PermissionError якщо не учасник."""
+def send_message_to_conversation(sender, conversation: Conversation, text: str):
+    """Returns (message, detected_contacts_list). Raises PermissionError if not participant."""
     is_participant = conversation.participants.filter(pk=sender.pk).exists()
     is_admin_imported = (
         getattr(sender, 'role', '') == 'admin'
@@ -102,12 +104,21 @@ def unread_count_for_user(user) -> int:
     return qs.distinct().count()
 
 
-def _add_message(sender, conversation: Conversation, text: str) -> Message:
-    # # Anti-spam (phone/link filter) — повноцінно C2C-промт 6
+def _add_message(sender, conversation: Conversation, text: str):
+    """Returns (message, detected_contacts_list)."""
+    from django.conf import settings as dj_settings
+    from local_listings.antispam import detect_contacts
+
+    antispam_mode = getattr(dj_settings, 'ANTISPAM_MODE', 'soft')
+    detected = detect_contacts(text) if antispam_mode != 'off' else []
+
+    if detected and antispam_mode == 'hard':
+        raise PermissionError('Повідомлення містить контактні дані (телефон, посилання). Видаліть їх.')
+
     msg = Message.objects.create(conversation=conversation, sender=sender, text=text)
     Conversation.objects.filter(pk=conversation.pk).update(last_message_at=msg.created_at)
     _notify_recipients(sender, conversation, msg)
-    return msg
+    return msg, detected
 
 
 def _notify_recipients(sender, conversation: Conversation, message: Message) -> None:

@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'notifications',
     'favorites',
     'saved_searches',
+    'reports',
 
     'drf_spectacular',
     'django_celery_beat',
@@ -221,6 +222,7 @@ REST_FRAMEWORK = {
         'user': _THROTTLE_USER,
         'expensive': _THROTTLE_EXPENSIVE,
         'messages': os.environ.get('THROTTLE_MESSAGES_RATE', '30/hour'),
+        'contact': os.environ.get('THROTTLE_CONTACT_RATE', '20/hour'),
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
@@ -273,8 +275,14 @@ LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
 # ─── Аукционные сборы ─────────────────────────────────────────────────────────
 AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
 
+# ─── Anti-spam ────────────────────────────────────────────────────────────────
+# 'soft' = flag listings for review, warn in message response (default)
+# 'hard' = block listing creation, refuse to send message
+# 'off'  = detection disabled
+ANTISPAM_MODE = os.environ.get('ANTISPAM_MODE', 'soft')
+
 # ─── C2C: місцеві оголошення ──────────────────────────────────────────────────
-# Максимум активних оголошень на акаунт. Повний антиспам — C2C-промт 6.
+# Максимум активних оголошень на акаунт.
 LOCAL_LISTING_MAX_ACTIVE = int(os.environ.get('LOCAL_LISTING_MAX_ACTIVE', '10'))
 # Фото: максимальна кількість на оголошення і розмір файлу
 LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
