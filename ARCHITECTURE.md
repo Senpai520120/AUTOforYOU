@@ -1,5 +1,69 @@
 # AUTOforYOU — Архитектура
 
+## ✅ C2C-блок ЗАВЕРШЕНО (C2C-промт 1–7)
+
+C2C-функціонал повністю реалізований. Блокери перед запуском:
+1. **Юридична перевірка** — `/rules`, `/terms`, `/privacy`, `/cookies` позначені «Шаблон». Потрібен юрист.
+2. **Реальні ціни тарифів** — `PromotionTariff` у БД містить плейсхолдери. Встановити перед продом.
+3. **Реальні тарифи логістики** — `UsLandRoute`, `OceanFreight`, `EuToUa` — котировки від брокера.
+4. **Платні API-ключі** — Carfax/BidFax (ДТП/торги), Apify (import лотів), реальні ключі LiqPay.
+
+---
+
+## Угоди + відгуки + рейтинги продавця (C2C-промт 7)
+
+### deals app
+
+#### Deal
+```
+listing FK(LocalListing), seller FK(CustomUser), buyer FK(CustomUser)
+status: proposed | confirmed | cancelled
+confirmed_at (DateTimeField, nullable)
+UniqueConstraint(listing, buyer)
+clean(): seller_id != buyer_id
+```
+
+#### Review
+```
+deal OneToOneField(Deal, related_name='review')
+author FK(CustomUser, related_name='reviews_written')
+target FK(CustomUser, related_name='reviews_received')
+rating PositiveSmallIntegerField (1–5)
+text TextField (blank=True)
+clean(): author_id == deal.buyer_id (анти-накрутка)
+```
+
+### Сервіси (deals/services.py)
+- `propose_deal(listing, seller, buyer_id)` — власник оголошення пропонує угоду; покупець має бути учасником хоча б одного діалогу по оголошенню; нотифікація `deal_proposed`.
+- `confirm_deal(deal, buyer)` — тільки покупець; `status → confirmed`, `listing.status → sold`, `confirmed_at = now()`; нотифікація `deal_confirmed`.
+- `cancel_deal(deal, user)` — будь-яка сторона; тільки з `proposed`; нотифікація `deal_cancelled`.
+- `create_review(deal, author, rating, text)` — тільки покупець; `deal.status == confirmed`; один відгук (`OneToOneField`); нотифікація `review_received`.
+- `seller_rating(seller_id)` → `{confirmed_deal_count, review_count, avg_rating, has_badge, badge_threshold}`.
+
+### Бейдж «✓ Перевірений продавець»
+- `SELLER_BADGE_THRESHOLD = 3` (env, `core/settings.py`).
+- `seller_has_badge`: `Deal.objects.filter(seller=owner, status='confirmed').count() >= threshold`.
+- Обчислюється в серіалізаторі при кожному запиті (без кешу — актуальне значення).
+- Показується в `LocalListingCard` і `LocalListingDetail` (синя панель продавця).
+
+### Ендпоінти `/api/v1/deals/`
+```
+GET/POST  /api/v1/deals/                        # мої угоди / propose
+POST      /api/v1/deals/<id>/confirm/           # buyer confirms
+POST      /api/v1/deals/<id>/cancel/            # either party cancels
+POST      /api/v1/deals/<id>/review/            # buyer leaves review
+GET       /api/v1/deals/seller-rating/<user_id>/ # public seller rating
+GET       /api/v1/deals/listing-buyers/<listing_id>/ # seller: who to propose to
+```
+
+### Юридичні сторінки
+- `/rules` — Правила розміщення (8 розділів). Розділ 6 = C2C-застереження: «Платформа є посередником, а не стороною угоди».
+- Усі юридичні тексти позначені «Шаблон — потребує перевірки юристом» і `robots: {index: false}`.
+- Footer: `/rules` між `/terms` і `/privacy`.
+- `LocalListingForm.tsx`: checkbox погодження → справжнє посилання `/rules`.
+
+---
+
 ## Захист контактів / Скарги / Баны / Антиспам (C2C-промт 6)
 
 ### Захист контактів
@@ -272,7 +336,7 @@ region, city, mileage_max, search (make/model/description), ordering (-created_a
 - **Пакеты**: `dj-database-url`, `django-storages[s3]`, `boto3` добавлены в requirements.txt.
 - **Документация**: `DEPLOY_NOTES.md` — пошаговая инструкция для продакшен-деплоя.
 
-## ⛔ ЗАПУСК ЗАБЛОКИРОВАН ДО (финальный список):
+## ⛔ ЗАПУСК ЗАБЛОКИРОВАН ДО (финальный список, стан на 2026-07-03):
 1. ~~**Реальные ставки растаможки**~~ — ✅ СНЯТ (акциз, пошлина, НДС, пенсионный сбор актуальны на янв–июнь 2026; финал у брокера)
 2. **Baseline-сетки Copart/IAAI** — ✅ BASELINE ГОТОВО (seed_auction_fees, 50 тиров).
    ✅ E2E формула верифицирована: Copart broker $5000 petrol 2.0L 2018 → total_usd=$8334, excise=800 EUR.

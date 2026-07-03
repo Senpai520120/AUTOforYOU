@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C-1 ✓ | C2C-2 ✓ | C2C-3 ✓ | C2C-4 ✓ | C2C-Extra ✓ | C2C-5 ✓ | C2C-6 ✓ (захист контактів + антиспам + скарги + баны)
+## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Черга: деплой (промт 15)
 
 ---
 
@@ -211,6 +211,47 @@
 
 ---
 
+## C2C-промт 7 — Угоди + відгуки + рейтинги + юридичні доповнення (завершено 2026-07-03)
+
+### Backend
+- [x] `deals` Django-додаток: `Deal(listing FK, seller FK, buyer FK, status[proposed|confirmed|cancelled], confirmed_at)`
+- [x] UniqueConstraint `(listing, buyer)` — один запит покупця на одне оголошення
+- [x] `Review(deal OneToOne, author FK, target FK, rating 1-5, text)` — тільки після підтвердженої угоди; `clean()`: автор = покупець по угоді
+- [x] `deals/services.py`:
+  - `propose_deal(listing, seller, buyer_id)` — перевірка власника, покупець має бути учасником діалогу, без дублів; нотифікація `deal_proposed`
+  - `confirm_deal(deal, buyer)` — тільки покупець, перехід у `confirmed`, оголошення → `sold`; нотифікація `deal_confirmed`
+  - `cancel_deal(deal, user)` — будь-яка сторона, лише з `proposed`; нотифікація `deal_cancelled`
+  - `create_review(deal, author, rating, text)` — тільки покупець, угода `confirmed`, один відгук; нотифікація `review_received`
+  - `seller_rating(seller_id)` → `{confirmed_deal_count, review_count, avg_rating, has_badge, badge_threshold}`
+- [x] 6 ендпоінтів `/api/v1/deals/`: list+create, confirm, cancel, review, seller-rating, listing-buyers
+- [x] `notifications/models.py`: 4 нові типи — `deal_proposed`, `deal_confirmed`, `deal_cancelled`, `review_received`
+- [x] `SELLER_BADGE_THRESHOLD = 3` (env, дефолт 3) — бейдж «✓ Перевірений продавець» після ≥3 підтверджених угод
+- [x] `LocalListingListSerializer`: `seller_has_badge` (SerializerMethodField)
+- [x] `LocalListingDetailSerializer`: `seller_avg_rating`, `seller_deal_count` (SerializerMethodFields)
+- [x] Міграція `deals/0001_initial`, `notifications/0002_deal_types`
+- [x] **31 новий тест; 365 тестів всього — OK**
+
+### Frontend
+- [x] `api/deals.ts`: list, propose, confirm, cancel, review, sellerRating, listingBuyers
+- [x] `lib/types.ts`: `DealStatus`, `DealUser`, `DealListing`, `DealReview`, `Deal`, `ReviewPayload`, `SellerRating`; нові типи нотифікацій
+- [x] `app/me/deals/page.tsx` — «Угоди та відгуки»: угоди як покупець (confirm/cancel/зірковий відгук) + як продавець (cancel). `DealCard` з умовними кнопками
+- [x] `app/me/local-listings/page.tsx`: «✅ Позначити проданим» (active) → модальне вікно → вибір покупця з діалогів → `propose_deal`
+- [x] `app/local/[id]/LocalListingDetail.tsx`: бейдж «✓ Перевірений продавець» + зірки + рейтинг продавця в синій панелі
+- [x] `app/rules/page.tsx` — Правила розміщення: 8 розділів, бурштинове попередження «Шаблон — потребує перевірки юристом», C2C-застереження (платформа — посередник, не сторона угоди)
+- [x] `components/layout/Footer.tsx`: посилання `/rules` між /terms і /privacy
+- [x] `components/local/LocalListingForm.tsx`: checkbox «Погоджуюсь з правилами» → справжнє посилання `/rules`
+- [x] `app/me/page.tsx`: «🤝 Угоди та відгуки» в меню кабінету
+- [x] **0 TS-помилок, npm run build OK**
+
+### Архітектурне рішення
+- Anti-nakrutka: відгук прив'язаний до `Deal` OneToOne + `buyer_id == author.pk` → неможливо залишити відгук самому собі або без реальної угоди
+- Бейдж `seller_has_badge` — обчислюється в серіалізаторі через SQL COUNT (≥threshold confirmed deals) без кешу — актуально в реальному часі
+- Бейдж `SELLER_BADGE_THRESHOLD` — env-переопределяємо без деплою
+- Всі юридичні тексти `robots: {index: false}` і позначені «Шаблон — потребує перевірки юристом»
+- C2C-застереження: «Платформа є посередником, а не стороною угоди» — у `/rules` розділ 6 та `/terms`
+
+---
+
 ## Дальше (C2C-черга)
 
 | # | Промт | Що робити |
@@ -219,7 +260,9 @@
 | ~~C2C-4~~ | ~~Обране + сповіщення~~ | ✓ |
 | ~~C2C-5~~ | ~~Lifecycle + просування~~ | ✓ (SANDBOX) |
 | ~~C2C-6~~ | ~~Захист контактів + антиспам~~ | ✓ |
-| **C2C-7** | **Рейтинги/відгуки + юридичні доповнення** | Відгуки через підтверджені угоди + правила розміщення, відмова від відповідальності |
+| ~~C2C-7~~ | ~~Рейтинги/відгуки + юридичні доповнення~~ | ✓ ЗАВЕРШЕНО |
+
+**C2C-блок 1–7 повністю завершено. Далі — деплой (промт 15).**
 
 ## Дальше (очередь задач до продакшена)
 
