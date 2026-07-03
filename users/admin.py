@@ -4,18 +4,44 @@ from .models import CustomUser, DealerApplication, TrustedShop
 from .services import approve_application, reject_application
 
 
+def ban_users(modeladmin, request, queryset):
+    from local_listings.models import LocalListing
+    count = 0
+    for user in queryset.exclude(is_staff=True):
+        if not user.is_banned:
+            user.is_banned = True
+            user.is_active = False
+            user.save(update_fields=['is_banned', 'is_active'])
+            LocalListing.objects.filter(
+                owner=user,
+                status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+            ).update(status=LocalListing.Status.HIDDEN)
+            count += 1
+    modeladmin.message_user(request, f'Забанено: {count}.', messages.WARNING)
+
+ban_users.short_description = 'Забанити вибраних користувачів'
+
+
+def unban_users(modeladmin, request, queryset):
+    count = queryset.filter(is_banned=True).update(is_banned=False, is_active=True)
+    modeladmin.message_user(request, f'Розбанено: {count}.', messages.SUCCESS)
+
+unban_users.short_description = 'Розбанити вибраних користувачів'
+
+
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
-    list_display = ('email', 'role', 'is_verified_dealer', 'is_staff', 'created_at')
-    list_filter = ('role', 'is_verified_dealer', 'is_staff')
+    list_display = ('email', 'role', 'is_verified_dealer', 'is_banned', 'is_email_verified', 'is_staff', 'created_at')
+    list_filter = ('role', 'is_verified_dealer', 'is_banned', 'is_email_verified', 'is_staff')
     search_fields = ('email', 'phone')
     ordering = ('-created_at',)
+    actions = [ban_users, unban_users]
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Личные данные', {'fields': ('first_name', 'last_name', 'phone')}),
-        ('Роль и статус', {'fields': ('role', 'is_verified_dealer')}),
+        ('Роль и статус', {'fields': ('role', 'is_verified_dealer', 'is_banned', 'is_email_verified')}),
         ('Права', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Даты', {'fields': ('last_login',)}),
     )

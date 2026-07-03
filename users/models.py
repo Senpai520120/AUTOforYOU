@@ -35,6 +35,10 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.BUYER, verbose_name='Роль')
     is_verified_dealer = models.BooleanField(default=False, verbose_name='Верифицированный дилер')
     telegram_id = models.BigIntegerField(null=True, blank=True, unique=True, verbose_name='Telegram ID')
+    agreed_to_terms_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата згоди з умовами')
+    is_banned = models.BooleanField(default=False, verbose_name='Забанений')
+    is_email_verified = models.BooleanField(default=False, verbose_name='Email підтверджено')
+    # повноцінна email-верифікація — окремо
     created_at = models.DateTimeField(auto_now_add=True)
 
     USERNAME_FIELD = 'email'
