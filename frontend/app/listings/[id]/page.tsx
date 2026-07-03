@@ -4,7 +4,8 @@ import type { Metadata } from 'next';
 import ListingDetail from '@/components/listings/ListingDetail';
 import type { Listing } from '@/lib/types';
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+// INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
+const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
 
 // cache() deduplicates the fetch — called once for metadata + once for the page = 1 request

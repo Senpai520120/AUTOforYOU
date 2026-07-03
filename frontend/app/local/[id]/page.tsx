@@ -3,7 +3,9 @@ import type { Metadata } from 'next';
 import LocalListingDetail from './LocalListingDetail';
 import { LocalListing } from '@/lib/types';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+// INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
+// NEXT_PUBLIC_API_URL is baked at build time and used by browser JS.
+const API = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 async function getListing(id: string): Promise<LocalListing | null> {
   try {

@@ -1,0 +1,124 @@
+services:
+
+  # ─── PostgreSQL database ─────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-autoforyou}
+      POSTGRES_USER: ${POSTGRES_USER:-autoforyou}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoforyou_dev_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoforyou} -d ${POSTGRES_DB:-autoforyou}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ─── Redis (cache + Celery broker) ───────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  # ─── Django backend (Gunicorn) ────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    entrypoint: ["/app/docker/entrypoint.sh"]
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - media:/app/media
+      - static:/app/staticfiles
+    restart: unless-stopped
+
+  # ─── Next.js frontend ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
+      args:
+        # Baked into client-side JS at build time (browser uses nginx on port 80)
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+    environment:
+      NODE_ENV: production
+      # Runtime env for Next.js SSR calls — uses Docker internal network
+      INTERNAL_API_URL: http://backend:8000
+    restart: unless-stopped
+
+  # ─── Telegram bot (disabled if TELEGRAM_BOT_TOKEN is not set) ────────────────
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    entrypoint: ["/app/docker/bot_entrypoint.sh"]
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    # on-failure: won't restart if bot exits cleanly (exit 0 = no token set)
+    restart: on-failure
+
+  # ─── Celery worker ────────────────────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["celery", "-A", "core", "worker", "-l", "info"]
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # ─── Celery beat (scheduler) ──────────────────────────────────────────────────
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command:
+      - celery
+      - -A
+      - core
+      - beat
+      - -l
+      - info
+      - --scheduler
+      - django_celery_beat.schedulers:DatabaseScheduler
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # ─── Nginx reverse proxy ──────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - static:/static:ro
+      - media:/media:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  static:
+  media:

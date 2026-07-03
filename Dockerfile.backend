@@ -1,0 +1,33 @@
+# ─── Stage 1: build dependencies ──────────────────────────────────────────────
+FROM python:3.12-slim AS builder
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+
+# ─── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.12-slim AS runtime
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy project source (frontend excluded via .dockerignore)
+COPY . .
+
+# Ensure dirs for static/media exist
+RUN mkdir -p /app/staticfiles /app/media
+
+# Make startup scripts executable
+RUN chmod +x /app/docker/entrypoint.sh /app/docker/bot_entrypoint.sh
+
+EXPOSE 8000

@@ -3,7 +3,8 @@ import { listingSlug } from '@/lib/utils';
 import type { Listing, PaginatedResponse } from '@/lib/types';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+// INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
+const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 async function fetchActiveListings(): Promise<Listing[]> {
   try {
