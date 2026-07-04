@@ -33,10 +33,11 @@ class LiqPayClient:
 
     @classmethod
     def from_settings(cls) -> 'LiqPayClient':
+        from django.conf import settings as django_settings
         return cls(
-            public_key=os.environ.get('LIQPAY_PUBLIC_KEY', ''),
-            private_key=os.environ.get('LIQPAY_PRIVATE_KEY', ''),
-            sandbox=os.environ.get('LIQPAY_SANDBOX', 'false').lower() == 'true',
+            public_key=getattr(django_settings, 'LIQPAY_PUBLIC_KEY', '') or os.environ.get('LIQPAY_PUBLIC_KEY', ''),
+            private_key=getattr(django_settings, 'LIQPAY_PRIVATE_KEY', '') or os.environ.get('LIQPAY_PRIVATE_KEY', ''),
+            sandbox=getattr(django_settings, 'LIQPAY_SANDBOX', True),
         )
 
     # ── Подпись ───────────────────────────────────────────────────────────────

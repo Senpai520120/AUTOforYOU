@@ -1,4 +1,7 @@
-FROM ubuntu:latest
-LABEL authors="kirit"
-
-ENTRYPOINT ["top", "-b"]
+FROM node:20-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm install
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]

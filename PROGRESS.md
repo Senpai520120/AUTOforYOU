@@ -299,6 +299,33 @@
 
 ---
 
+## Фікс 502 Bad Gateway (2026-07-04)
+
+### Причина 502
+nginx стартував одразу після запуску контейнера backend — але gunicorn слухає порт 8000
+лише ПІСЛЯ того, як відпрацюють `migrate` + `collectstatic`. На свіжій БД це займає 20-60 секунд.
+Поки gunicorn не піднявся, nginx повертав `502 Bad Gateway` на всі запити.
+
+Друга проблема: `celery_worker` і `celery_beat` використовували `memory://` брокер замість Redis,
+бо Django-налаштування обирають `memory://` при `DEBUG=true` (налаштування `core/settings.py`).
+
+### Що виправлено (`docker-compose.yml`)
+- [x] Додано `healthcheck` до сервісу `backend` — Python socket-перевірка порту 8000:
+  `python -c "import socket; s=socket.create_connection(('localhost',8000),2); s.close()"`
+- [x] `nginx` тепер залежить від `backend: condition: service_healthy` — стартує лише після
+  того, як gunicorn реально слухає порт (не просто "контейнер запущений")
+- [x] `celery_worker` і `celery_beat` отримали `environment: DEBUG=false` — примусово
+  використовують Redis-брокер (`redis://redis:6379/0`) незалежно від `.env`
+
+### Перевірка після фіксу
+- [x] `docker compose down && docker compose up -d` — nginx чекає `backend: Healthy` перед стартом ✅
+- [x] `http://localhost/` → **200** ✅
+- [x] `http://localhost/admin/` → **302** ✅
+- [x] `http://localhost/api/v1/local/listings/` → **200** ✅
+- [x] `celery_worker` → `Connected to redis://redis:6379/0` ✅
+
+---
+
 ## Дальше (очередь задач до продакшена)
 
 | # | Блокер | Что делать |
