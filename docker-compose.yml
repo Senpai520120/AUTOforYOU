@@ -37,6 +37,13 @@ services:
     volumes:
       - media:/app/media
       - static:/app/staticfiles
+    # Gunicorn starts only after migrate+collectstatic finish; nginx waits for this.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('localhost',8000),2); s.close()\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
 
   # ─── Next.js frontend ─────────────────────────────────────────────────────────
@@ -75,6 +82,9 @@ services:
       dockerfile: Dockerfile.backend
     command: ["celery", "-A", "core", "worker", "-l", "info"]
     env_file: .env
+    environment:
+      # Force DEBUG=false so settings.py uses Redis broker (not memory://).
+      - DEBUG=false
     depends_on:
       db:
         condition: service_healthy
@@ -97,6 +107,9 @@ services:
       - --scheduler
       - django_celery_beat.schedulers:DatabaseScheduler
     env_file: .env
+    environment:
+      # Force DEBUG=false so settings.py uses Redis broker (not memory://).
+      - DEBUG=false
     depends_on:
       db:
         condition: service_healthy
@@ -114,8 +127,10 @@ services:
       - static:/static:ro
       - media:/media:ro
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

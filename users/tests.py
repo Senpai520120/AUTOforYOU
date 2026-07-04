@@ -234,3 +234,37 @@ class TestJWTLogout(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access}')
         resp = self.client.post(LOGOUT_URL, {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ── Реєстрація: згода з умовами ──────────────────────────────────────────────
+
+REGISTER_URL = '/api/v1/auth/register/'
+
+_REG_BASE = {
+    'email': 'newuser@test.com',
+    'password': 'StrongPass123!',
+    'password2': 'StrongPass123!',
+    'role': 'buyer',
+}
+
+
+class TestRegistrationConsent(APITestCase):
+
+    def test_register_without_consent_returns_400(self):
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': False}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('agreed_to_terms', resp.data)
+
+    def test_register_without_consent_field_returns_400(self):
+        resp = self.client.post(REGISTER_URL, _REG_BASE, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_with_consent_sets_agreed_to_terms_at(self):
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(email=_REG_BASE['email'])
+        self.assertIsNotNone(user.agreed_to_terms_at)
+
+    def test_register_with_consent_returns_201(self):
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)

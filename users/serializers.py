@@ -1,23 +1,32 @@
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 from .models import CustomUser, DealerApplication, TrustedShop
 
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
-    password2 = serializers.CharField(write_only=True, label='Подтверждение пароля')
+    password2 = serializers.CharField(write_only=True, label='Підтвердження пароля')
+    agreed_to_terms = serializers.BooleanField(write_only=True)
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'role')
+        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'role', 'agreed_to_terms')
 
     def validate(self, attrs):
         if attrs['password'] != attrs.pop('password2'):
-            raise serializers.ValidationError({'password': 'Пароли не совпадают.'})
+            raise serializers.ValidationError({'password': 'Паролі не збігаються.'})
+        if not attrs.pop('agreed_to_terms'):
+            raise serializers.ValidationError(
+                {'agreed_to_terms': 'Необхідно погодитися з умовами використання.'}
+            )
         return attrs
 
     def create(self, validated_data):
-        return CustomUser.objects.create_user(**validated_data)
+        user = CustomUser.objects.create_user(**validated_data)
+        user.agreed_to_terms_at = timezone.now()
+        user.save(update_fields=['agreed_to_terms_at'])
+        return user
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
