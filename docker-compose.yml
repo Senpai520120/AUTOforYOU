@@ -3,12 +3,14 @@ services:
   # ─── PostgreSQL database ─────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
+    ports:
+      - "5433:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-autoforyou}
       POSTGRES_USER: ${POSTGRES_USER:-autoforyou}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoforyou_dev_pass}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - "/d/pyCharm/AUTOforYOU/pgdata/:/var/lib/postgresql/data"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoforyou} -d ${POSTGRES_DB:-autoforyou}"]
       interval: 5s
