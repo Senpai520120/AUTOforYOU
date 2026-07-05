@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from .models import Shipment, TrackingEvent
 from vehicles.serializers import VehicleSerializer
@@ -29,12 +30,14 @@ class ShipmentSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         )
 
+    @extend_schema_field(serializers.IntegerField())
     def get_vehicle_count(self, obj):
         # vehicles prefetched — используем кэш prefetch_related
         if hasattr(obj, '_prefetched_objects_cache') and 'vehicles' in obj._prefetched_objects_cache:
             return len(obj._prefetched_objects_cache['vehicles'])
         return obj.vehicles.count()
 
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_next_statuses(self, obj):
         return Shipment.VALID_TRANSITIONS.get(obj.status, [])
 
@@ -50,6 +53,7 @@ class ShipmentListSerializer(serializers.ModelSerializer):
             'eta', 'status', 'status_display', 'vehicle_count', 'created_at',
         )
 
+    @extend_schema_field(serializers.IntegerField())
     def get_vehicle_count(self, obj):
         if hasattr(obj, '_prefetched_objects_cache') and 'vehicles' in obj._prefetched_objects_cache:
             return len(obj._prefetched_objects_cache['vehicles'])

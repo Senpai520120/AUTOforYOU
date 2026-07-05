@@ -1,7 +1,9 @@
 import datetime
+from typing import Optional
 
 from django.conf import settings
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import Region, City, LocalListing, LocalListingImage, PromotionTariff
@@ -57,11 +59,13 @@ class LocalListingListSerializer(serializers.ModelSerializer):
         ]
         # contact_phone intentionally excluded from public list
 
+    @extend_schema_field(serializers.CharField())
     def get_owner_name(self, obj):
         u = obj.owner
         full = f'{u.first_name} {u.last_name}'.strip()
         return full or u.email.split('@')[0]
 
+    @extend_schema_field(serializers.BooleanField())
     def get_seller_has_badge(self, obj):
         from deals.services import seller_rating
         from django.conf import settings
@@ -85,12 +89,14 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
             'seller_avg_rating', 'seller_deal_count',
         ]
 
+    @extend_schema_field(serializers.FloatField(allow_null=True))
     def get_seller_avg_rating(self, obj):
         from django.db.models import Avg
         from deals.models import Review
         agg = Review.objects.filter(target=obj.owner).aggregate(avg=Avg('rating'))
         return round(agg['avg'], 1) if agg['avg'] else None
 
+    @extend_schema_field(serializers.IntegerField())
     def get_seller_deal_count(self, obj):
         from deals.models import Deal
         return Deal.objects.filter(seller=obj.owner, status='confirmed').count()

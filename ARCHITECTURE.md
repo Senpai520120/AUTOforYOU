@@ -1,5 +1,34 @@
 # AUTOforYOU — Архитектура
 
+## Безкоштовна підготовка до запуску (2026-07-05)
+
+### Зміни безпеки та конфігурації
+
+| Компонент | Що змінено |
+|---|---|
+| `core/settings.py` — SECRET_KEY | На проді (DEBUG=False) без SECRET_KEY → `ImproperlyConfigured`; dev-fallback збережений |
+| `core/settings.py` — Email | Додано EMAIL_HOST/PORT/USE_TLS/HOST_USER/HOST_PASSWORD з env; дефолт — console backend |
+| `core/settings.py` — SPECTACULAR | ENUM_NAME_OVERRIDES розширено для 10+ enum-типів; ENUM_GENERATE_CHOICE_DESCRIPTION=False |
+| `.env.example` | Команда генерації SECRET_KEY; секція Email з SMTP-коментарем |
+| `.env.docker.example` | SMTP-коментар в Email-секції |
+
+### Регіони (seed_regions)
+
+Команда `python manage.py seed_regions` розширена: 25 областей + місто Київ + ~300+ міст.
+
+Виправлена помилка: Рівне переміщено з Волинської → Рівненська область.
+
+Для повного КАТОТТГ потрібен офіційний CSV Мінцифри.
+
+### Swagger/OpenAPI warnings
+
+Після правок `@extend_schema_field` залишилось 5 non-critical warnings:
+- enum collision для fuel_type (3 різних набори значень: Vehicle 4, LocalListing 5+gas, CustomsExcise 5+phev)
+- 3x status collision (складно вирішити без @extend_schema на views)
+- 1x operationId collision на /messages/conversations/ — однакова назва для GET list і GET detail
+
+---
+
 ## Docker Compose — повний стек (промт 15)
 
 ### Сервіси (`docker-compose.yml`)

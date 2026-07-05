@@ -1,4 +1,5 @@
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from .models import Listing
 from vehicles.serializers import VehicleSerializer
@@ -19,6 +20,7 @@ class ListingSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'seller', 'created_at', 'updated_at')
 
+    @extend_schema_field(serializers.BooleanField())
     def get_is_express_active(self, obj):
         if not obj.is_express_buyout:
             return False

@@ -1,6 +1,43 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Docker ✓ | Черга: деплой на Railway
+## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Docker ✓ | Безкоштовна підготовка ✓ | Черга: деплой на Railway
+
+---
+
+## Безкоштовна підготовка до запуску (2026-07-05) — ЗАВЕРШЕНО
+
+### A1 — Регіони
+- [x] seed_regions розширено: 25 областей + місто Київ, ~300+ міст (більші та середні)
+- [x] Виправлено помилку: Рівне перенесено до Рівненської обл. (раніше помилково у Волинській)
+- [x] Ідемпотентно: повторний запуск не плодить дублів (get_or_create)
+- [!] Неповний КАТОТТГ: для повного переліку потрібен офіційний CSV Мінцифри
+
+### A2 — SECRET_KEY
+- [x] На проді (DEBUG=False) без SECRET_KEY в env → ImproperlyConfigured (зрозуміла помилка)
+- [x] Для dev — залишено insecure-fallback (локальна розробка не сломана)
+- [x] .env.example оновлено: команда генерації SECRET_KEY
+
+### A3 — DEBUG/ALLOWED_HOSTS
+- [x] DEBUG з env, дефолт false (прод безпечний за замовчуванням)
+- [x] ALLOWED_HOSTS=[] без env на проді → Django DisallowedHost (зрозуміла помилка, не мовчання)
+- [x] Локальний запуск (DEBUG=true) — не сломано
+
+### A4 — Email
+- [x] Dev: console backend (листи у консоль, SMTP не потрібен)
+- [x] Прод: EMAIL_HOST/PORT/TLS/USER/PASSWORD читаються з env — вписати SMTP-провайдер
+- [x] .env.example і .env.docker.example оновлено з коментарем «вписати SMTP-провайдер на проді»
+
+### A5 — Swagger
+- [x] Додано @extend_schema_field до SerializerMethodField у local_listings/serializers.py: get_owner_name (CharField), get_seller_has_badge (BooleanField), get_seller_avg_rating (FloatField), get_seller_deal_count (IntegerField)
+- [x] Додано @extend_schema_field у listings/serializers.py: get_is_express_active (BooleanField)
+- [x] Додано @extend_schema_field у shipments/serializers.py: get_vehicle_count (IntegerField), get_next_statuses (ListField)
+- [x] ENUM_NAME_OVERRIDES розширено: LocalListingFuelTypeEnum, CustomsExciseFuelTypeEnum, LocalListingStatusEnum, DealStatusEnum, PromotionTariffTypeEnum, ReportStatusEnum, PaymentStatusEnum, DealerApplicationStatusEnum, NotificationTypeEnum, UserRoleEnum
+- [x] ENUM_GENERATE_CHOICE_DESCRIPTION=False додано до SPECTACULAR_SETTINGS
+- [!] Залишилось 5 попереджень (не критично, не помилки):
+  - 1x fuel_type collision (FuelType94dEnum) — складно вирішити через нетривіальні хеші drf-spectacular
+  - 3x status collision (Status4ef/StatusC94/Status7fcEnum) — аналогічно, потребує @extend_schema на views
+  - 1x operationId collision на /api/v1/messages/conversations/ — потребує рефакторингу URL або @extend_schema(operation_id=...)
+  - Всі warnings не є помилками, схема генерується успішно
 
 ---
 

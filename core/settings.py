@@ -14,14 +14,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env', encoding='utf-8', override=False)
 
 # ─── Безопасность ─────────────────────────────────────────────────────────────
-# В продакшене задать через env: SECRET_KEY=<случайная_строка>
-SECRET_KEY = os.environ.get(
-    'SECRET_KEY',
-    'django-insecure-ea+&)bt%jlzm6=lms#20m8khy&^!fg*41^a+l(&3n7e!5hoal+',
-)
-
 # DEBUG=False по умолчанию; для локальной разработки добавить DEBUG=true в .env
 DEBUG = os.environ.get('DEBUG', 'false').lower() in ('true', '1', 'yes')
+
+# В продакшене SECRET_KEY обязателен — поднимает ImproperlyConfigured при отсутствии.
+# Для dev: insecure-fallback, чтобы runserver работал без .env.
+_secret_key_env = os.environ.get('SECRET_KEY', '')
+if _secret_key_env:
+    SECRET_KEY = _secret_key_env
+elif DEBUG:
+    # Локальная разработка — insecure fallback допустим
+    SECRET_KEY = 'django-insecure-ea+&)bt%jlzm6=lms#20m8khy&^!fg*41^a+l(&3n7e!5hoal+'
+else:
+    raise ImproperlyConfigured(
+        'SECRET_KEY не задан. На проді SECRET_KEY обязателен. '
+        'Сгенерировать: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
+    )
 
 # In production set: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 _raw_hosts = os.environ.get('ALLOWED_HOSTS', '')
@@ -234,6 +242,8 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'ENUM_NAME_OVERRIDES': {
         'VehicleFuelTypeEnum': ['petrol', 'diesel', 'electric', 'hybrid'],
+        'LocalListingFuelTypeEnum': ['petrol', 'diesel', 'electric', 'hybrid', 'gas'],
+        'CustomsExciseFuelTypeEnum': ['petrol', 'diesel', 'electric', 'hybrid', 'phev'],
         'VehicleSourceAuctionEnum': ['copart', 'iaai', 'other'],
         'CarStatusEnum': ['IN_USA', 'IN_TRANSIT', 'IN_UKRAINE'],
         'ListingStatusEnum': ['in_transit', 'in_stock', 'sold'],
@@ -243,7 +253,22 @@ SPECTACULAR_SETTINGS = {
             'at_us_warehouse', 'loading', 'in_ocean',
             'at_eu_port', 'on_truck_to_ua', 'cleared', 'delivered',
         ],
+        'LocalListingStatusEnum': [
+            'draft', 'active', 'pending', 'rejected', 'expired', 'sold', 'hidden',
+        ],
+        'DealStatusEnum': ['proposed', 'confirmed', 'cancelled'],
+        'PromotionTariffTypeEnum': ['renew', 'bump', 'top'],
+        'ReportStatusEnum': ['new', 'reviewed', 'dismissed'],
+        'PaymentStatusEnum': ['pending', 'completed', 'failed', 'reversed'],
+        'DealerApplicationStatusEnum': ['pending', 'approved', 'rejected'],
+        'NotificationTypeEnum': [
+            'new_message', 'listing_approved', 'listing_rejected', 'listing_expiring',
+            'saved_search_match', 'deal_proposed', 'deal_confirmed', 'deal_cancelled',
+            'review_received',
+        ],
+        'UserRoleEnum': ['buyer', 'dealer', 'admin'],
     },
+    'ENUM_GENERATE_CHOICE_DESCRIPTION': False,
     'TITLE': 'AUTOforYOU API',
     'DESCRIPTION': (
         'Маркетплейс для автоперекупщиков: импорт битых авто с аукционов США '
@@ -303,11 +328,16 @@ OPENDATABOT_API_KEY = os.environ.get('OPENDATABOT_API_KEY', '')
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '')
 
 # ─── Email ────────────────────────────────────────────────────────────────────
-# Dev: console-вывод. Продакшен: EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# Dev: console-вывод. Продакшен: вписати SMTP-провайдер через env EMAIL_BACKEND=...smtp...
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',
     'django.core.mail.backends.console.EmailBackend',
 )
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'false').lower() in ('true', '1', 'yes')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@autoforyou.ua')
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────
