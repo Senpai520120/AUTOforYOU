@@ -27,6 +27,27 @@
 - 3x status collision (складно вирішити без @extend_schema на views)
 - 1x operationId collision на /messages/conversations/ — однакова назва для GET list і GET detail
 
+### Telegram-бот — СКОНФІГУРОВАНИЙ (2026-07-05)
+
+| Параметр | Значення |
+|---|---|
+| Бот | @AUTO_F_Y_bot (AUTO_FOR_YOU) |
+| Канал | @AUTO_F_Y |
+| Токен | задано в .env (TELEGRAM_BOT_TOKEN) |
+| Webhook | очищено (deleteWebhook OK) |
+| Запуск | `python manage.py run_bot` (polling) |
+| Docker | окремий сервіс `bot` в docker-compose.yml |
+
+Бот перевірений через Telegram API: `getMe` → @AUTO_F_Y_bot; `getChat @AUTO_F_Y` → канал доступний.
+
+### Примітка для тестів (локальна розробка)
+
+.env містить docker-hostname для DATABASE_URL та REDIS_URL. Для локального запуску тестів:
+```
+DATABASE_URL="" REDIS_URL="" TELEGRAM_BOT_TOKEN="" python manage.py test
+```
+Результат: **365 тестів — OK**
+
 ---
 
 ## Docker Compose — повний стек (промт 15)

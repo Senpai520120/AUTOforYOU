@@ -39,6 +39,16 @@
   - 1x operationId collision на /api/v1/messages/conversations/ — потребує рефакторингу URL або @extend_schema(operation_id=...)
   - Всі warnings не є помилками, схема генерується успішно
 
+### A6 — Тести та Telegram-бот
+- [x] 365 тестів — OK (DATABASE_URL="" REDIS_URL="" TELEGRAM_BOT_TOKEN="" python manage.py test)
+- [!] Примітка для тестів: .env для Docker містить DATABASE_URL та REDIS_URL з docker-hostname. Для локального запуску тестів треба скидати через env: DATABASE_URL="" REDIS_URL="" TELEGRAM_BOT_TOKEN="" python manage.py test
+- [x] Telegram-бот налаштовано: токен задано в .env (TELEGRAM_BOT_TOKEN)
+- [x] Канал знайдено і доступний: @AUTO_F_Y (канал AUTO_FOR_YOU)
+- [x] Бот: @AUTO_F_Y_bot (AUTO_FOR_YOU), ID 8785926220
+- [x] Webhook очищено (deleteWebhook: ok — старих вебхуків не було)
+- [x] Бот готовий до polling: python manage.py run_bot
+- [x] В Docker — окремий сервіс `bot` у docker-compose.yml (вже є)
+
 ---
 
 ## C2C-промт 1 — Місцеві оголошення (завершено 2026-07-01)
