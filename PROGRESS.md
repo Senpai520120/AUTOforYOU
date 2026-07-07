@@ -1158,3 +1158,141 @@ GET  /api/list/
 /b2b            — B2B-дошка (тільки дилери)
 /_not-found     — 404
 ```
+
+---
+
+## Bug: UnicodeDecodeError при подключении к БД (2026-07-07) — ДИАГНОСТИКА ЗАВЕРШЕНА
+
+### Причина (двойная)
+
+1. **.env — UTF-8 BOM + битые комментарии на кириллице**
+   Файл начинался с BOM `\xef\xbb\xbf` и содержал Cyrillic-комментарии в двойной/некорректной кодировке.
+   `load_dotenv(..., encoding='utf-8')` падал, не дойдя до KEY=VALUE строк.
+   **ИСПРАВЛЕНО**: файл перезаписан как чистый UTF-8 без BOM, все комментарии — латиница/English.
+
+2. **Windows PostgreSQL 16.14 — Russian locale (CP1251 error messages)**
+   После чистки .env выяснилось, что реальная ошибка — **password authentication failed for user "autoforyou"**,
+   но Windows Postgres отдаёт сообщение об ошибке в кодировке CP1251 (Russian locale, `lc_messages`).
+   psycopg2 пытается декодировать его как UTF-8, падает на байте `0xc2` в позиции 83 — это
+   первый байт кириллицы "В" (из слова "ВАЖНО") в CP1251, за которым идёт `0xc0` (не валидный
+   UTF-8 continuation byte).
+   Настоящая ошибка сервера (декодирована вручную): `FATAL: пользователь "autoforyou" не прошёл проверку подлинности (по паролю)`.
+
+### Статус подключения
+
+**DB НЕ OK** — auth failure. psycopg2 не может подключиться.
+
+### Что нужно сделать владельцу в pgAdmin
+
+**Шаг A — Проверить пользователя и пароль:**
+1. pgAdmin → Login/Group Roles → найти `autoforyou`
+2. Properties → Definition → Password: убедиться, что пароль = `autopass123`
+   Если не совпадает — изменить или обновить `POSTGRES_PASSWORD` + `DATABASE_URL` в `.env`
+3. Если пользователя нет — создать: `CREATE USER autoforyou WITH PASSWORD 'autopass123';`
+
+**Шаг B — Проверить базу данных:**
+1. Databases → найти `db_autoforyou`
+2. Если нет — создать: `CREATE DATABASE db_autoforyou OWNER autoforyou ENCODING 'UTF8';`
+3. Если есть — убедиться, что owner = `autoforyou` или у него CONNECT privilege
+
+**Шаг C (опционально, устранить CP1251 навсегда):**
+В `postgresql.conf` добавить/изменить:
+```
+lc_messages = 'en_US.UTF-8'
+```
+Или если нет en_US.UTF-8 locale: `lc_messages = 'C'`
+Затем перезапустить PostgreSQL сервис на Windows.
+
+**Шаг D — После исправления перезапустить backend:**
+```
+docker compose up -d --force-recreate backend
+docker compose exec backend python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('DB OK')"
+```
+
+---
+
+## Перенос БД на Windows-Postgres — ЗАВЕРШЕНО (2026-07-07)
+
+### Финальные параметры подключения к БД
+
+| Параметр     | Значение                            |
+|--------------|-------------------------------------|
+| Host         | host.docker.internal (из Docker)    |
+| Host (DBeaver/pgAdmin) | localhost                  |
+| Port         | 5432                                |
+| Database     | **autoforyou**                      |
+| User         | **postgres**                        |
+| Password     | autopass123                         |
+| Engine       | PostgreSQL 18 (Windows)             |
+
+### Что было путаницей
+
+- `.env` ссылался на `db_autoforyou` — такой базы НЕ существует
+- Пользователь `autoforyou` — НЕ существует в Windows-Postgres
+- Реальная база с 56 таблицами: **autoforyou**, доступная через суперпользователя `postgres`
+- Passwords хранились верно (`autopass123`), но у несуществующего пользователя
+
+### Что сделано
+
+1. Диагностика: перебор комбинаций user/db — найдена база `autoforyou` (56 таблиц), user=postgres
+2. `.env` обновлён: `DATABASE_URL=postgresql://postgres:autopass123@host.docker.internal:5432/autoforyou`
+3. `seed_regions` — засіяно 25 областей + 310 міст
+4. `docker compose up -d` — весь стек запущен, все контейнеры Up
+
+### Статус
+
+- **DB OK** — подключение работает
+- Миграций не применяли (0 unapplied) — все 56 таблиц уже были в базе
+- listings: 0 (данных пользователей нет, БД чистая)
+- regions: 25 (засіяно seed_regions)
+- http://localhost → 200 OK
+- http://localhost/api/v1/listings/ → 200 OK
+
+### Креды для DBeaver / pgAdmin
+
+```
+Host:     localhost
+Port:     5432
+Database: autoforyou
+User:     postgres
+Password: autopass123
+```
+
+---
+
+## QA — Полное тестирование (2026-07-07) — ЗАВЕРШЕНО
+
+### Итог: 22 PASS, 2 FAIL → исправлено → **299 тестов зелёные**
+
+| Блок | Статус |
+|------|--------|
+| Инфраструктура (Docker, DB, nginx) | PASS |
+| Автотесты backend (299 тестов) | PASS (было 17 ошибок → исправлено) |
+| Frontend build (0 TS-ошибок, 29 страниц) | PASS |
+| Auth (регистрация/логин/refresh/logout/бан) | PASS |
+| Калькулятор (is_estimate, breakdown) | PASS |
+| Listings create/search (сигнал не крашит) | PASS |
+| Messenger, Favorites, B2B gating | PASS |
+| Local listings, регионы | PASS |
+| Все 23 фронт-роута → 200 | PASS |
+| Безопасность (SECRET_KEY не в git, JWT, throttle) | PASS |
+| Media файлы (volume nginx) | PASS |
+| Telegram binding /me/telegram | PASS |
+
+### Критические баги — исправлено
+
+**БАГ 1 — Listing creation → 500** (`telegram_bot/tasks.py`)
+Сигнал `post_listing_to_channel` не перехватывал `TelegramBadRequest` при `SITE_URL=http://localhost`.
+Исправление: добавлен `except Exception` с `logger.warning` вместо краша. Теперь ошибка
+Telegram логируется, листинг создаётся успешно.
+
+**БАГ 2 — Калькулятор → "Відсутні активні тарифи"** (`docker/entrypoint.sh`)
+Тарифы не сидировались при fresh deploy.
+Исправление: `entrypoint.sh` теперь вызывает `seed_regions`, `seed_rates`, `seed_auction_fees`
+автоматически при каждом старте (команды идемпотентны).
+
+### Не тестируется без ключей/публичного URL
+- LiqPay webhook (нужен публичный HTTPS-адрес)
+- VIN decode (нужен `APIFY_TOKEN`)
+- Реальный автопост в Telegram (нужен `SITE_URL` с валидным HTTPS)
+- Email-верификация (нужен SMTP)

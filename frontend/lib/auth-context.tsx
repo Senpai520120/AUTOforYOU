@@ -11,6 +11,7 @@ interface AuthCtx {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshToken: () => Promise<string | null>;
+  refreshUser: () => Promise<void>;
   loading: boolean;
 }
 
@@ -90,8 +91,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await fetchProfile(data.access);
   };
 
+  const refreshUser = useCallback(async () => {
+    const access = localStorage.getItem('access');
+    if (access) await fetchProfile(access);
+  }, [fetchProfile]);
+
   return (
-    <AuthContext.Provider value={{ user, tokens, login, logout, refreshToken, loading }}>
+    <AuthContext.Provider value={{ user, tokens, login, logout, refreshToken, refreshUser, loading }}>
       {children}
     </AuthContext.Provider>
   );

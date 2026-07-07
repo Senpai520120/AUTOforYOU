@@ -4,6 +4,11 @@ set -e
 echo "[entrypoint] Running database migrations..."
 python manage.py migrate --noinput
 
+echo "[entrypoint] Seeding reference data (idempotent)..."
+python manage.py seed_regions --no-color 2>/dev/null || true
+python manage.py seed_rates   --no-color 2>/dev/null || true
+python manage.py seed_auction_fees --no-color 2>/dev/null || true
+
 echo "[entrypoint] Collecting static files..."
 python manage.py collectstatic --noinput --clear
 

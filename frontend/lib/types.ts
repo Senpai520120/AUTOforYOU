@@ -7,6 +7,7 @@ export interface User {
   role: 'buyer' | 'dealer' | 'admin';
   is_verified_dealer: boolean;
   created_at: string;
+  telegram_id: number | null;
 }
 
 export interface VehicleImage {

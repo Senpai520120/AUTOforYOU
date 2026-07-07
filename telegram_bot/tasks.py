@@ -98,10 +98,20 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
             return True
         except TelegramRetryAfter as exc:
             raise self.retry(countdown=exc.retry_after + 1) from exc
+        except Exception as exc:
+            # Bad URL (localhost dev), invalid chat_id, network — log and skip, never crash listing creation.
+            logger.warning('post_listing_to_channel: Telegram error for listing %s: %s', listing_id, exc)
+            return False
         finally:
             await bot.session.close()
 
-    asyncio.run(_post())
+    try:
+        posted = asyncio.run(_post())
+    except Exception as exc:
+        logger.warning('post_listing_to_channel: skipped listing %s: %s', listing_id, exc)
+        return {'posted': False, 'reason': str(exc)}
+    if not posted:
+        return {'posted': False, 'reason': 'telegram_error'}
     time.sleep(_CHANNEL_THROTTLE_SECONDS)
     logger.info('post_listing_to_channel: листинг %s опубликован в %s', listing_id, channel_id)
     return {'posted': True, 'listing_id': listing_id}

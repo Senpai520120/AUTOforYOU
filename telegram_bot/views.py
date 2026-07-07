@@ -44,6 +44,22 @@ class TelegramLinkTokenView(APIView):
         })
 
 
+class TelegramUnlinkView(APIView):
+    """
+    DELETE /api/v1/telegram/link/
+    Відв'язує Telegram-акаунт від профілю поточного користувача.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        user = request.user
+        if not user.telegram_id:
+            return Response({'detail': 'Telegram не прив\'язаний.'}, status=400)
+        user.telegram_id = None
+        user.save(update_fields=['telegram_id'])
+        return Response({'ok': True})
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramWebhookView(View):
     """

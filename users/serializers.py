@@ -32,8 +32,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ('id', 'email', 'first_name', 'last_name', 'phone', 'role', 'is_verified_dealer', 'created_at')
-        read_only_fields = ('id', 'email', 'is_verified_dealer', 'created_at')
+        fields = ('id', 'email', 'first_name', 'last_name', 'phone', 'role', 'is_verified_dealer', 'created_at', 'telegram_id')
+        read_only_fields = ('id', 'email', 'is_verified_dealer', 'created_at', 'telegram_id')
 
 
 class TrustedShopSerializer(serializers.ModelSerializer):
