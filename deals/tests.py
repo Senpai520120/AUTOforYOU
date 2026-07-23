@@ -1,11 +1,10 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
-from rest_framework import status
 
 from local_listings.models import LocalListing, Region, City
 from messaging.models import Conversation
-from .models import Deal, Review
+from .models import Deal
 from .services import (
     propose_deal,
     confirm_deal,

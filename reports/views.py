@@ -1,6 +1,5 @@
 from rest_framework import generics, permissions
-from .models import Report
-from .serializers import ReportCreateSerializer, ReportSerializer
+from .serializers import ReportCreateSerializer
 
 
 class ReportCreateView(generics.CreateAPIView):

@@ -2,8 +2,7 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 from .models import (
-    Calculation, AuctionFeeTier, UsLandRoute, OceanFreightRate,
-    EuToUaDeliveryRate, ExchangeRate, CustomsExciseRate, PensionFundBracket,
+    Calculation, AuctionFeeTier, ExchangeRate,
 )
 
 

@@ -15,8 +15,6 @@ Management command: upload_lot_photos
 ⚠ S3-перенос фото — промт 7. Для продакшена задать S3_BUCKET_NAME, AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY (и S3_REGION) в .env.
 """
-import io
-import os
 
 import httpx
 from django.core.files.base import ContentFile

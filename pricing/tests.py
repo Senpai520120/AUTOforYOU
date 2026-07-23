@@ -790,8 +790,7 @@ class TestPricingCacheInvalidation(TestCase):
         self.assertIsNone(cache.get(KEYS['exchange']), 'Кэш не сброшен после delete()')
 
     def test_cache_repopulates_after_invalidation(self):
-        from django.core.cache import cache
-        from .cache import get_exchange_rates, KEYS
+        from .cache import get_exchange_rates
         from .models import ExchangeRate
 
         rate = ExchangeRate.objects.create(
@@ -857,7 +856,7 @@ class TestFetchNbuRatesTask(TestCase):
         return mock_resp
 
     def test_task_saves_rates_and_invalidates_cache(self):
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         from django.core.cache import cache
         from pricing.models import ExchangeRate
         from pricing.cache import get_exchange_rates, KEYS

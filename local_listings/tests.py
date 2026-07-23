@@ -1,14 +1,21 @@
+import io
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.conf import settings
+from django.utils import timezone
+from payments.models import Payment
+from PIL import Image as PILImage
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from integrations.models import VinReport
+from local_listings.models import PromotionTariff
+from local_listings.tasks import warn_expiring_listings, expire_listings
 from users.models import CustomUser
-from .models import Region, City, LocalListing
-from .services import approve_listing, reject_listing, SUBSTANTIVE_FIELDS
+from .models import Region, City, LocalListing, LocalListingImage
+from .services import approve_listing, reject_listing
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -441,10 +448,6 @@ class TestRegionsAPI(APITestCase):
 
 # ─── Тест: фото оголошень ─────────────────────────────────────────────────────
 
-import io
-from PIL import Image as PILImage
-from .models import LocalListingImage
-
 
 def _make_image_file(name='photo.jpg', fmt='JPEG', size=(100, 100), content_type='image/jpeg'):
     buf = io.BytesIO()
@@ -584,11 +587,6 @@ class TestListingImageSetPrimary(APITestCase):
 
 # ─── Тести: термін дії та Celery-задачі ──────────────────────────────────────
 
-from datetime import timedelta
-from django.utils import timezone
-from local_listings.tasks import warn_expiring_listings, expire_listings
-from local_listings.models import PromotionTariff
-
 
 def _make_tariff(code='test_renew', ttype='renew', price='49.00', days=30):
     return PromotionTariff.objects.get_or_create(
@@ -675,8 +673,6 @@ class TestExpiryTasks(APITestCase):
 
 # ─── Тести: promote endpoint + callback ──────────────────────────────────────
 
-from payments.models import Payment
-
 
 class TestPromoteEndpoint(APITestCase):
     def setUp(self):
@@ -719,8 +715,6 @@ class TestPromoteEndpoint(APITestCase):
 
 class TestCallbackAppliesTariff(APITestCase):
     def setUp(self):
-        from payments.liqpay_client import LiqPayClient
-        import base64, json, hashlib
 
         self.owner = _make_user('cb_owner@test.com')
         region = _make_region('cb-обл')
@@ -732,7 +726,9 @@ class TestCallbackAppliesTariff(APITestCase):
     def _make_callback(self, payment, liqpay_status='sandbox'):
         """Build a valid LiqPay callback payload (test keys)."""
         from django.conf import settings
-        import base64, json, hashlib
+        import base64
+        import json
+        import hashlib
         private_key = settings.LIQPAY_PRIVATE_KEY
         payload = {
             'order_id': payment.order_id,

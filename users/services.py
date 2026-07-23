@@ -60,7 +60,7 @@ def reject_application(application, admin_user, notes=''):
 def _notify(user, *, approved):
     subject = 'AUTOforYOU: заявка одобрена' if approved else 'AUTOforYOU: заявка отклонена'
     body = (
-        f'Ваша заявка на статус дилера одобрена. Добро пожаловать в B2B-клуб!'
+        'Ваша заявка на статус дилера одобрена. Добро пожаловать в B2B-клуб!'
         if approved else
         'Ваша заявка на статус дилера отклонена. Свяжитесь с поддержкой для уточнения.'
     )

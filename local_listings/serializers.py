@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 
 from django.conf import settings
 from django.utils import timezone
@@ -67,7 +66,6 @@ class LocalListingListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.BooleanField())
     def get_seller_has_badge(self, obj):
-        from deals.services import seller_rating
         from django.conf import settings
         threshold = getattr(settings, 'SELLER_BADGE_THRESHOLD', 3)
         from deals.models import Deal

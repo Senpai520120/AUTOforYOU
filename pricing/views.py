@@ -9,20 +9,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .calculator import (
-    AuctionFeeBreakdown,
     LandedCostInputs,
     build_rate_snapshot_from_db,
     calc_auction_fees,
     calculate_landed_cost,
     rate_snapshot_to_dict,
-    ZERO,
 )
 from .models import (
     AuctionFeeTier, AuctionFixedFee, Calculation, CustomsExciseRate,
     EuToUaDeliveryRate, ExchangeRate, OceanFreightRate,
     PensionFundBracket, UsLandRoute,
 )
-from .serializers import CalculateInputSerializer, CalculationSerializer
+from .serializers import CalculateInputSerializer
 from . import cache as pricing_cache
 
 DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')

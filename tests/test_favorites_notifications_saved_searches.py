@@ -270,7 +270,7 @@ class TestSavedSearchTask(SetupMixin):
         """Повторний запуск задачі не дублює сповіщення."""
         from django.utils import timezone
         import datetime
-        ss = SavedSearch.objects.create(
+        SavedSearch.objects.create(
             user=self.buyer,
             name='Camry',
             filters={'make': 'Toyota'},

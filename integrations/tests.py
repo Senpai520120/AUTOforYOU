@@ -10,8 +10,11 @@ from rest_framework import status
 from rest_framework.test import APITestCase, APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from integrations.importer import import_lot
 from integrations.models import RegistryReport
-from integrations.providers import RealOpendatabotProvider
+from integrations.providers import RealOpendatabotProvider, ManualLotProvider, ApifyLotProvider
+from listings.models import Listing
+from vehicles.models import Vehicle, VehicleImage
 
 
 def _auth_client(email='registry_test@test.com'):
@@ -37,7 +40,7 @@ class TestOpendatabotProviderNoKey(SimpleTestCase):
     def test_no_key_does_not_raise(self):
         provider = RealOpendatabotProvider(api_key='')
         try:
-            result = provider.get_vehicle_info(vin='1HGBH41JXMN109186')
+            provider.get_vehicle_info(vin='1HGBH41JXMN109186')
         except Exception as exc:
             self.fail(f'Provider без ключа бросил исключение: {exc}')
 
@@ -243,11 +246,6 @@ class TestRegistryReportCacheSave(TestCase):
 # Импорт лотов аукционов
 # ═══════════════════════════════════════════════════════════════════════════════
 
-from integrations.importer import import_lot
-from integrations.providers import ManualLotProvider, ApifyLotProvider
-from vehicles.models import Vehicle, VehicleImage
-from listings.models import Listing
-
 _VALID_LOT = {
     'vin': '1HGBH41JXMN109186',
     'auction': 'copart',
@@ -325,7 +323,7 @@ class TestApifyLotProvider(SimpleTestCase):
     def test_no_token_does_not_raise(self):
         provider = ApifyLotProvider(token='')
         try:
-            result = provider.fetch_lot('https://www.copart.com/lot/12345678')
+            provider.fetch_lot('https://www.copart.com/lot/12345678')
         except Exception as exc:
             self.fail(f'ApifyLotProvider без токена бросил исключение: {exc}')
 

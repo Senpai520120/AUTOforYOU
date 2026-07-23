@@ -1,10 +1,8 @@
 from django.test import TestCase
-from django.urls import reverse
 from rest_framework.test import APIClient
-from rest_framework import status
 
 from local_listings.models import LocalListing, Region, City
-from messaging.models import Conversation, Message
+from messaging.models import Message
 from messaging.services import get_or_create_conversation, unread_count_for_user
 from users.models import CustomUser
 

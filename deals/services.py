@@ -8,7 +8,6 @@ from .models import Deal, Review
 def _notify(user_id: int, ntype: str, title: str, text: str, link: str):
     try:
         from notifications.services import create_notification
-        from notifications.models import Notification
         # add new types gracefully if not yet in model
         create_notification(user_id, ntype, title, text, link)
     except Exception:
@@ -28,7 +27,6 @@ def propose_deal(listing, seller, buyer_id: int) -> Deal:
     Raises ValueError on validation errors.
     """
     from messaging.models import Conversation
-    from local_listings.models import LocalListing
 
     if listing.owner_id != seller.pk:
         raise ValueError('Тільки власник оголошення може запропонувати угоду.')
@@ -58,7 +56,7 @@ def propose_deal(listing, seller, buyer_id: int) -> Deal:
         'Пропозиція угоди',
         f'Продавець {seller.email} пропонує підтвердити угоду за оголошенням '
         f'{listing.make} {listing.model} {listing.year}.',
-        f'/me/deals',
+        '/me/deals',
     )
     return deal
 
@@ -87,7 +85,7 @@ def confirm_deal(deal: Deal, buyer) -> Deal:
         'Угоду підтверджено',
         f'Покупець підтвердив угоду за оголошенням '
         f'{deal.listing.make} {deal.listing.model} {deal.listing.year}.',
-        f'/me/deals',
+        '/me/deals',
     )
     return deal
 
@@ -110,7 +108,7 @@ def cancel_deal(deal: Deal, user) -> Deal:
         'Угоду скасовано',
         f'Учасник скасував угоду за оголошенням '
         f'{deal.listing.make} {deal.listing.model} {deal.listing.year}.',
-        f'/me/deals',
+        '/me/deals',
     )
     return deal
 
@@ -138,7 +136,7 @@ def create_review(deal: Deal, author, rating: int, text: str = '') -> Review:
         'review_received',
         'Новий відгук',
         f'Покупець залишив відгук {rating}★ про вас.',
-        f'/me/deals',
+        '/me/deals',
     )
     return review
 

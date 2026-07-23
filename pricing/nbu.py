@@ -6,7 +6,6 @@
 import json
 from datetime import date
 from decimal import Decimal
-from urllib.error import URLError
 from urllib.request import urlopen
 
 from pricing.models import ExchangeRate
