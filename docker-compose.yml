@@ -1,23 +1,26 @@
 services:
 
   # ─── PostgreSQL database ─────────────────────────────────────────────────────
-#  db:
-#    image: postgres:16-alpine
-#    ports:
-#      - "5433:5432"
-#    environment:
-#      POSTGRES_DB: ${POSTGRES_DB:-autoforyou}
-#      POSTGRES_USER: ${POSTGRES_USER:-autoforyou}
-#      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoforyou_dev_pass}
-#    volumes:
-#      - "/d/pyCharm/AUTOforYOU/pgdata/:/var/lib/postgresql/data"
-#    healthcheck:
-#      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoforyou} -d ${POSTGRES_DB:-autoforyou}"]
-#      interval: 5s
-#      timeout: 5s
-#      retries: 10
-#      start_period: 10s
-#    restart: unless-stopped
+  db:
+    image: postgres:18-alpine
+    ports:
+      # Только на localhost — внешний доступ через SSH-туннель; снаружи не видно.
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-autoforyou}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autopass123}
+    volumes:
+      # PG18+ требует монтировать /var/lib/postgresql (без /data)
+      # и сам создаёт подпапку 18/main/ внутри volume.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-autoforyou}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
   # ─── Redis (cache + Celery broker) ───────────────────────────────────────────
   redis:
@@ -32,8 +35,8 @@ services:
     entrypoint: ["/app/docker/entrypoint.sh"]
     env_file: .env
     depends_on:
-#      db:
-#        condition: service_healthy
+      db:
+        condition: service_healthy
       redis:
         condition: service_started
     volumes:
@@ -56,6 +59,7 @@ services:
       args:
         # Baked into client-side JS at build time (browser uses nginx on port 80)
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost}
     environment:
       NODE_ENV: production
       # Runtime env for Next.js SSR calls — uses Docker internal network
@@ -70,8 +74,8 @@ services:
     entrypoint: ["/app/docker/bot_entrypoint.sh"]
     env_file: .env
     depends_on:
-#      db:
-#        condition: service_healthy
+      db:
+        condition: service_healthy
       redis:
         condition: service_started
     # on-failure: won't restart if bot exits cleanly (exit 0 = no token set)
@@ -88,8 +92,8 @@ services:
       # Force DEBUG=false so settings.py uses Redis broker (not memory://).
       - DEBUG=false
     depends_on:
-#      db:
-#        condition: service_healthy
+      db:
+        condition: service_healthy
       redis:
         condition: service_started
     restart: unless-stopped
@@ -113,8 +117,8 @@ services:
       # Force DEBUG=false so settings.py uses Redis broker (not memory://).
       - DEBUG=false
     depends_on:
-#      db:
-#        condition: service_healthy
+      db:
+        condition: service_healthy
       redis:
         condition: service_started
     restart: unless-stopped

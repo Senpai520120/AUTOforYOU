@@ -1,6 +1,47 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Docker ✓ | Безкоштовна підготовка ✓ | 404-фікс ✓ | Черга: деплой на Railway
+## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Docker ✓ | Безкоштовна підготовка ✓ | 404-фікс ✓ | Compose EC2-ready ✓ | Черга: деплой на EC2/AWS
+
+---
+
+## Etap 0: Docker Compose EC2-ready + перенос даних (2026-07-23) — ЗАВЕРШЕНО
+
+### Що зроблено
+- **Дамп Windows-Postgres** (PG 18.3): `backups/win_dump.sql`, 180 KB, 56 таблиць, 5190 рядків.
+  Інструмент: `docker run postgres:18-alpine pg_dump` → stdout → файл.
+- **Сервіс db** розкоментовано та перенесено на `postgres:18-alpine` (відповідає версії Windows-PG).
+  Volume: `postgres_data:/var/lib/postgresql` (PG18 вимагає монтування без `/data`).
+- **Порт БД** прибрано назовні; залишено `127.0.0.1:5433:5432` — тільки для SSH-тунелю.
+- **depends_on** повернуто у всі 4 сервіси (backend, bot, celery_worker, celery_beat):
+  `db: service_healthy` + `redis: service_started`.
+- **DATABASE_URL** переключено на `db:5432` (Docker-мережа, НЕ host.docker.internal).
+- **COMPOSE_PROJECT_NAME=autoforyou** зафіксовано в `.env` та `.env.example`.
+- **NEXT_PUBLIC_SITE_URL** додано як build-arg у `Dockerfile.frontend`.
+- **`.gitignore`** виправлено (кінець файлу був пошкоджений — UTF-16 артефакти).
+- **`.env.example`** повністю переписано під шаблон для EC2-деплою.
+
+### Дані до/після переносу
+| Таблиця            | Windows (до) | Docker (після) |
+|--------------------|:------------:|:--------------:|
+| local_listings     | 0            | 0              |
+| regions            | 25           | 25             |
+| cities             | 310          | 310            |
+| users              | 6            | 6              |
+| vehicles           | 2            | 2              |
+| calculations       | 2            | 2              |
+| payments           | 0            | 0              |
+
+### Перевірка
+- `docker compose config` — валідний, db присутній, порт БД не назовні ✅
+- `docker compose ps` — всі 8 сервісів running/healthy ✅
+- `http://localhost` → HTTP 200 ✅
+- `http://localhost/api/v1/listings/` → 4 оголошення ✅
+- `manage.py migrate` — "No migrations to apply" (схема актуальна) ✅
+- Назовні відкрито тільки порт 80 (nginx) ✅
+
+### Стан після
+Windows-Postgres залишається незачепленою. Резервна копія: `backups/win_dump.sql`.
+Проект повністю переведено на Docker-Postgres. Готово до деплою на EC2.
 
 ---
 
