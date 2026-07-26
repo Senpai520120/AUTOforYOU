@@ -4,14 +4,13 @@ Tests for C2C-промт 4: favorites, notifications, saved_searches.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from local_listings.models import LocalListing, Region, City
-from users.models import CustomUser
+from favorites.models import Favorite
+from local_listings.models import City, LocalListing, Region
 from notifications.models import Notification
 from notifications.services import create_notification, unread_count
-from favorites.models import Favorite
 from saved_searches.models import SavedSearch
 from saved_searches.tasks import check_saved_searches
-
+from users.models import CustomUser
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -253,8 +252,9 @@ class TestSavedSearchTask(SetupMixin):
         )
         # listing was created after saved_search.created_at — task should catch it
         # Force last_notified_at to be before listing creation
-        from django.utils import timezone
         import datetime
+
+        from django.utils import timezone
         ss.last_notified_at = timezone.now() - datetime.timedelta(days=1)
         ss.save()
 
@@ -268,8 +268,9 @@ class TestSavedSearchTask(SetupMixin):
 
     def test_task_does_not_duplicate_on_rerun(self):
         """Повторний запуск задачі не дублює сповіщення."""
-        from django.utils import timezone
         import datetime
+
+        from django.utils import timezone
         SavedSearch.objects.create(
             user=self.buyer,
             name='Camry',
@@ -287,8 +288,9 @@ class TestSavedSearchTask(SetupMixin):
 
     def test_task_skips_non_matching(self):
         """SavedSearch для Honda не спрацьовує на Toyota."""
-        from django.utils import timezone
         import datetime
+
+        from django.utils import timezone
         SavedSearch.objects.create(
             user=self.buyer,
             name='Honda',

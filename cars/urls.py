@@ -1,5 +1,6 @@
 from django.urls import path
-from .views import CustomsCalculatorView, CarListView
+
+from .views import CarListView, CustomsCalculatorView
 
 urlpatterns = [
     path('calculate/', CustomsCalculatorView.as_view(), name='calculator'),

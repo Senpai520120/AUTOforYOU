@@ -1,7 +1,8 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import generics, filters
+from rest_framework import filters, generics
+
 from .models import Shipment
-from .serializers import ShipmentSerializer, ShipmentListSerializer
+from .serializers import ShipmentListSerializer, ShipmentSerializer
 
 
 @extend_schema_view(

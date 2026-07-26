@@ -1,12 +1,17 @@
 from django.urls import path
 from drf_spectacular.utils import extend_schema
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
 from .views import (
-    DealerApplyView, DealerApplicationStatusView,
+    DealerApplicationStatusView,
+    DealerApplyView,
     LogoutView,
-    RegisterView, ProfileView,
-    MyCalculationsView, MyShipmentsView,
-    TrustedShopListView, TrustedShopDetailView,
+    MyCalculationsView,
+    MyShipmentsView,
+    ProfileView,
+    RegisterView,
+    TrustedShopDetailView,
+    TrustedShopListView,
 )
 
 TokenObtainPairView = extend_schema(

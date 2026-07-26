@@ -1,11 +1,10 @@
 from django.contrib import admin, messages
+from django.contrib.admin import helpers
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
-from django.contrib.admin import helpers
 
-from .models import Region, City, LocalListing, LocalListingImage, PromotionTariff
+from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .services import approve_listing, reject_listing
-
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────
 

@@ -536,8 +536,9 @@ class TestRegistryThrottleE2E(TestCase):
         self.client = _auth_client(self.user)
 
     def test_after_limit_returns_429(self):
-        from rest_framework.throttling import ScopedRateThrottle
         from unittest.mock import patch
+
+        from rest_framework.throttling import ScopedRateThrottle
 
         # Симулируем превышение лимита: allow_request возвращает False
         with patch.object(ScopedRateThrottle, 'allow_request', return_value=False), \
@@ -550,8 +551,9 @@ class TestRegistryThrottleE2E(TestCase):
         )
 
     def test_within_limit_responds_normally(self):
-        from rest_framework.throttling import ScopedRateThrottle
         from unittest.mock import patch
+
+        from rest_framework.throttling import ScopedRateThrottle
 
         # В пределах лимита allow_request возвращает True
         with patch.object(ScopedRateThrottle, 'allow_request', return_value=True):

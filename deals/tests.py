@@ -1,15 +1,16 @@
-from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from rest_framework.test import APIClient
 
-from local_listings.models import LocalListing, Region, City
+from local_listings.models import City, LocalListing, Region
 from messaging.models import Conversation
+
 from .models import Deal
 from .services import (
-    propose_deal,
-    confirm_deal,
     cancel_deal,
+    confirm_deal,
     create_review,
+    propose_deal,
     seller_rating,
 )
 

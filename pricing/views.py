@@ -2,12 +2,13 @@ from datetime import date
 
 from django.conf import settings
 from django.db.models import Q
-from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse, inline_serializer
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from . import cache as pricing_cache
 from .calculator import (
     LandedCostInputs,
     build_rate_snapshot_from_db,
@@ -16,12 +17,17 @@ from .calculator import (
     rate_snapshot_to_dict,
 )
 from .models import (
-    AuctionFeeTier, AuctionFixedFee, Calculation, CustomsExciseRate,
-    EuToUaDeliveryRate, ExchangeRate, OceanFreightRate,
-    PensionFundBracket, UsLandRoute,
+    AuctionFeeTier,
+    AuctionFixedFee,
+    Calculation,
+    CustomsExciseRate,
+    EuToUaDeliveryRate,
+    ExchangeRate,
+    OceanFreightRate,
+    PensionFundBracket,
+    UsLandRoute,
 )
 from .serializers import CalculateInputSerializer
-from . import cache as pricing_cache
 
 DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
 

@@ -1,15 +1,17 @@
-from celery import shared_task
 from datetime import timedelta
+
+from celery import shared_task
 from django.utils import timezone
 
 
 @shared_task
 def warn_expiring_listings():
     """За 3 дні до expires_at — попередження власнику (один раз, idempotent)."""
-    from .models import LocalListing
+    from integrations.tasks import send_notification
     from notifications.models import Notification
     from notifications.services import create_notification
-    from integrations.tasks import send_notification
+
+    from .models import LocalListing
 
     threshold = timezone.now() + timedelta(days=3)
     qs = LocalListing.objects.filter(
@@ -42,10 +44,11 @@ def warn_expiring_listings():
 @shared_task
 def expire_listings():
     """Переводить прострочені active-оголошення в expired (idempotent)."""
-    from .models import LocalListing
+    from integrations.tasks import send_notification
     from notifications.models import Notification
     from notifications.services import create_notification
-    from integrations.tasks import send_notification
+
+    from .models import LocalListing
 
     now = timezone.now()
     qs = LocalListing.objects.filter(

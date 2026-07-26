@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
+
 from .models import CustomUser, DealerApplication, TrustedShop
 from .services import approve_application, reject_application
 

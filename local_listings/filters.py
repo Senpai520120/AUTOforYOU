@@ -1,4 +1,4 @@
-from django.db.models import Q, Case, When, Value, IntegerField, F
+from django.db.models import Case, F, IntegerField, Q, Value, When
 from django.utils import timezone
 from rest_framework.filters import BaseFilterBackend
 

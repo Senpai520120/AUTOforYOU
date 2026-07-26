@@ -2,17 +2,17 @@
 Тесты интеграции: Opendatabot (провайдер, кэш, эндпоинт) + импорт лотов аукционов.
 """
 from decimal import Decimal
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 from rest_framework import status
-from rest_framework.test import APITestCase, APIClient
+from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from integrations.importer import import_lot
 from integrations.models import RegistryReport
-from integrations.providers import RealOpendatabotProvider, ManualLotProvider, ApifyLotProvider
+from integrations.providers import ApifyLotProvider, ManualLotProvider, RealOpendatabotProvider
 from listings.models import Listing
 from vehicles.models import Vehicle, VehicleImage
 
@@ -546,8 +546,8 @@ class TestImportLotTaskIdempotency(TestCase):
 
     def test_two_calls_one_listing(self):
         from integrations.tasks import import_lot_task
-        from vehicles.models import Vehicle
         from listings.models import Listing
+        from vehicles.models import Vehicle
 
         result1 = import_lot_task(self._LOT, self.seller.pk)
         result2 = import_lot_task(self._LOT, self.seller.pk)

@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .models import DealerApplication
-from .services import apply_for_dealer, approve_application, reject_application, DuplicatePendingError
+from .services import DuplicatePendingError, apply_for_dealer, approve_application, reject_application
 
 User = get_user_model()
 
@@ -159,8 +159,8 @@ class TestWholesaleCatalogFilter(APITestCase):
     LISTINGS_URL = '/api/v1/listings/'
 
     def _make_listing(self, channel, seller):
-        from vehicles.models import Vehicle
         from listings.models import Listing
+        from vehicles.models import Vehicle
         v = Vehicle.objects.create(
             make='Toyota', model='Camry', year=2020, vin=f'VIN{channel[:1].upper()}001',
             fuel_type='petrol', engine_cc=2000, mileage_km=50000,

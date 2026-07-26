@@ -154,9 +154,9 @@ class PostListingToChannelTaskTest(TestCase):
         self.assertEqual(result['reason'], 'listing not found')
 
     def test_no_channel_id_skips(self):
+        from listings.models import Listing
         from telegram_bot.tasks import post_listing_to_channel
         from vehicles.models import Vehicle
-        from listings.models import Listing
 
         v = Vehicle.objects.create(
             vin='1HGBH41JXMN109186', make='Toyota', model='Camry', year=2020,

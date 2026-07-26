@@ -1,5 +1,7 @@
 from django.contrib import admin
+
 from .models import Car, CarImage
+
 
 class CarImageInline(admin.TabularInline):
     model = CarImage

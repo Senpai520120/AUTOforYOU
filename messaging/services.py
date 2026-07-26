@@ -25,8 +25,8 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
     Якщо діалог вже є — відкриває його і надсилає перше повідомлення.
     Raises ValueError: оголошення не знайдено / initiator == власник.
     """
-    from local_listings.models import LocalListing
     from listings.models import Listing
+    from local_listings.models import LocalListing
 
     if listing_type == 'local':
         try:
@@ -107,6 +107,7 @@ def unread_count_for_user(user) -> int:
 def _add_message(sender, conversation: Conversation, text: str):
     """Returns (message, detected_contacts_list)."""
     from django.conf import settings as dj_settings
+
     from local_listings.antispam import detect_contacts
 
     antispam_mode = getattr(dj_settings, 'ANTISPAM_MODE', 'soft')
@@ -128,8 +129,8 @@ def _notify_recipients(sender, conversation: Conversation, message: Message) -> 
         send_notification = None
 
     try:
-        from notifications.services import create_notification
         from notifications.models import Notification as NotifModel
+        from notifications.services import create_notification
     except ImportError:
         create_notification = None
         NotifModel = None

@@ -1,8 +1,10 @@
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
-from .models import Listing
+
 from vehicles.serializers import VehicleSerializer
+
+from .models import Listing
 
 
 class ListingSerializer(serializers.ModelSerializer):

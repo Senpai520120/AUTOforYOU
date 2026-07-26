@@ -4,8 +4,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
-from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -366,6 +366,7 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # Расписание фоновых задач
 from celery.schedules import crontab as _crontab  # noqa: E402
+
 CELERY_BEAT_SCHEDULE = {
     # Курс НБУ: каждый день в 09:00 по Киеву
     'fetch-nbu-rates-daily': {

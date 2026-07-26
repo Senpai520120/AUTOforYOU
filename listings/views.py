@@ -1,9 +1,10 @@
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
-from rest_framework import generics, filters, permissions
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from rest_framework import filters, generics, permissions
+
 from .models import Listing
 from .permissions import IsVerifiedDealerOrAdmin
-from .serializers import ListingSerializer, ListingCreateSerializer
+from .serializers import ListingCreateSerializer, ListingSerializer
 
 
 def _base_queryset():

@@ -16,7 +16,6 @@ import hashlib
 import json
 import os
 
-
 LIQPAY_CHECKOUT_URL = 'https://www.liqpay.com/api/3/checkout'
 LIQPAY_API_URL = 'https://www.liqpay.com/api/3/request'
 

@@ -5,7 +5,7 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from .models import Region, City, LocalListing, LocalListingImage, PromotionTariff
+from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .services import SUBSTANTIVE_FIELDS
 
 
@@ -90,6 +90,7 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
     @extend_schema_field(serializers.FloatField(allow_null=True))
     def get_seller_avg_rating(self, obj):
         from django.db.models import Avg
+
         from deals.models import Review
         agg = Review.objects.filter(target=obj.owner).aggregate(avg=Avg('rating'))
         return round(agg['avg'], 1) if agg['avg'] else None
@@ -160,8 +161,9 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        from .antispam import detect_contacts
         from django.conf import settings as dj_settings
+
+        from .antispam import detect_contacts
 
         agreed = validated_data.pop('agreed_to_rules')
         max_active = getattr(settings, 'LOCAL_LISTING_MAX_ACTIVE', 10)
@@ -223,8 +225,9 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
-        from .antispam import detect_contacts
         from django.conf import settings as dj_settings
+
+        from .antispam import detect_contacts
 
         current_status = instance.status
         substantive_changed = bool(SUBSTANTIVE_FIELDS & set(validated_data.keys()))

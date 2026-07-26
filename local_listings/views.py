@@ -1,29 +1,30 @@
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
+import uuid
+
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
-from .filters import LocalListingFilter
-import uuid
 
-from .models import LocalListing, LocalListingImage, Region, City, PromotionTariff
+from .filters import LocalListingFilter
+from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .serializers import (
+    CitySerializer,
+    LocalListingCreateSerializer,
+    LocalListingDetailSerializer,
     LocalListingImageSerializer,
     LocalListingListSerializer,
-    LocalListingDetailSerializer,
-    LocalListingCreateSerializer,
-    LocalListingUpdateSerializer,
     LocalListingOwnerSerializer,
+    LocalListingUpdateSerializer,
     PromotionTariffSerializer,
     RegionSerializer,
-    CitySerializer,
 )
 
 
@@ -345,8 +346,8 @@ class LocalListingPromoteView(APIView):
         order_id = f'promo-{listing.pk}-{tariff.code}-{uuid.uuid4().hex[:8]}'
         description = f'{tariff.name}: {listing.make} {listing.model} {listing.year}'
 
-        from payments.models import Payment
         from payments.liqpay_client import LiqPayClient
+        from payments.models import Payment
 
         payment = Payment.objects.create(
             user=request.user,

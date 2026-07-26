@@ -1,4 +1,5 @@
 import logging
+
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
@@ -12,9 +13,11 @@ def check_saved_searches():
     Idempotent: last_notified_at is updated after processing.
     """
     from django.utils import timezone
+
     from local_listings.models import LocalListing
-    from notifications.services import create_notification
     from notifications.models import Notification as NotifModel
+    from notifications.services import create_notification
+
     from .models import SavedSearch
 
     now = timezone.now()

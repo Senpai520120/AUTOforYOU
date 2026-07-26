@@ -1,0 +1,19 @@
+# Настройки ruff для Django-проекта
+target-version = "py312"
+line-length = 120
+
+# Не проверять автогенерённые и служебные файлы
+extend-exclude = [
+    "*/migrations/*",
+    "frontend",
+    ".venv",
+    "venv",
+]
+
+[lint]
+# E,F — базовые ошибки (pyflakes/pycodestyle); I — сортировка импортов
+select = ["E", "F", "I"]
+
+# RUF012 несовместимо со стилем Django (Meta-классы, DRF-атрибуты)
+# E501 — длина строк, не критично
+ignore = ["E501"]

@@ -1,5 +1,6 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import generics, filters
+from rest_framework import filters, generics
+
 from .models import Vehicle
 from .serializers import VehicleSerializer
 

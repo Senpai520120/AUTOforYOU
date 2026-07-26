@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from local_listings.models import LocalListing
+
 from .models import Deal
 from .serializers import (
     DealSerializer,

@@ -7,8 +7,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import CustomUser, DealerApplication, TrustedShop
 from .serializers import (
-    DealerApplicationCreateSerializer, DealerApplicationSerializer,
-    RegisterSerializer, UserProfileSerializer, TrustedShopSerializer,
+    DealerApplicationCreateSerializer,
+    DealerApplicationSerializer,
+    RegisterSerializer,
+    TrustedShopSerializer,
+    UserProfileSerializer,
 )
 from .services import DuplicatePendingError, apply_for_dealer
 

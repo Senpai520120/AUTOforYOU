@@ -1,9 +1,15 @@
 from django.contrib import admin
+
 from .models import (
-    AuctionFeeTier, AuctionFixedFee,
-    UsLandRoute, OceanFreightRate,
-    EuToUaDeliveryRate, ExchangeRate, CustomsExciseRate,
-    PensionFundBracket, Calculation,
+    AuctionFeeTier,
+    AuctionFixedFee,
+    Calculation,
+    CustomsExciseRate,
+    EuToUaDeliveryRate,
+    ExchangeRate,
+    OceanFreightRate,
+    PensionFundBracket,
+    UsLandRoute,
 )
 
 

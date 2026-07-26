@@ -8,6 +8,7 @@
 """
 from decimal import Decimal
 from types import SimpleNamespace
+
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 
@@ -15,9 +16,9 @@ from .calculator import (
     AuctionFeeBreakdown,
     LandedCostInputs,
     RateSnapshot,
+    calc_age_coeff,
     calc_auction_fees,
     calculate_landed_cost,
-    calc_age_coeff,
 )
 
 D = Decimal
@@ -579,6 +580,7 @@ class TestIAAITierBoundaryDB(TestCase):
 
     def _tier(self, bid):
         from datetime import date
+
         from pricing.views import _lookup_tier
         return _lookup_tier('iaai', D(str(bid)), 'broker', 'secured', 'any', date.today())
 
@@ -595,8 +597,9 @@ class TestIAAITierBoundaryDB(TestCase):
         self.assertEqual(tier.fee_percent, D('0.1000'))
 
     def test_bid_12000_calc_buyer_fee(self):
-        from pricing.views import _lookup_fixed_fees
         from datetime import date
+
+        from pricing.views import _lookup_fixed_fees
         today = date.today()
         tier = self._tier(12000)
         fixed = _lookup_fixed_fees('iaai', 'any', today)
@@ -647,15 +650,23 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
     def _build(self):
         from datetime import date
-        from pricing.views import _lookup_tier, _lookup_fixed_fees, _active_on
-        from pricing.models import (
-            UsLandRoute, OceanFreightRate, EuToUaDeliveryRate,
-            ExchangeRate, CustomsExciseRate, PensionFundBracket,
-        )
-        from pricing.calculator import (
-            build_rate_snapshot_from_db, LandedCostInputs, calculate_landed_cost,
-        )
+
         from django.db.models import Q
+
+        from pricing.calculator import (
+            LandedCostInputs,
+            build_rate_snapshot_from_db,
+            calculate_landed_cost,
+        )
+        from pricing.models import (
+            CustomsExciseRate,
+            EuToUaDeliveryRate,
+            ExchangeRate,
+            OceanFreightRate,
+            PensionFundBracket,
+            UsLandRoute,
+        )
+        from pricing.views import _active_on, _lookup_fixed_fees, _lookup_tier
 
         today = date.today()
         bid = D('5000')
@@ -758,7 +769,8 @@ class TestPricingCacheInvalidation(TestCase):
 
     def test_save_exchange_rate_invalidates_cache(self):
         from django.core.cache import cache
-        from .cache import get_exchange_rates, KEYS
+
+        from .cache import KEYS, get_exchange_rates
         from .models import ExchangeRate
 
         rate = ExchangeRate.objects.create(
@@ -776,7 +788,8 @@ class TestPricingCacheInvalidation(TestCase):
 
     def test_delete_exchange_rate_invalidates_cache(self):
         from django.core.cache import cache
-        from .cache import get_exchange_rates, KEYS
+
+        from .cache import KEYS, get_exchange_rates
         from .models import ExchangeRate
 
         rate = ExchangeRate.objects.create(
@@ -812,7 +825,8 @@ class TestPricingCacheInvalidation(TestCase):
 
     def test_auction_fee_tier_save_invalidates_cache(self):
         from django.core.cache import cache
-        from .cache import get_auction_fee_tiers, KEYS
+
+        from .cache import KEYS, get_auction_fee_tiers
         from .models import AuctionFeeTier
 
         tier = AuctionFeeTier.objects.create(
@@ -857,9 +871,11 @@ class TestFetchNbuRatesTask(TestCase):
 
     def test_task_saves_rates_and_invalidates_cache(self):
         from unittest.mock import patch
+
         from django.core.cache import cache
+
+        from pricing.cache import KEYS, get_exchange_rates
         from pricing.models import ExchangeRate
-        from pricing.cache import get_exchange_rates, KEYS
         from pricing.tasks import fetch_nbu_rates_task
 
         # Прогреваем кэш
@@ -891,7 +907,9 @@ class TestFetchNbuRatesTask(TestCase):
     def test_task_retries_on_url_error(self):
         from unittest.mock import patch
         from urllib.error import URLError
+
         from celery.exceptions import Retry
+
         from pricing.tasks import fetch_nbu_rates_task
 
         with patch('pricing.nbu.urlopen', side_effect=URLError('timeout')):

@@ -1,8 +1,8 @@
 from django.conf import settings
 from django.db import models
 
-from vehicles.models import Vehicle
 from pricing.models import Calculation
+from vehicles.models import Vehicle
 
 
 class Listing(models.Model):

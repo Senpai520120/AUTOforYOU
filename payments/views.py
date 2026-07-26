@@ -2,9 +2,9 @@ import logging
 from datetime import timedelta
 
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from drf_spectacular.utils import extend_schema, OpenApiResponse
+from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response

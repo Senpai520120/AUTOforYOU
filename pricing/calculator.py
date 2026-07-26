@@ -8,9 +8,8 @@
 с плейсхолдер-значениями. Результат всегда is_estimate=True.
 Сетки аукционных сборов — baseline (сверить с тарифом брокера).
 """
-from dataclasses import dataclass, field, asdict
-from decimal import Decimal, ROUND_HALF_UP
-
+from dataclasses import asdict, dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 
 ZERO = Decimal('0')
 TWO_PLACES = Decimal('0.01')

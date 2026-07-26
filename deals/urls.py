@@ -1,11 +1,12 @@
 from django.urls import path
+
 from .views import (
-    DealListCreateView,
-    DealConfirmView,
     DealCancelView,
+    DealConfirmView,
+    DealListCreateView,
     DealReviewView,
-    SellerRatingView,
     ListingBuyersView,
+    SellerRatingView,
 )
 
 urlpatterns = [

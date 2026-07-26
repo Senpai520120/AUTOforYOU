@@ -14,8 +14,12 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 
 from pricing.models import (
-    CustomsExciseRate, EuToUaDeliveryRate,
-    ExchangeRate, OceanFreightRate, PensionFundBracket, UsLandRoute,
+    CustomsExciseRate,
+    EuToUaDeliveryRate,
+    ExchangeRate,
+    OceanFreightRate,
+    PensionFundBracket,
+    UsLandRoute,
 )
 
 # ПРОВЕРИТЬ — прожиточный минимум 2026 (Украина, грн/месяц)

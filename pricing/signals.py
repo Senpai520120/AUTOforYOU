@@ -1,11 +1,17 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import (
-    AuctionFeeTier, AuctionFixedFee, EuToUaDeliveryRate, ExchangeRate,
-    CustomsExciseRate, OceanFreightRate, PensionFundBracket, UsLandRoute,
-)
 from .cache import invalidate
+from .models import (
+    AuctionFeeTier,
+    AuctionFixedFee,
+    CustomsExciseRate,
+    EuToUaDeliveryRate,
+    ExchangeRate,
+    OceanFreightRate,
+    PensionFundBracket,
+    UsLandRoute,
+)
 
 
 @receiver([post_save, post_delete], sender=AuctionFeeTier)

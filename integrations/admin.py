@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import VinReport, RegistryReport
+
+from .models import RegistryReport, VinReport
 
 
 @admin.register(VinReport)

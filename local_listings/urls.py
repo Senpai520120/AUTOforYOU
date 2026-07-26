@@ -1,16 +1,17 @@
 from django.urls import path
+
 from .views import (
-    LocalListingListCreateView,
-    LocalListingDetailView,
-    LocalListingContactView,
-    MyListingsView,
-    VinPrefillView,
-    RegionListView,
     CityListView,
-    LocalListingImageUploadView,
+    LocalListingContactView,
+    LocalListingDetailView,
     LocalListingImageDetailView,
-    PromotionTariffListView,
+    LocalListingImageUploadView,
+    LocalListingListCreateView,
     LocalListingPromoteView,
+    MyListingsView,
+    PromotionTariffListView,
+    RegionListView,
+    VinPrefillView,
 )
 
 urlpatterns = [

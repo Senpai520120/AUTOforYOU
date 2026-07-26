@@ -63,8 +63,8 @@ def _notify_owner(listing: LocalListing, *, approved: bool, reason: str = '') ->
 
     # In-app сповіщення
     try:
-        from notifications.services import create_notification
         from notifications.models import Notification as NotifModel
+        from notifications.services import create_notification
         ntype = NotifModel.Type.LISTING_APPROVED if approved else NotifModel.Type.LISTING_REJECTED
         create_notification(user.pk, ntype, subject, body[:500], f'/local/{listing.pk}')
     except Exception:

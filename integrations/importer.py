@@ -9,8 +9,8 @@
 """
 from decimal import Decimal
 
-from vehicles.models import Vehicle, VehicleImage
 from listings.models import Listing
+from vehicles.models import Vehicle, VehicleImage
 
 
 def import_lot(lot_data: dict, seller) -> tuple:

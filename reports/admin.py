@@ -1,6 +1,8 @@
 from django.contrib import admin, messages
-from .models import Report
+
 from local_listings.models import LocalListing
+
+from .models import Report
 
 
 def hide_listing(modeladmin, request, queryset):

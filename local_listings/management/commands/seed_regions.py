@@ -4,7 +4,8 @@
 """
 from django.core.management.base import BaseCommand
 from django.utils.text import slugify
-from local_listings.models import Region, City
+
+from local_listings.models import City, Region
 
 # (oblast_name, [cities...])
 # розширений перелік ~300+ міст — неповний КАТОТТГ, для повного потрібен офіційний CSV Мінцифри

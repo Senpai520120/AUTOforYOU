@@ -1,8 +1,9 @@
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from local_listings.models import City, LocalListing, Region
 from users.models import CustomUser
-from local_listings.models import Region, City, LocalListing
+
 from .models import Report
 
 

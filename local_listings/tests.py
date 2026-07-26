@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.utils import timezone
-from payments.models import Payment
 from PIL import Image as PILImage
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -12,11 +11,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from integrations.models import VinReport
 from local_listings.models import PromotionTariff
-from local_listings.tasks import warn_expiring_listings, expire_listings
+from local_listings.tasks import expire_listings, warn_expiring_listings
+from payments.models import Payment
 from users.models import CustomUser
-from .models import Region, City, LocalListing, LocalListingImage
-from .services import approve_listing, reject_listing
 
+from .models import City, LocalListing, LocalListingImage, Region
+from .services import approve_listing, reject_listing
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -725,10 +725,11 @@ class TestCallbackAppliesTariff(APITestCase):
 
     def _make_callback(self, payment, liqpay_status='sandbox'):
         """Build a valid LiqPay callback payload (test keys)."""
-        from django.conf import settings
         import base64
-        import json
         import hashlib
+        import json
+
+        from django.conf import settings
         private_key = settings.LIQPAY_PRIVATE_KEY
         payload = {
             'order_id': payment.order_id,

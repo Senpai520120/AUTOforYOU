@@ -1,7 +1,9 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
-from .models import Shipment, TrackingEvent
+
 from vehicles.serializers import VehicleSerializer
+
+from .models import Shipment, TrackingEvent
 
 
 class TrackingEventSerializer(serializers.ModelSerializer):

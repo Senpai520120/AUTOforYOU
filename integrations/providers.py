@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-
 # ─── VIN-провайдер ───────────────────────────────────────────────────────────
 
 class VinProvider(ABC):

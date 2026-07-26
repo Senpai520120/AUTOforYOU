@@ -1,5 +1,6 @@
 from django.urls import path
-from .views import CalculateView, ActiveRatesView
+
+from .views import ActiveRatesView, CalculateView
 
 urlpatterns = [
     path('calculate/', CalculateView.as_view(), name='pricing-calculate'),

@@ -1,7 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from local_listings.models import LocalListing, Region, City
+from local_listings.models import City, LocalListing, Region
 from messaging.models import Message
 from messaging.services import get_or_create_conversation, unread_count_for_user
 from users.models import CustomUser

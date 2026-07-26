@@ -24,6 +24,7 @@ def import_lot_task(self, lot_data: dict, seller_id: int):
         seller_id: PK пользователя — владельца листинга.
     """
     from django.contrib.auth import get_user_model
+
     from integrations.importer import import_lot
 
     User = get_user_model()
@@ -60,6 +61,7 @@ def send_notification(self, user_id: int, text: str, buttons=None):
         buttons: список dict {text, url} для inline-кнопок (необязательно).
     """
     import asyncio
+
     from django.conf import settings
     from django.contrib.auth import get_user_model
 

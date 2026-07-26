@@ -1,16 +1,19 @@
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
-from rest_framework import status, permissions
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .importer import import_lot
-from .models import VinReport, RegistryReport
+from .models import RegistryReport, VinReport
 from .providers import (
-    NHTSAVinDecodeProvider,
     ManualLotProvider,
-    get_vin_provider, get_auction_history_provider, get_opendatabot_provider, get_lot_provider,
+    NHTSAVinDecodeProvider,
+    get_auction_history_provider,
+    get_lot_provider,
+    get_opendatabot_provider,
+    get_vin_provider,
 )
 from .serializers import LotImportRequestSerializer
 
