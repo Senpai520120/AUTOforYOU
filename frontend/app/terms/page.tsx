@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Умови використання | AUTOforYOU',
-  robots: { index: false },
 };
 
 export default function TermsPage() {

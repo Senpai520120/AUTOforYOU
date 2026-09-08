@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Політика конфіденційності | AUTOforYOU',
-  robots: { index: false },
 };
 
 export default function PrivacyPage() {
@@ -90,7 +90,10 @@ export default function PrivacyPage() {
           <h2 className="text-xl font-semibold text-slate-800 mb-2">8. Cookie</h2>
           <p>
             Детальніше про використання cookie дивіться у нашій{' '}
-            <a href="/cookies" className="text-blue-600 hover:underline">Політиці щодо файлів cookie</a>.
+            <Link href="/cookies" className="text-blue-600 hover:underline">
+              Політиці щодо файлів cookie
+            </Link>
+            .
           </p>
         </section>
 
