@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Правила розміщення оголошень | AUTOforYOU',
-  robots: { index: false },
 };
 
 export default function RulesPage() {
@@ -62,7 +62,12 @@ export default function RulesPage() {
           <p>
             Кожне оголошення проходить перевірку модератора перед публікацією. Платформа залишає за собою
             право відхилити або видалити оголошення, що порушує ці Правила, без попередження та без
-            повернення коштів за платні послуги просування.
+            повернення коштів за платні послуги просування. Випадки, коли кошти повертаються,
+            описані в{' '}
+            <Link href="/refund" className="text-blue-600 hover:underline">
+              Політиці повернення коштів
+            </Link>
+            .
           </p>
         </section>
 
