@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { dealersApi } from '@/api/dealers';
 import Spinner from '@/components/ui/Spinner';
@@ -15,6 +16,7 @@ export default function DealerApplyPage() {
     contact_phone: '',
     documents: '',
   });
+  const [agreedToProcessing, setAgreedToProcessing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -43,6 +45,10 @@ export default function DealerApplyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!agreedToProcessing) {
+      setError('Для подання заявки потрібна згода на обробку персональних даних.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -115,6 +121,24 @@ export default function DealerApplyPage() {
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <p className="text-xs text-slate-400 mt-1">Виписка з ЄДР, свідоцтво про реєстрацію або інший документ</p>
+        </div>
+
+        <div className="flex items-start gap-3 pt-1">
+          <input
+            id="agreed_to_processing"
+            type="checkbox"
+            checked={agreedToProcessing}
+            onChange={e => setAgreedToProcessing(e.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-2 focus:ring-amber-400"
+          />
+          <label htmlFor="agreed_to_processing" className="text-sm text-slate-600">
+            Я даю згоду на обробку вказаних персональних даних (ПІБ, телефон, документи компанії)
+            з метою розгляду цієї заявки, відповідно до{' '}
+            <Link href="/privacy" className="text-blue-600 hover:underline" target="_blank">
+              Політики конфіденційності
+            </Link>
+            .
+          </label>
         </div>
 
         {error && (
