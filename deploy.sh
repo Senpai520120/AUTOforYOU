@@ -42,6 +42,20 @@ if echo "$DATABASE_URL" | grep -q "host.docker.internal"; then
     exit 1
 fi
 
+# DEBUG=true в проде отключает SECURE_*-заголовки, показывает трейсбеки
+# с полным URLconf и переводит Celery в синхронный режим.
+if [[ "$(echo "${DEBUG:-false}" | tr '[:upper:]' '[:lower:]')" =~ ^(true|1|yes)$ ]]; then
+    echo "ERROR: DEBUG is enabled. Set DEBUG=false in .env before deploying." >&2
+    exit 1
+fi
+
+# В паре с CORS_ALLOW_CREDENTIALS=true открытый CORS позволяет любому сайту
+# обращаться к API от имени залогиненного пользователя.
+if [[ "$(echo "${CORS_ALLOW_ALL_ORIGINS:-false}" | tr '[:upper:]' '[:lower:]')" =~ ^(true|1|yes)$ ]]; then
+    echo "ERROR: CORS_ALLOW_ALL_ORIGINS is enabled. Set it to false and list real origins in CORS_ALLOWED_ORIGINS." >&2
+    exit 1
+fi
+
 echo "[deploy] Pre-flight checks passed."
 
 # ─── Запуск стека ─────────────────────────────────────────────────────────────

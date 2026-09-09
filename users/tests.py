@@ -268,3 +268,68 @@ class TestRegistrationConsent(APITestCase):
     def test_register_with_consent_returns_201(self):
         resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+
+# ── Эскалация привилегий через поле role ──────────────────────────────────────
+
+PROFILE_URL = '/api/v1/auth/profile/'
+B2B_URL = '/api/v1/b2b/board/'
+
+
+class TestRoleIsNotSelfAssignable(APITestCase):
+    """
+    role пользователь указывает сам при регистрации, поэтому она не должна
+    давать привилегий. Раньше значение 'admin' открывало B2B-доску и чтение
+    чужих переписок по импортным листингам.
+    """
+
+    def test_register_with_role_admin_is_rejected(self):
+        resp = self.client.post(
+            REGISTER_URL,
+            {**_REG_BASE, 'role': 'admin', 'agreed_to_terms': True},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('role', resp.data)
+        self.assertFalse(User.objects.filter(email=_REG_BASE['email']).exists())
+
+    def test_register_with_role_dealer_is_allowed(self):
+        resp = self.client.post(
+            REGISTER_URL,
+            {**_REG_BASE, 'role': 'dealer', 'agreed_to_terms': True},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(email=_REG_BASE['email'])
+        self.assertEqual(user.role, 'dealer')
+        # Роль дилера сама по себе не верифицирует и не даёт прав.
+        self.assertFalse(user.is_verified_dealer)
+        self.assertFalse(user.is_staff)
+
+    def test_patch_profile_cannot_change_role(self):
+        user = _make_user('selfpromote@test.com')
+        self.client.force_authenticate(user=user)
+
+        resp = self.client.patch(PROFILE_URL, {'role': 'admin'}, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertEqual(user.role, 'buyer')
+
+    def test_role_admin_without_is_staff_has_no_b2b_access(self):
+        # Роль выставлена напрямую в БД — эмулируем состояние, которое
+        # раньше можно было получить через API.
+        user = _make_user('fakeadmin@test.com', role='admin')
+        self.assertFalse(user.is_staff)
+        self.client.force_authenticate(user=user)
+
+        resp = self.client.get(B2B_URL)
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_real_admin_has_b2b_access(self):
+        self.client.force_authenticate(user=_make_admin('realadmin@test.com'))
+
+        resp = self.client.get(B2B_URL)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)

@@ -30,7 +30,10 @@ class SetupMixin(TestCase):
     def setUp(self):
         self.buyer = make_user('buyer@test.com')
         self.seller = make_user('seller@test.com')
-        self.admin = make_user('admin@test.com', role='admin')
+        # Признак администратора — is_staff. Раньше здесь стояло role='admin':
+        # тест проходил, но проверял привилегию, которую пользователь мог
+        # назначить себе сам.
+        self.admin = make_user('admin@test.com', role='admin', is_staff=True)
         self.region = Region.objects.create(name='Київська', slug='kyivska')
         self.city = City.objects.create(name='Київ', slug='kyiv', region=self.region)
         self.listing = make_local_listing(self.seller, self.region, self.city)
