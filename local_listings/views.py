@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
@@ -99,7 +100,23 @@ class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
         return LocalListingDetailSerializer
 
     def get_queryset(self):
-        return _base_queryset()
+        """
+        Не-ACTIVE оголошення бачать тільки власник і staff.
+
+        Раніше фільтра не було зовсім: pending, rejected і hidden віддавалися
+        анониму по прямому посиланню з HTTP 200. Через це адмін-екшен
+        hide_listing (reports/admin.py) фактично нічого не приховував.
+
+        Власнику свої оголошення потрібні в будь-якому статусі — інакше він
+        не зможе відредагувати те, що відхилила модерація.
+        """
+        qs = _base_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.filter(status=LocalListing.Status.ACTIVE)
+        if user.is_staff:
+            return qs
+        return qs.filter(Q(status=LocalListing.Status.ACTIVE) | Q(owner=user))
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
@@ -298,10 +315,12 @@ class LocalListingContactView(APIView):
     throttle_scope = 'contact'
 
     def get(self, request, pk):
+        # Тільки ACTIVE. Раніше сюди входив і PENDING — телефон продавця
+        # віддавався до того, як оголошення пройшло модерацію.
         listing = get_object_or_404(
             LocalListing,
             pk=pk,
-            status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+            status=LocalListing.Status.ACTIVE,
         )
         return Response({'contact_phone': listing.contact_phone or None})
 

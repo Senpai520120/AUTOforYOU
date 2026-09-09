@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from .liqpay_client import LiqPayClient, LiqPaySignatureError
 from .models import Payment
+from .serializers import LiqPayCheckoutSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -66,29 +67,23 @@ class LiqPayCheckoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        data = request.data
-        order_id = data.get('order_id')
-        amount = data.get('amount')
-        currency = data.get('currency', 'USD')
-        description = data.get('description', '')
-        listing_id = data.get('listing_id')
-        purpose = data.get('purpose', Payment.Purpose.OTHER)
-        result_url = data.get('result_url', '')
-        server_url = data.get('server_url', '')
+        serializer = LiqPayCheckoutSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        if not order_id or not amount:
-            return Response({'error': 'order_id и amount обязательны.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if Payment.objects.filter(order_id=order_id).exists():
-            return Response({'error': f'Платёж с order_id={order_id!r} уже существует.'}, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        order_id = data['order_id']
+        amount = data['amount']
+        currency = data['currency']
+        description = data['description']
+        purpose = data['purpose']
+        result_url = data['result_url']
+        server_url = data['server_url']
 
         listing = None
-        if listing_id:
+        if data['listing_id']:
             from listings.models import Listing
-            try:
-                listing = Listing.objects.get(pk=listing_id)
-            except Listing.DoesNotExist:
-                return Response({'error': f'Листинг #{listing_id} не найден.'}, status=status.HTTP_400_BAD_REQUEST)
+            listing = Listing.objects.get(pk=data['listing_id'])
 
         payment = Payment.objects.create(
             user=request.user,

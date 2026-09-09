@@ -157,12 +157,14 @@ class TestModerationService(APITestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['rejection_reason'], 'Тест')
 
-    def test_rejection_reason_hidden_from_stranger(self):
+    def test_rejected_listing_hidden_from_stranger(self):
+        # Раніше стороннiй бачив саме оголошення, а маскувалася тільки причина
+        # відхилення. Тепер не-ACTIVE оголошення недоступне цілком.
         reject_listing(self.listing, self.admin, reason='Таємна причина')
         stranger = _make_user('stranger@test.com')
         _auth(self.client, stranger)
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/')
-        self.assertIsNone(r.data['rejection_reason'])
+        self.assertEqual(r.status_code, 404)
 
     def test_rejected_listing_not_in_public_catalog(self):
         reject_listing(self.listing, self.admin, reason='X')
@@ -950,3 +952,69 @@ class TestBannedUser(APITestCase):
         payload = _listing_payload(self.region, self.city)
         r = self.client.post('/api/v1/local/listings/', payload, format='json')
         self.assertIn(r.status_code, [401, 403])
+
+
+# ─── Видимість оголошень за статусом (деталь + контакт) ───────────────────────
+
+class TestListingVisibilityByStatus(APITestCase):
+    """
+    Три в'ю на одну сутність раніше мали три різних правила видимості:
+    список фільтрував ACTIVE, contact — ACTIVE+PENDING, а деталь не фільтрувала
+    зовсім. Через це адмін-екшен «сховати оголошення» нічого не ховав.
+    """
+
+    def setUp(self):
+        self.owner = _make_user('vis_owner@test.com')
+        self.stranger = _make_user('vis_stranger@test.com')
+        self.staff = _make_user('vis_staff@test.com', is_staff=True)
+        self.region = Region.objects.create(name='Одеська', slug='odeska')
+        self.city = City.objects.create(name='Одеса', slug='odesa', region=self.region)
+        self.listing = _make_listing(self.owner, self.region, self.city)
+
+    def _set_status(self, value):
+        self.listing.status = value
+        self.listing.save(update_fields=['status'])
+
+    def _get_detail(self):
+        return self.client.get(f'/api/v1/local/listings/{self.listing.pk}/')
+
+    def test_anonymous_sees_only_active(self):
+        for value in ['pending', 'rejected', 'hidden', 'expired', 'draft']:
+            with self.subTest(status=value):
+                self._set_status(value)
+                self.assertEqual(self._get_detail().status_code, 404)
+
+        self._set_status(LocalListing.Status.ACTIVE)
+        self.assertEqual(self._get_detail().status_code, 200)
+
+    def test_hidden_listing_unavailable_to_stranger(self):
+        # Саме цей сценарій і має закривати адмін-екшен hide_listing.
+        self._set_status(LocalListing.Status.HIDDEN)
+        _auth(self.client, self.stranger)
+        self.assertEqual(self._get_detail().status_code, 404)
+
+    def test_owner_sees_own_listing_in_any_status(self):
+        _auth(self.client, self.owner)
+        for value in ['pending', 'rejected', 'hidden', 'expired']:
+            with self.subTest(status=value):
+                self._set_status(value)
+                self.assertEqual(self._get_detail().status_code, 200)
+
+    def test_staff_sees_any_listing(self):
+        _auth(self.client, self.staff)
+        self._set_status(LocalListing.Status.HIDDEN)
+        self.assertEqual(self._get_detail().status_code, 200)
+
+    def test_contact_not_exposed_before_moderation(self):
+        # Телефон не має віддаватися, доки оголошення не пройшло модерацію.
+        self._set_status(LocalListing.Status.PENDING)
+        _auth(self.client, self.stranger)
+        r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
+        self.assertEqual(r.status_code, 404)
+
+    def test_contact_available_for_active(self):
+        self._set_status(LocalListing.Status.ACTIVE)
+        _auth(self.client, self.stranger)
+        r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('contact_phone', r.data)
