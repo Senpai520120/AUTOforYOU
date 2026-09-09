@@ -196,8 +196,11 @@ else:
     STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
-# Dev: разрешаем всё. Prod: задать CORS_ALLOWED_ORIGINS=https://yourdomain.com,...
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# Раньше было CORS_ALLOW_ALL_ORIGINS = DEBUG. Из-за DEBUG=true в .env бэкенд
+# в Docker отдавал Access-Control-Allow-Origin любому сайту вместе с
+# Allow-Credentials: true — то есть чужая страница могла ходить в API от имени
+# залогиненного пользователя. Отдельный флаг: включать только осознанно.
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'false').lower() in ('true', '1', 'yes')
 _cors_env = os.environ.get('CORS_ALLOWED_ORIGINS', '')
 CORS_ALLOWED_ORIGINS = (
     [o.strip() for o in _cors_env.split(',') if o.strip()]
