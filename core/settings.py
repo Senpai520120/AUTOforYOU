@@ -409,8 +409,11 @@ SITE_URL = os.environ.get('SITE_URL', 'https://autoforyou.ua')
 # В dev (DEBUG=True) и в тест-раннере не включаем — тесты работают по HTTP.
 _TESTING = 'test' in sys.argv
 if not DEBUG and not _TESTING:
-    SECURE_SSL_REDIRECT = True
-    SECURE_HSTS_SECONDS = 31_536_000          # 1 год
+    # Отключается только осознанно: стенд без TLS (CI, локальный прогон
+    # E2E по HTTP) или TLS, терминируемый балансировщиком, который уже
+    # делает редирект сам. По умолчанию включено.
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'true').lower() in ('true', '1', 'yes')
+    SECURE_HSTS_SECONDS = 31_536_000 if SECURE_SSL_REDIRECT else 0
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
