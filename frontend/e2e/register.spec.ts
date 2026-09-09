@@ -1,57 +1,74 @@
 /**
- * E2E: Реєстрація — обов'язкова галочка згоди
+ * E2E: реєстрація — обов'язкова згода з Умовами та Політикою конфіденційності.
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Register page — consent checkbox', () => {
-  test('register page loads with consent checkbox', async ({ page }) => {
+test.describe("Реєстрація — згода з умовами", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('cookie_consent', 'necessary');
+    });
+  });
+
+  test('форма містить поля і чекбокс згоди', async ({ page }) => {
     await page.goto('/register');
     await expect(page).toHaveTitle(/AUTOforYOU/);
 
-    const emailInput = page.locator('input[type="email"]');
-    await expect(emailInput).toBeVisible();
-
-    const checkbox = page.locator('#agreed_to_terms');
-    await expect(checkbox).toBeVisible();
+    await expect(page.locator('input[type="email"]')).toBeVisible();
+    await expect(page.getByLabel(/Погоджуюсь з/)).toBeVisible();
+    await expect(page.getByLabel(/Погоджуюсь з/)).not.toBeChecked();
   });
 
-  test('consent checkbox is required — form blocks submit without it', async ({ page }) => {
+  test('без згоди форма не відправляється', async ({ page }) => {
     await page.goto('/register');
 
-    await page.fill('input[type="email"]', 'test@example.com');
-    await page.fill('input[type="password"]', 'StrongPass123!');
+    await page.fill('input[type="email"]', 'e2e-consent@example.com');
+    await page.locator('input[type="password"]').first().fill('StrongPass123!');
+    await page.locator('input[type="password"]').nth(1).fill('StrongPass123!');
 
-    const checkbox = page.locator('#agreed_to_terms');
-    await expect(checkbox).not.toBeChecked();
+    await page.getByRole('button', { name: 'Зареєструватися' }).click();
 
-    // Без галочки кнопка submit должна блокироваться через HTML required
-    const submitBtn = page.locator('button[type="submit"]');
-    await submitBtn.click();
-
-    // Страница не должна перейти на /login (форма заблокирована)
+    // Чекбокс має required — браузер блокує відправку, URL не змінюється.
     await expect(page).toHaveURL(/\/register/);
+    await expect(page.getByLabel(/Погоджуюсь з/)).not.toBeChecked();
   });
 
-  test('terms and privacy links open correct pages', async ({ page }) => {
+  test('посилання «Умовами використання» відкриває сторінку умов', async ({ page, context }) => {
     await page.goto('/register');
 
-    const termsLink = page.locator('a[href="/terms"]');
-    await expect(termsLink).toBeVisible();
+    // Раніше тест називався «open correct pages», але нікуди не переходив —
+    // перевіряв лише видимість. До того ж локатор a[href="/terms"] збігався
+    // з двома елементами (текст згоди і футер) і падав на strict mode.
+    const [popup] = await Promise.all([
+      context.waitForEvent('page'),
+      page.getByRole('link', { name: 'Умовами використання' }).click(),
+    ]);
 
-    const privacyLink = page.locator('a[href="/privacy"]');
-    await expect(privacyLink).toBeVisible();
+    await popup.waitForLoadState();
+    await expect(popup).toHaveURL(/\/terms$/);
+    await expect(popup.getByRole('heading', { name: 'Умови використання' })).toBeVisible();
   });
 
-  test('footer contains legal links', async ({ page }) => {
+  test('посилання «Політикою конфіденційності» відкриває сторінку політики', async ({ page, context }) => {
+    await page.goto('/register');
+
+    const [popup] = await Promise.all([
+      context.waitForEvent('page'),
+      page.getByRole('link', { name: 'Політикою конфіденційності' }).click(),
+    ]);
+
+    await popup.waitForLoadState();
+    await expect(popup).toHaveURL(/\/privacy$/);
+    await expect(popup.getByRole('heading', { name: 'Політика конфіденційності' })).toBeVisible();
+  });
+
+  test('футер містить посилання на юридичні документи', async ({ page }) => {
     await page.goto('/');
 
-    const termsLink = page.locator('footer a[href="/terms"]');
-    await expect(termsLink).toBeVisible();
-
-    const privacyLink = page.locator('footer a[href="/privacy"]');
-    await expect(privacyLink).toBeVisible();
-
-    const cookiesLink = page.locator('footer a[href="/cookies"]');
-    await expect(cookiesLink).toBeVisible();
+    const footer = page.getByRole('contentinfo');
+    await expect(footer.getByRole('link', { name: 'Умови використання' })).toBeVisible();
+    await expect(footer.getByRole('link', { name: 'Правила розміщення' })).toBeVisible();
+    await expect(footer.getByRole('link', { name: 'Конфіденційність' })).toBeVisible();
+    await expect(footer.getByRole('link', { name: 'Cookie' })).toBeVisible();
   });
 });

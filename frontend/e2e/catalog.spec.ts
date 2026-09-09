@@ -1,64 +1,92 @@
 /**
- * E2E: Каталог → карточка → калькулятор
+ * E2E: каталог імпорту з США та калькулятор вартості «під ключ».
  *
- * Запуск (нужны оба сервера):
- *   backend:  python manage.py runserver
- *   frontend: cd frontend && npm run dev
- *   тесты:    cd frontend && npx playwright test
- *
- * Первый запуск — установить браузер: npx playwright install chromium
+ * Запуск:
+ *   docker compose up -d          (з кореня репозиторію)
+ *   cd frontend && npx playwright test
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Catalog → Listing → Calculator happy-path', () => {
-  test('catalog page loads and shows listings count', async ({ page }) => {
-    await page.goto('/listings');
+// Текст заголовка демо-банера. Навмисно не збігається з текстом у футері
+// («Тестові тарифи — всі розрахунки є демонстраційними»), інакше перевірка
+// відсутності банера ловила б футер і завжди була б хибною.
+const DEMO_BANNER = 'Тестові тарифи — розрахунок демонстраційний';
+
+test.describe('Каталог імпорту з США', () => {
+  test('сторінка каталогу відповідає 200 і рендерить заголовок', async ({ page }) => {
+    const resp = await page.goto('/listings');
+    expect(resp?.status()).toBe(200);
     await expect(page).toHaveTitle(/AUTOforYOU/);
-    // Сетка объявлений или пустое состояние — страница не должна показывать 500
-    await expect(page.locator('main')).toBeVisible();
-    const errorText = page.locator('text=500');
-    await expect(errorText).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Каталог автомобілів' })).toBeVisible();
   });
 
-  test('demo banner is visible on catalog page', async ({ page }) => {
+  test('демо-банер на каталозі не показується', async ({ page }) => {
+    // DemoBanner рендериться тільки на /calculator і всередині CalcBreakdown.
+    // Раніше цей тест називався «demo banner is visible on catalog page»,
+    // оголошував локатор банера і не перевіряв його — був зеленим завжди.
     await page.goto('/listings');
-    // DemoBanner показывается если NEXT_PUBLIC_DEMO_MODE != 'false'
-    // В dev .env.local — NEXT_PUBLIC_DEMO_MODE=true, баннер виден
-    const banner = page.locator('[role="alert"]');
-    // Может быть несколько alert-ов; просто проверим что нет ошибки рендеринга
-    await expect(page.locator('main')).toBeVisible();
+    await expect(page.getByText(DEMO_BANNER)).toHaveCount(0);
+  });
+});
+
+test.describe('Калькулятор вартості', () => {
+  test.beforeEach(async ({ page }) => {
+    // Знімаємо банер згоди: він fixed bottom з z-50 і може перекривати кнопку
+    // відправки. Вибір робиться до завантаження сторінки, банер не з'явиться.
+    await page.addInitScript(() => {
+      window.localStorage.setItem('cookie_consent', 'necessary');
+    });
   });
 
-  test('calculator page renders form and demo banner', async ({ page }) => {
+  test('форма містить підписані поля і демо-банер', async ({ page }) => {
     await page.goto('/calculator');
     await expect(page).toHaveTitle(/AUTOforYOU/);
-    // Поле «Ціна на аукціоні»
-    const priceInput = page.locator('input[name="auction_price_usd"], input[placeholder*="000"]').first();
-    await expect(priceInput).toBeVisible({ timeout: 8000 });
+
+    await expect(page.getByLabel('Ціна аукціону ($)', { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Об'єм двигуна (см³)", { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Рік випуску', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Тип палива', { exact: true })).toBeVisible();
+
+    await expect(page.getByText(DEMO_BANNER).first()).toBeVisible();
   });
 
-  test('calculator: fill form and see result', async ({ page }) => {
+  test('розрахунок повертає повну деталізацію вартості', async ({ page }) => {
     await page.goto('/calculator');
 
-    // Заполняем форму
-    const priceInput = page.locator('input').first();
-    await priceInput.fill('5000');
+    await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('5000');
+    await page.getByLabel("Об'єм двигуна (см³)", { exact: true }).fill('2000');
+    await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
+    await page.getByRole('button', { name: 'Розрахувати' }).click();
 
-    // Ищем кнопку submit
-    const submitBtn = page.locator('button[type="submit"]');
-    if (await submitBtn.count() > 0) {
-      await submitBtn.click();
-      // Ждём появления результата или демо-баннера
-      await page.waitForTimeout(3000);
-      // Страница не должна упасть в 500
-      await expect(page.locator('main')).toBeVisible();
+    // Раніше тут стояв if (count > 0) навколо кліку і waitForTimeout(3000):
+    // тест був зеленим навіть якщо кнопки не існує, а розрахунок не відбувся.
+    await expect(
+      page.getByRole('heading', { name: 'Детализация стоимости «под ключ»' }),
+    ).toBeVisible();
+
+    for (const article of [
+      'Цена аукциона',
+      'Аукционный сбор',
+      'Логистика США',
+      'Морской фрахт',
+      'Пошлина 10%',
+      'НДС 20%',
+      'Пенсионный сбор',
+    ]) {
+      await expect(page.getByRole('cell', { name: article, exact: true })).toBeVisible();
     }
-  });
 
-  test('404 page for unknown route', async ({ page }) => {
+    // Підсумок має бути додатним числом, а не прочерком.
+    const total = page.getByRole('row').filter({ hasText: 'ИТОГО' });
+    await expect(total).toBeVisible();
+    await expect(total).not.toContainText('—');
+  });
+});
+
+test.describe('Обробка помилок', () => {
+  test('невідомий маршрут повертає 404 і сторінку не знайдено', async ({ page }) => {
     const resp = await page.goto('/this-page-does-not-exist-xyz');
-    // Next.js custom not-found возвращает 404
     expect(resp?.status()).toBe(404);
-    await expect(page.locator('text=404')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'Сторінку не знайдено' })).toBeVisible();
   });
 });

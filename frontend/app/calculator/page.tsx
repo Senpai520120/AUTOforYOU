@@ -55,18 +55,18 @@ function CalculatorForm() {
       <form onSubmit={calculate} className="bg-white border border-slate-200 rounded-xl p-6 mt-4 space-y-5">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Ціна аукціону ($)</label>
-            <input type="number" required min={0} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="auction_price_usd" className="block text-xs font-semibold text-slate-600 mb-1">Ціна аукціону ($)</label>
+            <input id="auction_price_usd" name="auction_price_usd" type="number" required min={0} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.auction_price_usd} onChange={e => set('auction_price_usd', e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Об'єм двигуна (см³)</label>
-            <input type="number" required min={0} max={10000} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="engine_cc" className="block text-xs font-semibold text-slate-600 mb-1">Об'єм двигуна (см³)</label>
+            <input id="engine_cc" name="engine_cc" type="number" required min={0} max={10000} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.engine_cc} onChange={e => set('engine_cc', Number(e.target.value))} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Тип палива</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="fuel_type" className="block text-xs font-semibold text-slate-600 mb-1">Тип палива</label>
+            <select id="fuel_type" name="fuel_type" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.fuel_type} onChange={e => set('fuel_type', e.target.value)}>
               <option value="petrol">Бензин</option>
               <option value="diesel">Дизель</option>
@@ -75,21 +75,21 @@ function CalculatorForm() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Рік випуску</label>
-            <input type="number" required min={1990} max={2030} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="vehicle_year" className="block text-xs font-semibold text-slate-600 mb-1">Рік випуску</label>
+            <input id="vehicle_year" name="vehicle_year" type="number" required min={1990} max={2030} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.vehicle_year} onChange={e => set('vehicle_year', Number(e.target.value))} />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Аукціон</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="auction" className="block text-xs font-semibold text-slate-600 mb-1">Аукціон</label>
+            <select id="auction" name="auction" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.auction} onChange={e => set('auction', e.target.value)}>
               <option value="copart">Copart</option>
               <option value="iaai">IAAI</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Порт США</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="us_port" className="block text-xs font-semibold text-slate-600 mb-1">Порт США</label>
+            <select id="us_port" name="us_port" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.us_port} onChange={e => set('us_port', e.target.value)}>
               <option value="houston">Houston</option>
               <option value="baltimore">Baltimore</option>
@@ -97,16 +97,16 @@ function CalculatorForm() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Порт ЄС</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="eu_port" className="block text-xs font-semibold text-slate-600 mb-1">Порт ЄС</label>
+            <select id="eu_port" name="eu_port" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.eu_port} onChange={e => set('eu_port', e.target.value)}>
               <option value="klaipeda">Клайпеда</option>
               <option value="gdansk">Гданськ</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Локація аукціону</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="auction_location" className="block text-xs font-semibold text-slate-600 mb-1">Локація аукціону</label>
+            <select id="auction_location" name="auction_location" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               value={form.auction_location} onChange={e => set('auction_location', e.target.value)}>
               <option value="general">Загальна (East/Central)</option>
               <option value="california">Каліфорнія</option>
