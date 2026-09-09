@@ -42,3 +42,8 @@ dump.sql
 
 # Claude Code
 .claude/
+
+# Playwright (артефакты случайного запуска из корня репозитория)
+test-results/
+playwright-report/
+blob-report/
