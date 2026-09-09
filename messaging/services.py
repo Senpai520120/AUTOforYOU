@@ -2,7 +2,7 @@
 Сервісний шар мессенджера (non-realtime).
 
 Місцеві оголошення  → покупець ↔ автор оголошення.
-Імпортні оголошення → покупець ↔ адмін (перший role='admin').
+Імпортні оголошення → покупець ↔ адмін (перший is_staff=True).
                       Всі адміни бачать ці діалоги через permissions у views.
 """
 from django.contrib.auth import get_user_model
@@ -15,7 +15,7 @@ User = get_user_model()
 
 
 def _first_admin():
-    return User.objects.filter(role='admin').order_by('pk').first()
+    return User.objects.filter(is_staff=True).order_by('pk').first()
 
 
 @transaction.atomic
@@ -74,7 +74,7 @@ def send_message_to_conversation(sender, conversation: Conversation, text: str):
     """Returns (message, detected_contacts_list). Raises PermissionError if not participant."""
     is_participant = conversation.participants.filter(pk=sender.pk).exists()
     is_admin_imported = (
-        getattr(sender, 'role', '') == 'admin'
+        bool(getattr(sender, 'is_staff', False))
         and conversation.imported_listing_id is not None
     )
     if not is_participant and not is_admin_imported:
@@ -94,7 +94,7 @@ def unread_count_for_user(user) -> int:
     """Загальна кількість непрочитаних повідомлень для користувача."""
     from django.db.models import Q
     qs = Message.objects.filter(read_at__isnull=True).exclude(sender=user)
-    if getattr(user, 'role', '') == 'admin':
+    if getattr(user, 'is_staff', False):
         qs = qs.filter(
             Q(conversation__participants=user)
             | Q(conversation__imported_listing__isnull=False)
@@ -156,7 +156,7 @@ def _notify_recipients(sender, conversation: Conversation, message: Message) -> 
     # Для імпортних — додатково адміни, які не є учасниками
     if conversation.imported_listing_id:
         existing_ids = {r.pk for r in recipients} | {sender.pk}
-        extra_admins = User.objects.filter(role='admin').exclude(pk__in=existing_ids)
+        extra_admins = User.objects.filter(is_staff=True).exclude(pk__in=existing_ids)
         for admin in extra_admins:
             _send_one(admin.pk, tg_text, notif_title, notif_text, conv_link, send_notification, create_notification, NotifModel)
 

@@ -114,7 +114,7 @@ class TestNotificationAPI(SetupMixin):
     def test_moderation_creates_in_app_notification(self):
         """approve_listing должен создавать in-app Notification."""
         from local_listings.services import approve_listing
-        admin = make_user('admin@test.com', role='admin')
+        admin = make_user('admin@test.com', role='admin', is_staff=True)
         self.listing.status = LocalListing.Status.PENDING
         self.listing.save()
         approve_listing(self.listing, admin)
@@ -123,7 +123,7 @@ class TestNotificationAPI(SetupMixin):
 
     def test_reject_creates_in_app_notification(self):
         from local_listings.services import reject_listing
-        admin = make_user('admin2@test.com', role='admin')
+        admin = make_user('admin2@test.com', role='admin', is_staff=True)
         self.listing.status = LocalListing.Status.PENDING
         self.listing.save()
         reject_listing(self.listing, admin, 'Погані фото')
