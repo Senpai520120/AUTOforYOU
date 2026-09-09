@@ -39,6 +39,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${siteUrl}/`, changeFrequency: 'daily', priority: 1 },
     { url: `${siteUrl}/listings`, changeFrequency: 'hourly', priority: 0.9 },
     { url: `${siteUrl}/calculator`, changeFrequency: 'monthly', priority: 0.7 },
+    // Юридичні документи мають бути публічно доступними та індексованими
+    { url: `${siteUrl}/terms`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${siteUrl}/rules`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${siteUrl}/refund`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${siteUrl}/privacy`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${siteUrl}/cookies`, changeFrequency: 'yearly', priority: 0.3 },
   ];
 
   const listingRoutes: MetadataRoute.Sitemap = listings.map(l => ({

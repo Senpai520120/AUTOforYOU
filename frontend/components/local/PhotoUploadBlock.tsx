@@ -58,7 +58,7 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
   }
 
   const imgSrc = (img: LocalListingImage) =>
-    img.image ?? img.source_url ?? '/placeholder-car.jpg';
+    img.image ?? img.source_url ?? '/placeholder-car.svg';
 
   return (
     <div className="space-y-3">
