@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Артефакты Playwright. HTML-отчёт — это ~500 КБ инлайн-JS в одном
+    // файле: без этих правил `npm run lint` даёт сотни ошибок в сгенерированном
+    // коде и заглушает реальные предупреждения по исходникам.
+    "playwright-report/**",
+    "test-results/**",
+    "blob-report/**",
   ]),
   {
     rules: {
