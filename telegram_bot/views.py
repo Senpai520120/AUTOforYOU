@@ -69,16 +69,25 @@ class TelegramWebhookView(View):
     """
 
     def post(self, request):
-        secret = getattr(settings, 'TELEGRAM_WEBHOOK_SECRET', '')
-        if secret:
-            incoming = request.META.get('HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN', '')
-            if incoming != secret:
-                logger.warning('Webhook: неверный секрет, отклонено')
-                return HttpResponse('Forbidden', status=403)
-
         token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
         if not token:
             return HttpResponse('Bot not configured', status=503)
+
+        secret = getattr(settings, 'TELEGRAM_WEBHOOK_SECRET', '')
+        if not secret:
+            # Раньше при пустом секрете проверка пропускалась целиком: кто
+            # угодно мог прислать сюда произвольный Update, и он обрабатывался
+            # роутером бота как настоящее сообщение из Telegram.
+            logger.error(
+                'Webhook: TELEGRAM_WEBHOOK_SECRET не задан при заданном токене — '
+                'эндпоинт отключён. Задайте секрет и переустановите webhook.'
+            )
+            return HttpResponse('Webhook secret not configured', status=503)
+
+        incoming = request.META.get('HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN', '')
+        if incoming != secret:
+            logger.warning('Webhook: неверный секрет, отклонено')
+            return HttpResponse('Forbidden', status=403)
 
         try:
             data = json.loads(request.body)

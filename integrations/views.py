@@ -32,6 +32,14 @@ from .serializers import LotImportRequestSerializer
     },
 )
 class VinReportView(APIView):
+    # Тот же уровень защиты, что и у RegistryReportView: внутри дергается
+    # Opendatabot — платный внешний API. Раньше вью была без permission_classes
+    # (то есть AllowAny из настроек) и без «дорогого» throttle: аноним мог
+    # жечь квоту на дефолтном лимите и плодить строки в VinReport.
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'expensive'
+
     # noinspection PyMethodMayBeStatic
     def get(self, request, vin: str):
         vin = vin.upper().strip()
