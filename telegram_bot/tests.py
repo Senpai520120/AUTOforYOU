@@ -2,7 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -222,3 +222,57 @@ class ListingAutopostSignalTest(TestCase):
             listing.price = '13000.00'
             listing.save()
             mock_delay.assert_not_called()
+
+
+# ─── Webhook: секрет обязателен ───────────────────────────────────────────────
+
+class TelegramWebhookSecretTest(TestCase):
+    """
+    Раньше при пустом TELEGRAM_WEBHOOK_SECRET проверка пропускалась целиком:
+    кто угодно мог прислать произвольный Update, и он обрабатывался роутером
+    бота как настоящее сообщение из Telegram.
+    """
+
+    URL = '/api/v1/telegram/webhook/'
+
+    def _post(self, **headers):
+        return self.client.post(
+            self.URL, data='{}', content_type='application/json', **headers,
+        )
+
+    def test_no_token_returns_503(self):
+        with self.settings(TELEGRAM_BOT_TOKEN='', TELEGRAM_WEBHOOK_SECRET=''):
+            self.assertEqual(self._post().status_code, 503)
+
+    def test_token_without_secret_disables_endpoint(self):
+        with self.settings(TELEGRAM_BOT_TOKEN='fake', TELEGRAM_WEBHOOK_SECRET=''):
+            resp = self._post()
+        self.assertEqual(resp.status_code, 503)
+
+    def test_wrong_secret_rejected(self):
+        with self.settings(TELEGRAM_BOT_TOKEN='fake', TELEGRAM_WEBHOOK_SECRET='right'):
+            resp = self._post(HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN='wrong')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_missing_secret_header_rejected(self):
+        with self.settings(TELEGRAM_BOT_TOKEN='fake', TELEGRAM_WEBHOOK_SECRET='right'):
+            resp = self._post()
+        self.assertEqual(resp.status_code, 403)
+
+
+class TelegramTokenDisabledInTestsTest(SimpleTestCase):
+    """
+    Страховка от возврата к старому поведению.
+
+    post_save на listings.Listing запускает post_listing_to_channel, а в тестах
+    CELERY_TASK_ALWAYS_EAGER=True — задача выполняется синхронно. С реальным
+    токеном это были настоящие аутентифицированные запросы в api.telegram.org:
+    прогон listings занимал 22.5 с вместо 4.5 с.
+    """
+
+    def test_token_is_empty_under_test_runner(self):
+        from django.conf import settings
+        self.assertEqual(
+            settings.TELEGRAM_BOT_TOKEN, '',
+            'В тестах TELEGRAM_BOT_TOKEN должен быть пустым — см. core/settings.py',
+        )
