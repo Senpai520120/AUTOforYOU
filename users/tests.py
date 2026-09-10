@@ -333,3 +333,26 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         resp = self.client.get(B2B_URL)
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_profile_exposes_is_staff(self):
+        # Фронт показывает админские разделы по тому же признаку, по которому
+        # их проверяет бэкенд. Раньше is_staff в профиль не отдавался, и шапка
+        # ориентировалась на role — пользователь видел ссылку на B2B и получал 403.
+        self.client.force_authenticate(user=_make_admin('staffflag@test.com'))
+        resp = self.client.get(PROFILE_URL)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data['is_staff'])
+
+    def test_profile_is_staff_false_for_regular_user(self):
+        self.client.force_authenticate(user=_make_user('plain@test.com'))
+        resp = self.client.get(PROFILE_URL)
+        self.assertFalse(resp.data['is_staff'])
+
+    def test_patch_profile_cannot_grant_is_staff(self):
+        user = _make_user('escalate_staff@test.com')
+        self.client.force_authenticate(user=user)
+
+        self.client.patch(PROFILE_URL, {'is_staff': True}, format='json')
+
+        user.refresh_from_db()
+        self.assertFalse(user.is_staff)
