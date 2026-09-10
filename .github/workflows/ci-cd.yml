@@ -57,6 +57,25 @@ jobs:
       - name: Run tests
         run: python manage.py test --verbosity=2
 
+      # openapi.yaml отставал от кода: описывал 13 путей из 60 и версию 1.0.0
+      # вместо 2.0.0. Проверка не даёт схеме разъехаться снова.
+      #
+      # Важно: схема зависит от СУБД. drf-spectacular берёт границы числовых
+      # полей из бэкенда БД, и на SQLite IntegerField выходит 64-битным
+      # (maximum: 9223372036854775807), а на PostgreSQL — int32 (2147483647),
+      # PositiveSmallIntegerField — int16 (32767). Поэтому файл генерируется
+      # против PostgreSQL, как в проде. Локально:
+      #   DATABASE_URL=postgresql://... python manage.py spectacular --file openapi.yaml
+      - name: OpenAPI schema is up to date
+        run: |
+          python manage.py spectacular --file /tmp/openapi.generated.yaml
+          if ! diff -q openapi.yaml /tmp/openapi.generated.yaml > /dev/null; then
+            echo "::error::openapi.yaml устарел. Сгенерируйте против PostgreSQL: DATABASE_URL=postgresql://... python manage.py spectacular --file openapi.yaml"
+            diff openapi.yaml /tmp/openapi.generated.yaml | head -40
+            exit 1
+          fi
+          echo "openapi.yaml актуален"
+
   # ─── Frontend: линтер + типы + сборка ───
   frontend:
     name: Frontend checks
