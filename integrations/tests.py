@@ -563,3 +563,28 @@ class TestImportLotTaskIdempotency(TestCase):
 
         result = import_lot_task(self._LOT, seller_id=999999)
         self.assertIn('error', result)
+
+
+# ─── VIN-отчёт: платный API под защитой ───────────────────────────────────────
+
+class VinReportAccessTest(APITestCase):
+    """
+    Внутри дергается Opendatabot — платный внешний API. Раньше вью была без
+    permission_classes (AllowAny из настроек) и без «дорогого» throttle:
+    аноним мог жечь квоту и плодить строки в VinReport.
+    """
+
+    URL = '/api/v1/vehicles/1HGBH41JXMN109186/report/'
+
+    def test_anonymous_rejected(self):
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_authenticated_allowed(self):
+        user = get_user_model().objects.create_user(email='vin@test.com', password='pass1234')
+        self.client.force_authenticate(user=user)
+        self.assertEqual(self.client.get(self.URL).status_code, 200)
+
+    def test_uses_expensive_throttle_scope(self):
+        from integrations.views import VinReportView
+        # Тот же лимит, что и у RegistryReportView с тем же внешним API.
+        self.assertEqual(VinReportView.throttle_scope, 'expensive')
