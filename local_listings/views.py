@@ -1,7 +1,17 @@
 import uuid
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import (
+    Avg,
+    Count,
+    FloatField,
+    IntegerField,
+    OuterRef,
+    Q,
+    Subquery,
+    Value,
+)
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
@@ -29,8 +39,51 @@ from .serializers import (
 )
 
 
+def _seller_stats_annotations():
+    """
+    Рейтинг і кількість підтверджених угод продавця — одним запитом.
+
+    Раніше серіалізатор рахував це на кожне оголошення окремо: каталог з 20
+    позицій давав 23 запити, з них 20 однакових COUNT по deals_deal. У кабінеті
+    було гірше — LocalListingOwnerSerializer додає ще середню оцінку та
+    лічильник угод, тобто по три запити на позицію.
+
+    Підзапити, а не Count по зворотному зв'язку: рахувати треба угоди власника
+    оголошення, а не самого оголошення.
+    """
+    from deals.models import Deal, Review
+
+    deals_count = (
+        Deal.objects
+        .filter(seller=OuterRef('owner'), status=Deal.Status.CONFIRMED)
+        .order_by()
+        .values('seller')
+        .annotate(total=Count('pk'))
+        .values('total')[:1]
+    )
+    avg_rating = (
+        Review.objects
+        .filter(target=OuterRef('owner'))
+        .order_by()
+        .values('target')
+        .annotate(avg=Avg('rating'))
+        .values('avg')[:1]
+    )
+    return {
+        'seller_deals_count': Coalesce(
+            Subquery(deals_count, output_field=IntegerField()), Value(0),
+        ),
+        'seller_avg_rating_agg': Subquery(avg_rating, output_field=FloatField()),
+    }
+
+
 def _base_queryset():
-    return LocalListing.objects.select_related('owner', 'region', 'city').prefetch_related('images')
+    return (
+        LocalListing.objects
+        .select_related('owner', 'region', 'city')
+        .prefetch_related('images')
+        .annotate(**_seller_stats_annotations())
+    )
 
 
 class IsOwnerOrAdmin(permissions.BasePermission):
