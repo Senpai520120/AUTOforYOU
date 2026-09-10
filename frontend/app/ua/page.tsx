@@ -3,12 +3,18 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import LocalListingFilters from '@/components/local/LocalListingFilters';
 import LocalCatalogGrid from './LocalCatalogGrid';
-import { ListingsGridSkeleton } from '@/components/ui/Skeleton';
 import SaveSearchButton from '@/components/local/SaveSearchButton';
+import { buildQuery, serverGet, type SearchParams } from '@/lib/server-api';
+import type { LocalListing, PaginatedResponse } from '@/lib/types';
+
+// Каталог залежить від query-параметрів фільтрів, тому рендериться на кожен
+// запит. Дані самі кешуються на рівні fetch.
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Каталог Україна',
-  description: 'Місцеві оголошення про продаж авто по всій Україні. Фільтри за маркою, регіоном, паливом, ціною.',
+  description:
+    'Місцеві оголошення про продаж авто по всій Україні. Фільтри за маркою, регіоном, паливом, ціною.',
   openGraph: {
     title: 'Каталог Україна — AUTOforYOU',
     description: 'Купити авто в Україні: оголошення від власників і дилерів.',
@@ -16,7 +22,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function UaCatalogPage() {
+/**
+ * Білий список фільтрів. Має збігатися з тим, що читає
+ * local_listings/filters.py — інакше параметр мовчки не спрацює.
+ */
+const LOCAL_FILTERS = [
+  'make', 'model', 'year_min', 'year_max', 'price_min', 'price_max',
+  'fuel_type', 'transmission', 'body_type', 'region', 'city',
+  'mileage_max', 'search', 'ordering', 'page',
+] as const;
+
+export default async function UaCatalogPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const data = await serverGet<PaginatedResponse<LocalListing>>(
+    `/api/v1/local/listings/${buildQuery(params, LOCAL_FILTERS)}`,
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -36,13 +61,13 @@ export default function UaCatalogPage() {
           </Link>
         </div>
       </div>
+
       <Suspense>
         <LocalListingFilters />
       </Suspense>
+
       <div className="mt-6">
-        <Suspense fallback={<ListingsGridSkeleton />}>
-          <LocalCatalogGrid />
-        </Suspense>
+        <LocalCatalogGrid data={data} params={params} />
       </div>
     </div>
   );
