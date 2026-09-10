@@ -27,6 +27,7 @@ _APPLY_DATA = {
     'full_name': 'Іван Іванов',
     'contact_phone': '+380991234567',
     'documents': 'https://drive.google.com/doc123',
+    'agreed_to_processing': True,
 }
 
 
@@ -356,3 +357,41 @@ class TestRoleIsNotSelfAssignable(APITestCase):
 
         user.refresh_from_db()
         self.assertFalse(user.is_staff)
+
+
+# ── Согласие на обработку ПД в заявке дилера ──────────────────────────────────
+
+class TestDealerApplicationConsent(APITestCase):
+
+    def test_apply_without_consent_returns_400(self):
+        # Чекбокс на фронте согласие показывал, но прямой POST в API проходил
+        # мимо него — согласие нигде не фиксировалось и доказать его было нельзя.
+        self.client.force_authenticate(user=_make_user('noconsent@test.com'))
+        payload = {k: v for k, v in _APPLY_DATA.items() if k != 'agreed_to_processing'}
+
+        resp = self.client.post(APPLY_URL, payload, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('agreed_to_processing', resp.data)
+        self.assertFalse(DealerApplication.objects.exists())
+
+    def test_apply_with_consent_false_returns_400(self):
+        self.client.force_authenticate(user=_make_user('falseconsent@test.com'))
+
+        resp = self.client.post(
+            APPLY_URL, {**_APPLY_DATA, 'agreed_to_processing': False}, format='json',
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(DealerApplication.objects.exists())
+
+    def test_apply_records_consent_timestamp(self):
+        self.client.force_authenticate(user=_make_user('withconsent@test.com'))
+
+        resp = self.client.post(APPLY_URL, _APPLY_DATA, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        application = DealerApplication.objects.get()
+        # Метка времени, а не булев флаг: доказывать нужно и момент тоже.
+        self.assertIsNotNone(application.agreed_to_processing_at)
+        self.assertIsNotNone(resp.data['agreed_to_processing_at'])

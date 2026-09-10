@@ -70,9 +70,23 @@ class TrustedShopSerializer(serializers.ModelSerializer):
 
 
 class DealerApplicationCreateSerializer(serializers.ModelSerializer):
+    # Форма собирает ПІБ, телефон и ссылку на выписку ЄДР. Чекбокс на фронте
+    # согласие показывает, но доказать его не может — прямой POST в API
+    # проходил мимо. Теперь без согласия заявка не создаётся.
+    agreed_to_processing = serializers.BooleanField(write_only=True)
+
     class Meta:
         model = DealerApplication
-        fields = ('company_name', 'full_name', 'contact_phone', 'documents')
+        fields = ('company_name', 'full_name', 'contact_phone', 'documents', 'agreed_to_processing')
+
+    def validate(self, attrs):
+        # pop, а не просто чтение: apply_for_dealer принимает **validated_data
+        # и лишний ключ уронил бы вызов.
+        if not attrs.pop('agreed_to_processing'):
+            raise serializers.ValidationError(
+                {'agreed_to_processing': 'Необхідна згода на обробку персональних даних.'}
+            )
+        return attrs
 
 
 class DealerApplicationSerializer(serializers.ModelSerializer):
@@ -81,5 +95,6 @@ class DealerApplicationSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'company_name', 'full_name', 'contact_phone', 'documents',
             'status', 'review_notes', 'created_at', 'reviewed_at',
+            'agreed_to_processing_at',
         )
         read_only_fields = fields

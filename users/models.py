@@ -111,6 +111,12 @@ class DealerApplication(models.Model):
         verbose_name='Рассмотрел',
     )
     review_notes = models.TextField(blank=True, verbose_name='Заметки рассмотрения')
+    # Согласие на обработку ПД. Хранится метка времени, а не булев флаг:
+    # доказывать нужно не только факт, но и момент — форма собирает ПІБ,
+    # телефон и ссылку на выписку ЄДР.
+    agreed_to_processing_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='Дата згоди на обробку даних',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
 

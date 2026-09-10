@@ -18,7 +18,12 @@ class DuplicatePendingError(Exception):
 
 
 def apply_for_dealer(user, company_name, full_name, contact_phone, documents=''):
-    """Создаёт pending-заявку. Raises DuplicatePendingError при наличии pending."""
+    """
+    Создаёт pending-заявку. Raises DuplicatePendingError при наличии pending.
+
+    Метка времени согласия ставится здесь: заявку без согласия принимать
+    нельзя, а сериализатор не пропустит её без agreed_to_processing=True.
+    """
     if DealerApplication.objects.filter(user=user, status=DealerApplication.Status.PENDING).exists():
         raise DuplicatePendingError('У вас уже есть заявка на рассмотрении.')
     return DealerApplication.objects.create(
@@ -28,6 +33,7 @@ def apply_for_dealer(user, company_name, full_name, contact_phone, documents='')
         contact_phone=contact_phone,
         documents=documents,
         status=DealerApplication.Status.PENDING,
+        agreed_to_processing_at=timezone.now(),
     )
 
 
