@@ -1,11 +1,13 @@
 openapi: 3.0.3
 info:
   title: AUTOforYOU API
-  version: 1.0.0
+  version: 2.0.0
   description: |-
     Маркетплейс для автоперекупщиков: импорт битых авто с аукционов США (Copart/IAAI), калькулятор стоимости «под ключ» в Украину, каталог объявлений.
 
     **Аутентификация**: Bearer JWT. Получить токен: `POST /api/v1/auth/token/`.
+
+    ⚠ **Тестовые тарифы** — все расчёты демонстрационные до подключения реальных ставок.
 paths:
   /api/calculate/:
     get:
@@ -50,6 +52,198 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCarList'
           description: ''
+  /api/v1/auth/me/calculations/:
+    get:
+      operationId: v1_auth_me_calculations_list
+      summary: История моих расчётов
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCalculationList'
+          description: ''
+  /api/v1/auth/me/shipments/:
+    get:
+      operationId: v1_auth_me_shipments_list
+      summary: Мои отслеживаемые контейнеры
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedShipmentListList'
+          description: ''
+  /api/v1/auth/me/trusted-shops/:
+    get:
+      operationId: v1_auth_me_trusted_shops_list
+      summary: Мои проверенные партнёры (СТО, маляры, запчасти)
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTrustedShopList'
+          description: ''
+    post:
+      operationId: v1_auth_me_trusted_shops_create
+      summary: Добавить партнёра
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrustedShopRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TrustedShopRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TrustedShopRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedShop'
+          description: ''
+  /api/v1/auth/me/trusted-shops/{id}/:
+    get:
+      operationId: v1_auth_me_trusted_shops_retrieve
+      summary: Детали партнёра
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedShop'
+          description: ''
+    put:
+      operationId: v1_auth_me_trusted_shops_update
+      summary: Обновить партнёра
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrustedShopRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TrustedShopRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TrustedShopRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedShop'
+          description: ''
+    patch:
+      operationId: v1_auth_me_trusted_shops_partial_update
+      summary: Частично обновить партнёра
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTrustedShopRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTrustedShopRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTrustedShopRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrustedShop'
+          description: ''
+    delete:
+      operationId: v1_auth_me_trusted_shops_destroy
+      summary: Удалить партнёра
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/auth/profile/:
     get:
       operationId: v1_auth_profile_retrieve
@@ -171,6 +365,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/TokenObtainPair'
           description: ''
+  /api/v1/auth/token/logout/:
+    post:
+      operationId: v1_auth_token_logout_create
+      description: Помещает переданный refresh-токен в blacklist. После этого им нельзя
+        получить новый access.
+      summary: Выход из системы (отзыв refresh-токена)
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+        '400':
+          description: No response body
   /api/v1/auth/token/refresh/:
     post:
       operationId: v1_auth_token_refresh_create
@@ -199,11 +408,216 @@ paths:
               schema:
                 $ref: '#/components/schemas/TokenRefresh'
           description: ''
+  /api/v1/b2b/board/:
+    get:
+      operationId: v1_b2b_board_list
+      description: Только для верифицированных перекупщиков (is_verified_dealer=true).
+        Возвращает wholesale-листинги, срочные выкупы вверху.
+      summary: B2B-доска опта
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - b2b
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedListingList'
+          description: ''
+  /api/v1/dealers/application/:
+    get:
+      operationId: v1_dealers_application_retrieve
+      description: Возвращает последнюю заявку текущего пользователя (или 404).
+      summary: Статус собственной заявки
+      tags:
+      - dealers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/dealers/apply/:
+    post:
+      operationId: v1_dealers_apply_create
+      description: Создаёт заявку со статусом pending. Повторная подача при наличии
+        pending-заявки возвращает 409.
+      summary: Подать заявку на статус дилера
+      tags:
+      - dealers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/deals/:
+    get:
+      operationId: v1_deals_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_deals_create
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/deals/{id}/cancel/:
+    post:
+      operationId: v1_deals_cancel_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/deals/{id}/confirm/:
+    post:
+      operationId: v1_deals_confirm_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/deals/{id}/review/:
+    post:
+      operationId: v1_deals_review_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/deals/listing-buyers/{listing_id}/:
+    get:
+      operationId: v1_deals_listing_buyers_retrieve
+      description: Returns list of users who initiated conversations about a listing
+        (for seller to choose buyer).
+      parameters:
+      - in: path
+        name: listing_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/deals/seller-rating/{user_id}/:
+    get:
+      operationId: v1_deals_seller_rating_retrieve
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/favorites/:
+    get:
+      operationId: v1_favorites_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_favorites_create
+      description: 'Add to favorites. Body: {listing_type: ''local''|''imported'',
+        listing_id: <int>}'
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_favorites_destroy
+      description: 'Remove from favorites. Body: {listing_type, listing_id}'
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/favorites/status/:
+    get:
+      operationId: v1_favorites_status_retrieve
+      description: Check if current user has favorited a specific listing.
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/listings/:
     get:
       operationId: v1_listings_list
-      description: Список объявлений с фильтрацией и поиском.
-      summary: Каталог объявлений
+      description: Возвращает только retail-листинги. Wholesale скрыт.
+      summary: Каталог объявлений (розница)
       parameters:
       - in: query
         name: channel
@@ -309,13 +723,562 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListingCreate'
           description: ''
+  /api/v1/local/listings/:
+    get:
+      operationId: v1_local_listings_list
+      summary: Каталог Україна — список активних оголошень
+      parameters:
+      - in: query
+        name: body_type
+        schema:
+          type: string
+      - in: query
+        name: city
+        schema:
+          type: integer
+      - in: query
+        name: fuel_type
+        schema:
+          type: string
+      - in: query
+        name: make
+        schema:
+          type: string
+      - in: query
+        name: mileage_max
+        schema:
+          type: integer
+      - in: query
+        name: model
+        schema:
+          type: string
+      - in: query
+        name: ordering
+        schema:
+          type: string
+        description: -created_at | created_at | price | -price
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: price_max
+        schema:
+          type: number
+      - in: query
+        name: price_min
+        schema:
+          type: number
+      - in: query
+        name: region
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: transmission
+        schema:
+          type: string
+      - in: query
+        name: year_max
+        schema:
+          type: integer
+      - in: query
+        name: year_min
+        schema:
+          type: integer
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLocalListingListList'
+          description: ''
+    post:
+      operationId: v1_local_listings_create
+      description: Нове оголошення отримує статус pending і проходить модерацію.
+      summary: Подати місцеве оголошення (авторизований)
+      tags:
+      - local
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalListingCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LocalListingCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LocalListingCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalListingCreate'
+          description: ''
+  /api/v1/local/listings/{id}/:
+    get:
+      operationId: v1_local_listings_retrieve
+      summary: Деталі місцевого оголошення
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalListingDetail'
+          description: ''
+    patch:
+      operationId: v1_local_listings_partial_update
+      summary: Редагувати своє оголошення
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedLocalListingUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedLocalListingUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedLocalListingUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalListingUpdate'
+          description: ''
+    delete:
+      operationId: v1_local_listings_destroy
+      summary: Видалити своє оголошення
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/local/listings/{id}/contact/:
+    get:
+      operationId: v1_local_listings_contact_retrieve
+      description: 'Повертає contact_phone. Обмеження: 20 запитів/год на акаунт.'
+      summary: Отримати телефон продавця (тільки авторизований)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/local/listings/{id}/images/:
+    post:
+      operationId: v1_local_listings_images_create
+      description: Завантажити одне або кілька фото. Перше фото стає головним, якщо
+        головного ще немає.
+      summary: Завантажити фото до оголошення (multipart)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/local/listings/{id}/images/{img_id}/:
+    patch:
+      operationId: v1_local_listings_images_partial_update
+      description: Призначити фото головним (is_primary=true). Знімає прапор з решти.
+      summary: Видалити або призначити головним фото оголошення
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: img_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_local_listings_images_destroy
+      summary: Видалити або призначити головним фото оголошення
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: img_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/local/listings/{id}/promote/:
+    post:
+      operationId: v1_local_listings_promote_create
+      description: 'Тільки власник оголошення. Body: `{"tariff": "<code>"}`. Повертає
+        LiqPay checkout_url і form_data. Оплата в ТЕСТОВОМУ режимі (LIQPAY_SANDBOX=true).'
+      summary: Замовити просування оголошення (LiqPay SANDBOX)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/local/my-listings/:
+    get:
+      operationId: v1_local_my_listings_list
+      description: Повертає всі оголошення поточного авторизованого користувача, включаючи
+        pending та rejected.
+      summary: Мої оголошення (усі статуси)
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLocalListingOwnerList'
+          description: ''
+  /api/v1/local/regions/:
+    get:
+      operationId: v1_local_regions_list
+      summary: Список областей України
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Region'
+          description: ''
+  /api/v1/local/regions/{region_id}/cities/:
+    get:
+      operationId: v1_local_regions_cities_list
+      summary: Міста за областю
+      parameters:
+      - in: path
+        name: region_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+          description: ''
+  /api/v1/local/tariffs/:
+    get:
+      operationId: v1_local_tariffs_list
+      summary: Тарифи просування оголошень
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PromotionTariff'
+          description: ''
+  /api/v1/local/vin-prefill/{vin}/:
+    get:
+      operationId: v1_local_vin_prefill_retrieve
+      description: Безкоштовно, без ключа. Повертає make/model/year/engine_cc/fuel_type
+        з кешу або NHTSA.
+      summary: VIN-автозаповнення (NHTSA vPIC)
+      parameters:
+      - in: path
+        name: vin
+        schema:
+          type: string
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/lots/import/:
+    post:
+      operationId: v1_lots_import_create
+      description:
+      - |-
+        Тільки для адміністраторів.
+
+        **source=manual** (за замовчуванням): приймає `lot_data` dict з полями лоту — рабочий MVP без зовнішніх залежностей.
+
+        **source=apify**: `lot_url` — URL лоту на Copart/IAAI; потребує `APIFY_TOKEN`; без токену повертає `demo=true`.
+
+        Повторний імпорт того ж VIN оновлює Vehicle, не плодить дублів.
+
+        ⚠ Автоматичний імпорт за розкладом — Celery (промт 10).
+      summary: Імпорт лоту аукціону
+      tags:
+      - lots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LotImportRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LotImportRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LotImportRequestRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          description: Лот створено (новий Vehicle+Listing)
+        '200':
+          description: Лот оновлено (Vehicle з таким VIN вже існував)
+        '400':
+          description: Помилка валідації або провайдера
+        '403':
+          description: Тільки адміністратори
+  /api/v1/messages/conversations/:
+    get:
+      operationId: v1_messages_conversations_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/messages/conversations/{id}/:
+    get:
+      operationId: v1_messages_conversations_retrieve_2
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_messages_conversations_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/messages/start/:
+    post:
+      operationId: v1_messages_start_create
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/messages/unread-count/:
+    get:
+      operationId: v1_messages_unread_count_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/notifications/:
+    get:
+      operationId: v1_notifications_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/notifications/mark-read/:
+    post:
+      operationId: v1_notifications_mark_read_create
+      description: 'Body: {id: <int>} or {all: true}'
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/notifications/unread-count/:
+    get:
+      operationId: v1_notifications_unread_count_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/payments/liqpay/callback/:
+    post:
+      operationId: v1_payments_liqpay_callback_create
+      description: |-
+        Принимает POST-колбэк от LiqPay после оплаты.
+
+        Проверяет подпись (SHA1 от private_key + data + private_key).
+
+        При успешной оплате обновляет Payment.status и разблокирует связанный листинг.
+
+        **csrf_exempt** — LiqPay не шлёт CSRF-токен, защита — подпись.
+      summary: LiqPay webhook (callback)
+      tags:
+      - payments
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Неверная подпись или данные
+  /api/v1/payments/liqpay/checkout/:
+    post:
+      operationId: v1_payments_liqpay_checkout_create
+      description: |-
+        Создаёт платёж через LiqPay и возвращает checkout URL + HTML-форму.
+
+        Требует авторизации. `order_id` должен быть уникальным.
+
+        Для sandbox-режима установите `LIQPAY_SANDBOX=true` в env.
+      summary: Создать LiqPay checkout
+      tags:
+      - payments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: checkout_url и form_data для HTML-формы
+        '400':
+          description: Ошибка валидации
   /api/v1/pricing/calculate/:
     post:
       operationId: v1_pricing_calculate_create
       description: |-
-        Рассчитывает полную стоимость автомобиля в Украине: аукционный сбор, логистика США, морской фрахт, доставка ЕС→UA, растаможка.
+        Рассчитывает полную стоимость автомобиля в Украине: аукционный сбор (buyer fee + gate + environmental + virtual bid), логистика США, морской фрахт, доставка ЕС→UA, растаможка.
 
-        **Важно**: результат всегда `is_estimate: true`. Ставки акциза и пенсионного сбора — плейсхолдеры, требуют проверки по действующему законодательству Украины.
+        **Важно**: результат всегда `is_estimate: true`. Ставки аукционных сборов — baseline (сверить с тарифом брокера). Ставки акциза и пенсионного сбора — требуют проверки по законодательству.
       summary: Калькулятор стоимости «под ключ»
       tags:
       - pricing
@@ -325,17 +1288,20 @@ paths:
             schema:
               $ref: '#/components/schemas/CalculateInputRequest'
             examples:
-              ToyotaCamry2019Бензин2500cc$10000:
+              ToyotaCamry2019Бензин2500cc$10000(broker/secured/salvage):
                 value:
                   auction_price_usd: '10000.00'
                   engine_cc: 2500
                   fuel_type: petrol
                   vehicle_year: 2019
                   auction: copart
+                  member_type: broker
+                  payment_type: secured
+                  title_type: salvage
                   auction_location: general
                   us_port: houston
                   eu_port: klaipeda
-                summary: Toyota Camry 2019 бензин 2500cc $10 000
+                summary: Toyota Camry 2019 бензин 2500cc $10 000 (broker/secured/salvage)
               TeslaModel32022Электро$25000:
                 value:
                   auction_price_usd: '25000.00'
@@ -343,6 +1309,9 @@ paths:
                   fuel_type: electric
                   vehicle_year: 2022
                   auction: copart
+                  member_type: broker
+                  payment_type: secured
+                  title_type: salvage
                   auction_location: california
                   us_port: houston
                   eu_port: gdansk
@@ -381,6 +1350,161 @@ paths:
               schema:
                 $ref: '#/components/schemas/ActiveRatesResponse'
           description: ''
+  /api/v1/reports/:
+    post:
+      operationId: v1_reports_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReportCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReportCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportCreate'
+          description: ''
+  /api/v1/saved-searches/:
+    get:
+      operationId: v1_saved_searches_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_saved_searches_create
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/saved-searches/{id}/:
+    patch:
+      operationId: v1_saved_searches_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_saved_searches_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/shipments/:
+    get:
+      operationId: v1_shipments_list
+      description: Повертає контейнери, які відстежує поточний користувач. Адміністратор
+        бачить усі.
+      summary: Список контейнерів
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - shipments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedShipmentListList'
+          description: ''
+  /api/v1/shipments/{id}/:
+    get:
+      operationId: v1_shipments_retrieve
+      description: Доступно лише тим, хто відстежує контейнер, і адміністраторам.
+      summary: Деталі контейнера + історія подій
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - shipments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shipment'
+          description: ''
+  /api/v1/telegram/link/:
+    delete:
+      operationId: v1_telegram_link_destroy
+      description: |-
+        DELETE /api/v1/telegram/link/
+        Відв'язує Telegram-акаунт від профілю поточного користувача.
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/telegram/link-token/:
+    get:
+      operationId: v1_telegram_link_token_retrieve
+      description: |-
+        GET /api/v1/telegram/link-token/
+        Генерирует deep-link для привязки Telegram-аккаунта в личном кабинете.
+        Токен действует 30 минут, одноразовый.
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/vehicles/:
     get:
       operationId: v1_vehicles_list
@@ -433,12 +1557,99 @@ paths:
               schema:
                 $ref: '#/components/schemas/Vehicle'
           description: ''
+  /api/v1/vehicles/{vin}/decode/:
+    get:
+      operationId: v1_vehicles_decode_retrieve
+      description: |-
+        Декодирует VIN через бесплатный API NHTSA vPIC (федеральная база США).
+
+        Возвращает технические характеристики: марку, модель, год, объём двигателя, тип топлива, тип кузова. Результат кэшируется — повторный запрос не обращается к NHTSA.
+
+        История ДТП и торги — отдельный эндпоинт `/report/` (заглушка, требует Carfax/BidFax).
+
+        `demo: false` — данные реальные из NHTSA.
+      summary: VIN-декод через NHTSA vPIC
+      parameters:
+      - in: path
+        name: vin
+        schema:
+          type: string
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: Технические данные из NHTSA vPIC
+        '400':
+          description: Некорректный VIN
+  /api/v1/vehicles/{vin}/registry/:
+    get:
+      operationId: v1_vehicles_registry_retrieve
+      description: |-
+        Повертає дані з українських реєстрів: власники, пробіг, обтяження (арешти/застави).
+
+        Результат кешується — повторний запрос по тому ж VIN/номеру не звертається до API.
+
+        **Без ключа** (`OPENDATABOT_API_KEY` не задано): `demo: true`, безпечний fallback.
+
+        **З ключем**: реальні дані з Opendatabot.
+      summary: Перевірка по реєстрах України (Opendatabot)
+      parameters:
+      - in: query
+        name: plate
+        schema:
+          type: string
+        description: Держномер (наприклад AA1234BB). Якщо вказано — пошук за номером.
+      - in: path
+        name: vin
+        schema:
+          type: string
+        description: VIN (17 символів) або `_` при пошуку за номером
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Звіт реєстру (реальний або демо)
+        '400':
+          description: Некоректний VIN або не вказано ані VIN, ані номер
+  /api/v1/vehicles/{vin}/report/:
+    get:
+      operationId: v1_vehicles_report_retrieve
+      description: |-
+        Возвращает агрегированный отчёт по VIN: история аварий, торги, реестры UA.
+
+        **Важно**: данные кэшируются в БД. При отсутствии ключей провайдера возвращаются демо-данные с полем `demo: true` и меткой «Демо-данные» в UI.
+      summary: VIN-отчёт
+      parameters:
+      - in: path
+        name: vin
+        schema:
+          type: string
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Отчёт (реальный или демо)
+        '400':
+          description: Некорректный VIN
 components:
   schemas:
     ActiveRatesResponse:
       type: object
       properties:
-        auction_fees:
+        auction_fee_tiers:
+          type: array
+          items: {}
+        auction_fixed_fees:
           type: array
           items: {}
         us_land_routes:
@@ -460,21 +1671,36 @@ components:
           type: array
           items: {}
       required:
-      - auction_fees
+      - auction_fee_tiers
+      - auction_fixed_fees
       - eu_to_ua
       - exchange_rates
       - excise_rates
       - ocean_freight
       - pension_brackets
       - us_land_routes
+    ArrivalPortEuEnum:
+      enum:
+      - klaipeda
+      - gdansk
+      type: string
     AuctionEnum:
       enum:
       - copart
       - iaai
       type: string
-      description: |-
-        * `copart` - copart
-        * `iaai` - iaai
+    BodyTypeEnum:
+      enum:
+      - sedan
+      - suv
+      - hatchback
+      - wagon
+      - coupe
+      - minivan
+      - pickup
+      - convertible
+      - other
+      type: string
     CalculateInputRequest:
       type: object
       properties:
@@ -487,15 +1713,32 @@ components:
           maximum: 10000
           minimum: 0
         fuel_type:
-          $ref: '#/components/schemas/VehicleFuelTypeEnum'
+          $ref: '#/components/schemas/CustomsExciseFuelTypeEnum'
         vehicle_year:
           type: integer
           maximum: 2100
           minimum: 1900
+        battery_capacity_kwh:
+          type: integer
+          maximum: 200
+          minimum: 0
+          default: 0
         auction:
           allOf:
           - $ref: '#/components/schemas/AuctionEnum'
           default: copart
+        member_type:
+          allOf:
+          - $ref: '#/components/schemas/MemberTypeEnum'
+          default: broker
+        payment_type:
+          allOf:
+          - $ref: '#/components/schemas/PaymentTypeEnum'
+          default: secured
+        title_type:
+          allOf:
+          - $ref: '#/components/schemas/TitleTypeEnum'
+          default: salvage
         auction_location:
           type: string
           minLength: 1
@@ -510,11 +1753,65 @@ components:
           allOf:
           - $ref: '#/components/schemas/EuPortEnum'
           default: klaipeda
+        calculation_date:
+          type: string
+          format: date
+          nullable: true
       required:
       - auction_price_usd
       - engine_cc
       - fuel_type
       - vehicle_year
+    Calculation:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+          nullable: true
+          title: Пользователь
+        inputs_snapshot:
+          readOnly: true
+          title: Снимок входных данных
+        rates_snapshot:
+          readOnly: true
+          title: Снимок применённых ставок
+        breakdown:
+          readOnly: true
+          title: Детализация расчёта
+        total_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          title: Итого USD
+        total_uah:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          title: Итого UAH
+        is_estimate:
+          type: boolean
+          readOnly: true
+          title: Ориентировочный расчёт
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - breakdown
+      - created_at
+      - id
+      - inputs_snapshot
+      - is_estimate
+      - rates_snapshot
+      - total_uah
+      - total_usd
+      - user
     Car:
       type: object
       properties:
@@ -599,26 +1896,64 @@ components:
       - IN_TRANSIT
       - IN_UKRAINE
       type: string
-      description: |-
-        * `IN_USA` - На аукционе в США
-        * `IN_TRANSIT` - Плывет в Украину
-        * `IN_UKRAINE` - В Украине / На ремонте / Готов
     ChannelEnum:
       enum:
       - retail
       - wholesale
       type: string
-      description: |-
-        * `retail` - Розница
-        * `wholesale` - Опт
+    City:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          title: Місто
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        region:
+          type: integer
+          title: Область
+        region_name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - region
+      - region_name
+      - slug
+    ConditionEnum:
+      enum:
+      - new
+      - used
+      - damaged
+      type: string
+    CustomsExciseFuelTypeEnum:
+      enum:
+      - petrol
+      - diesel
+      - electric
+      - hybrid
+      - phev
+      type: string
     EuPortEnum:
       enum:
       - klaipeda
       - gdansk
       type: string
-      description: |-
-        * `klaipeda` - klaipeda
-        * `gdansk` - gdansk
+    FuelType94dEnum:
+      enum:
+      - petrol
+      - diesel
+      - electric
+      - hybrid
+      - gas
+      type: string
     LegacyCalcResponse:
       type: object
       properties:
@@ -680,6 +2015,17 @@ components:
           type: integer
           nullable: true
           title: Расчёт стоимости
+        is_express_buyout:
+          type: boolean
+          title: Срочный выкуп
+        express_buyout_until:
+          type: string
+          format: date-time
+          nullable: true
+          title: Срочный выкуп до
+        is_express_active:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -691,6 +2037,7 @@ components:
       required:
       - created_at
       - id
+      - is_express_active
       - price
       - seller
       - updated_at
@@ -726,6 +2073,14 @@ components:
           type: integer
           nullable: true
           title: Расчёт стоимости
+        is_express_buyout:
+          type: boolean
+          title: Срочный выкуп
+        express_buyout_until:
+          type: string
+          format: date-time
+          nullable: true
+          title: Срочный выкуп до
       required:
       - price
       - vehicle
@@ -759,6 +2114,14 @@ components:
           type: integer
           nullable: true
           title: Расчёт стоимости
+        is_express_buyout:
+          type: boolean
+          title: Срочный выкуп
+        express_buyout_until:
+          type: string
+          format: date-time
+          nullable: true
+          title: Срочный выкуп до
       required:
       - price
       - vehicle
@@ -768,10 +2131,841 @@ components:
       - UAH
       - EUR
       type: string
+    LocalListingCreate:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        make:
+          type: string
+          title: Марка
+          maxLength: 100
+        model:
+          type: string
+          title: Модель
+          maxLength: 100
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Рік
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробіг, км
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          title: Об'єм двигуна, куб.см
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/FuelType94dEnum'
+          title: Тип палива
+        transmission:
+          allOf:
+          - $ref: '#/components/schemas/TransmissionEnum'
+          title: КПП
+        body_type:
+          allOf:
+          - $ref: '#/components/schemas/BodyTypeEnum'
+          title: Тип кузова
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionEnum'
+          title: Стан
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        price_type:
+          allOf:
+          - $ref: '#/components/schemas/PriceTypeEnum'
+          title: Тип ціни
+        region:
+          type: integer
+          title: Область
+        city:
+          type: integer
+          title: Місто
+        description:
+          type: string
+          title: Опис
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status7fcEnum'
+          readOnly: true
+          title: Статус
+        seller_type:
+          allOf:
+          - $ref: '#/components/schemas/SellerTypeEnum'
+          title: Тип продавця
+        contact_phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalListingImage'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - body_type
+      - city
+      - created_at
+      - fuel_type
+      - id
+      - images
+      - make
+      - mileage_km
+      - model
+      - price
+      - region
+      - status
+      - transmission
+      - updated_at
+      - year
+    LocalListingCreateRequest:
+      type: object
+      properties:
+        make:
+          type: string
+          minLength: 1
+          title: Марка
+          maxLength: 100
+        model:
+          type: string
+          minLength: 1
+          title: Модель
+          maxLength: 100
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Рік
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробіг, км
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          title: Об'єм двигуна, куб.см
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/FuelType94dEnum'
+          title: Тип палива
+        transmission:
+          allOf:
+          - $ref: '#/components/schemas/TransmissionEnum'
+          title: КПП
+        body_type:
+          allOf:
+          - $ref: '#/components/schemas/BodyTypeEnum'
+          title: Тип кузова
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionEnum'
+          title: Стан
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        price_type:
+          allOf:
+          - $ref: '#/components/schemas/PriceTypeEnum'
+          title: Тип ціни
+        region:
+          type: integer
+          title: Область
+        city:
+          type: integer
+          title: Місто
+        description:
+          type: string
+          title: Опис
+        seller_type:
+          allOf:
+          - $ref: '#/components/schemas/SellerTypeEnum'
+          title: Тип продавця
+        contact_phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        agreed_to_rules:
+          type: boolean
+          writeOnly: true
+      required:
+      - agreed_to_rules
+      - body_type
+      - city
+      - fuel_type
+      - make
+      - mileage_km
+      - model
+      - price
+      - region
+      - transmission
+      - year
+    LocalListingDetail:
+      type: object
       description: |-
-        * `USD` - USD
-        * `UAH` - UAH
-        * `EUR` - EUR
+        Деталь: телефон і причина відхилення повертаються авторизованим/власнику.
+        Повна реалізація захисту контактів — C2C-промт 6.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        make:
+          type: string
+          title: Марка
+          maxLength: 100
+        model:
+          type: string
+          title: Модель
+          maxLength: 100
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Рік
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробіг, км
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          title: Об'єм двигуна, куб.см
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/FuelType94dEnum'
+          title: Тип палива
+        transmission:
+          allOf:
+          - $ref: '#/components/schemas/TransmissionEnum'
+          title: КПП
+        body_type:
+          allOf:
+          - $ref: '#/components/schemas/BodyTypeEnum'
+          title: Тип кузова
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionEnum'
+          title: Стан
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        price_type:
+          allOf:
+          - $ref: '#/components/schemas/PriceTypeEnum'
+          title: Тип ціни
+        region:
+          type: integer
+          title: Область
+        region_name:
+          type: string
+          readOnly: true
+        city:
+          type: integer
+          title: Місто
+        city_name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          title: Опис
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status7fcEnum'
+          title: Статус
+        seller_type:
+          allOf:
+          - $ref: '#/components/schemas/SellerTypeEnum'
+          title: Тип продавця
+        owner_name:
+          type: string
+          readOnly: true
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalListingImage'
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Дійсне до
+        promoted_until:
+          type: string
+          format: date-time
+          nullable: true
+          title: ТОП до
+        bumped_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Піднято
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        seller_has_badge:
+          type: boolean
+          readOnly: true
+        contact_phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        rejection_reason:
+          type: string
+          title: Причина відхилення
+        seller_avg_rating:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        seller_deal_count:
+          type: integer
+          readOnly: true
+      required:
+      - body_type
+      - city
+      - city_name
+      - created_at
+      - fuel_type
+      - id
+      - images
+      - make
+      - mileage_km
+      - model
+      - owner_name
+      - price
+      - region
+      - region_name
+      - seller_avg_rating
+      - seller_deal_count
+      - seller_has_badge
+      - transmission
+      - updated_at
+      - year
+    LocalListingImage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        image:
+          type: string
+          format: uri
+          nullable: true
+          title: Фото
+        source_url:
+          type: string
+          title: URL фото
+          maxLength: 500
+        is_primary:
+          type: boolean
+          title: Головне фото
+      required:
+      - id
+    LocalListingImageRequest:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
+          nullable: true
+          title: Фото
+        source_url:
+          type: string
+          title: URL фото
+          maxLength: 500
+        is_primary:
+          type: boolean
+          title: Головне фото
+    LocalListingList:
+      type: object
+      description: Публічний список — тільки active, без телефону та причини відхилення.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        make:
+          type: string
+          title: Марка
+          maxLength: 100
+        model:
+          type: string
+          title: Модель
+          maxLength: 100
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Рік
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробіг, км
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          title: Об'єм двигуна, куб.см
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/FuelType94dEnum'
+          title: Тип палива
+        transmission:
+          allOf:
+          - $ref: '#/components/schemas/TransmissionEnum'
+          title: КПП
+        body_type:
+          allOf:
+          - $ref: '#/components/schemas/BodyTypeEnum'
+          title: Тип кузова
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionEnum'
+          title: Стан
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        price_type:
+          allOf:
+          - $ref: '#/components/schemas/PriceTypeEnum'
+          title: Тип ціни
+        region:
+          type: integer
+          title: Область
+        region_name:
+          type: string
+          readOnly: true
+        city:
+          type: integer
+          title: Місто
+        city_name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          title: Опис
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status7fcEnum'
+          title: Статус
+        seller_type:
+          allOf:
+          - $ref: '#/components/schemas/SellerTypeEnum'
+          title: Тип продавця
+        owner_name:
+          type: string
+          readOnly: true
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalListingImage'
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Дійсне до
+        promoted_until:
+          type: string
+          format: date-time
+          nullable: true
+          title: ТОП до
+        bumped_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Піднято
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        seller_has_badge:
+          type: boolean
+          readOnly: true
+      required:
+      - body_type
+      - city
+      - city_name
+      - created_at
+      - fuel_type
+      - id
+      - images
+      - make
+      - mileage_km
+      - model
+      - owner_name
+      - price
+      - region
+      - region_name
+      - seller_has_badge
+      - transmission
+      - updated_at
+      - year
+    LocalListingOwner:
+      type: object
+      description: Серіалізатор для кабінету власника — бачить всі статуси та причину
+        відхилення.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        make:
+          type: string
+          title: Марка
+          maxLength: 100
+        model:
+          type: string
+          title: Модель
+          maxLength: 100
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Рік
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробіг, км
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          title: Об'єм двигуна, куб.см
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/FuelType94dEnum'
+          title: Тип палива
+        transmission:
+          allOf:
+          - $ref: '#/components/schemas/TransmissionEnum'
+          title: КПП
+        body_type:
+          allOf:
+          - $ref: '#/components/schemas/BodyTypeEnum'
+          title: Тип кузова
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionEnum'
+          title: Стан
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        price_type:
+          allOf:
+          - $ref: '#/components/schemas/PriceTypeEnum'
+          title: Тип ціни
+        region:
+          type: integer
+          title: Область
+        region_name:
+          type: string
+          readOnly: true
+        city:
+          type: integer
+          title: Місто
+        city_name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          title: Опис
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status7fcEnum'
+          title: Статус
+        seller_type:
+          allOf:
+          - $ref: '#/components/schemas/SellerTypeEnum'
+          title: Тип продавця
+        owner_name:
+          type: string
+          readOnly: true
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalListingImage'
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Дійсне до
+        promoted_until:
+          type: string
+          format: date-time
+          nullable: true
+          title: ТОП до
+        bumped_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Піднято
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        seller_has_badge:
+          type: boolean
+          readOnly: true
+        contact_phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+        rejection_reason:
+          type: string
+          title: Причина відхилення
+        seller_avg_rating:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        seller_deal_count:
+          type: integer
+          readOnly: true
+        expiry_warned:
+          type: boolean
+          title: Попередження надіслано
+      required:
+      - body_type
+      - city
+      - city_name
+      - created_at
+      - fuel_type
+      - id
+      - images
+      - make
+      - mileage_km
+      - model
+      - owner_name
+      - price
+      - region
+      - region_name
+      - seller_avg_rating
+      - seller_deal_count
+      - seller_has_badge
+      - transmission
+      - updated_at
+      - year
+    LocalListingUpdate:
+      type: object
+      properties:
+        make:
+          type: string
+          title: Марка
+          maxLength: 100
+        model:
+          type: string
+          title: Модель
+          maxLength: 100
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Рік
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробіг, км
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          title: Об'єм двигуна, куб.см
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/FuelType94dEnum'
+          title: Тип палива
+        transmission:
+          allOf:
+          - $ref: '#/components/schemas/TransmissionEnum'
+          title: КПП
+        body_type:
+          allOf:
+          - $ref: '#/components/schemas/BodyTypeEnum'
+          title: Тип кузова
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionEnum'
+          title: Стан
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        price_type:
+          allOf:
+          - $ref: '#/components/schemas/PriceTypeEnum'
+          title: Тип ціни
+        region:
+          type: integer
+          title: Область
+        city:
+          type: integer
+          title: Місто
+        description:
+          type: string
+          title: Опис
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status7fcEnum'
+          title: Статус
+        contact_phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+      required:
+      - body_type
+      - city
+      - fuel_type
+      - make
+      - mileage_km
+      - model
+      - price
+      - region
+      - transmission
+      - year
+    LotImportRequestRequest:
+      type: object
+      description: |-
+        Тело POST /api/v1/lots/import/.
+
+        source='manual' (default) → lot_data обязателен.
+        source='apify'            → lot_url обязателен.
+      properties:
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          default: manual
+        lot_data:
+          type: object
+          additionalProperties: {}
+          description: JSON лота для ручного импорта
+        lot_url:
+          type: string
+          format: uri
+          minLength: 1
+          description: URL лота на Copart/IAAI для Apify-импорта
+    MemberTypeEnum:
+      enum:
+      - public
+      - licensed
+      - broker
+      type: string
+    PaginatedCalculationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Calculation'
     PaginatedCarList:
       type: object
       required:
@@ -818,6 +3012,98 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Listing'
+    PaginatedLocalListingListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalListingList'
+    PaginatedLocalListingOwnerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalListingOwner'
+    PaginatedShipmentListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentList'
+    PaginatedTrustedShopList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustedShop'
     PaginatedVehicleList:
       type: object
       required:
@@ -841,6 +3127,107 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Vehicle'
+    PatchedLocalListingUpdateRequest:
+      type: object
+      properties:
+        make:
+          type: string
+          minLength: 1
+          title: Марка
+          maxLength: 100
+        model:
+          type: string
+          minLength: 1
+          title: Модель
+          maxLength: 100
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Рік
+        mileage_km:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Пробіг, км
+        engine_cc:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          title: Об'єм двигуна, куб.см
+        fuel_type:
+          allOf:
+          - $ref: '#/components/schemas/FuelType94dEnum'
+          title: Тип палива
+        transmission:
+          allOf:
+          - $ref: '#/components/schemas/TransmissionEnum'
+          title: КПП
+        body_type:
+          allOf:
+          - $ref: '#/components/schemas/BodyTypeEnum'
+          title: Тип кузова
+        condition:
+          allOf:
+          - $ref: '#/components/schemas/ConditionEnum'
+          title: Стан
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
+          title: Валюта
+        price_type:
+          allOf:
+          - $ref: '#/components/schemas/PriceTypeEnum'
+          title: Тип ціни
+        region:
+          type: integer
+          title: Область
+        city:
+          type: integer
+          title: Місто
+        description:
+          type: string
+          title: Опис
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status7fcEnum'
+          title: Статус
+        contact_phone:
+          type: string
+          title: Телефон
+          maxLength: 20
+    PatchedTrustedShopRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          title: Название
+          maxLength: 200
+        type:
+          allOf:
+          - $ref: '#/components/schemas/TrustedShopTypeEnum'
+          title: Тип
+        contacts:
+          type: string
+          title: Контакты
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+          title: Рейтинг (1-5)
+        notes:
+          type: string
+          title: Заметки
     PatchedUserProfileRequest:
       type: object
       properties:
@@ -856,10 +3243,91 @@ components:
           type: string
           title: Телефон
           maxLength: 20
-        role:
+    PaymentTypeEnum:
+      enum:
+      - secured
+      - unsecured
+      type: string
+    PriceTypeEnum:
+      enum:
+      - fixed
+      - negotiable
+      type: string
+    PromotionTariff:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          title: Код
+          maxLength: 50
+        name:
+          type: string
+          title: Назва
+          maxLength: 100
+        type:
           allOf:
-          - $ref: '#/components/schemas/RoleEnum'
-          title: Роль
+          - $ref: '#/components/schemas/PromotionTariffTypeEnum'
+          title: Тип
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          title: Ціна
+        currency:
+          type: string
+          title: Валюта
+          maxLength: 3
+        duration_days:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          title: Днів дії
+        description:
+          type: string
+          title: Опис
+      required:
+      - code
+      - id
+      - name
+      - price
+      - type
+    PromotionTariffTypeEnum:
+      enum:
+      - renew
+      - bump
+      - top
+      type: string
+    ReasonEnum:
+      enum:
+      - spam
+      - wrong_info
+      - inappropriate
+      - fraud
+      - duplicate
+      - other
+      type: string
+    Region:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          title: Область
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+      required:
+      - id
+      - name
+      - slug
     Register:
       type: object
       properties:
@@ -881,8 +3349,8 @@ components:
           maxLength: 20
         role:
           allOf:
-          - $ref: '#/components/schemas/RoleEnum'
-          title: Роль
+          - $ref: '#/components/schemas/RegisterRoleEnum'
+          default: buyer
       required:
       - email
     RegisterRequest:
@@ -901,7 +3369,7 @@ components:
           type: string
           writeOnly: true
           minLength: 1
-          title: Подтверждение пароля
+          title: Підтвердження пароля
         first_name:
           type: string
           title: Имя
@@ -916,42 +3384,234 @@ components:
           maxLength: 20
         role:
           allOf:
-          - $ref: '#/components/schemas/RoleEnum'
-          title: Роль
+          - $ref: '#/components/schemas/RegisterRoleEnum'
+          default: buyer
+        agreed_to_terms:
+          type: boolean
+          writeOnly: true
       required:
+      - agreed_to_terms
       - email
       - password
       - password2
-    RoleEnum:
+    RegisterRoleEnum:
       enum:
       - buyer
       - dealer
-      - admin
       type: string
-      description: |-
-        * `buyer` - Покупатель
-        * `dealer` - Перекупщик
-        * `admin` - Администратор
+    ReportCreate:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        listing:
+          type: integer
+          nullable: true
+          title: Оголошення
+        reported_user:
+          type: integer
+          nullable: true
+          title: Скаржимося на користувача
+        reason:
+          allOf:
+          - $ref: '#/components/schemas/ReasonEnum'
+          title: Причина
+        comment:
+          type: string
+          title: Коментар
+      required:
+      - id
+      - reason
+    ReportCreateRequest:
+      type: object
+      properties:
+        listing:
+          type: integer
+          nullable: true
+          title: Оголошення
+        reported_user:
+          type: integer
+          nullable: true
+          title: Скаржимося на користувача
+        reason:
+          allOf:
+          - $ref: '#/components/schemas/ReasonEnum'
+          title: Причина
+        comment:
+          type: string
+          title: Коментар
+      required:
+      - reason
+    SellerTypeEnum:
+      enum:
+      - private
+      - dealer
+      type: string
+    Shipment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        container_no:
+          type: string
+          title: Номер контейнера
+          maxLength: 20
+        vessel:
+          type: string
+          title: Судно
+          maxLength: 100
+        us_warehouse:
+          type: string
+          title: Склад США
+          maxLength: 100
+        departure_port_us:
+          type: string
+          title: Порт отправки (США)
+          maxLength: 50
+        arrival_port_eu:
+          allOf:
+          - $ref: '#/components/schemas/ArrivalPortEuEnum'
+          title: Порт прибытия (ЕС)
+        arrival_port_eu_display:
+          type: string
+          readOnly: true
+        eta:
+          type: string
+          format: date
+          nullable: true
+          title: Ожидаемая дата прибытия
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusC94Enum'
+          title: Статус
+        status_display:
+          type: string
+          readOnly: true
+        next_statuses:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vehicle'
+          readOnly: true
+        vehicle_count:
+          type: integer
+          readOnly: true
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingEvent'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - arrival_port_eu_display
+      - container_no
+      - created_at
+      - events
+      - id
+      - next_statuses
+      - status_display
+      - updated_at
+      - vehicle_count
+      - vehicles
+    ShipmentList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        container_no:
+          type: string
+          title: Номер контейнера
+          maxLength: 20
+        vessel:
+          type: string
+          title: Судно
+          maxLength: 100
+        arrival_port_eu:
+          allOf:
+          - $ref: '#/components/schemas/ArrivalPortEuEnum'
+          title: Порт прибытия (ЕС)
+        eta:
+          type: string
+          format: date
+          nullable: true
+          title: Ожидаемая дата прибытия
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusC94Enum'
+          title: Статус
+        status_display:
+          type: string
+          readOnly: true
+        vehicle_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - container_no
+      - created_at
+      - id
+      - status_display
+      - vehicle_count
     SourceAuctionEnum:
       enum:
       - copart
       - iaai
       - other
       type: string
-      description: |-
-        * `copart` - Copart
-        * `iaai` - IAAI
-        * `other` - Другой
+    SourceEnum:
+      enum:
+      - manual
+      - apify
+      type: string
     Status4efEnum:
       enum:
       - in_transit
       - in_stock
       - sold
       type: string
-      description: |-
-        * `in_transit` - В пути
-        * `in_stock` - В наличии
-        * `sold` - Продан
+    Status7fcEnum:
+      enum:
+      - draft
+      - active
+      - pending
+      - rejected
+      - expired
+      - sold
+      - hidden
+      type: string
+    StatusC94Enum:
+      enum:
+      - at_us_warehouse
+      - loading
+      - in_ocean
+      - at_eu_port
+      - on_truck_to_ua
+      - cleared
+      - delivered
+      type: string
+    TitleTypeEnum:
+      enum:
+      - clean
+      - salvage
+      - any
+      type: string
     TokenObtainPair:
       type: object
       properties:
@@ -997,6 +3657,113 @@ components:
           minLength: 1
       required:
       - refresh
+    TrackingEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusC94Enum'
+          title: Статус
+        status_display:
+          type: string
+          readOnly: true
+        note:
+          type: string
+          title: Комментарий
+        photo:
+          type: string
+          format: uri
+          nullable: true
+          title: Фото
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - status
+      - status_display
+    TransmissionEnum:
+      enum:
+      - auto
+      - manual
+      - cvt
+      - robot
+      type: string
+    TrustedShop:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          title: Название
+          maxLength: 200
+        type:
+          allOf:
+          - $ref: '#/components/schemas/TrustedShopTypeEnum'
+          title: Тип
+        contacts:
+          type: string
+          title: Контакты
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+          title: Рейтинг (1-5)
+        notes:
+          type: string
+          title: Заметки
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - updated_at
+    TrustedShopRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          title: Название
+          maxLength: 200
+        type:
+          allOf:
+          - $ref: '#/components/schemas/TrustedShopTypeEnum'
+          title: Тип
+        contacts:
+          type: string
+          title: Контакты
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+          title: Рейтинг (1-5)
+        notes:
+          type: string
+          title: Заметки
+      required:
+      - name
+    TrustedShopTypeEnum:
+      enum:
+      - service
+      - painter
+      - parts
+      - other
+      type: string
     UserProfile:
       type: object
       properties:
@@ -1021,21 +3788,35 @@ components:
           maxLength: 20
         role:
           allOf:
-          - $ref: '#/components/schemas/RoleEnum'
+          - $ref: '#/components/schemas/UserProfileRoleEnum'
+          readOnly: true
           title: Роль
         is_verified_dealer:
           type: boolean
           readOnly: true
           title: Верифицированный дилер
+        is_staff:
+          type: boolean
+          readOnly: true
+          title: Статус персонала
+          description: Отметьте, если пользователь может входить в административную
+            часть сайта.
         created_at:
           type: string
           format: date-time
           readOnly: true
+        telegram_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - created_at
       - email
       - id
+      - is_staff
       - is_verified_dealer
+      - role
+      - telegram_id
     UserProfileRequest:
       type: object
       properties:
@@ -1051,10 +3832,12 @@ components:
           type: string
           title: Телефон
           maxLength: 20
-        role:
-          allOf:
-          - $ref: '#/components/schemas/RoleEnum'
-          title: Роль
+    UserProfileRoleEnum:
+      enum:
+      - buyer
+      - dealer
+      - admin
+      type: string
     Vehicle:
       type: object
       properties:
@@ -1131,11 +3914,6 @@ components:
       - electric
       - hybrid
       type: string
-      description: |-
-        * `petrol` - petrol
-        * `diesel` - diesel
-        * `electric` - electric
-        * `hybrid` - hybrid
     VehicleImage:
       type: object
       properties:
@@ -1145,12 +3923,16 @@ components:
         image:
           type: string
           format: uri
+          nullable: true
+        source_url:
+          type: string
+          title: URL источника фото
+          maxLength: 500
         is_primary:
           type: boolean
           title: Главное фото
       required:
       - id
-      - image
   securitySchemes:
     jwtAuth:
       type: http
@@ -1159,9 +3941,23 @@ components:
 tags:
 - name: auth
   description: Регистрация и JWT-аутентификация
+- name: me
+  description: Личный кабинет (история расчётов, партнёры, контейнеры)
 - name: vehicles
-  description: Каталог автомобилей
+  description: Каталог автомобилей + VIN-отчёты
 - name: pricing
   description: Калькулятор стоимости «под ключ» и тарифы
 - name: listings
   description: Объявления маркетплейса
+- name: shipments
+  description: Логистика контейнеров
+- name: b2b
+  description: B2B-доска опта (только верифицированные дилеры)
+- name: payments
+  description: Платёжный шлюз LiqPay (checkout + webhook)
+- name: lots
+  description: Импорт лотов аукционов (только admin)
+- name: local
+  description: 'C2C: місцеві оголошення від користувачів (Каталог Україна)'
+- name: legacy
+  description: Устаревшие эндпоинты
