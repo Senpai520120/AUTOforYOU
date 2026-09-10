@@ -5,9 +5,21 @@ echo "[entrypoint] Running database migrations..."
 python manage.py migrate --noinput
 
 echo "[entrypoint] Seeding reference data (idempotent)..."
-python manage.py seed_regions --no-color 2>/dev/null || true
-python manage.py seed_rates   --no-color 2>/dev/null || true
-python manage.py seed_auction_fees --no-color 2>/dev/null || true
+
+# Раньше было `2>/dev/null || true`: любая ошибка сида уходила в никуда.
+# Так, seed_rates падал при недоступном Redis, тарифы не применялись, и
+# калькулятор молча отдавал 422 «Отсутствуют активные тарифы».
+# Теперь ошибка видна в логах, но не роняет весь стек: сиды идемпотентны и
+# их можно повторить вручную.
+run_seed() {
+    if ! python manage.py "$1" --no-color; then
+        echo "[entrypoint] ВНИМАНИЕ: $1 завершился с ошибкой — справочники могут быть неполными" >&2
+    fi
+}
+
+run_seed seed_regions
+run_seed seed_rates
+run_seed seed_auction_fees
 
 echo "[entrypoint] Collecting static files..."
 python manage.py collectstatic --noinput --clear
