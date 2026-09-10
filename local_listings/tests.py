@@ -1018,3 +1018,75 @@ class TestListingVisibilityByStatus(APITestCase):
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
         self.assertEqual(r.status_code, 200)
         self.assertIn('contact_phone', r.data)
+
+
+# ─── N+1 в каталозі ───────────────────────────────────────────────────────────
+
+class TestCatalogQueryCount(APITestCase):
+    """
+    Кількість запитів не має залежати від кількості оголошень.
+
+    До правки серіалізатор рахував бейдж продавця окремим COUNT на кожну
+    позицію: каталог з 20 оголошень давав 23 запити, з них 20 однакових.
+    У кабінеті було гірше — там ще середня оцінка й лічильник угод, тобто
+    по три запити на позицію.
+    """
+
+    def setUp(self):
+        self.owner = _make_user('qc_owner@test.com')
+        self.region = _make_region('QC-область')
+        self.city = _make_city(self.region, 'QC-місто')
+        for i in range(5):
+            _make_listing(self.owner, self.region, self.city, model=f'Model{i}')
+
+    def test_catalog_query_count_is_flat(self):
+        # COUNT для пагінації + вибірка оголошень + prefetch зображень.
+        # Статистика продавця приходить підзапитами всередині основної вибірки.
+        with self.assertNumQueries(3):
+            resp = self.client.get('/api/v1/local/listings/')
+            _ = resp.data
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['count'], 5)
+
+    def test_catalog_does_not_scale_with_listings(self):
+        """Вчетверо більше оголошень — та сама кількість запитів."""
+        for i in range(15):
+            _make_listing(self.owner, self.region, self.city, model=f'Extra{i}')
+
+        with self.assertNumQueries(3):
+            resp = self.client.get('/api/v1/local/listings/')
+            _ = resp.data
+
+        self.assertEqual(resp.data['count'], 20)
+
+    def test_my_listings_query_count_is_flat(self):
+        # Кабінет використовує LocalListingOwnerSerializer — там ще середня
+        # оцінка й лічильник угод, тобто найгірший випадок до правки.
+        _auth(self.client, self.owner)
+
+        with self.assertNumQueries(4):
+            resp = self.client.get('/api/v1/local/my-listings/')
+            _ = resp.data
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_seller_stats_still_correct(self):
+        """Підзапити мають рахувати те саме, що й попередні окремі запити."""
+        from deals.models import Deal
+
+        listing = LocalListing.objects.filter(owner=self.owner).first()
+        # Різні покупці: у Deal унікальність по парі (listing, buyer).
+        for i in range(3):
+            Deal.objects.create(
+                listing=listing,
+                seller=self.owner,
+                buyer=_make_user(f'qc_buyer{i}@test.com'),
+                status=Deal.Status.CONFIRMED,
+            )
+
+        resp = self.client.get(f'/api/v1/local/listings/{listing.pk}/')
+
+        self.assertEqual(resp.data['seller_deal_count'], 3)
+        # SELLER_BADGE_THRESHOLD за замовчуванням 3
+        self.assertTrue(resp.data['seller_has_badge'])

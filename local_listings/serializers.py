@@ -9,6 +9,36 @@ from .models import City, LocalListing, LocalListingImage, PromotionTariff, Regi
 from .services import SUBSTANTIVE_FIELDS
 
 
+def _confirmed_deals(obj) -> int:
+    """
+    Кількість підтверджених угод продавця.
+
+    Спершу — з анотації queryset (див. _seller_stats_annotations у views):
+    інакше на кожне оголошення йшов би окремий COUNT. Запит лишається
+    запасним варіантом для одиночних об'єктів поза анотованим queryset —
+    наприклад, у відповіді на створення оголошення.
+    """
+    annotated = getattr(obj, 'seller_deals_count', None)
+    if annotated is not None:
+        return annotated
+
+    from deals.models import Deal
+    return Deal.objects.filter(seller=obj.owner, status=Deal.Status.CONFIRMED).count()
+
+
+def _avg_rating(obj):
+    """Середня оцінка продавця. Логіка та сама, що й у _confirmed_deals."""
+    if hasattr(obj, 'seller_avg_rating_agg'):
+        value = obj.seller_avg_rating_agg
+        return round(value, 1) if value else None
+
+    from django.db.models import Avg
+
+    from deals.models import Review
+    agg = Review.objects.filter(target=obj.owner).aggregate(avg=Avg('rating'))
+    return round(agg['avg'], 1) if agg['avg'] else None
+
+
 class PromotionTariffSerializer(serializers.ModelSerializer):
     class Meta:
         model = PromotionTariff
@@ -68,9 +98,7 @@ class LocalListingListSerializer(serializers.ModelSerializer):
     def get_seller_has_badge(self, obj):
         from django.conf import settings
         threshold = getattr(settings, 'SELLER_BADGE_THRESHOLD', 3)
-        from deals.models import Deal
-        count = Deal.objects.filter(seller=obj.owner, status='confirmed').count()
-        return count >= threshold
+        return _confirmed_deals(obj) >= threshold
 
 
 class LocalListingDetailSerializer(LocalListingListSerializer):
@@ -89,16 +117,11 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
 
     @extend_schema_field(serializers.FloatField(allow_null=True))
     def get_seller_avg_rating(self, obj):
-        from django.db.models import Avg
-
-        from deals.models import Review
-        agg = Review.objects.filter(target=obj.owner).aggregate(avg=Avg('rating'))
-        return round(agg['avg'], 1) if agg['avg'] else None
+        return _avg_rating(obj)
 
     @extend_schema_field(serializers.IntegerField())
     def get_seller_deal_count(self, obj):
-        from deals.models import Deal
-        return Deal.objects.filter(seller=obj.owner, status='confirmed').count()
+        return _confirmed_deals(obj)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
