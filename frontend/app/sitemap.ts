@@ -1,43 +1,37 @@
 import type { MetadataRoute } from 'next';
 import { listingSlug } from '@/lib/utils';
-import type { Listing, PaginatedResponse } from '@/lib/types';
+import type { Listing, LocalListing, PaginatedResponse } from '@/lib/types';
+import { serverGet } from '@/lib/server-api';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
-// INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
-const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
+/** Роздрібні лоти імпорту: в наявності та в дорозі. */
 async function fetchActiveListings(): Promise<Listing[]> {
-  try {
-    // Fetch first page of active retail listings (in_stock + in_transit)
-    const res = await fetch(
-      `${apiUrl}/api/v1/listings/?status=in_stock&channel=retail&page=1`,
-      { next: { revalidate: 3600 } },
-    );
-    if (!res.ok) return [];
-    const data: PaginatedResponse<Listing> = await res.json();
-    const all = [...data.results];
+  const pages = await Promise.all([
+    serverGet<PaginatedResponse<Listing>>('/api/v1/listings/?status=in_stock&channel=retail&page=1', 3600),
+    serverGet<PaginatedResponse<Listing>>('/api/v1/listings/?status=in_transit&channel=retail&page=1', 3600),
+  ]);
+  return pages.flatMap(p => p?.results ?? []);
+}
 
-    // Fetch in_transit page too
-    const res2 = await fetch(
-      `${apiUrl}/api/v1/listings/?status=in_transit&channel=retail&page=1`,
-      { next: { revalidate: 3600 } },
-    );
-    if (res2.ok) {
-      const data2: PaginatedResponse<Listing> = await res2.json();
-      all.push(...data2.results);
-    }
-    return all;
-  } catch {
-    return [];
-  }
+/** Активні місцеві оголошення — публічний ендпоінт віддає тільки їх. */
+async function fetchLocalListings(): Promise<LocalListing[]> {
+  const data = await serverGet<PaginatedResponse<LocalListing>>('/api/v1/local/listings/?page=1', 3600);
+  return data?.results ?? [];
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const listings = await fetchActiveListings();
+  const [listings, localListings] = await Promise.all([
+    fetchActiveListings(),
+    fetchLocalListings(),
+  ]);
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${siteUrl}/`, changeFrequency: 'daily', priority: 1 },
     { url: `${siteUrl}/listings`, changeFrequency: 'hourly', priority: 0.9 },
+    // Каталог України раніше в sitemap не потрапляв, хоча це єдиний розділ
+    // з реальними оголошеннями.
+    { url: `${siteUrl}/ua`, changeFrequency: 'hourly', priority: 0.9 },
     { url: `${siteUrl}/calculator`, changeFrequency: 'monthly', priority: 0.7 },
     // Юридичні документи мають бути публічно доступними та індексованими
     { url: `${siteUrl}/terms`, changeFrequency: 'yearly', priority: 0.3 },
@@ -54,5 +48,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  return [...staticRoutes, ...listingRoutes];
+  const localRoutes: MetadataRoute.Sitemap = localListings.map(l => ({
+    url: `${siteUrl}/local/${l.id}`,
+    lastModified: new Date(l.updated_at),
+    changeFrequency: 'daily',
+    priority: 0.8,
+  }));
+
+  return [...staticRoutes, ...listingRoutes, ...localRoutes];
 }
