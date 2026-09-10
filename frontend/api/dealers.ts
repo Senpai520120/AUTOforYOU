@@ -6,6 +6,8 @@ export interface ApplyPayload {
   full_name: string;
   contact_phone: string;
   documents?: string;
+  // Обов'язкове: без згоди сервер відхиляє заявку з 400.
+  agreed_to_processing: boolean;
 }
 
 export const dealersApi = {

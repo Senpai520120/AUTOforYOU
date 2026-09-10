@@ -508,6 +508,7 @@ class TestDealerApplicationFlowE2E(TestCase):
             'full_name': 'Іван Іванов',
             'contact_phone': '+380991234567',
             'documents': 'https://drive.google.com/doc123',
+            'agreed_to_processing': True,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data['status'], 'pending')
@@ -519,6 +520,7 @@ class TestDealerApplicationFlowE2E(TestCase):
             'company_name': 'ТОВ 2',
             'full_name': 'Іван',
             'contact_phone': '+380',
+            'agreed_to_processing': True,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT)
 

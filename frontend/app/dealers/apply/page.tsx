@@ -57,6 +57,7 @@ export default function DealerApplyPage() {
         full_name: form.full_name,
         contact_phone: form.contact_phone,
         documents: form.documents || undefined,
+        agreed_to_processing: agreedToProcessing,
       });
       setSuccess(true);
     } catch (err: unknown) {
