@@ -4,8 +4,11 @@ export interface User {
   first_name: string;
   last_name: string;
   phone: string;
+  // role — категорія користувача, а не привілей: її вказує сам користувач
+  // при реєстрації. Права перевіряються по is_staff і is_verified_dealer.
   role: 'buyer' | 'dealer' | 'admin';
   is_verified_dealer: boolean;
+  is_staff: boolean;
   created_at: string;
   telegram_id: number | null;
 }

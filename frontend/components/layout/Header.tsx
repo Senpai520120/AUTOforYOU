@@ -42,7 +42,10 @@ export default function Header() {
           <Link href="/listings" className="hover:text-amber-400 transition-colors">Пригін/аукціон</Link>
           <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
           <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
-          {user && (user.is_verified_dealer || user.role === 'admin') ? (
+          {/* Той самий признак, що й на бекенді (IsVerifiedDealerOrAdmin).
+              Раніше тут стояло user.role === 'admin' — користувач бачив
+              посилання на B2B-дошку, а у відповідь отримував 403. */}
+          {user && (user.is_verified_dealer || user.is_staff) ? (
             <Link href="/b2b" className="hover:text-amber-400 transition-colors">B2B</Link>
           ) : user ? (
             <Link href="/dealers/apply" className="text-amber-300 hover:text-amber-400 transition-colors text-xs border border-amber-400/40 px-2 py-1 rounded">

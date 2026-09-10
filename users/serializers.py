@@ -40,11 +40,22 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ('id', 'email', 'first_name', 'last_name', 'phone', 'role', 'is_verified_dealer', 'created_at', 'telegram_id')
+        fields = (
+            'id', 'email', 'first_name', 'last_name', 'phone', 'role',
+            'is_verified_dealer', 'is_staff', 'created_at', 'telegram_id',
+        )
         # role только для чтения: смена роли — не самообслуживание.
         # Без этого PATCH /auth/profile/ {"role": "admin"} проходил и открывал
         # B2B-доску и чужие переписки по импортным листингам.
-        read_only_fields = ('id', 'email', 'role', 'is_verified_dealer', 'created_at', 'telegram_id')
+        #
+        # is_staff отдаётся, чтобы фронт мог показывать админские разделы по
+        # тому же признаку, по которому их проверяет бэкенд. Раньше шапка
+        # ориентировалась на role, и пользователь с role='admin' видел ссылку
+        # на B2B-доску, а в ответ получал 403.
+        read_only_fields = (
+            'id', 'email', 'role', 'is_verified_dealer', 'is_staff',
+            'created_at', 'telegram_id',
+        )
 
 
 class TrustedShopSerializer(serializers.ModelSerializer):
