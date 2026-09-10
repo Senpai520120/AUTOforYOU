@@ -123,17 +123,47 @@ python manage.py test -v2                         # с именами тесто
 
 ---
 
+## Покрытие
+
+```bash
+pip install coverage
+coverage run --source=. \
+  --omit="*/migrations/*,*/tests.py,tests/*,.venv/*,venv/*,manage.py,frontend/*" \
+  manage.py test
+coverage report --skip-empty
+```
+
+```
+TOTAL    4460    878    80%
+```
+
+`coverage` не входит в `requirements.txt` — это инструмент разработчика, в проде он не нужен.
+
 ## Чего не покрыто
+
+Модули с нулевым покрытием — ровно те, что ниже. Это не оценка, а вывод `coverage report`.
+
+| Модуль | Строк | Причина |
+|---|---:|---|
+| `telegram_bot/handlers.py` | 66 | Рантайм бота: нужен живой aiogram-диспетчер и моки Telegram API |
+| `integrations/management/commands/import_lot.py` | 64 | Требует внешних сервисов или больших фикстур |
+| `integrations/management/commands/upload_lot_photos.py` | 43 | То же |
+| `telegram_bot/management/commands/run_bot.py` | 27 | Точка входа бота, бесконечный polling |
+| `telegram_bot/management/commands/set_webhook.py` | 27 | Ходит в Telegram API |
+| `pricing/management/commands/fetch_nbu_rates.py` | 25 | Сама задача покрыта (`TestFetchNbuRatesTask`), обёртка-команда — нет |
+| `telegram_bot/management/commands/unset_webhook.py` | 24 | Ходит в Telegram API |
+| `telegram_bot/middleware.py` | 18 | Часть рантайма бота |
+| `core/wsgi.py`, `core/asgi.py` | 8 | Точки входа, тестировать нечего |
+
+**Больше половины непокрытого — рантайм Telegram-бота** (`handlers`, `middleware`, три команды: 162 строки). Это работающий в проде код, и это самый заметный пробел.
+
+Кроме того, не проверяются автотестами:
 
 | Область | Причина |
 |---|---|
-| `telegram_bot/handlers.py`, `middleware.py` | Рантайм бота: нужен живой aiogram-диспетчер и моки Telegram API |
-| Команды импорта лотов (`import_lot`, `upload_lot_photos`) | Требуют внешних сервисов или больших фикстур |
-| `fetch_nbu_rates` как команда | Сама задача покрыта (`TestFetchNbuRatesTask`), обёртка-команда — нет |
-| `core/wsgi.py`, `core/asgi.py` | Точки входа, тестировать нечего |
 | Реальная оплата LiqPay | Нужны боевые ключи и публичный HTTPS для колбэка |
 | Отправка email | Бэкенд в тестах консольный, доставка не проверяется |
-| Админка Django | Действия админа вызываются напрямую, интерфейс не проверяется |
+| Интерфейс админки | Действия админа вызываются напрямую, сам интерфейс — нет |
 
 ---
 
