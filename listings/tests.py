@@ -3,6 +3,8 @@
 Проверяет, что прямой доступ по ID к wholesale-листингу возвращает 404 для неверифицированных.
 """
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -112,3 +114,53 @@ class TestListingListQueryCount(APITestCase):
 
         results = resp.data.get('results', resp.data)
         self.assertGreaterEqual(len(results), 10)
+
+
+# ─── Ограничения на уровне БД ─────────────────────────────────────────────────
+
+class TestListingChoiceConstraints(TestCase):
+    """
+    Django проверяет choices только при full_clean(). .save() и .update()
+    пишут что угодно — в базе уже лежал status='active', которого нет среди
+    вариантов, и карточка в каталоге показывала сырое значение вместо
+    перевода. Ограничения в БД закрывают все пути записи.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(email='constraint@test.com', password='pass')
+        self.vehicle = Vehicle.objects.create(
+            vin='WBAVA37547NL12345', make='BMW', model='X5', year=2019,
+            engine_cc=3000, fuel_type='diesel', mileage_km=80000,
+        )
+
+    def _create(self, **kw):
+        defaults = dict(vehicle=self.vehicle, seller=self.user, price='20000.00')
+        defaults.update(kw)
+        return Listing.objects.create(**defaults)
+
+    def test_valid_status_accepted(self):
+        listing = self._create(status='in_stock')
+        self.assertEqual(listing.status, 'in_stock')
+
+    def test_invalid_status_rejected_on_create(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._create(status='active')
+
+    def test_invalid_status_rejected_on_update(self):
+        # update() обходит и full_clean(), и сигналы — раньше это был
+        # самый простой способ записать что угодно.
+        listing = self._create()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Listing.objects.filter(pk=listing.pk).update(status='active')
+
+    def test_invalid_channel_rejected(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._create(channel='secret')
+
+    def test_invalid_currency_rejected(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._create(currency='BTC')
