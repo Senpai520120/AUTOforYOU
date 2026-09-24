@@ -34,10 +34,9 @@ class Command(BaseCommand):
 
     @staticmethod
     async def _run(token: str) -> None:
-        from aiogram import Bot, Dispatcher
+        from aiogram import Bot
 
-        from telegram_bot.handlers import router
-        from telegram_bot.middleware import UserBindingMiddleware
+        from telegram_bot.dispatcher import get_dispatcher
 
         bot = Bot(token=token)
 
@@ -45,9 +44,7 @@ class Command(BaseCommand):
         # если предыдущий бот работал в webhook-режиме.
         await bot.delete_webhook(drop_pending_updates=True)
 
-        dp = Dispatcher()
-        dp.include_router(router)
-        dp.message.middleware(UserBindingMiddleware())
+        dp = get_dispatcher()
 
         try:
             await dp.start_polling(bot)

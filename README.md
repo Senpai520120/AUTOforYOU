@@ -25,7 +25,7 @@
 | Сповіщення | Telegram-бот на aiogram 3 |
 | Розгортання | Docker Compose: nginx, backend, frontend, celery worker і beat, bot, db, redis |
 | API-документація | drf-spectacular (Swagger / ReDoc) |
-| Тести | Django test runner (417) + Playwright (33) |
+| Тести | Django test runner (433) + Playwright (33) |
 
 ---
 
@@ -80,7 +80,7 @@ npm run dev
 
 ## Тести
 
-### Backend — 417 тестів
+### Backend — 433 тести
 
 ```bash
 python manage.py test
@@ -208,7 +208,7 @@ AUTOforYOU/
 
 | Джоб | Що робить |
 |---|---|
-| **Backend checks** | ruff, системні перевірки, незакомічені міграції, 417 тестів |
+| **Backend checks** | ruff, системні перевірки, незакомічені міграції, 433 тести |
 | **Frontend checks** | eslint, `tsc --noEmit`, збірка |
 | **E2E tests** | Піднімає весь стек через docker compose з `DEBUG=false` і ганяє Playwright. HTML-звіт зберігається артефактом |
 

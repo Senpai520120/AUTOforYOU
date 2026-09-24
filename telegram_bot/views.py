@@ -1,8 +1,8 @@
-import asyncio
 import json
 import logging
 from datetime import timedelta
 
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
@@ -94,23 +94,21 @@ class TelegramWebhookView(View):
         except Exception:
             return HttpResponse('Bad request', status=400)
 
-        asyncio.run(self._process_update(token, data))
+        # async_to_sync, а не asyncio.run: так sync_to_async в хендлерах
+        # выполняется в потоке запроса и работает с его соединением к БД.
+        async_to_sync(self._process_update)(token, data)
         return HttpResponse('ok')
 
     @staticmethod
     async def _process_update(token: str, data: dict) -> None:
-        from aiogram import Bot, Dispatcher
+        from aiogram import Bot
         from aiogram.types import Update
 
-        from telegram_bot.handlers import router
-        from telegram_bot.middleware import UserBindingMiddleware
+        from telegram_bot.dispatcher import get_dispatcher
 
         bot = Bot(token=token)
-        dp = Dispatcher()
-        dp.include_router(router)
-        dp.message.middleware(UserBindingMiddleware())
         try:
             update = Update.model_validate(data)
-            await dp.feed_update(bot, update)
+            await get_dispatcher().feed_update(bot, update)
         finally:
             await bot.session.close()
