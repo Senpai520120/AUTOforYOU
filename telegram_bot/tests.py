@@ -1,11 +1,22 @@
+import json
+import uuid
 from datetime import timedelta
+from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from aiogram import Bot, Dispatcher
+from aiogram.methods import SendMessage
+from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from .dispatcher import get_dispatcher
+from .management.commands.run_bot import Command as RunBotCommand
+from .middleware import UserBindingMiddleware
 from .models import TelegramLinkToken
 
 User = get_user_model()
@@ -53,46 +64,264 @@ class TelegramLinkApiTest(TestCase):
         self.assertTrue(TelegramLinkToken.objects.filter(user=self.user).exists())
 
 
-# ─── Deep-link: привязка аккаунта ────────────────────────────────────────────
+# ─── Рантайм бота: апдейт → webhook → диспетчер → хендлер ────────────────────
+#
+# Хендлеры прогоняются по настоящему пути: POST на webhook, Dispatcher aiogram,
+# фильтры команд, middleware. Подменён только выход в Telegram API — Bot.__call__,
+# через который проходит любой метод (SendMessage и т.д.). Отправленные методы
+# складываются в список и проверяются.
 
-class TelegramLinkFlowTest(TestCase):
+BOT_TOKEN = '123456:TEST-TOKEN'
+WEBHOOK_SECRET = 'test-secret'
+TG_USER_ID = 555001
+SITE_URL = 'http://site.test'
+
+
+def _update(text: str, update_id: int = 1, from_id: int = TG_USER_ID) -> str:
+    command_len = len(text.split(' ', 1)[0]) if text.startswith('/') else 0
+    message = {
+        'message_id': update_id,
+        'date': 0,
+        'chat': {'id': from_id, 'type': 'private'},
+        'from': {'id': from_id, 'is_bot': False, 'first_name': 'Test'},
+        'text': text,
+    }
+    if command_len:
+        message['entities'] = [{'type': 'bot_command', 'offset': 0, 'length': command_len}]
+    return json.dumps({'update_id': update_id, 'message': message})
+
+
+class BotRuntimeTestCase(TestCase):
+    URL = '/api/v1/telegram/webhook/'
+
     def setUp(self):
+        self.sent = []
+        sent = self.sent
+
+        async def fake_call(bot, method, request_timeout=None):
+            sent.append(method)
+
+        patcher = patch.object(Bot, '__call__', fake_call)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def send(self, text: str, update_id: int = 1, from_id: int = TG_USER_ID):
+        with self.settings(
+            TELEGRAM_BOT_TOKEN=BOT_TOKEN,
+            TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET,
+            SITE_URL=SITE_URL,
+        ):
+            return self.client.post(
+                self.URL, data=_update(text, update_id, from_id),
+                content_type='application/json',
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=WEBHOOK_SECRET,
+            )
+
+    def messages(self) -> list[SendMessage]:
+        return [m for m in self.sent if isinstance(m, SendMessage)]
+
+    def replies(self) -> list[str]:
+        return [m.text for m in self.messages()]
+
+
+class BotCommandsTest(BotRuntimeTestCase):
+    def test_start_greets_and_lists_commands(self):
+        self.assertEqual(self.send('/start').status_code, 200)
+        [reply] = self.replies()
+        self.assertIn('Ласкаво просимо', reply)
+        self.assertIn('/latest', reply)
+
+    def test_help_lists_commands(self):
+        self.send('/help')
+        [reply] = self.replies()
+        self.assertIn('/start', reply)
+        self.assertIn('/latest', reply)
+
+    def test_plain_text_is_ignored(self):
+        self.assertEqual(self.send('привіт').status_code, 200)
+        self.assertEqual(self.replies(), [])
+
+    def test_consecutive_updates_are_all_processed(self):
+        """
+        Регрессия: вью собирало Dispatcher на каждый запрос и подключало к нему
+        один и тот же модульный роутер. Первый апдейт проходил, второй падал
+        с RuntimeError 'Router is already attached'.
+        """
+        self.assertEqual(self.send('/start', update_id=1).status_code, 200)
+        self.assertEqual(self.send('/help', update_id=2).status_code, 200)
+        self.assertEqual(self.send('/start', update_id=3).status_code, 200)
+        self.assertEqual(len(self.replies()), 3)
+
+
+class BotLatestTest(BotRuntimeTestCase):
+    def setUp(self):
+        super().setUp()
+        self.seller = User.objects.create_user(email='seller@test.com', password='pass')
+
+    def _listing(self, vin: str, **kw):
+        from listings.models import Listing
+        from vehicles.models import Vehicle
+        v = Vehicle.objects.create(
+            vin=vin, make='Honda', model='Civic', year=2019,
+            engine_cc=1500, fuel_type='petrol', mileage_km=30000,
+        )
+        defaults = {'vehicle': v, 'seller': self.seller, 'price': '12000.00', 'channel': 'retail'}
+        defaults.update(kw)
+        return Listing.objects.create(**defaults)
+
+    def _listing_ids(self) -> list[int]:
+        return [
+            int(m.reply_markup.inline_keyboard[0][0].url.rsplit('/', 1)[1])
+            for m in self.messages()
+        ]
+
+    def test_no_listings(self):
+        self.send('/latest')
+        self.assertEqual(self.replies(), ['Наразі немає активних оголошень.'])
+
+    def test_only_retail_in_stock_or_in_transit(self):
+        in_stock = self._listing('1HGCM82633A000001', status='in_stock')
+        in_transit = self._listing('1HGCM82633A000002', status='in_transit')
+        self._listing('1HGCM82633A000003', status='sold')
+        self._listing('1HGCM82633A000004', status='in_stock', channel='wholesale')
+
+        self.send('/latest')
+
+        self.assertEqual(sorted(self._listing_ids()), sorted([in_stock.pk, in_transit.pk]))
+
+    def test_button_links_to_listing_page(self):
+        listing = self._listing('1HGCM82633A000005')
+        self.send('/latest')
+        [msg] = self.messages()
+        self.assertEqual(msg.reply_markup.inline_keyboard[0][0].url, f'{SITE_URL}/listings/{listing.pk}')
+        self.assertIn('Honda Civic 2019', msg.text)
+
+    def test_at_most_five_newest(self):
+        from listings.models import Listing
+        created = [self._listing(f'1HGCM82633A00010{i}') for i in range(7)]
+        # Разводим время создания явно: подряд созданные записи могут получить
+        # одинаковый created_at, и порядок между ними не определён.
+        base = timezone.now()
+        for i, lst in enumerate(created):
+            Listing.objects.filter(pk=lst.pk).update(created_at=base + timedelta(minutes=i))
+        self.send('/latest')
+        self.assertEqual(self._listing_ids(), [lst.pk for lst in reversed(created)][:5])
+
+
+class BotAccountLinkTest(BotRuntimeTestCase):
+    """
+    /start link_<uuid> — deep-link из личного кабинета.
+
+    Заменяет прежний TelegramLinkFlowTest: тот не вызывал хендлер вообще,
+    а сам присваивал telegram_id и проверял собственное присваивание.
+    """
+
+    def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(email='link@test.com', password='pass')
 
-    def _make_token(self, **kw):
+    def _token(self, **kw):
         defaults = {'user': self.user, 'expires_at': timezone.now() + timedelta(minutes=10)}
         defaults.update(kw)
         return TelegramLinkToken.objects.create(**defaults)
 
-    def test_valid_token_links_user(self):
-        token_obj = self._make_token()
-        # Simulate what the /start deeplink handler does
-        self.user.telegram_id = 999001
-        self.user.save()
-        token_obj.used = True
-        token_obj.save()
+    def test_valid_token_links_account(self):
+        token = self._token()
+        self.send(f'/start link_{token.token}')
 
         self.user.refresh_from_db()
-        token_obj.refresh_from_db()
-        self.assertEqual(self.user.telegram_id, 999001)
-        self.assertTrue(token_obj.used)
-        self.assertFalse(token_obj.is_valid())
+        token.refresh_from_db()
+        self.assertEqual(self.user.telegram_id, TG_USER_ID)
+        self.assertTrue(token.used)
+        [reply] = self.replies()
+        self.assertIn('успішно', reply)
 
-    def test_expired_token_is_invalid(self):
-        token_obj = self._make_token(expires_at=timezone.now() - timedelta(minutes=1))
-        self.assertFalse(token_obj.is_valid())
+    def test_token_cannot_be_reused(self):
+        token = self._token()
+        self.send(f'/start link_{token.token}', update_id=1)
+        self.send(f'/start link_{token.token}', update_id=2, from_id=TG_USER_ID + 1)
 
-    def test_used_token_is_invalid(self):
-        token_obj = self._make_token(used=True)
-        self.assertFalse(token_obj.is_valid())
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.telegram_id, TG_USER_ID)
+        self.assertIn('застаріло', self.replies()[-1])
 
-    def test_token_marks_used_after_link(self):
-        token_obj = self._make_token()
-        self.assertTrue(token_obj.is_valid())
-        token_obj.used = True
-        token_obj.save()
-        token_obj.refresh_from_db()
-        self.assertTrue(token_obj.used)
+    def test_expired_token_does_not_link(self):
+        token = self._token(expires_at=timezone.now() - timedelta(minutes=1))
+        self.send(f'/start link_{token.token}')
+
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertIn('застаріло', self.replies()[0])
+
+    def test_used_token_does_not_link(self):
+        token = self._token(used=True)
+        self.send(f'/start link_{token.token}')
+
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertIn('застаріло', self.replies()[0])
+
+    def test_malformed_token(self):
+        self.send('/start link_not-a-uuid')
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertIn('Невалідне', self.replies()[0])
+
+    def test_unknown_token(self):
+        self.send(f'/start link_{uuid.uuid4()}')
+        self.assertIn('Невалідне', self.replies()[0])
+
+    def test_other_deeplink_payload_greets(self):
+        self.send('/start promo2026')
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertIn('Ласкаво просимо', self.replies()[0])
+
+
+class UserBindingMiddlewareTest(TestCase):
+    def _run(self, from_id):
+        seen = {}
+
+        async def handler(event, data):
+            seen.update(data)
+
+        event = SimpleNamespace(from_user=SimpleNamespace(id=from_id) if from_id else None)
+        async_to_sync(UserBindingMiddleware())(handler, event, {})
+        return seen
+
+    def test_linked_user_is_resolved(self):
+        user = User.objects.create_user(email='mw@test.com', password='pass', telegram_id=777)
+        data = self._run(777)
+        self.assertTrue(data['is_linked'])
+        self.assertEqual(data['telegram_user'], user)
+
+    def test_unknown_telegram_id(self):
+        data = self._run(778)
+        self.assertFalse(data['is_linked'])
+        self.assertIsNone(data['telegram_user'])
+
+    def test_event_without_sender(self):
+        data = self._run(None)
+        self.assertFalse(data['is_linked'])
+        self.assertIsNone(data['telegram_user'])
+
+
+class RunBotCommandTest(TestCase):
+    def test_without_token_exits_with_message(self):
+        err = StringIO()
+        with self.settings(TELEGRAM_BOT_TOKEN=''), patch('asyncio.run') as run:
+            call_command('run_bot', stderr=err)
+        run.assert_not_called()
+        self.assertIn('TELEGRAM_BOT_TOKEN не задан', err.getvalue())
+
+    def test_polling_uses_shared_dispatcher(self):
+        with patch.object(Bot, 'delete_webhook') as delete_webhook, \
+                patch.object(Dispatcher, 'start_polling', autospec=True) as start_polling:
+            async_to_sync(RunBotCommand._run)(BOT_TOKEN)
+
+        delete_webhook.assert_awaited_once_with(drop_pending_updates=True)
+        start_polling.assert_awaited_once()
+        self.assertIs(start_polling.await_args.args[0], get_dispatcher())
 
 
 # ─── send_notification task ───────────────────────────────────────────────────
