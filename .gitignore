@@ -47,3 +47,7 @@ dump.sql
 test-results/
 playwright-report/
 blob-report/
+
+# coverage.py
+.coverage
+htmlcov/
