@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from aiogram import Bot, Dispatcher
 from aiogram.methods import SendMessage
+from aiogram.types import Update
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -104,6 +105,13 @@ class BotRuntimeTestCase(TestCase):
         patcher = patch.object(Bot, '__call__', fake_call)
         patcher.start()
         self.addCleanup(patcher.stop)
+
+        # В aiogram Update.event_type — @property поверх @lru_cache: разобранные
+        # Update (а с ними Message.date — datetime с tzinfo из pydantic_core)
+        # живут в кэше класса до конца процесса. При завершении интерпретатора
+        # кэш освобождается после частичной выгрузки pydantic_core, и на сборке
+        # Python в GitHub Actions это segfault (exit 139) уже после 'OK'.
+        self.addCleanup(Update.event_type.fget.cache_clear)
 
     def send(self, text: str, update_id: int = 1, from_id: int = TG_USER_ID):
         with self.settings(
