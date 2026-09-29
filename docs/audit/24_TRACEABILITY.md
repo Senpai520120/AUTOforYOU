@@ -1,0 +1,264 @@
+# Трассировка: находка → задача
+
+Пояснение: колонку «Задача» заполнит основной агент в фазе D.
+
+Источник: отчёты `docs/audit/01_*.md` … `13_*.md`. В реестр вошли все S- и Q-находки уровня «критично» и «важно», а также C-находки, которым отчёт явно присвоил уровень «важно» в разделе «Итог» (01-C1, 03-C1, 09-C1…C3, 12-C1, 12-C2). Этап брифа: 0 — тестовая среда; 1 — безопасность/аккаунты/ПДн/роли; 2 — калькулятор, заявка, лоты, контейнеры, B2B; 3 — адаптеры внешних API; 4 — C2C, сделки, переписка, платежи; 5 — Telegram-бот; 6 — UX/SEO/доступность/мобильная; 7 — деплой, HTTPS, бэкапы, мониторинг, CI. Колонка «Дубль с» перечисляет другие находки реестра про ту же проблему; группы — в конце файла.
+
+| ID | Уровень | Пакет | Кратко | Файл:строка | Этап | Дубль с | Задача |
+|---|---|---|---|---|---|---|---|
+| 12-Q8 | важно | 12 | Два venv, в venv/ нет celery: manage.py test падает | `venv/; .venv/; core/__init__.py:1` | 0 | — | 0.1 |
+| 12-Q14 | важно | 12 | CRLF в entrypoint.sh, нет .gitattributes: backend на Windows в цикле рестартов | `docker/entrypoint.sh; deploy.sh; Dockerfile.backend:31` | 0 | — | 0.1 |
+| 13-S9 | важно | 13 | Тесты без мока платного API: при ключе в .env будут реальные запросы | `integrations/tests.py:582-585,452-462; tests/test_e2e.py:555-567` | 0 | — | 0.2 |
+| 13-Q1 | важно | 13 | Фальшиво-зелёный e2e «без згоди форма не відправляється» | `frontend/e2e/register.spec.ts:22-34` | 0 | — | 0.3 |
+| 13-Q2 | важно | 13 | Фальшиво-зелёный e2e «порожня форма» калькулятора | `frontend/e2e/negative.spec.ts:136-143` | 0 | — | 0.3 |
+| 13-Q5 | важно | 13 | Фальшиво-зелёный test_phone_not_in_list_response | `local_listings/tests.py:112-119,847-850` | 0 | — | 0.3 |
+| 13-Q6 | важно | 13 | TestAuctionFeeBoundary не проверяет границы тиров | `pricing/tests.py:523-543` | 0 | — | 0.3 |
+| 13-Q13 | важно | 13 | Кэш тарифов переживает откат транзакции: скрытая зависимость от порядка | `pricing/tests.py:576-579,645-649; tests/test_e2e.py:157-161` | 0 | — | 0.2 |
+| 13-Q18 | важно | 13 | Нет авторизованных e2e, мобильного проекта, Firefox/WebKit | `frontend/playwright.config.ts:10-46` | 0 | — | 0.4, 0.5 |
+| 01-S1 | критично | 01 | JWT access/refresh (7 дней) в localStorage, нет httpOnly cookie | `frontend/lib/auth-context.tsx:60-61,88-89; users/urls.py:27-28; core/settings.py:220-222` | 1 | 08-S1, 08-S3, 09-S1, 10-S2, 11-S5 | 1.3 |
+| 01-S2 | критично | 01 | Нет лимита попыток входа по аккаунту и временной блокировки | `core/settings.py:214,229-235; users/urls.py:27` | 1 | — | 1.5 |
+| 05-S1 | критично | 05 | Тип фото только по content-type клиента: хранимый XSS через /media/ | `local_listings/views.py:251,292,303-307; nginx/nginx.conf:24-27` | 1 | 03-S5, 04-S4, 05-S2, 13-S8 | 1.10 |
+| 05-S2 | критично | 05 | EXIF/GPS не удаляется из фото объявлений | `local_listings/views.py:301-310` | 1 | 03-S5, 04-S4, 05-S1, 13-S8 | 1.10 |
+| 08-S1 | критично | 08 | access и refresh JWT в localStorage | `frontend/lib/auth-context.tsx:29-30,60-61,88-89; frontend/api/client.ts:4,13,22,71` | 1 | 01-S1, 08-S3, 09-S1, 10-S2, 11-S5 | 1.4 |
+| 08-Q1 | критично | 08 | Refresh не сохраняет ротированный токен и гоняется: выкидывает через 15–30 мин | `frontend/api/client.ts:3-15,31-38` | 1 | — | 1.4 |
+| 11-S1 | критично | 11 | Не указан владелец ПДн (название, ЄДРПОУ, адрес), issue #10 | `frontend/app/privacy/page.tsx:18-22; frontend/components/layout/Footer.tsx:9-10` | 1 | — | 1.12 |
+| 11-S2 | критично | 11 | Права на удаление/выгрузку заявлены в privacy, механизма нет | `frontend/app/privacy/page.tsx:67-78; users/urls.py:26-40` | 1 | 01-S6, 08-S6 | 1.8 |
+| 12-S1 | критично | 12 | Реальный токен Telegram-бота в публичном репозитории | `.claude/settings.local.json:58` | 1 | — | 1.1 |
+| 13-S1 | критично | 13 | listing-buyers отдаёт email/ФИО покупателей, тестов нет вовсе | `deals/views.py:91-107; deals/urls.py:18` | 1 | 06-S5, 10-S3 | 1.9 |
+| 01-S3 | важно | 01 | Нет сброса/смены пароля и отзыва всех сессий | `users/urls.py:25-36` | 1 | 08-S5 | 1.7 |
+| 01-S4 | важно | 01 | Email не подтверждается, is_email_verified не используется | `users/models.py:40-41; users/serializers.py:33-37` | 1 | 01-S5, 08-S4 | 1.6 |
+| 01-S5 | важно | 01 | Нет капчи/антибота на регистрации, входе, заявке дилера | `users/views.py:40-44; users/urls.py:27` | 1 | 01-S4, 08-S4 | 1.6 |
+| 01-S6 | важно | 01 | Нет удаления аккаунта и выгрузки данных | `—` | 1 | 08-S6, 11-S2 | 1.8 |
+| 01-S7 | важно | 01 | Нет роли broker | `users/models.py:25-28; core/settings.py:272` | 1 | 02-S6, 06-S9, 08-Q8 | 1.2 |
+| 01-S8 | важно | 01 | DEFAULT_PERMISSION_CLASSES = AllowAny глобально | `core/settings.py:223-225` | 1 | — | 1.2 |
+| 01-Q1 | важно | 01 | Нет очистки token_blacklist (flushexpiredtokens/clearsessions) | `core/settings.py:373-394` | 1 | — | 1.7 |
+| 01-Q2 | важно | 01 | Одобрение дилера через форму админки обходит сервис | `users/admin.py:88-99` | 1 | — | 1.2 |
+| 01-Q3 | важно | 01 | Роль выбирается при регистрации и декоративна: два источника истины о правах | `users/serializers.py:15-18; users/services.py:49-51; users/models.py:35-36` | 1 | 09-S2 | 1.2 |
+| 02-S6 | важно | 02 | Заявки некому видеть по роли: роли broker нет | `users/models.py:25-28` | 1 | 01-S7, 06-S9, 08-Q8 | 1.2, 2.4 |
+| 04-S4 | важно | 04 | Фото VehicleImage/TrackingEvent: нет EXIF-очистки, лимита, безопасных имён; tracking-фото публичны | `vehicles/models.py:42; shipments/models.py:87; nginx/nginx.conf:24` | 1 | 03-S5, 05-S1, 05-S2, 13-S8 | 1.10 |
+| 05-S3 | важно | 05 | owner_name раскрывает локальную часть email в публичном списке и SSR | `local_listings/serializers.py:92-95` | 1 | 10-S1 | 1.9 |
+| 06-S5 | важно | 06 | Email контрагента в сделках, чате, списке покупателей, уведомлениях | `deals/serializers.py:13-17; messaging/serializers.py:9-12; deals/views.py:101-104` | 1 | 10-S3, 13-S1 | 1.9 |
+| 06-S9 | важно | 06 | Все is_staff видят диалоги импортных лотов; роли broker нет | `messaging/views.py:62-65; messaging/services.py:157-161` | 1 | 01-S7, 02-S6, 08-Q8 | 1.2 |
+| 08-S2 | важно | 08 | Выход не отзывает refresh (token/logout не вызывается) | `frontend/lib/auth-context.tsx:28-33` | 1 | — | 1.4 |
+| 08-S3 | важно | 08 | Нет CSRF-инфраструктуры для cookie-аутентификации | `frontend/api/client.ts:23-27` | 1 | 01-S1, 08-S1, 09-S1, 10-S2, 11-S5 | 1.3 |
+| 08-S4 | важно | 08 | Регистрация без подтверждения email и без капчи | `frontend/app/register/page.tsx:24-28` | 1 | 01-S4, 01-S5 | 1.6 |
+| 08-S5 | важно | 08 | Нет UI сброса/смены пароля и выхода со всех устройств | `frontend/app/login/page.tsx:49-51; frontend/app/me/page.tsx:17-28` | 1 | 01-S3 | 1.7 |
+| 08-S6 | важно | 08 | Нет UI удаления аккаунта и выгрузки данных | `frontend/app/me/page.tsx:17-28` | 1 | 01-S6, 11-S2 | 1.8 |
+| 08-Q2 | важно | 08 | apiFetch при любом 401 редиректит на /login, в т.ч. гостя | `frontend/api/client.ts:22,31-38` | 1 | 09-Q7 | 1.4 |
+| 08-Q8 | важно | 08 | Нет роли broker и кабинета брокера со статусами заявок | `frontend/lib/types.ts:9; frontend/app/me/page.tsx:17-28,42` | 1 | 01-S7, 02-S6, 06-S9 | 2.4 |
+| 08-Q9 | важно | 08 | Нет редактирования профиля (имя, телефон), хотя API есть | `frontend/app/me/page.tsx` | 1 | — | 1.8 |
+| 09-S1 | важно | 09 | JWT в localStorage (фронт пригона) | `frontend/api/client.ts:4,13,22,71` | 1 | 01-S1, 08-S1, 08-S3, 10-S2, 11-S5 | 1.4 |
+| 09-Q7 | важно | 09 | Протухший токен выкидывает анонима из калькулятора на /login | `frontend/api/client.ts:31-38` | 1 | 08-Q2 | 1.4 |
+| 10-S1 | важно | 10 | owner_name с частью email попадает в SSR-HTML и каталог | `frontend/app/local/[id]/LocalListingDetail.tsx:145; local_listings/serializers.py:92-95` | 1 | 05-S3 | 1.9 |
+| 10-S2 | важно | 10 | Токены в localStorage для всех вызовов C2C-пакета | `frontend/api/client.ts:4,22,71` | 1 | 01-S1, 08-S1, 08-S3, 09-S1, 11-S5 | 1.4 |
+| 10-S3 | важно | 10 | listing-buyers отдаёт продавцу email покупателей | `frontend/api/deals.ts:23-26; deals/views.py:102` | 1 | 06-S5, 13-S1 | 1.9 |
+| 11-S3 | важно | 11 | Перечень собираемых данных в privacy не соответствует моделям | `frontend/app/privacy/page.tsx:26-33` | 1 | — | 1.12 |
+| 11-S4 | важно | 11 | Не названы третьи лица-получатели и трансграничная передача | `frontend/app/privacy/page.tsx:55-64` | 1 | — | 1.12 |
+| 11-S5 | важно | 11 | Cookie-страница закрепляет хранение JWT в localStorage | `frontend/app/cookies/page.tsx:87-110` | 1 | 01-S1, 08-S1, 08-S3, 09-S1, 10-S2 | 1.4 |
+| 11-S6 | важно | 11 | Нет срока хранения ПДн и права жалобы Омбудсмену | `frontend/app/privacy/page.tsx:85,67-78` | 1 | — | 1.12 |
+| 13-S2 | важно | 13 | me/calculations, me/shipments, me/trusted-shops, dealers/application без тестов 401/изоляции | `users/urls.py:32-35,40; users/views.py:63-111,147-151` | 1 | — | 1.11 |
+| 13-S3 | важно | 13 | confirm/cancel/review сделки посторонним через API не проверены | `deals/tests.py:236-321` | 1 | — | 1.11 |
+| 13-S4 | важно | 13 | mark-read чужого id, чужой saved-search, DELETE telegram/link без тестов 401/403 | `tests/test_favorites_notifications_saved_searches.py:99-112,236-240; telegram_bot/views.py:47-60` | 1 | — | 1.11 |
+| 13-S7 | важно | 13 | Нет тестов на требования §3 (cookie/CSRF, сброс пароля, лимит входа и т.д.) | `—` | 1 | — | 1.11 |
+| 13-S8 | важно | 13 | Нет тестов лимита размера, подмены содержимого, EXIF при загрузке фото | `local_listings/views.py:280-295; local_listings/tests.py:506-510` | 1 | 03-S5, 04-S4, 05-S1, 05-S2 | 1.10 |
+| 02-Q1 | критично | 02 | Нет заявки после расчёта, уведомления брокера и статусов | `frontend/components/calculator/CalcBreakdown.tsx:51-53` | 2 | 07-Q2, 09-Q1 | 2.1 |
+| 04-S1 | критично | 04 | listings/create открыт любому залогиненному: публикация на любой лот без модерации | `listings/views.py:84-86; listings/serializers.py:34-45` | 2 | 07-S1 | 2.8 |
+| 07-Q2 | критично | 07 | Заявок брокеру в Telegram нет: нет модели, роли, chat_id | `—` | 2 | 02-Q1, 09-Q1 | 2.2 |
+| 09-Q1 | критично | 09 | Нет заявки после расчёта: ни формы, ни эндпоинта, ни модели | `frontend/components/calculator/CalcBreakdown.tsx:14-56; frontend/api/pricing.ts:15-21` | 2 | 02-Q1, 07-Q2 | 2.1, 2.3 |
+| 09-Q2 | критично | 09 | Лоты с B2B-доски открываются 404 (SSR лота анонимный) | `frontend/components/listings/ListingCard.tsx:26; frontend/app/listings/[id]/page.tsx:14` | 2 | — | 2.9 |
+| 02-S1 | важно | 02 | Ответ 500 калькулятора отдаёт str(exc) клиенту | `pricing/views.py:279-280` | 2 | — | 2.6 |
+| 02-S2 | важно | 02 | Анонимный /calculate/ пишет Calculation без отдельного throttle и очистки | `pricing/views.py:144,328-336; core/settings.py:214,229-235` | 2 | — | 2.6 |
+| 02-Q2 | важно | 02 | Брекет пенсионного сбора выбирается по цене аукциона, не по базе | `pricing/views.py:239-251; pricing/calculator.py:213-214` | 2 | — | 2.5 |
+| 02-Q3 | важно | 02 | Акциз EV/PHEV всегда 0: нет battery_capacity_kwh | `pricing/serializers.py:19; pricing/calculator.py:189-190; frontend/app/calculator/page.tsx:71-74` | 2 | 09-Q4 | 2.5 |
+| 02-Q4 | важно | 02 | При перекрытии периодов тарифов побеждает старая/случайная запись, нет валидации | `pricing/views.py:180-200,76-87; pricing/models.py:6-11` | 2 | — | 2.5 |
+| 02-Q5 | важно | 02 | Фоллбэк курса берёт самый новый курс, а не предыдущий | `pricing/views.py:202-224` | 2 | — | 2.5 |
+| 02-Q6 | важно | 02 | Подбор тарифов во view, а не в сервисе (CLAUDE.md §1) | `pricing/views.py:160-251` | 2 | — | 2.5 |
+| 02-Q7 | важно | 02 | Таможенная стоимость без доставки до границы UA (юридически не проверено) | `pricing/calculator.py:182-183` | 2 | — | 2.5 |
+| 04-S2 | важно | 04 | /api/v1/vehicles/ публично отдаёт VIN wholesale- и контейнерных авто | `vehicles/views.py:11-23; vehicles/serializers.py:12-17` | 2 | 13-S5 | 2.8 |
+| 04-S3 | важно | 04 | Legacy /api/calculate/ публичен, хардкод-ставки, float, без is_estimate | `cars/views.py:26-54; core/urls.py:34` | 2 | — | 2.8; решение владельца (cars/ не трогать); 2.8 после Q7 |
+| 04-Q1 | важно | 04 | max_price=abc роняет публичный каталог с 500 | `listings/views.py:29-33` | 2 | 05-Q4 | 2.8 |
+| 04-Q2 | важно | 04 | Нет уведомлений о статусе контейнера; админка обходит VALID_TRANSITIONS | `shipments/models.py:62-75; shipments/admin.py:26-33` | 2 | — | 2.10 |
+| 04-Q3 | важно | 04 | Истёкший срочный выкуп остаётся вверху B2B-доски | `listings/views.py:103; listings/serializers.py:26-31` | 2 | — | 2.9 |
+| 09-S2 | важно | 09 | B2B на клиенте проверяется по самовыбранной role, а не is_staff | `frontend/app/b2b/page.tsx:17` | 2 | 01-Q3 | 1.2 |
+| 09-S3 | важно | 09 | Фото Copart/IAAI проксируются и уходят в og:image без атрибуции (#11) | `frontend/components/listings/ListingCard.tsx:22; frontend/next.config.ts:31-33` | 2 | — | 2.11 |
+| 09-C1 | важно | 09 | Справочники калькулятора (аукционы, порты, локации, топливо) зашиты во фронт | `frontend/app/calculator/page.tsx:71-74,86-87,94-96,103-104,111-112` | 2 | — | 2.6 |
+| 09-C2 | важно | 09 | Подписи «Пошлина 10%», «НДС 20%» зашиты во фронт | `frontend/components/calculator/CalcBreakdown.tsx:35-36` | 2 | — | 2.6 |
+| 09-C3 | важно | 09 | Демо-баннер по build-флагу NEXT_PUBLIC_DEMO_MODE, не по данным | `frontend/components/ui/DemoBanner.tsx:4` | 2 | 12-C2 | 2.6 |
+| 09-Q3 | важно | 09 | «Порахувати вартість» подставляет розничную цену как цену аукциона в USD | `frontend/components/listings/ListingDetail.tsx:110; frontend/app/calculator/page.tsx:25` | 2 | — | 2.6 |
+| 09-Q4 | важно | 09 | Нет поля ёмкости батареи: акциз EV всегда 0 | `frontend/app/calculator/page.tsx:68-75; frontend/api/pricing.ts:4-13` | 2 | 02-Q3 | 2.5 |
+| 09-Q5 | важно | 09 | В разбивке нет доставки по UA, услуг брокера, дат курса и тарифов | `frontend/components/calculator/CalcBreakdown.tsx:29-37; frontend/lib/types.ts:84-89` | 2 | — | 2.7 |
+| 09-Q6 | важно | 09 | Ошибки калькулятора сырым JSON, 422 не превращается в «не настроено» | `frontend/app/calculator/page.tsx:45-48` | 2 | — | 2.6 |
+| 09-Q8 | важно | 09 | Заявка дилера читает err.detail вместо err.data: ошибки 409/полей не видны | `frontend/app/dealers/apply/page.tsx:64; frontend/api/client.ts:43` | 2 | 10-Q6 | 2.9 |
+| 09-Q10 | важно | 09 | B2B: ошибки 403/500 показываются как «лотов нет», нет пагинации и фильтров | `frontend/app/b2b/page.tsx:23,53,64-67` | 2 | 08-Q6, 10-Q7 | 2.9 |
+| 13-S5 | важно | 13 | Нет теста утечки VIN через /api/v1/vehicles/ | `vehicles/views.py:11-23; vehicles/tests.py:1-2` | 2 | 04-S2 | 2.8 |
+| 20-G1 | важно | 20 | О новой заявке дилера никто не уведомляется | `users/services.py:20-37`; `frontend/app/dealers/apply/page.tsx:35` | 2 | — | 2.9 |
+| 20-G3 | важно | 20 | Клиента к контейнеру привязывают только вручную, без уведомления | `shipments/admin.py:19` | 2 | 04-Q2 | 2.10 |
+| 03-S1 | критично | 03 | Ключ Opendatabot утекает в JSON-ответ и кэш БД через текст ошибки httpx | `integrations/providers.py:209,212-219; integrations/views.py:173-183` | 3 | — | 1.1 |
+| 03-S2 | важно | 03 | Сырой ответ реестра (raw, owners) отдаётся всем залогиненным и хранится бессрочно | `integrations/providers.py:236-238; integrations/views.py:183` | 3 | — | 3.2 |
+| 03-S3 | важно | 03 | VIN/номер без regex: можно менять URL запроса к внешнему API | `integrations/views.py:45-47,96-101,146-158; integrations/providers.py:80,203-205` | 3 | — | 3.2 |
+| 03-S5 | важно | 03 | upload_lot_photos: без лимита размера, проверки типа, удаления EXIF | `integrations/management/commands/upload_lot_photos.py:59-71` | 3 | 04-S4, 05-S1, 05-S2, 13-S8 | 1.10 |
+| 03-C1 | важно | 03 | Плейсхолдеры в .env.example включают real-режим с неверным ключом | `.env.example (External APIs / LiqPay)` | 3 | — | 3.1 |
+| 03-Q1 | важно | 03 | RegistryReport кэширует ошибки и demo-ответы навсегда | `integrations/views.py:163-181` | 3 | — | 3.2 |
+| 03-Q2 | важно | 03 | Повторный импорт лота создаёт второе объявление на тот же Vehicle | `integrations/importer.py:62-70` | 3 | — | 3.3 |
+| 03-Q3 | важно | 03 | Нечисловой year/engine/mileage в лоте даёт 500 | `integrations/providers.py:293-297; integrations/views.py:218` | 3 | — | 3.3 |
+| 03-Q4 | важно | 03 | VinReportView смешивает реальные данные Opendatabot со stub под demo:true | `integrations/views.py:50-71` | 3 | — | 3.2 |
+| 03-Q5 | важно | 03 | autoretry_for не ловит ошибки httpx: ретраи не работают | `integrations/tasks.py:12,50` | 3 | — | 3.2 |
+| 03-Q6 | важно | 03 | Apify без токена даёт 400 «VIN обязателен» вместо «не настроено» | `integrations/providers.py:338-344; integrations/views.py:223-229` | 3 | — | 3.3 |
+| 06-S1 | критично | 06 | При пустом LIQPAY_PRIVATE_KEY callback подделывается, платёж → completed | `payments/liqpay_client.py:44-46,98-103; core/settings.py:302` | 4 | — | 4.1 |
+| 06-S2 | критично | 06 | Checkout: сумма и чужой listing_id от клиента, оплата 0.01 меняет статус (#24) | `payments/serializers.py:24-26,41-48; payments/views.py:74-97` | 4 | 13-S6 | 4.1 |
+| 10-Q1 | критично | 10 | Редактирование объявления стирает телефон продавца | `frontend/app/local/[id]/edit/page.tsx:24; LocalListingForm.tsx:90,147` | 4 | — | 4.2 |
+| 05-S4 | важно | 05 | Обход модерации: правка expired + RENEW сразу делает объявление active | `local_listings/serializers.py:259-266; payments/views.py:33-38` | 4 | — | 4.3 |
+| 05-S5 | важно | 05 | Жёсткое удаление объявления каскадно стирает сделки, отзывы и жалобы | `local_listings/views.py:146-148; deals/models.py:12-15; reports/models.py:26-31` | 4 | — | 4.3 |
+| 05-S6 | важно | 05 | Показ телефона не журналируется, массовый сбор номеров не обнаружить | `local_listings/views.py:364-378; core/settings.py:238` | 4 | — | 4.5 |
+| 05-S7 | важно | 05 | Избранное раскрывает непубличные (pending/hidden) объявления | `favorites/views.py:31-38; favorites/serializers.py:25-67` | 4 | — | 4.4 |
+| 05-Q1 | важно | 05 | Сохранённый поиск теряет объявления, одобренные после запуска задачи | `saved_searches/tasks.py:27-31,43` | 4 | — | 4.4 |
+| 05-Q2 | важно | 05 | Кривой JSON фильтра сохранённого поиска роняет всю задачу рассылки | `saved_searches/serializers.py:6-10; saved_searches/tasks.py:60-88` | 4 | — | 4.4 |
+| 05-Q3 | важно | 05 | Фильтр и сортировка по цене сравнивают разные валюты | `local_listings/filters.py:41-50,88-94` | 4 | — | 4.4 |
+| 05-Q4 | важно | 05 | price_min=abc даёт 500 (ValidationError не ловится) | `local_listings/filters.py:41-50` | 4 | 04-Q1 | 4.4 |
+| 05-Q5 | важно | 05 | Промо можно оплатить для pending/hidden/sold объявления | `local_listings/views.py:405-417` | 4 | — | 4.3 |
+| 05-Q6 | важно | 05 | Продление истёкшего только платное, бесплатного нет (вопрос владельцу) | `local_listings/tasks.py:66; payments/views.py:33-38` | 4 | — | 4.3 |
+| 05-Q7 | важно | 05 | Владелец не может вернуть hidden-объявление в каталог | `local_listings/serializers.py:243-248` | 4 | — | 4.3 |
+| 05-Q8 | важно | 05 | Избранное: невалидный listing_id даёт 500, нет CHECK «ровно один FK» | `favorites/views.py:26-58,66-75; favorites/models.py:27-36` | 4 | — | 4.4 |
+| 05-Q9 | важно | 05 | Нет уведомлений о жалобах, новых pending и скрытии по жалобе | `reports/views.py:6-8; reports/admin.py:8-18` | 4 | — | 4.5 |
+| 05-Q10 | важно | 05 | Фронт определяет владельца по owner_name, API не отдаёт is_owner | `frontend/app/local/[id]/LocalListingDetail.tsx:38` | 4 | 10-Q2 | 4.2 |
+| 06-S3 | важно | 06 | Callback не сверяет amount/currency с Payment | `payments/views.py:154-179` | 4 | — | 4.1 |
+| 06-S4 | важно | 06 | Статус sandbox засчитывается как оплата в боевом режиме | `payments/liqpay_client.py:111` | 4 | — | 4.1 |
+| 06-S6 | важно | 06 | Нет спам-лимита на ответы в существующем диалоге | `messaging/views.py:35-36,100; core/settings.py:215,237` | 4 | — | 4.7 |
+| 06-S7 | важно | 06 | result_url/server_url задаёт клиент: открытый редирект, увод callback | `payments/serializers.py:33-34; payments/views.py:80-81` | 4 | — | 4.1 |
+| 06-S8 | важно | 06 | Callback без блокировки строки: повторное применение эффекта, reversed не откатывает | `payments/views.py:158-179` | 4 | — | 4.1 |
+| 06-Q1 | важно | 06 | ANTISPAM_MODE=hard: старт диалога падает с 500 | `messaging/services.py:116-117; messaging/views.py:41-49` | 4 | — | 4.7 |
+| 06-Q2 | важно | 06 | confirm_deal без блокировки: можно подтвердить две сделки по объявлению | `deals/services.py:64-80` | 4 | — | 4.6 |
+| 06-Q3 | важно | 06 | propose_deal не проверяет статус объявления (sold/hidden/expired) | `deals/services.py:31-45` | 4 | — | 4.6 |
+| 06-Q4 | важно | 06 | Нельзя повторно предложить сделку после отмены | `deals/services.py:44; deals/models.py:41-44` | 4 | — | 4.6 |
+| 06-Q5 | важно | 06 | Ошибки уведомлений глушатся except Exception: pass | `deals/services.py:13-19; messaging/services.py:171-177` | 4 | — | 4.7 |
+| 06-Q6 | важно | 06 | N+1 и загрузка всех сообщений в списке диалогов без пагинации | `messaging/serializers.py:63-77; messaging/views.py:69-72` | 4 | — | 4.7 |
+| 10-Q2 | важно | 10 | Владелец определяется по совпадению owner_name | `frontend/app/local/[id]/LocalListingDetail.tsx:38,181-202` | 4 | 05-Q10 | 4.2 |
+| 10-Q3 | важно | 10 | Любое сохранение активного объявления отправляет его на модерацию | `LocalListingForm.tsx:141-152` | 4 | — | 4.2 |
+| 10-Q4 | важно | 10 | Ошибки description, contact_phone, detail, 429 не показываются в форме | `LocalListingForm.tsx:168-177` | 4 | — | 4.2 |
+| 10-Q5 | важно | 10 | Ошибка загрузки фото после создания теряется за экраном успеха | `LocalListingForm.tsx:157-165,187-199` | 4 | — | 4.2 |
+| 10-Q6 | важно | 10 | ReportButton читает err.detail вместо err.data: причины отказа не видны | `ReportButton.tsx:46; frontend/api/client.ts:43` | 4 | 09-Q8 | 4.2 |
+| 10-Q8 | важно | 10 | Владелец не видит своё pending/hidden объявление, проданное даёт 404 | `frontend/app/local/[id]/page.tsx:10-18,40` | 4 | — | 4.3 |
+| 13-S6 | важно | 13 | Тесты закрепляют сумму checkout от клиента (#24) | `payments/tests.py:30-35; tests/test_e2e.py:291-298` | 4 | 06-S2 | 4.1 |
+| 07-S1 | критично | 07 | Любой Listing сразу публикуется в официальный канал без модерации | `telegram_bot/signals.py:5-13` | 5 | 04-S1 | 5.2 |
+| 05-Q11 | важно | 05 | C2C-объявления не публикуются в Telegram-канал | `telegram_bot/signals.py:5` | 5 | 07-Q3 | 5.3 |
+| 07-S2 | важно | 07 | Wholesale-лоты при пустом B2B-канале уходят в публичный канал | `telegram_bot/tasks.py:45-49` | 5 | — | 5.2 |
+| 07-S3 | важно | 07 | make/model без html.escape в HTML-сообщениях: 500 и подмена разметки | `telegram_bot/handlers.py:75,95-100; telegram_bot/tasks.py:58-63` | 5 | — | 5.1 |
+| 07-Q1 | важно | 07 | Занятый telegram_id: IntegrityError, webhook 500 и повторы апдейта | `telegram_bot/handlers.py:121-123; telegram_bot/views.py:99` | 5 | — | 5.1 |
+| 07-Q3 | важно | 07 | C2C-объявления не публикуются в канал | `telegram_bot/signals.py:5` | 5 | 05-Q11 | 5.3 |
+| 07-Q4 | важно | 07 | Нет message_id поста: нельзя удалить, обновить, защититься от дублей | `telegram_bot/signals.py:7-8; telegram_bot/tasks.py:79-98` | 5 | — | 5.2 |
+| 07-Q5 | важно | 07 | .delay() в post_save без on_commit; в eager-режиме sleep(3) в запросе | `telegram_bot/signals.py:13; telegram_bot/tasks.py:115` | 5 | — | 5.2 |
+| 07-Q6 | важно | 07 | Webhook синхронный, без дедупликации update_id; исключение даёт 500 и повторы | `telegram_bot/views.py:97-100` | 5 | — | 5.1 |
+| 20-G4 | важно | 20 | Polling-бот из compose снимает webhook при каждом рестарте | `telegram_bot/management/commands/run_bot.py:45`; `docker/bot_entrypoint.sh:8` | 5 | 12-S2 | 5.1 |
+| 08-Q4 | важно | 08 | Мобильная шапка без бургер-меню, навигация скрыта | `frontend/components/layout/Header.tsx:41,57-91` | 6 | — | 6.1 |
+| 08-Q5 | важно | 08 | Сообщения не адаптивны: список диалогов фиксированной ширины | `frontend/app/me/messages/page.tsx:143-145` | 6 | — | 6.1 |
+| 08-Q6 | важно | 08 | Ошибки API в кабинете маскируются под пустое состояние | `frontend/app/me/*/page.tsx (9 страниц)` | 6 | 09-Q10, 10-Q7 | 6.2 |
+| 08-Q7 | важно | 08 | Оптимистичные изменения при ошибке, create/delete без try/catch | `frontend/app/me/saved-searches/page.tsx:38-46 и др.` | 6 | — | 6.2 |
+| 10-Q7 | важно | 10 | Пустые и ошибочные состояния C2C молчат или рендерят null | `LocalListingForm.tsx:107; frontend/app/local/[id]/edit/page.tsx:24` | 6 | 08-Q6, 09-Q10 | 6.2 |
+| 11-Q1 | важно | 11 | Sitemap берёт только первую страницу каждого списка | `frontend/app/sitemap.ts:10-13,19` | 6 | — | 6.3 |
+| 11-Q2 | важно | 11 | URL лотов в sitemap не совпадают с canonical | `frontend/app/sitemap.ts:45; frontend/app/listings/[id]/page.tsx:43` | 6 | — | 6.3 |
+| 11-Q3 | важно | 11 | Двойной суффикс «\| AUTOforYOU» в title юр. страниц | `frontend/app/privacy/page.tsx:5; frontend/app/layout.tsx:14` | 6 | — | 6.3 |
+| 11-Q4 | важно | 11 | robots не закрывает /me, /b2b, /local/new; у них нет noindex | `frontend/app/robots.ts:10-11; frontend/app/layout.tsx:25-28` | 6 | — | 6.3 |
+| 12-S2 | критично | 12 | HTTPS нет: nginx только :80, Django редиректит на несуществующий https | `nginx/nginx.conf:10,35,54-61; core/settings.py:423,429` | 7 | — | 7.1 |
+| 01-S9 | важно | 01 | Нет CSP; HSTS в nginx закомментирован | `core/settings.py:418-431; nginx/nginx.conf:61` | 7 | 12-S3 | 7.1 |
+| 01-S10 | важно | 01 | DEBUG=true в проде отключает SECURE_* и включает известный SECRET_KEY | `core/settings.py:25-27,419; docker-compose.yml:36` | 7 | — | 7.2 |
+| 01-C1 | важно | 01 | S3 настроен удалёнными в Django 5.1 настройками, медиа в S3 не пойдут | `core/settings.py:174-191` | 7 | — | 7.2 |
+| 12-S3 | важно | 12 | На страницах Next нет HSTS, CSP и других security-заголовков | `nginx/nginx.conf:9-62; frontend/next.config.ts:12-36` | 7 | 01-S9 | 7.1 |
+| 12-S4 | важно | 12 | .dockerignore пропускает .claude, pgdata, dump.sql в образ | `Dockerfile.backend:25; .dockerignore:1-20` | 7 | — | 7.3 |
+| 12-S5 | важно | 12 | Все контейнеры работают от root | `Dockerfile.backend:13-33; Dockerfile.frontend:24-34` | 7 | — | 7.3 |
+| 12-S6 | важно | 12 | Бэкапов Postgres нет вообще | `docker-compose.yml:4-23; DEPLOY_NOTES.md:7-20,146-149` | 7 | — | 7.4 |
+| 12-S8 | важно | 12 | Access-логи с query-строкой (ПДн) и без ротации, нет LOGGING | `docker/entrypoint.sh:32; nginx/nginx.conf; docker-compose.yml` | 7 | — | 7.2 |
+| 12-S9 | важно | 12 | Throttling обходится подменой X-Forwarded-For (нет NUM_PROXIES) | `nginx/nginx.conf:34,45; core/settings.py:219-240` | 7 | — | 1.5 |
+| 12-S13 | важно | 12 | Нет мониторинга ошибок (Sentry/аналог) и алертов | `requirements.txt:1-25; core/settings.py` | 7 | — | 7.6 |
+| 12-C1 | важно | 12 | Часть env-переменных, читаемых кодом, не описана в .env*.example | `core/settings.py:312 и др.; .env.example; .env.docker.example` | 7 | — | 7.7 |
+| 12-C2 | важно | 12 | NEXT_PUBLIC_DEMO_MODE не пробрасывается в Docker-сборку фронта | `Dockerfile.frontend:15-19; docker-compose.yml:59-62` | 7 | 09-C3 | 2.6, 7.7 |
+| 12-Q1 | важно | 12 | deploy.sh не загружает .env, нет git pull, бэкапа, отката | `deploy.sh:8-19,63-75` | 7 | — | 7.5 |
+| 12-Q2 | важно | 12 | Deploy-джоба красная на каждом push в main | `.github/workflows/ci-cd.yml:178-192` | 7 | — | 7.5 |
+| 12-Q4 | важно | 12 | Неполные healthchecks, нет /healthz | `docker-compose.yml:26-28,46-51,55-67,85-140` | 7 | — | 7.3 |
+| 12-Q11 | важно | 12 | DEPLOY_NOTES.md устарел (SQLite, dumpdata) | `DEPLOY_NOTES.md:7-20,38-53,144-171,224-233` | 7 | — | 7.5 |
+
+## Итоговые счётчики
+
+Всего в реестре: **166** (критично 21, важно 145).
+
+### По пакетам
+
+| Пакет | Критично | Важно | Всего |
+|---|---|---|---|
+| 01 | 2 | 12 | 14 |
+| 02 | 1 | 9 | 10 |
+| 03 | 1 | 10 | 11 |
+| 04 | 1 | 6 | 7 |
+| 05 | 2 | 16 | 18 |
+| 06 | 2 | 13 | 15 |
+| 07 | 2 | 7 | 9 |
+| 08 | 2 | 12 | 14 |
+| 09 | 2 | 13 | 15 |
+| 10 | 1 | 10 | 11 |
+| 11 | 2 | 8 | 10 |
+| 12 | 2 | 15 | 17 |
+| 13 | 1 | 14 | 15 |
+| **Итого** | **21** | **145** | **166** |
+
+### По этапам брифа
+
+| Этап | Критично | Важно | Всего |
+|---|---|---|---|
+| 0 | 0 | 9 | 9 |
+| 1 | 10 | 36 | 46 |
+| 2 | 5 | 25 | 30 |
+| 3 | 1 | 10 | 11 |
+| 4 | 3 | 32 | 35 |
+| 5 | 1 | 8 | 9 |
+| 6 | 0 | 9 | 9 |
+| 7 | 1 | 16 | 17 |
+| **Итого** | **21** | **145** | **166** |
+
+### Находки «желательно» (в реестр не включены)
+
+Считались только S- и Q-находки с уровнем «желательно» в таблицах отчётов.
+
+| Пакет | Желательно |
+|---|---|
+| 01 | 16 |
+| 02 | 11 |
+| 03 | 12 |
+| 04 | 11 |
+| 05 | 14 |
+| 06 | 14 |
+| 07 | 14 |
+| 08 | 18 |
+| 09 | 11 |
+| 10 | 14 |
+| 11 | 10 |
+| 12 | 12 |
+| 13 | 16 |
+| **Итого** | **173** |
+
+Остальные C-находки (конфигурация) уровня в отчётах не имеют и в реестр не вошли. Оговорка: в отчёте 08 счётчик «важно 15» на 3 больше числа важных S/Q (12), то есть три C-находки 08-C* посчитаны как важные, но какие именно, отчёт не указывает (по «Итогу» это кандидаты из 08-C1…C5). В отчёте 09 счётчик «желательно 14» включает 09-C4…C6.
+
+## Группы дублей
+
+- **G1. JWT в localStorage вместо httpOnly cookie (+CSRF, текст cookie-страницы):** 01-S1, 08-S1, 08-S3, 09-S1, 10-S2, 11-S5
+- **G2. Нет заявки брокеру после расчёта (главный сценарий):** 02-Q1, 07-Q2, 09-Q1
+- **G3. Нет роли broker:** 01-S7, 02-S6, 06-S9, 08-Q8 (связанные вне реестра: 06-C8)
+- **G4. Нет удаления аккаунта и выгрузки данных:** 01-S6, 08-S6, 11-S2 (связанные вне реестра: 06-S11)
+- **G5. Нет сброса/смены пароля и отзыва сессий:** 01-S3, 08-S5
+- **G6. Нет подтверждения email и капчи:** 01-S4, 01-S5, 08-S4
+- **G7. Загрузка фото: тип, размер, EXIF, имена:** 03-S5, 04-S4, 05-S1, 05-S2, 13-S8 (связанные вне реестра: 12-S7)
+- **G8. Email контрагентов / listing-buyers:** 06-S5, 10-S3, 13-S1 (связанные вне реестра: 08-S11)
+- **G9. owner_name раскрывает часть email:** 05-S3, 10-S1
+- **G10. Владелец C2C-объявления определяется на фронте по имени:** 05-Q10, 10-Q2 (связанные вне реестра: 10-S4)
+- **G11. Любой залогиненный создаёт Listing → публикация без модерации (сайт и канал):** 04-S1, 07-S1 (связанные вне реестра: 13-S12, 02-S5)
+- **G12. VIN всех авто через публичный /api/v1/vehicles/:** 04-S2, 13-S5
+- **G13. Акциз EV всегда 0 (нет ёмкости батареи):** 02-Q3, 09-Q4
+- **G14. Checkout: сумма от клиента (issue #24):** 06-S2, 13-S6 (связанные вне реестра: 06-C1)
+- **G15. C2C-объявления не публикуются в Telegram-канал:** 05-Q11, 07-Q3
+- **G16. Нет CSP и security-заголовков:** 01-S9, 12-S3 (связанные вне реестра: 08-S9)
+- **G17. Нечисловой фильтр цены → ValidationError → 500:** 04-Q1, 05-Q4
+- **G18. Фронт читает err.detail вместо err.data:** 09-Q8, 10-Q6
+- **G19. Любой 401 редиректит гостя на /login:** 08-Q2, 09-Q7
+- **G20. Ошибки API маскируются под пустое состояние:** 08-Q6, 09-Q10, 10-Q7
+- **G21. Демо-флаг — переменная сборки NEXT_PUBLIC_DEMO_MODE:** 09-C3, 12-C2 (связанные вне реестра: 02-C2, 02-C3, 08-C2, 11-C11)
+- **G22. Самовыбранная role используется как признак прав:** 01-Q3, 09-S2 (связанные вне реестра: 04-S6, 05-Q22)
+
+Всего групп дублей: **22**.

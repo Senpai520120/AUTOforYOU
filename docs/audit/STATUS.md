@@ -1,0 +1,60 @@
+# Статус аудита (Промт 00)
+
+Точка восстановления после `/clear`: продолжать с первого пункта со статусом не «готово».
+Код проекта не меняется. Пишутся только `docs/audit/`, `docs/tasks/`, `ROADMAP.md`, `docs/LAUNCH_CHECKLIST.md`
+(и итоговые `docs/AUDIT_SUMMARY.md`, `docs/QUESTIONS.md`).
+
+Ветка: `finish-site` @ `d4cbfab`. Старт: 2026-09-25.
+
+## Фаза A — карта
+
+| Пункт | Статус | Файл | Дата |
+|---|---|---|---|
+| Карта репозитория | готово | [00_MAP.md](00_MAP.md) | 2026-09-25 |
+
+## Фаза B — пакеты
+
+| № | Пакет | Статус | Файл отчёта | Дата |
+|---|---|---|---|---|
+| 01 | Аккаунты и ядро | готово (крит 2 / важ 12 / жел 16) | [01_accounts_core.md](01_accounts_core.md) | 2026-09-25 |
+| 02 | Калькулятор | готово (крит 1 / важ 9 / жел 11) | [02_pricing.md](02_pricing.md) | 2026-09-25 |
+| 03 | Интеграции | готово (крит 1 / важ 9 / жел 12) | [03_integrations.md](03_integrations.md) | 2026-09-25 |
+| 04 | Пригон | готово (крит 1 / важ 6 / жел 11) | [04_import.md](04_import.md) | 2026-09-25 |
+| 05 | Объявления UA | готово (крит 2 / важ 16 / жел 14) | [05_local_listings.md](05_local_listings.md) | 2026-09-25 |
+| 06 | Сделки и общение | готово (крит 2 / важ 13 / жел 14) | [06_deals_messaging.md](06_deals_messaging.md) | 2026-09-25 |
+| 07 | Telegram-бот | готово (крит 2 / важ 7 / жел 14) | [07_telegram_bot.md](07_telegram_bot.md) | 2026-09-25 |
+| 08 | Фронтенд: аккаунт и каркас | готово (крит 2 / важ 15 / жел 23) | [08_fe_account_shell.md](08_fe_account_shell.md) | 2026-09-25 |
+| 09 | Фронтенд: пригон | готово (крит 2 / важ 13 / жел 14) | [09_fe_import.md](09_fe_import.md) | 2026-09-25 |
+| 10 | Фронтенд: объявления и общение | готово (крит 1 / важ 10 / жел 14) | [10_fe_local_messaging.md](10_fe_local_messaging.md) | 2026-09-25 |
+| 11 | Фронтенд: юридическое и SEO | готово (крит 2 / важ 8 / жел 10) | [11_fe_legal_seo.md](11_fe_legal_seo.md) | 2026-09-25 |
+| 12 | Инфраструктура | готово (крит 2 / важ 13 / жел 12) | [12_infra.md](12_infra.md) | 2026-09-25 |
+| 13 | Тесты | готово (крит 1 / важ 14 / жел 16) | [13_tests.md](13_tests.md) | 2026-09-25 |
+
+## Фактические прогоны
+
+| Проверка | Статус | Результат |
+|---|---|---|
+| `python manage.py test` | готово | `DATABASE_URL= REDIS_URL= .venv/Scripts/python.exe manage.py test` → **Ran 433 tests in 325.8s, OK**. Через `venv/` (второе окружение в корне) падает на импорте: `No module named 'celery'`. |
+| `npm run build` | готово | exit 0, Next 16.2.9, 27 страниц; `/sitemap.xml` пререндерится при сборке (revalidate 1h). |
+| `npx tsc --noEmit` | готово | exit 0, ошибок нет. |
+| Playwright e2e | не запущено | `docker compose up -d --build` → backend в цикле рестартов: `exec /app/docker/entrypoint.sh: no such file or directory`. Причина: `core.autocrlf=true`, нет `.gitattributes`, рабочая копия `docker/entrypoint.sh` и `deploy.sh` с CRLF (`git ls-files --eol` → `i/lf w/crlf`). На Windows стек из свежей сборки не поднимается; в CI (Linux) не воспроизводится. Код не правился по условию аудита. |
+
+## Фаза C — сквозные проверки
+
+| Файл | Статус | Дата |
+|---|---|---|
+| [20_SCENARIOS.md](20_SCENARIOS.md) | готово | 2026-09-26 |
+| [21_SECURITY.md](21_SECURITY.md) | готово | 2026-09-26 |
+| [22_CONFIG.md](22_CONFIG.md) | готово | 2026-09-26 |
+| [23_TESTS.md](23_TESTS.md) | готово | 2026-09-25 |
+
+## Фаза D — план и задачи
+
+| Файл | Статус | Дата |
+|---|---|---|
+| [../AUDIT_SUMMARY.md](../AUDIT_SUMMARY.md) | готово | 2026-09-26 |
+| [../../ROADMAP.md](../../ROADMAP.md) | готово (57 задач) | 2026-09-26 |
+| `docs/tasks/*.md` | готово: 57 файлов, шаблон брифа §7 соблюдён во всех | 2026-09-27 |
+| Таблица «находка → задача» ([24_TRACEABILITY.md](24_TRACEABILITY.md)) | готово: 169 находок, все назначены и упомянуты в файлах своих задач | 2026-09-26 |
+| [../LAUNCH_CHECKLIST.md](../LAUNCH_CHECKLIST.md) | готово (161 пункт) | 2026-09-26 |
+| [../QUESTIONS.md](../QUESTIONS.md) | готово (Q1–Q13) | 2026-09-26 |
