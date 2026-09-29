@@ -41,7 +41,8 @@ pgdata/
 dump.sql
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/agents/
 
 # Playwright (артефакты случайного запуска из корня репозитория)
 test-results/
