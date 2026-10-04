@@ -160,7 +160,7 @@ CI) по всему репозиторию, кроме `venv/`, `.venv/`, `node_
 | Telegram — публичный канал | Канал, бот — администратор с правом публикации | `TELEGRAM_CHANNEL_ID` (`@name` или `-100…`) | До исправления 04-S1/07-S1 любой залогиненный может отправить пост через создание `Listing` |
 | Telegram — B2B-канал | Закрытый канал для верифицированных дилеров, бот — админ | `TELEGRAM_B2B_CHANNEL_ID` | Обязательно, иначе wholesale уходит в публичный канал (07-S2) |
 | Telegram — чат брокера | Группа/личный чат брокера для заявок | chat_id — **некуда вписать**: настройки нет (07-C1), заявок нет (02-Q1) | Появится после задачи «заявка брокеру» |
-| LiqPay | Мерчант-аккаунт (ФОП/ТОВ, требует реквизитов #10) | `LIQPAY_PUBLIC_KEY`, `LIQPAY_PRIVATE_KEY`; в кабинете указать `server_url` = `https://домен/api/v1/payments/callback/` (checkout продвижения его не передаёт, 06-C3) | Сначала sandbox; `LIQPAY_SANDBOX=false` только после исправления 06-S1…S4 |
+| LiqPay | Мерчант-аккаунт (ФОП/ТОВ, требует реквизитов #10) | `LIQPAY_PUBLIC_KEY`, `LIQPAY_PRIVATE_KEY`; в кабинете указать `server_url` = `https://домен/api/v1/payments/liqpay/callback/` (checkout продвижения его не передаёт, 06-C3) | Сначала sandbox; `LIQPAY_SANDBOX=false` только после исправления 06-S1…S4 |
 | SMTP | Транзакционный провайдер (Brevo, Mailgun, SES, Gmail app-password) + SPF/DKIM/DMARC на домене | `EMAIL_*`, `DEFAULT_FROM_EMAIL` | Сейчас по умолчанию письма идут в консоль (01-C7) |
 | НБУ | Ключ не нужен | — (URL в коде `pricing/nbu.py:29-32`) | Проверить, что beat-задача работает, демо-курс сида перезаписан |
 | NHTSA vPIC | Ключ не нужен | — (URL в коде `integrations/providers.py:56`) | Используется для VIN-префилла |
@@ -192,7 +192,7 @@ CI) по всему репозиторию, кроме `venv/`, `.venv/`, `node_
 | 12 | 01-C12 | Описание API и `UserRoleEnum` без broker | `core/settings.py:272,276-281` | Обновить с ролью broker |
 | 13 | 01-C13 | Celery eager привязан к `DEBUG` | `core/settings.py:358-365` | `.env`: `CELERY_EAGER` |
 | 14 | 01-C14 | `LANGUAGE_CODE='ru-ru'` при украинском UI | `core/settings.py:137` | `uk` / `.env` |
-| 15 | 02-C1, 09-C6, 08-C6 | Текст предупреждения калькулятора с датой «янв–чер 2026», текст демо-баннера | `pricing/views.py:342-348`; `frontend/components/ui/DemoBanner.tsx:16-18` | Модель настроек калькулятора |
+| 15 | 02-C1, 09-C6, 08-C6 | Текст предупреждения калькулятора с датой «янв–чер 2026», текст демо-баннера | `pricing/views.py:344-348`; `frontend/components/ui/DemoBanner.tsx:16-18` | Модель настроек калькулятора |
 | 16 | 02-C2, 02-C3, 09-C3, 08-C2, 11-C11, 12-C2 | `is_estimate=True` константой; демо-баннер — build-флаг (в Docker не пробрасывается); «Тестові тарифи» в футере и на главной статично | `pricing/views.py:335,341`; `pricing/calculator.py:140`; `frontend/components/ui/DemoBanner.tsx:4`; `frontend/components/calculator/CalcBreakdown.tsx:18`; `frontend/components/layout/Footer.tsx:18-20`; `frontend/app/page.tsx:118-120`; `Dockerfile.frontend:15-19` | Признак «тариф проверен» у тарифных моделей → `is_estimate`/`is_demo` в API → баннеры по данным |
 | 17 | 02-C4, 04-C2 | Порты ЕС только Клайпеда/Гданьск в `TextChoices` (тарифы и контейнеры) | `pricing/models.py:112-114,129-131`; `pricing/serializers.py:27`; `shipments/models.py:27-29` | Справочник портов в админке |
 | 18 | 02-C5, 09-C1 | Справочники калькулятора (аукционы, порты, локации, топливо; нет PHEV и поля батареи) во фронте | `frontend/app/calculator/page.tsx:71-74,86-87,94-96,103-104,111-112` | Отдавать из API по активным тарифам |
@@ -229,17 +229,17 @@ CI) по всему репозиторию, кроме `venv/`, `.venv/`, `node_
 | 49 | 07-C4 | `set_webhook` ставит webhook без секрета | `telegram_bot/management/commands/set_webhook.py:27,41` | `CommandError` при пустом секрете; URL из `SITE_URL` |
 | 50 | 07-C7 | Пауза 3 с и повторы постинга | `telegram_bot/tasks.py:10,16` | Celery `rate_limit` из settings |
 | 51 | 07-C8 | Правила «что публиковать в канал» в сигнале | `telegram_bot/signals.py:9-11`; `core/settings.py:409-410` | Флаги публикации в админке |
-| 52 | 08-C1, 08-C7, 11-C1, 11-C2 | Нет реквизитов и контактов в подвале; `[вписати…]` в правилах; email для обращений `[… заповнити]`; «Зверніться до менеджера» без контакта | `frontend/components/layout/Footer.tsx:9-20`; `frontend/app/rules/page.tsx:200`; `frontend/app/privacy/page.tsx:77`; `frontend/app/terms/page.tsx:80`; `frontend/app/refund/page.tsx:116`; `frontend/app/me/shipments/page.tsx:49` | Singleton `SiteSettings`/`CompanyDetails` в админке → SSR |
+| 52 | 08-C1, 08-C7, 11-C1, 11-C2 | Нет реквизитов и контактов в подвале; `[вписати…]` в правилах; email для обращений `[… заповнити]`; «Зверніться до менеджера» без контакта | `frontend/components/layout/Footer.tsx:9-20`; `frontend/app/rules/page.tsx:110`; `frontend/app/privacy/page.tsx:77`; `frontend/app/terms/page.tsx:80`; `frontend/app/refund/page.tsx:116`; `frontend/app/me/shipments/page.tsx:49` | Singleton `SiteSettings`/`CompanyDetails` в админке → SSR |
 | 53 | 08-C4 | Имя бота `@AUTO_F_Y_bot` и «30 хвилин» | `frontend/app/me/telegram/page.tsx:107,109` | Из ответа link-token (`expires_at`) / `TELEGRAM_BOT_USERNAME` |
 | 54 | 08-C5, 09-C4, 11-C9, 10-C7 | Фолбэки `http://localhost:8000` и `https://autoforyou.ua` в 8+ файлах фронта; дубль базового URL | `frontend/api/client.ts:1`; `frontend/lib/auth-context.tsx:6`; `frontend/lib/server-api.ts:10`; `frontend/app/page.tsx:7`; `frontend/next.config.ts:6`; `frontend/app/layout.tsx:8`; `frontend/app/listings/[id]/page.tsx:8-9`; `frontend/app/robots.ts:3`; `frontend/app/sitemap.ts:6`; `frontend/app/local/[id]/page.tsx:8-18` | Единый `lib/config.ts`, ошибка сборки без переменных |
 | 55 | 08-C8 | Хосты Copart/IAAI/CDN в `remotePatterns` | `frontend/next.config.ts:27-33` | `.env` (список хостов) |
 | 56 | 10-C1 | Баннер «Тестовий режим (SANDBOX)» всегда | `frontend/components/.../PromoteModal.tsx:70-74` | Флаг `sandbox` из API |
-| 57 | 10-C2, 11-C6, 11-C7 | Лимиты C2C во фронте: 15 фото, 8 МБ, литерал `{LOCAL_LISTING_MAX_ACTIVE}`, «30 днів» | `LocalListingForm.tsx:14,31,36`; `PhotoUploadBlock.tsx:67,72,99`; `frontend/app/rules/page.tsx:185,229` | Публичный `/config/` из settings |
+| 57 | 10-C2, 11-C6, 11-C7 | Лимиты C2C во фронте: 15 фото, 8 МБ, литерал `{LOCAL_LISTING_MAX_ACTIVE}`, «30 днів» | `LocalListingForm.tsx:14,31,36`; `PhotoUploadBlock.tsx:67,72,99`; `frontend/app/rules/page.tsx:95,33` | Публичный `/config/` из settings |
 | 58 | 10-C3 | Максимальный год 2026 в форме | `LocalListingForm.tsx:248` | `new Date().getFullYear()+1` |
 | 59 | 10-C5 | Справочники топлива/КПП/кузова продублированы в 4 местах | `LocalListingCard.tsx:5-10`; `LocalListingFilters.tsx:89-135`; `LocalListingForm.tsx:262-298`; `LocalListingDetail.tsx:15-27` | `lib/labels.ts` или choices из API |
 | 60 | 11-C3 | Срок хранения `[X] років` | `frontend/app/privacy/page.tsx:85` | `SiteSettings` / `DATA_RETENTION_YEARS` |
-| 61 | 11-C4 | `[дата — заповнити]` в 4 документах | privacy:101; terms:86; refund:140; cookies:159 | `LegalDocument.updated_at`/версия |
-| 62 | 11-C5 | Плашки «Шаблон — потребує перевірки юристом» публично | privacy:11-13; terms:10-12; rules:207-210; refund:11-13; cookies:11-13 | Флаг `LEGAL_DOCS_APPROVED` |
+| 61 | 11-C4 | `[дата — заповнити]` в 4 документах | privacy:101; terms:85; refund:140; cookies:159 | `LegalDocument.updated_at`/версия |
+| 62 | 11-C5 | Плашки «Шаблон — потребує перевірки юристом» публично | privacy:11-13; terms:11; rules:11-14; refund:11-13; cookies:11-13 | Флаг `LEGAL_DOCS_APPROVED` |
 | 63 | 11-C8 | Таблица платных услуг на `/refund` захардкожена | `frontend/app/refund/page.tsx:27-47` | Рендер из `PromotionTariff` |
 | 64 | 11-C10 | `NEXT_PUBLIC_SITE_URL` вшивается при сборке — нужна пересборка при смене домена | `Dockerfile.frontend:18-19` | Пункт LAUNCH_CHECKLIST (или runtime-конфиг) |
 | 65 | 12-C3 | `server_name localhost` и пути сертификатов в nginx | `nginx/nginx.conf:11,57-58` | Шаблон nginx + `DOMAIN` в `.env` |

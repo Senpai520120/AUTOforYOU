@@ -45,7 +45,7 @@
 | Предзаполнение из лота через query | частично | `app/calculator/page.tsx:22-29`, `components/listings/ListingDetail.tsx:110` | Цена лота (розничная, в валюте лота) подставляется как цена аукциона в USD, см. 09-Q3 |
 | Откуда цифры | готово | `api/pricing.ts:16-17` | Все суммы считает сервер `pricing/views.py:144`. Ставок растаможки на фронте нет, **но** подписи «Пошлина 10%», «НДС 20%» зашиты (09-C2), и списки портов/локаций тоже (09-C1) |
 | Демо-баннер / is_estimate | частично | `components/ui/DemoBanner.tsx:4`, `app/calculator/page.tsx:135`, `components/calculator/CalcBreakdown.tsx:18,51-53` | Баннер зависит от переменной сборки `NEXT_PUBLIC_DEMO_MODE`, а не от `is_estimate` или заполненности тарифов. `result.is_estimate` фронт не читает. `warning` выводится |
-| Разбивка результата | частично | `components/calculator/CalcBreakdown.tsx:14-56` | Нет строк: доставка по Украине, услуги брокера, сертификация/регистрация. Не показаны `rates_validity_date` и `exchange_rate_date` (сервер их отдаёт: `pricing/views.py:340-341`, в типе их нет: `lib/types.ts:84-89`). Интерфейс на русском |
+| Разбивка результата | частично | `components/calculator/CalcBreakdown.tsx:14-56` | Нет строк: доставка по Украине, услуги брокера, сертификация/регистрация. Не показаны `rates_validity_date` и `exchange_rate_date` (сервер их отдаёт: `pricing/views.py:342-343`, в типе их нет: `lib/types.ts:84-89`). Интерфейс на русском |
 | Заявка после расчёта (имя, телефон, способ связи, параметры, согласие) | **отсутствует** | — | На фронте нет ни формы, ни CTA. Бэкенд-модели заявки тоже нет (поиск `class .*Lead` / `Inquiry` ничего не дал) |
 | Что клиент видит после отправки заявки | отсутствует | — | Нечего отправлять |
 | Ошибки калькулятора | частично | `app/calculator/page.tsx:45-48,122` | Пользователь видит сырой `JSON.stringify` ответа сервера, в том числе 422 «нет тарифов» |
@@ -98,7 +98,7 @@
 | 09-C3 | Демо-баннер управляется переменной сборки `NEXT_PUBLIC_DEMO_MODE` (по умолчанию включён) и не зависит от `is_estimate` и заполненности тарифов. Смена требует пересборки фронта | `frontend/components/ui/DemoBanner.tsx:4`, `frontend/components/calculator/CalcBreakdown.tsx:18` | Флаг «тарифы демо» в модели настроек в админке → поле в ответе API → баннер по `result.is_estimate`/флагу |
 | 09-C4 | Запасные URL: `https://autoforyou.ua` (canonical/OG) и `http://localhost:8000` | `frontend/app/listings/[id]/page.tsx:8-9`, `frontend/api/client.ts:1` | Только `.env` (`NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_API_URL`), без запасного значения в проде (ошибка сборки, если переменная не задана) |
 | 09-C5 | Значения формы по умолчанию ($10 000, 2000 см³, 2020, Copart, Houston, Klaipeda). Скрытые параметры `member_type`/`payment_type`/`title_type` берутся из серверных дефолтов, пользователь их не видит | `frontend/app/calculator/page.tsx:10-19`, `pricing/views.py:156-158` | Дефолты в модели настроек калькулятора. Скрытые параметры показать или явно подписать |
-| 09-C6 | Текст баннера («ставки … плейсхолдерами») и `warning` с датой «янв–чер 2026» зашиты в код | `frontend/components/ui/DemoBanner.tsx:16-18`, `pricing/views.py:342-346` | Тексты в модели настроек (админка) |
+| 09-C6 | Текст баннера («ставки … плейсхолдерами») и `warning` с датой «янв–чер 2026» зашиты в код | `frontend/components/ui/DemoBanner.tsx:16-18`, `pricing/views.py:344-348` | Тексты в модели настроек (админка) |
 
 ## Качество кода
 

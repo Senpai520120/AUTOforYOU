@@ -22,20 +22,20 @@
 | Функция | Состояние | Файл:строки | Комментарий |
 |---|---|---|---|
 | Политика конфиденциальности | частично | frontend/app/privacy/page.tsx:8-106 | Шаблон с плашкой «потребує перевірки юристом» (:11-13); нет владельца ПДн, email/срок/дата — placeholder'ы (:77, :85, :101); перечень данных не соответствует моделям |
-| Условия использования | частично | frontend/app/terms/page.tsx:7-90 | Шаблон; описывает только импорт из США (:29-32), нет C2C/платных услуг/применимого права; email и дата — placeholder (:80, :86) |
-| Правила размещения | частично | frontend/app/rules/page.tsx:8-115 | Пользователю выводится буквальный текст `{LOCAL_LISTING_MAX_ACTIVE}` (:229); срок 30 дней захардкожен (:185); реквизиты — placeholder (:200) |
+| Условия использования | частично | frontend/app/terms/page.tsx:7-90 | Шаблон; описывает только импорт из США (:29-32), нет C2C/платных услуг/применимого права; email и дата — placeholder (:80, :85) |
+| Правила размещения | частично | frontend/app/rules/page.tsx:8-115 | Пользователю выводится буквальный текст `{LOCAL_LISTING_MAX_ACTIVE}` (:33); срок 30 дней захардкожен (:95); реквизиты — placeholder (:110) |
 | Политика возврата | частично | frontend/app/refund/page.tsx:8-145 | Содержательно наиболее полная; таблица услуг захардкожена (:27-47) при наличии модели `PromotionTariff`; email/дата — placeholder (:116, :140) |
 | Политика cookie + настройки | готово (как описание текущего кода) | frontend/app/cookies/page.tsx:8-164 | Точно отражает текущие ключи `access`/`refresh`/`cookie_consent` (:87-107); но фиксирует хранение JWT в localStorage, что противоречит брифу §3 |
 | Cookie-баннер | готово | components/ui/CookieBanner.tsx:13-55, frontend/lib/consent.ts:41-77 | Две кнопки («Лише необхідні»/«Прийняти всі»), без мигания при гидратации; до согласия ставится только необходимое |
 | Отзыв согласия | готово | components/ui/CookieSettings.tsx:107-114, frontend/lib/consent.ts:53-58 | `clearConsent()` возвращает баннер |
 | Гейт аналитики | готово (не используется) | frontend/lib/consent.ts:64-66 | `hasAnalyticsConsent()` нигде не вызывается — аналитики нет (grep `gtag|next/script|googletagmanager` — 0 совпадений) |
-| Реквизиты владельца (issue #10) | отсутствует | rules/page.tsx:200; privacy/page.tsx:18-22; Footer.tsx:9-10 | Нигде нет юр. названия, ЄДРПОУ/РНОКПП, адреса |
+| Реквизиты владельца (issue #10) | отсутствует | rules/page.tsx:110; privacy/page.tsx:18-22; Footer.tsx:9-10 | Нигде нет юр. названия, ЄДРПОУ/РНОКПП, адреса |
 | Механизм прав субъекта (удаление/выгрузка) | отсутствует | users/urls.py:26-40; users/views.py:52 | Эндпоинтов удаления/экспорта аккаунта нет, `ProfileView` — только Retrieve/Update; в `/me` нет UI; privacy ссылается лишь на placeholder-email (privacy/page.tsx:75-78) |
 | Связка страниц (футер) | готово | components/layout/Footer.tsx:11-17 | Все 5 документов в футере |
 | Связка с регистрацией | готово | app/register/page.tsx:68-81 | Чекбокс + ссылки на `/terms`, `/privacy` |
 | Связка с формой объявления | готово | components/local/LocalListingForm.tsx:392-407 | `/rules`, `/terms` (через `<a>`, не `Link`) |
 | Связка с заявкой дилера | готово | app/dealers/apply/page.tsx:129-138 | `/privacy` |
-| Перекрёстные ссылки документов | частично | privacy:93 → cookies; cookies:296 → privacy; rules:263 → refund; refund:94 → rules | terms не ссылается ни на privacy, ни на rules/refund |
+| Перекрёстные ссылки документов | частично | privacy:93 → cookies; cookies:296 → privacy; rules:67 → refund; refund:94 → rules | terms не ссылается ни на privacy, ни на rules/refund |
 | robots.txt | частично | frontend/app/robots.ts:5-21 | `'/me/'` и `'/b2b/'` не матчат `/me` и `/b2b` (префикс со слэшем); `/local/new` не закрыт; `/calculator` разрешён, но noindex |
 | sitemap.xml | частично | frontend/app/sitemap.ts:23-58 | Только 1-я страница каждого списка (PAGE_SIZE=20, core/settings.py:241); URL лотов не совпадают с canonical; `/calculator` с noindex включён |
 | Корневые метаданные | готово | frontend/app/layout.tsx:10-29, :33 | `metadataBase`, template, OG `locale: uk_UA`, `<html lang="uk">` |
@@ -57,7 +57,7 @@
 | §3 JWT не в localStorage (httpOnly cookie) | противоречит | cookies/page.tsx:87-107 документирует `access`/`refresh` в localStorage — так и есть в lib/auth-context.tsx:60-61, :88-89. После миграции на cookie страницу нужно переписать (11-S5) |
 | §3 нет утечек через sitemap / SSR-HTML | совпадает | sitemap берёт только `id`/`updated_at` публичных записей (sitemap.ts:44-57); публичный список local — только ACTIVE (local_listings/views.py:137-138); телефон исключён из публичного сериализатора (local_listings/serializers.py:89) |
 | §2 всё настраивается без правки кода | противоречит | Email для обращений, реквизиты, срок хранения, срок объявления, перечень платных услуг захардкожены в TSX (см. «Готовность к конфигурации») |
-| §2 тестовые пометки исчезают автоматически | противоречит | Плашки «Шаблон — потребує перевірки юристом» (privacy:11, terms:10, rules:207-210, refund:11, cookies:11) и строка в футере (Footer.tsx:18-20) статичны, не управляются флагом |
+| §2 тестовые пометки исчезают автоматически | противоречит | Плашки «Шаблон — потребує перевірки юристом» (privacy:11-13, terms:11, rules:11-14, refund:11-13, cookies:11-13) и строка в футере (Footer.tsx:18-20) статичны, не управляются флагом |
 | §2 `docs/LAUNCH_CHECKLIST.md` | не хватает | Файл отсутствует; `NEXT_PUBLIC_SITE_URL` и юр. данные туда не занесены |
 | §4 этап 6 — SEO | частично | Базовые метаданные есть; нет JSON-LD, canonical каталогов, OG-картинки, полной sitemap |
 | §5 п.4 нет хардкода контактов | противоречит | privacy:77 / terms:80 содержат домен `autoforyou.ua` в placeholder |
@@ -66,7 +66,7 @@
 
 | ID | Уровень | Проблема | Файл:строка | Как исправить |
 |---|---|---|---|---|
-| 11-S1 | критично | Не указан владелец (володілець) ПДн — юр. название, код ЄДРПОУ/РНОКПП, адрес; ЗУ «Про захист персональних даних» (ст. 12) требует сообщать субъекту владельца. Issue #10 | privacy/page.tsx:18-22; rules/page.tsx:200; terms/page.tsx:78-81; Footer.tsx:9-10 | Модель «Реквізити компанії» (singleton в админке) + вывод в privacy/terms/refund/rules/футер |
+| 11-S1 | критично | Не указан владелец (володілець) ПДн — юр. название, код ЄДРПОУ/РНОКПП, адрес; ЗУ «Про захист персональних даних» (ст. 12) требует сообщать субъекту владельца. Issue #10 | privacy/page.tsx:18-22; rules/page.tsx:110; terms/page.tsx:78-81; Footer.tsx:9-10 | Модель «Реквізити компанії» (singleton в админке) + вывод в privacy/terms/refund/rules/футер |
 | 11-S2 | критично | Права субъекта (копия данных, удаление, отзыв согласия) заявлены, но механизма нет: нет эндпоинтов удаления/экспорта, `ProfileView` только Retrieve/Update, в `/me` нет кнопок | privacy/page.tsx:67-78; users/urls.py:26-40; users/views.py:52-57 | Эндпоинты `DELETE /api/v1/auth/profile/` и `GET /api/v1/auth/me/export/` + кнопки в `/me` + ссылка из privacy |
 | 11-S3 | важно | Перечень собираемых данных не соответствует моделям. Не упомянуты: переписка (messaging/models.py:67), сделки и отзывы (deals/models.py:6, :79), жалобы (reports/models.py:6), объявления с телефоном, который выдаётся другим пользователям (local_listings/models.py:150, local_listings/views.py:378), фото объявлений, заявка дилера — ФИО/компания/телефон (users/models.py:99-101), контакты партнёров (users/models.py:68), сохранённые поиски, избранное, уведомления, платежи, отслеживание контейнеров, VIN-отчёты. Заявленные «переглянуті оголошення» не собираются (трекинга просмотров нет — grep пуст) | privacy/page.tsx:26-33 | Переписать §2 по фактическим моделям, по категориям и целям |
 | 11-S4 | важно | Не названы третьи лица-получатели: LiqPay, SMTP-провайдер, провайдеры VIN/реестров (NHTSA, carVertical, Opendatabot), S3/R2, CDN Copart/IAAI; нет раздела о трансграничной передаче (Telegram, облачные хранилища — ст. 29 Закона) | privacy/page.tsx:55-64 | Дополнить §5 списком получателей и трансграничной передачей |
@@ -81,13 +81,13 @@
 
 | ID | Что захардкожено / placeholder | Файл:строка | Куда вынести |
 |---|---|---|---|
-| 11-C1 | Реквизиты платформы `[вписати юридичну назву, ЄДРПОУ, адресу, контакти]` | rules/page.tsx:200 | Модель админки `CompanyDetails` (singleton) |
+| 11-C1 | Реквизиты платформы `[вписати юридичну назву, ЄДРПОУ, адресу, контакти]` | rules/page.tsx:110 | Модель админки `CompanyDetails` (singleton) |
 | 11-C2 | Email для обращений `[privacy@autoforyou.ua — заповнити]`, `[email@autoforyou.ua — заповнити]`, `[email — заповнити]` | privacy/page.tsx:77; terms/page.tsx:80; refund/page.tsx:116 | Та же модель (поля `privacy_email`, `support_email`) |
 | 11-C3 | Срок хранения `[X] років` | privacy/page.tsx:85 | Модель/настройка `DATA_RETENTION_YEARS` |
-| 11-C4 | Дата обновления `[дата — заповнити]` во всех 4 документах | privacy:101; terms:86; refund:140; cookies:159 | Поле `updated_at` документа (модель `LegalDocument` или константа версии) |
-| 11-C5 | Плашки «Шаблон — потребує перевірки юристом» показываются публично | privacy:11-13; terms:10-12; rules:207-210; refund:11-13; cookies:11-13 | Флаг `LEGAL_DOCS_APPROVED` (.env/админка), плашка скрывается автоматически |
-| 11-C6 | Буквальный текст `{LOCAL_LISTING_MAX_ACTIVE}` выводится пользователю вместо числа | rules/page.tsx:229 | Подставлять значение из API (`core/settings.py:320`, env `LOCAL_LISTING_MAX_ACTIVE`) |
-| 11-C7 | Срок объявления «30 днів» захардкожен, при этом есть `LOCAL_LISTING_EXPIRY_DAYS` | rules/page.tsx:185; core/settings.py:324 | Брать из публичного эндпоинта конфигурации |
+| 11-C4 | Дата обновления `[дата — заповнити]` во всех 4 документах | privacy:101; terms:85; refund:140; cookies:159 | Поле `updated_at` документа (модель `LegalDocument` или константа версии) |
+| 11-C5 | Плашки «Шаблон — потребує перевірки юристом» показываются публично | privacy:11-13; terms:11; rules:11-14; refund:11-13; cookies:11-13 | Флаг `LEGAL_DOCS_APPROVED` (.env/админка), плашка скрывается автоматически |
+| 11-C6 | Буквальный текст `{LOCAL_LISTING_MAX_ACTIVE}` выводится пользователю вместо числа | rules/page.tsx:33 | Подставлять значение из API (`core/settings.py:320`, env `LOCAL_LISTING_MAX_ACTIVE`) |
+| 11-C7 | Срок объявления «30 днів» захардкожен, при этом есть `LOCAL_LISTING_EXPIRY_DAYS` | rules/page.tsx:95; core/settings.py:324 | Брать из публичного эндпоинта конфигурации |
 | 11-C8 | Перечень платных услуг и сроки в таблице захардкожены, хотя тарифы — модель `PromotionTariff` | refund/page.tsx:27-47; local_listings/models.py:38-48 | Рендерить таблицу из `PromotionTariff` |
 | 11-C9 | Fallback домена `'https://autoforyou.ua'` продублирован в 4 местах и расходится с docker-дефолтом `http://localhost` | layout.tsx:8; listings/[id]/page.tsx:9; robots.ts:3; sitemap.ts:6; docker-compose.yml:62; Dockerfile.frontend:18 | Один модуль `lib/site.ts`; при отсутствии `NEXT_PUBLIC_SITE_URL` в проде — ошибка сборки, а не молчаливый localhost в canonical/sitemap |
 | 11-C10 | `NEXT_PUBLIC_SITE_URL` вшивается на этапе сборки; нет `docs/LAUNCH_CHECKLIST.md` с этим пунктом | Dockerfile.frontend:18-19; .env.example:33 | Внести в LAUNCH_CHECKLIST.md (пересборка фронта после смены домена) |
