@@ -74,21 +74,21 @@ class ProposeDealServiceTest(TestCase):
 
     def test_propose_deal_only_owner_can_propose(self):
         other = _make_user('other@example.com')
-        with self.assertRaises(ValueError, msg='Тільки власник оголошення може запропонувати угоду.'):
+        with self.assertRaisesMessage(ValueError, 'Тільки власник оголошення може запропонувати угоду.'):
             propose_deal(self.listing, other, self.buyer.pk)
 
     def test_propose_deal_no_self_deal(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesMessage(ValueError, 'Продавець і покупець не можуть бути однією особою.'):
             propose_deal(self.listing, self.seller, self.seller.pk)
 
     def test_propose_deal_buyer_must_have_conversation(self):
         stranger = _make_user('stranger@example.com')
-        with self.assertRaises(ValueError, msg='Покупець не писав по цьому оголошенню.'):
+        with self.assertRaisesMessage(ValueError, 'Покупець не писав по цьому оголошенню.'):
             propose_deal(self.listing, self.seller, stranger.pk)
 
     def test_propose_deal_no_duplicates(self):
         propose_deal(self.listing, self.seller, self.buyer.pk)
-        with self.assertRaises(ValueError, msg='Угода з цим покупцем вже існує'):
+        with self.assertRaisesMessage(ValueError, 'Угода з цим покупцем вже існує'):
             propose_deal(self.listing, self.seller, self.buyer.pk)
 
 

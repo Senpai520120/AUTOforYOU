@@ -522,27 +522,66 @@ class TestIAAIPercentTier(SimpleTestCase):
         self.assertEqual(result.total, D('1200.00') + D('95.00') + D('15.00') + D('75.00'))
 
 
-class TestAuctionFeeBoundary(SimpleTestCase):
-    """Проверка выбора тиера на границах диапазона."""
+class TestAuctionFeeBoundary(CleanCacheTestCase):
+    """
+    Выбор тира на границах диапазона через pricing.views._lookup_tier.
+    Тиры создаются в setUpTestData (не seed). Если _lookup_tier сравнивает
+    границу неверно (>= вместо >), соответствующий тест краснеет.
+    """
 
-    def test_flat_fee_exact_bid_min(self):
-        """bid == bid_min → должен попасть в тиер."""
-        tier = _tier(fee_flat='335.00')
-        result = calc_auction_fees(D('2500'), tier, [])
-        self.assertEqual(result.buyer_fee, D('335.00'))
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import date
 
-    def test_flat_fee_exact_bid_max(self):
-        """bid == bid_max → должен попасть в тиер."""
-        tier = _tier(fee_flat='335.00')
-        result = calc_auction_fees(D('2999'), tier, [])
-        self.assertEqual(result.buyer_fee, D('335.00'))
+        from pricing.models import AuctionFeeTier
+        AuctionFeeTier.objects.all().delete()  # изоляция от возможных seed-строк
+        common = dict(
+            auction='copart', member_type='broker', payment_type='secured',
+            title_type='any', valid_from=date(2000, 1, 1),
+        )
+        cls.tier_low = AuctionFeeTier.objects.create(
+            bid_min=D('1000.00'), bid_max=D('1999.99'), fee_flat=D('100.00'), **common)
+        cls.tier_high = AuctionFeeTier.objects.create(
+            bid_min=D('2000.00'), bid_max=D('2999.99'), fee_flat=D('200.00'), **common)
 
-    def test_percent_fee_rounding(self):
-        """Проверяем округление ROUND_HALF_UP при %."""
-        tier = _tier(fee_percent='0.0600')
-        # 8333 * 0.06 = 499.98 → 499.98 (нет округления)
-        result = calc_auction_fees(D('8333'), tier, [])
-        self.assertEqual(result.buyer_fee, D('499.98'))
+    def _lookup(self, bid):
+        from datetime import date
+
+        from pricing.views import _lookup_tier
+        return _lookup_tier('copart', D(str(bid)), 'broker', 'secured', 'any', date.today())
+
+    def test_bid_equal_min_selects_tier(self):
+        """bid == bid_min -> попадает в этот тир (bid_min включительно)."""
+        self.assertEqual(self._lookup('2000.00'), self.tier_high)
+        self.assertEqual(self._lookup('1000.00'), self.tier_low)
+
+    def test_bid_equal_max_selects_tier(self):
+        """bid == bid_max -> всё ещё этот тир (bid_max включительно)."""
+        self.assertEqual(self._lookup('1999.99'), self.tier_low)
+        self.assertEqual(self._lookup('2999.99'), self.tier_high)
+
+    def test_bid_above_max_selects_next_tier(self):
+        """bid_max + 0.01 -> следующий тир; выше последнего тира тира нет."""
+        self.assertEqual(self._lookup('2000.00'), self.tier_high)
+        self.assertIsNone(self._lookup('3000.00'))
+
+    def test_bid_below_min_selects_previous_tier(self):
+        """bid_min - 0.01 -> предыдущий тир; ниже первого тира тира нет."""
+        self.assertEqual(self._lookup('1999.99'), self.tier_low)
+        self.assertIsNone(self._lookup('999.99'))
+
+    def test_selected_tier_fee_applied(self):
+        """Выбранный на границе тир реально определяет сбор."""
+        tier = self._lookup('1999.99')
+        self.assertEqual(calc_auction_fees(D('1999.99'), tier, []).buyer_fee, D('100.00'))
+        tier = self._lookup('2000.00')
+        self.assertEqual(calc_auction_fees(D('2000.00'), tier, []).buyer_fee, D('200.00'))
+
+    def test_percent_fee_round_half_up(self):
+        """1000.50 * 0.0100 = 10.005 -> 10.01 (HALF_EVEN дал бы 10.00)."""
+        tier = _tier(fee_percent='0.0100')
+        result = calc_auction_fees(D('1000.50'), tier, [])
+        self.assertEqual(result.buyer_fee, D('10.01'))
 
 
 class TestAuctionFeeBreakdownAllDecimal(SimpleTestCase):

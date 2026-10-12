@@ -284,6 +284,8 @@ class TestSavedSearchTask(SetupMixin):
         # Run again — last_notified_at is now updated, so no new listings
         check_saved_searches()
         count_second = Notification.objects.filter(user=self.buyer, type=Notification.Type.SAVED_SEARCH_MATCH).count()
+        # Без этого тест зелёный и когда задача вообще не создаёт уведомлений (0 == 0).
+        self.assertGreater(count_first, 0)
         self.assertEqual(count_first, count_second)
 
     def test_task_skips_non_matching(self):

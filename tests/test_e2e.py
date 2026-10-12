@@ -239,10 +239,19 @@ class TestCalculatorAPIE2E(CleanCacheTestCase):
             Decimal('6800.00'),
         )
 
-    def test_rates_date_in_response(self):
+    def test_exchange_rate_date_in_response(self):
+        from datetime import date
         resp = self._calc()
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertIn('warning', resp.data)
+        # Дата курса — ISO YYYY-MM-DD (date.fromisoformat падает на другом формате).
+        rate_date = resp.data['exchange_rate_date']
+        self.assertRegex(rate_date, r'^\d{4}-\d{2}-\d{2}$')
+        date.fromisoformat(rate_date)
+        # Дата тарифов, зафиксированная в замороженном снимке расчёта (в БД, не в ответе).
+        from pricing.models import Calculation
+        rates_date = Calculation.objects.get(pk=resp.data['calculation_id']).rates_snapshot['rates_date']
+        self.assertRegex(rates_date, r'^\d{4}-\d{2}-\d{2}$')
+        date.fromisoformat(rates_date)
 
     def test_calculator_saves_calculation_to_db(self):
         from pricing.models import Calculation

@@ -2,6 +2,7 @@
  * E2E: реєстрація — обов'язкова згода з Умовами та Політикою конфіденційності.
  */
 import { test, expect } from '@playwright/test';
+import { expectNoRequest } from './helpers/network';
 
 test.describe("Реєстрація — згода з умовами", () => {
   test.beforeEach(async ({ page }) => {
@@ -19,18 +20,36 @@ test.describe("Реєстрація — згода з умовами", () => {
     await expect(page.getByLabel(/Погоджуюсь з/)).not.toBeChecked();
   });
 
-  test('без згоди форма не відправляється', async ({ page }) => {
+  test('без згоди форма не відправляється', async ({ page }, testInfo) => {
     await page.goto('/register');
 
-    await page.fill('input[type="email"]', 'e2e-consent@example.com');
+    // Унікальний email: інакше після першого прогону «зайнятий email» теж лишає на /register.
+    await page.fill('input[type="email"]', `e2e-consent-${Date.now()}-${testInfo.workerIndex}@e2e.test`);
     await page.locator('input[type="password"]').first().fill('StrongPass123!');
     await page.locator('input[type="password"]').nth(1).fill('StrongPass123!');
 
-    await page.getByRole('button', { name: 'Зареєструватися' }).click();
+    const consent = page.getByLabel(/Погоджуюсь з/);
+    const isRegisterPost = (r: { url(): string; method(): string }) =>
+      r.url().includes('/auth/register/') && r.method() === 'POST';
+    const submit = page.getByRole('button', { name: 'Зареєструватися' });
+    const pageError = page.getByText(/Необхідно погодитися з Умовами/);
 
-    // Чекбокс має required — браузер блокує відправку, URL не змінюється.
+    // Захист 1: браузерний required. Сабміт заблокований, запиту немає.
+    await expectNoRequest(page, isRegisterPost, async () => {
+      await submit.click();
+    });
+    expect(await consent.evaluate((el: HTMLInputElement) => el.validity.valueMissing)).toBe(true);
     await expect(page).toHaveURL(/\/register/);
-    await expect(page.getByLabel(/Погоджуюсь з/)).not.toBeChecked();
+    await expect(pageError).toHaveCount(0);
+
+    // Захист 2: перевірка на самій сторінці. Знімаємо required — браузер пропускає
+    // сабміт, але сторінка має показати помилку й не слати запит.
+    await consent.evaluate((el: HTMLInputElement) => el.removeAttribute('required'));
+    await expectNoRequest(page, isRegisterPost, async () => {
+      await submit.click();
+      await expect(pageError).toBeVisible();
+    });
+    await expect(page).toHaveURL(/\/register/);
   });
 
   test('посилання «Умовами використання» відкриває сторінку умов', async ({ page, context }) => {

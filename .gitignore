@@ -43,6 +43,7 @@ dump.sql
 # Claude Code
 .claude/*
 !.claude/agents/
+!.claude/commands/
 
 # Playwright (артефакты случайного запуска из корня репозитория)
 test-results/

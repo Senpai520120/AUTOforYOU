@@ -111,13 +111,16 @@ class TestLocalListingCreate(APITestCase):
         self.assertEqual(r.status_code, 400)
 
     def test_phone_not_in_list_response(self):
-        payload = _listing_payload(self.region, self.city)
-        self.client.post('/api/v1/local/listings/', payload, format='json')
+        # Публичный список показывает только ACTIVE: создаём такое объявление напрямую,
+        # иначе (pending через API) список пуст и проверка ничего не проверяет.
+        _make_listing(self.user, self.region, self.city, status_val=LocalListing.Status.ACTIVE,
+                      contact_phone='+380501234567')
         self.client.credentials()
         r = self.client.get('/api/v1/local/listings/')
+        self.assertEqual(r.status_code, 200)
         results = r.data.get('results', [])
-        if results:
-            self.assertNotIn('contact_phone', results[0])
+        self.assertTrue(results)
+        self.assertNotIn('contact_phone', results[0])
 
 
 # ─── Тест: модерація (approve / reject) ───────────────────────────────────────
@@ -848,7 +851,9 @@ class TestContactEndpoint(APITestCase):
 
     def test_phone_not_in_list(self):
         r = self.client.get('/api/v1/local/listings/')
-        for item in r.data.get('results', []):
+        results = r.data.get('results', [])
+        self.assertTrue(results)
+        for item in results:
             self.assertNotIn('contact_phone', item)
 
     def test_phone_not_in_detail(self):
@@ -940,7 +945,7 @@ class TestBannedUser(APITestCase):
         r = self.client.post('/api/v1/auth/token/', {
             'email': 'banned@test.com', 'password': 'pass'
         }, format='json')
-        self.assertIn(r.status_code, [400, 401])
+        self.assertEqual(r.status_code, 401)
 
     def test_banned_user_listings_hidden(self):
         r = self.client.get('/api/v1/local/listings/')
@@ -953,7 +958,7 @@ class TestBannedUser(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         payload = _listing_payload(self.region, self.city)
         r = self.client.post('/api/v1/local/listings/', payload, format='json')
-        self.assertIn(r.status_code, [401, 403])
+        self.assertEqual(r.status_code, 401)
 
 
 # ─── Видимість оголошень за статусом (деталь + контакт) ───────────────────────
