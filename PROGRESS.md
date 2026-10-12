@@ -4,6 +4,24 @@
 
 ---
 
+## Задача 0.3: Фальшиво-зелёные тесты (2026-10-12) — ЗАВЕРШЕНО
+
+- Исправлены 13-Q1…Q9 и 13-Q10 (часть). Новый хелпер `frontend/e2e/helpers/network.ts` (`expectNoRequest`). В `local_listings/tests.py` оба ассерта сужены до 401. Остальные правки — в `pricing`, `deals`, `tests/`.
+- В `negative.spec.ts` у «порожня форма» `valueMissing` проверяется только у цены.
+- **Находка (код не менялся):** `frontend/app/calculator/page.tsx:65,80` превращает пустые `engine_cc` и `vehicle_year` в 0 через `Number(...)`, `required` не срабатывает. Нужна отдельная задача.
+- **Не подтверждено мутацией:** отдельно «только `required`» и «только страничная проверка» у регистрации.
+
+| Тест | Мутация | Красный |
+|---|---|---|
+| регистрация «без згоди» | снят `required` и страничная проверка | да |
+| калькулятор: 5 негативных тестов | `noValidate` на форме | да, все |
+| `test_phone_not_in_list_response`, `TestContactEndpoint.test_phone_not_in_list` | `contact_phone` в сериализаторе списка | да, оба |
+| `TestAuctionFeeBoundary` | `_lookup_tier`: `>=` -> `>` | да (`bid_max`, `below_min`, `selected_tier_fee_applied`) |
+| `test_percent_fee_round_half_up` | `ROUND_HALF_UP` -> `ROUND_HALF_EVEN` | да |
+| `test_task_does_not_duplicate_on_rerun` | ранний `return` в `check_saved_searches` | да |
+
+---
+
 ## Задача 0.2: Изоляция тестов от внешнего мира (2026-10-12) — ЗАВЕРШЕНО
 
 - `core/settings.py`: один флаг `_TESTING`; блок изоляции в конце — обнуление ключей OpenDataBot/Apify/LiqPay/SMTP/Telegram/Turnstile, locmem-почта, `LocMemCache`, eager-Celery с `memory://` даже при заданном `REDIS_URL`; `TEST_RUNNER`.
