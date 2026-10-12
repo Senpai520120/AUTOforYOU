@@ -42,6 +42,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Shell scripts use LF
+        run: |
+          git ls-files --eol -- '*.sh' | awk '$1 != "i/lf" {print; bad=1} END {exit bad}'
+          ! grep -lU $'\r' $(git ls-files '*.sh')
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Ruff lint
