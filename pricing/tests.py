@@ -12,6 +12,8 @@ from types import SimpleNamespace
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 
+from tests.base import CleanCacheTestCase
+
 from .calculator import (
     AuctionFeeBreakdown,
     LandedCostInputs,
@@ -567,15 +569,14 @@ class TestAuctionFeeNoFixedFees(SimpleTestCase):
         self.assertEqual(result.total, D('235.00'))
 
 
-class TestIAAITierBoundaryDB(TestCase):
+class TestIAAITierBoundaryDB(CleanCacheTestCase):
     """
     Границы IAAI-тиров из реальных seed-данных.
     $5000-$7499 → 8%;  $7500+ → 10%.
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpTestData(cls):
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
     def _tier(self, bid):
@@ -635,7 +636,7 @@ class TestCalculateInputSerializerDefaults(SimpleTestCase):
         self.assertEqual(s.validated_data['payment_type'], 'secured')
 
 
-class TestLandedCostE2ECopartBroker(TestCase):
+class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
     """
     Интеграционный тест полной формулы «под ключ».
     Сценарий: Copart broker salvage secured $5000 petrol 2.0L 2018.
@@ -643,8 +644,7 @@ class TestLandedCostE2ECopartBroker(TestCase):
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpTestData(cls):
         call_command('seed_rates', verbosity=0)
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
@@ -760,12 +760,8 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
 # ── Кэш справочников + инвалидация ───────────────────────────────────────────
 
-class TestPricingCacheInvalidation(TestCase):
+class TestPricingCacheInvalidation(CleanCacheTestCase):
     """Изменение ставки в БД → кэш сброшен → следующий запрос берёт новое значение."""
-
-    def setUp(self):
-        from django.core.cache import cache
-        cache.clear()
 
     def test_save_exchange_rate_invalidates_cache(self):
         from django.core.cache import cache
@@ -844,16 +840,12 @@ class TestPricingCacheInvalidation(TestCase):
 
 # ── Celery-задача: fetch_nbu_rates_task ───────────────────────────────────────
 
-class TestFetchNbuRatesTask(TestCase):
+class TestFetchNbuRatesTask(CleanCacheTestCase):
     """
     fetch_nbu_rates_task должна:
     1) Сохранить курсы в ExchangeRate (USD/UAH, EUR/UAH, USD/EUR).
     2) Сбросить кэш pricing:exchange_rates после записи.
     """
-
-    def setUp(self):
-        from django.core.cache import cache
-        cache.clear()
 
     def _nbu_side_effect(self, url, *args, **kwargs):
         """Возвращает фиктивный ответ НБУ в зависимости от valcode в URL."""
@@ -915,3 +907,54 @@ class TestFetchNbuRatesTask(TestCase):
         with patch('pricing.nbu.urlopen', side_effect=URLError('timeout')):
             with self.assertRaises((URLError, Retry)):
                 fetch_nbu_rates_task()
+
+
+# ── 23-D3: кэш тарифов не переживает класс с seed ────────────────────────────
+
+class TestNoStaleTiersAfterSeededClass(CleanCacheTestCase):
+    """
+    Тарифов в БД нет → _lookup_tier возвращает None, а API расчёта отвечает
+    «нет тарифов» (422), даже если кэш был «отравлен» объектами удалённых
+    seed-строк (так выглядит состояние после класса с seed в setUpClass).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from datetime import date
+
+        from django.core.cache import cache
+
+        from pricing.cache import KEYS
+        # Имитируем хвост предыдущего класса: в кэше лежит живой на вид тир.
+        cache.set(KEYS['tiers'], [SimpleNamespace(
+            auction='iaai', member_type='broker', payment_type='secured',
+            title_type='any', bid_min=D('0'), bid_max=None,
+            valid_from=date(2000, 1, 1), valid_to=None,
+        )])
+        super().setUpClass()  # базовый класс обязан сбросить кэш
+
+    def test_no_stale_tiers_after_seeded_class(self):
+        from datetime import date
+
+        from rest_framework.test import APIClient
+
+        from pricing.models import AuctionFeeTier
+        from pricing.views import _lookup_tier
+
+        self.assertFalse(AuctionFeeTier.objects.exists())
+        self.assertIsNone(
+            _lookup_tier('iaai', D('7500'), 'broker', 'secured', 'any', date.today())
+        )
+        resp = APIClient().post('/api/v1/pricing/calculate/', {
+            'auction': 'iaai',
+            'auction_price_usd': '7500',
+            'engine_cc': 2000,
+            'fuel_type': 'petrol',
+            'vehicle_year': 2018,
+            'member_type': 'broker',
+            'payment_type': 'secured',
+            'title_type': 'salvage',
+            'us_port': 'houston',
+            'eu_port': 'klaipeda',
+        }, format='json')
+        self.assertEqual(resp.status_code, 422, getattr(resp, 'data', None))

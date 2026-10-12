@@ -4,6 +4,16 @@
 
 ---
 
+## Задача 0.2: Изоляция тестов от внешнего мира (2026-10-12) — ЗАВЕРШЕНО
+
+- `core/settings.py`: один флаг `_TESTING`; блок изоляции в конце — обнуление ключей OpenDataBot/Apify/LiqPay/SMTP/Telegram/Turnstile, locmem-почта, `LocMemCache`, eager-Celery с `memory://` даже при заданном `REDIS_URL`; `TEST_RUNNER`.
+- `core/test_runner.py`: `IsolatedDiscoverRunner` — сетевой предохранитель (localhost и хост БД разрешены) и очистка кэша `Update.event_type` aiogram.
+- `tests/base.py`: `CleanCacheTestCase`; на нём три класса с seed тарифов (seed в `setUpTestData`) и два класса кэша pricing. Тест 23-D3 в `pricing/tests.py`.
+- Тесты 13-S9 переписаны на моки: VIN-отчёт и registry -> 200, Apify без токена -> 400 `{'error': 'VIN обязателен для импорта лота'}`. Колбэк LiqPay в `local_listings` подписан ключом из `override_settings`.
+- Новые страховочные тесты: `tests/test_environment.py`.
+
+---
+
 ## Задача 0.1: Воспроизводимая локальная среда (2026-10-12) — ЗАВЕРШЕНО
 
 - `.gitattributes`: LF для `*.sh`, `docker/*`, `Dockerfile*`, `nginx/*.conf` (12-Q14). Индекс уже был с LF, CRLF был только в рабочих копиях `docker/entrypoint.sh`, `deploy.sh`, `Dockerfile` — пересозданы через checkout.

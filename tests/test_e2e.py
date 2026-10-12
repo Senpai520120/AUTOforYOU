@@ -20,6 +20,7 @@ from listings.models import Listing
 from payments.models import Payment
 from users.models import DealerApplication
 from users.services import apply_for_dealer, approve_application
+from tests.base import CleanCacheTestCase
 from vehicles.models import Vehicle
 
 User = get_user_model()
@@ -147,7 +148,7 @@ class TestRegisterLoginProfileFlow(APITestCase):
 # 2. Калькулятор: полный landed-cost через API (реальные seed-тарифы)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestCalculatorAPIE2E(TestCase):
+class TestCalculatorAPIE2E(CleanCacheTestCase):
     """
     POST /api/v1/pricing/calculate/ с реальными seed-тарифами.
     Сценарий: Copart broker, бензин 2.0L 2018, $5 000.
@@ -155,12 +156,12 @@ class TestCalculatorAPIE2E(TestCase):
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpTestData(cls):
         call_command('seed_rates', verbosity=0)
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
     def setUp(self):
+        super().setUp()
         self.client = APIClient()
         self._payload = {
             'auction': 'copart',
@@ -557,14 +558,15 @@ class TestRegistryThrottleE2E(TestCase):
 
         from rest_framework.throttling import ScopedRateThrottle
 
-        # В пределах лимита allow_request возвращает True
-        with patch.object(ScopedRateThrottle, 'allow_request', return_value=True):
+        # В пределах лимита allow_request возвращает True.
+        # Провайдер Opendatabot (платный) замокан — реального запроса нет (13-S9).
+        with patch.object(ScopedRateThrottle, 'allow_request', return_value=True),              patch('integrations.views.get_opendatabot_provider') as mock_prov:
+            mock_prov.return_value.get_vehicle_info.return_value = {
+                'vin': '1HGBH41JXMN109186', 'demo': True, 'provider': 'opendatabot',
+            }
             resp = self.client.get(REGISTRY_URL)
-        self.assertNotEqual(
-            resp.status_code,
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            'В пределах лимита не должно быть 429',
-        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        mock_prov.return_value.get_vehicle_info.assert_called_once()
 
     def test_anon_gets_401_not_throttled(self):
         resp = APIClient().get(REGISTRY_URL)

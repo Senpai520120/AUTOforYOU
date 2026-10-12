@@ -25,6 +25,15 @@ scripts/test-backend.ps1 users.tests.TestB2BGating   # один класс
 scripts/test-backend.ps1 -v2                         # с именами тестов
 ```
 
+### Изоляция
+
+Под тест-раннером (`'test' in sys.argv`, флаг `_TESTING` в `core/settings.py`) результат не зависит от `.env`:
+
+- обнуляются `OPENDATABOT_API_KEY`, `APIFY_TOKEN`, `LIQPAY_PUBLIC_KEY`/`LIQPAY_PRIVATE_KEY`, `EMAIL_HOST_USER`/`EMAIL_HOST_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`; `CAPTCHA_PROVIDER='off'`; почта — `locmem`. Любой новый ключ внешнего провайдера добавляется в этот блок. Тесту, которому нужен ключ (например, подпись LiqPay), его задаёт `override_settings` с фиксированным тестовым значением.
+- кэш — всегда `LocMemCache`, Celery — eager с `memory://`, даже при заданном `REDIS_URL`.
+- сетевой предохранитель (`core/test_runner.py`, `IsolatedDiscoverRunner`): исходящие соединения запрещены, кроме `localhost`, `127.0.0.1`, `::1` и хоста БД из `DATABASES`. Попытка даёт `ExternalNetworkBlocked: Внешний сетевой запрос в тесте: <host>:<port>. Замокайте провайдер`. Тот же раннер после прогона чистит кэш `Update.event_type` aiogram (защита от segfault 139).
+- `tests.base.CleanCacheTestCase` очищает кэш в `setUpClass` (после `super()`), `setUp` и `tearDownClass`: откат транзакции не трогает LocMem-кэш, и тарифы удалённых seed-строк иначе переживали бы класс. Классы с seed тарифов наследуются от него, seed — в `setUpTestData`. Страховочные тесты: `tests/test_environment.py`, `pricing.tests.TestNoStaleTiersAfterSeededClass`.
+
 Playwright запускается только из `frontend/` (см. [`TEST_CASES.md`](TEST_CASES.md)).
 
 БД для тестов создаётся и удаляется автоматически. Прогон занимает около 4,5 минут.

@@ -455,11 +455,11 @@ class TestLotImportEndpoint(TestCase):
             'source': 'apify',
             'lot_url': 'https://www.copart.com/lot/12345678',
         }, format='json')
-        # Apify без токена вернёт demo=True и vin=None → ошибка провайдера → 400
-        # или если vin None, import_lot бросает ValueError → 400
-        self.assertIn(resp.status_code, (200, 201, 400))
-        # Главное — не 500
-        self.assertNotEqual(resp.status_code, 500)
+        # Под тест-раннером APIFY_TOKEN обнулён (core/settings.py) → ApifyLotProvider
+        # в demo-режиме (demo=True, vin=None), сетевого запроса нет. Вью отвечает 400:
+        # import_lot бросает ValueError('VIN обязателен для импорта лота'). Код выяснен прогоном.
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data, {'error': 'VIN обязателен для импорта лота'})
 
 
 # ── Безопасность: auth + throttling ──────────────────────────────────────────
@@ -582,7 +582,19 @@ class VinReportAccessTest(APITestCase):
     def test_authenticated_allowed(self):
         user = get_user_model().objects.create_user(email='vin@test.com', password='pass1234')
         self.client.force_authenticate(user=user)
-        self.assertEqual(self.client.get(self.URL).status_code, 200)
+        # Платный Opendatabot замокан — реального запроса нет (13-S9).
+        with patch('integrations.views.get_opendatabot_provider') as mock_prov:
+            mock_prov.return_value.get_vehicle_info.return_value = {
+                'vin': '1HGBH41JXMN109186', 'demo': True, 'provider': 'opendatabot',
+                'stolen': False, 'restrictions': [], 'ua_registrations': [],
+            }
+            resp = self.client.get(self.URL)
+        self.assertEqual(resp.status_code, 200)
+        mock_prov.return_value.get_vehicle_info.assert_called_once_with('1HGBH41JXMN109186')
+        self.assertTrue(resp.data['demo'])
+        self.assertFalse(resp.data['cached'])
+        self.assertIn('ua_registry', resp.data)
+        self.assertEqual(resp.data['ua_registry']['stolen'], False)
 
     def test_uses_expensive_throttle_scope(self):
         from integrations.views import VinReportView

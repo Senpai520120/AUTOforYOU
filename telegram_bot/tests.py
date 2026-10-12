@@ -108,6 +108,8 @@ class BotRuntimeTestCase(TestCase):
 
         # В aiogram Update.event_type — @property поверх @lru_cache: разобранные
         # Update (а с ними Message.date — datetime с tzinfo из pydantic_core)
+        # Вторая страховка: основная очистка — в core.test_runner.IsolatedDiscoverRunner
+        # (teardown_test_environment), этот cleanup защищает и при запуске без него.
         # живут в кэше класса до конца процесса. При завершении интерпретатора
         # кэш освобождается после частичной выгрузки pydantic_core, и на сборке
         # Python в GitHub Actions это segfault (exit 139) уже после 'OK'.

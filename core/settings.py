@@ -31,15 +31,17 @@ else:
         'Сгенерировать: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
     )
 
+# Флаг тест-раннера: единственный, вычисляется один раз (см. блок изоляции в конце файла).
+_TESTING = 'test' in sys.argv
+
 # In production set: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 _raw_hosts = os.environ.get('ALLOWED_HOSTS', '')
-_testing = 'test' in sys.argv
 _explicit_hosts = [h.strip() for h in _raw_hosts.split(',') if h.strip()]
 if _explicit_hosts:
     ALLOWED_HOSTS = _explicit_hosts
 elif DEBUG:
     ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
-elif _testing:
+elif _TESTING:
     ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
 else:
     ALLOWED_HOSTS = []   # prod without env var → Django will raise, as intended
@@ -403,8 +405,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 # CELERY_TASK_ALWAYS_EAGER=True — задача выполняется синхронно и с реальным
 # токеном уходит в api.telegram.org. Прогон listings занимал 22.5 с вместо
 # 4.5 с, и это были настоящие аутентифицированные запросы боевым ботом.
-if _testing:
-    TELEGRAM_BOT_TOKEN = ''
+# (обнуление — в блоке изоляции тестов в конце файла)
 TELEGRAM_BOT_USERNAME = os.environ.get('TELEGRAM_BOT_USERNAME', '')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '')      # @channel или -100xxx
 TELEGRAM_B2B_CHANNEL_ID = os.environ.get('TELEGRAM_B2B_CHANNEL_ID', '')  # опц. B2B-канал
@@ -415,7 +416,6 @@ SITE_URL = os.environ.get('SITE_URL', 'https://autoforyou.ua')
 
 # ─── Заголовки безопасности (только в продакшене) ─────────────────────────────
 # В dev (DEBUG=True) и в тест-раннере не включаем — тесты работают по HTTP.
-_TESTING = 'test' in sys.argv
 if not DEBUG and not _TESTING:
     # Отключается только осознанно: стенд без TLS (CI, локальный прогон
     # E2E по HTTP) или TLS, терминируемый балансировщиком, который уже
@@ -429,3 +429,30 @@ if not DEBUG and not _TESTING:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     X_FRAME_OPTIONS = 'DENY'
     SECURE_CONTENT_TYPE_NOSNIFF = True
+
+
+# ─── Изоляция тестов от внешнего мира (задача 0.2) ────────────────────────────
+# Результат тестов не должен зависеть от локального .env.
+# ПРАВИЛО: любой новый ключ внешнего провайдера (carVertical и др. этапа 3,
+# Turnstile и т.п.) добавлять сюда. Тесты, которым нужен ключ, задают его
+# через override_settings, а не берут из окружения.
+TEST_RUNNER = 'core.test_runner.IsolatedDiscoverRunner'
+
+if _TESTING:
+    OPENDATABOT_API_KEY = ''
+    APIFY_TOKEN = ''
+    LIQPAY_PUBLIC_KEY = ''
+    LIQPAY_PRIVATE_KEY = ''
+    TELEGRAM_BOT_TOKEN = ''
+    TURNSTILE_SITE_KEY = ''
+    TURNSTILE_SECRET_KEY = ''
+    CAPTCHA_PROVIDER = 'off'
+    EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+    EMAIL_HOST_USER = ''
+    EMAIL_HOST_PASSWORD = ''
+    # Кэш и Celery не должны подключаться к Redis, даже если задан REDIS_URL.
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+    CELERY_BROKER_URL = 'memory://'
+    CELERY_RESULT_BACKEND = 'cache+memory://'
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True

@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.conf import settings
+from django.test import override_settings
 from django.utils import timezone
 from PIL import Image as PILImage
 from rest_framework import status
@@ -715,6 +716,7 @@ class TestPromoteEndpoint(APITestCase):
         self.assertGreaterEqual(len(r.data), 4)
 
 
+@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
 class TestCallbackAppliesTariff(APITestCase):
     def setUp(self):
 
@@ -732,7 +734,7 @@ class TestCallbackAppliesTariff(APITestCase):
         import json
 
         from django.conf import settings
-        private_key = settings.LIQPAY_PRIVATE_KEY
+        private_key = settings.LIQPAY_PRIVATE_KEY  # 'test_priv' из override_settings класса
         payload = {
             'order_id': payment.order_id,
             'status': liqpay_status,
