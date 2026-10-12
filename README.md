@@ -48,6 +48,8 @@ docker compose ps
 
 ### Локально, без Docker
 
+Робоче оточення Python — `.venv` (інших venv у корені немає).
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate        # Windows
@@ -82,11 +84,15 @@ npm run dev
 
 ### Backend — 433 тести
 
-```bash
-python manage.py test
+Робоче оточення Python — `.venv` (у PyCharm оберіть інтерпретатор `.venv\Scripts\python.exe`).
+
+```powershell
+scripts/test-backend.ps1              # Windows
+scripts/test-backend.sh               # Linux/Mac/Git Bash
+scripts/test-backend.ps1 pricing      # один застосунок
 ```
 
-Токен Telegram у тестах обнуляється автоматично, окремих змінних задавати не треба.
+Скрипти самі обнуляють `DATABASE_URL` і `REDIS_URL`: локальний `.env` — шаблон для Docker з хостами `db`/`redis`, а `core/settings.py` його підвантажує. Без обнулення тести йдуть у Postgres/Redis з `.env` або падають. Токен Telegram у тестах обнуляється автоматично.
 
 ### E2E — 33 тести, Playwright
 

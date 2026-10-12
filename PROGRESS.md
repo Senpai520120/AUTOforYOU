@@ -4,6 +4,18 @@
 
 ---
 
+## Задача 0.1: Воспроизводимая локальная среда (2026-10-12) — ЗАВЕРШЕНО
+
+- `.gitattributes`: LF для `*.sh`, `docker/*`, `Dockerfile*`, `nginx/*.conf` (12-Q14). Индекс уже был с LF, CRLF был только в рабочих копиях `docker/entrypoint.sh`, `deploy.sh`, `Dockerfile` — пересозданы через checkout.
+- `Dockerfile.backend`: `sed -i 's/\r$//'` перед `chmod`. CI (джоба `backend`): шаг «Shell scripts use LF».
+- `scripts/test-backend.ps1` / `.sh`: тесты через `.venv` с пустыми `DATABASE_URL`/`REDIS_URL`. В PowerShell `$env:X=''` удаляет переменную, поэтому `.ps1` запускает Python через `ProcessStartInfo`.
+- Удалён локальный `venv/` (12-Q8). README и `docs/BACKEND_TESTS.md` обновлены.
+- Проверки: Django 433 теста OK (283 с); `npm run build` и `tsc --noEmit` без ошибок; `pip check` чисто; `git ls-files --eol '*.sh'` везде `i/lf w/lf`.
+- Docker на Windows: `down` + `up -d --build` → `backend` и `db` `(healthy)`, `http://localhost` и `/api/v1/listings/` отвечают 200.
+- **Первый локальный Playwright: 33 passed, 0 failed, 0 skipped (17,5 с).**
+
+---
+
 ## Etap 0: Docker Compose EC2-ready + перенос даних (2026-07-23) — ЗАВЕРШЕНО
 
 ### Що зроблено

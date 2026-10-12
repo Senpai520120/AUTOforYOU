@@ -8,17 +8,24 @@ E2E-тесты Playwright — отдельно, [`docs/TEST_CASES.md`](TEST_CASE
 
 ## Как запускать
 
-```bash
-python manage.py test
+Рабочее окружение — `.venv`. Запускать через скрипты:
+
+```powershell
+scripts/test-backend.ps1        # Windows
+scripts/test-backend.sh         # Linux/Mac/Git Bash
 ```
 
-Никаких переменных окружения задавать не нужно. Токен Telegram обнуляется в настройках при работе тест-раннера — иначе `post_save` на `Listing` запускал бы `post_listing_to_channel`, а с `CELERY_TASK_ALWAYS_EAGER=True` в тестах это уходило бы настоящими запросами в `api.telegram.org`.
+Скрипты обнуляют `DATABASE_URL` и `REDIS_URL`. Причина: локальный `.env` — docker-шаблон с хостами `db`/`redis`, а `core/settings.py` подгружает его через `load_dotenv`. Без обнуления тесты идут в Postgres/Redis из `.env` или падают. Голый `python manage.py test` без этого не рекомендуется.
 
-```bash
-python manage.py test local_listings              # одно приложение
-python manage.py test users.tests.TestB2BGating   # один класс
-python manage.py test -v2                         # с именами тестов
+Токен Telegram обнуляется в настройках при работе тест-раннера — иначе `post_save` на `Listing` запускал бы `post_listing_to_channel`, а с `CELERY_TASK_ALWAYS_EAGER=True` в тестах это уходило бы настоящими запросами в `api.telegram.org`.
+
+```powershell
+scripts/test-backend.ps1 local_listings              # одно приложение
+scripts/test-backend.ps1 users.tests.TestB2BGating   # один класс
+scripts/test-backend.ps1 -v2                         # с именами тестов
 ```
+
+Playwright запускается только из `frontend/` (см. [`TEST_CASES.md`](TEST_CASES.md)).
 
 БД для тестов создаётся и удаляется автоматически. Прогон занимает около 4,5 минут.
 
