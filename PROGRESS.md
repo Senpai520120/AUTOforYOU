@@ -12,7 +12,7 @@
 - Тесты 403/404 для broker и moderator по каждой точке; мутации (вернуть `is_staff`) красные. Тесты `shipments`, полагавшиеся на голый `is_staff`, переписаны под `make_admin_role`.
 - Перечень остальных `is_staff`: `users/*`, `messaging/services.py:31`, `deals`, `local_listings/admin.py` — все безопасны (роль/суперпользователь), без изменений.
 - Проверки: backend 526 OK, build и tsc чистые, весь Playwright 105 passed / 7 skipped / 0 failed. `openapi.yaml` — только `is_admin_role`.
-- **Ревью безопасности (находки вне задачи, ждут решения владельца, предложено в задачу 2.8 или отдельную):** (1) `vehicles/views.py:12-25` — `VehicleListView/DetailView` AllowAny с `fields='__all__'`: VIN и лоты оптовых машин видны анониму в обход wholesale; (2) `listings/views.py:85` + `serializers.py:34-44` — `ListingCreateView` для любого вошедшего: IDOR по `vehicle`/`calculation`, `channel=wholesale`, `is_express_buyout` уходит в Telegram-канал; (3) `messaging/services.py:66` — диалог по wholesale-объявлению раскрывает его существование. Права модератора на «Черга модерації» перенесены в 4.5b.
+- **Ревью безопасности (находки вне задачи, записаны в файлы задач 2.8 (п.1–2) и 4.7 (п.3) с пометкой «найдено ревью 1.2b»):** (1) `vehicles/views.py:12-25` — `VehicleListView/DetailView` AllowAny с `fields='__all__'`: VIN и лоты оптовых машин видны анониму в обход wholesale; (2) `listings/views.py:85` + `serializers.py:34-44` — `ListingCreateView` для любого вошедшего: IDOR по `vehicle`/`calculation`, `channel=wholesale`, `is_express_buyout` уходит в Telegram-канал; (3) `messaging/services.py:66` — диалог по wholesale-объявлению раскрывает его существование. Права модератора на «Черга модерації» перенесены в 4.5b.
 
 ---
 
