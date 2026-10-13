@@ -11,6 +11,19 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 | `pricing`  | Тарифные справочники, сервис калькулятора, Calculation|
 | `listings` | Listing (объявление на маркетплейсе)                 |
 | `cars`     | Устаревший Car/CarImage (legacy, оставлен временно)  |
+| `local_listings` | Объявления частников по Украине                |
+| `shipments`  | Отслеживание доставки/контейнеров                    |
+| `integrations` | Внешние API (реестры, уведомления), троттлинг      |
+| `payments`   | Платежи (LiqPay)                                     |
+| `telegram_bot` | Telegram-бот и каналы                              |
+| `messaging`  | Диалоги покупатель–продавец                          |
+| `notifications` | Уведомления пользователю                          |
+| `favorites`  | Избранное                                            |
+| `saved_searches` | Сохранённые поиски                               |
+| `reports`    | Жалобы на объявления                                 |
+| `deals`      | Сделки                                               |
+
+`core` — проект (настройки, celery), не приложение.
 
 ## Принципы
 
@@ -46,6 +59,38 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 Ставки акциза и пенсионного сбора хранятся в БД (модели `CustomsExciseRate`, `PensionFundBracket`)
 с дефолтными placeholder-значениями. Они помечены `# ПРОВЕРИТЬ по действующему законодательству`.
 Результат калькулятора всегда возвращает флаг `is_estimate: true`.
+## Тестирование — правила
+- Backend-тесты: `scripts/test-backend.ps1` / `.sh` или `DATABASE_URL= REDIS_URL= .venv/Scripts/python.exe manage.py test`. Окружение — только `.venv/`.
+- Ни один тест не ходит в сеть: провайдеры мокаются, предохранитель `core/test_runner.py` роняет тест при внешнем соединении. Новый ключ провайдера — сразу в блок обнуления `if _TESTING:` в `core/settings.py`.
+- Данные для тестов — из `tests/factories.py`. Новые локальные `_make_user` не заводить.
+- Тесты, читающие тарифы через кэш, наследуются от `tests.base.CleanCacheTestCase`, seed — в `setUpTestData`.
+- Один ожидаемый код ответа в ассерте. Никаких `assertIn(status, (200, 400))` и `if results:` перед проверкой. `assertRaisesMessage` вместо `assertRaises(msg=)`.
+- Каждый новый/исправленный тест проверяется мутацией: сломать код — тест красный — откатить.
+- На каждый эндпоинт с личными данными — тесты 401 (аноним) и 403/404 (чужой), бриф §3.
+- Для функций без UI — Django-тесты с моками внешних API (бриф §5 п. 3).
+
+## E2E (Playwright) — правила
+- Запускать только из `frontend/`.
+- Стек: `docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml up -d --build` (env из `.env.e2e`, боевой `.env` не подхватывается; шаблон `.env.e2e.example`), затем `docker compose -p autoforyou-e2e exec -T redis redis-cli FLUSHALL` (сброс троттлинга), затем `... exec -T backend python manage.py e2e_seed`. Сайт — `http://localhost` (nginx), не `:3000`. Dev-стек занимает те же порты 80 — перед прогоном его остановить.
+- Импорт `test` — из `e2e/fixtures`. Роли — через `storageState` (`e2e/.auth/<role>.json`). Новые пользователи — только `…@e2e.test`, тестовые записи — с префиксом `[E2E]`.
+- Негативные проверки — через отсутствие сетевого запроса (`helpers/network.ts`) и `validity.*`, а не мгновенное «элемента нет». Ошибки сверять по тексту, не по CSS-классу.
+- `fill()` на `input[type=number]` с нечисловым значением кидает исключение — печатать с клавиатуры.
+- Мобильные тесты — `@mobile`, кросс-браузерные — `@smoke`. Незаработавшее — `test.fixme('<ID> → <задача>')`, не молча зелёный тест.
+- `frontend/e2e/test-1.spec.ts` не переименовывать (решение владельца).
+
+## Известные ловушки
+- `openapi.yaml` генерировать только против PostgreSQL (`DATABASE_URL=postgresql://… python manage.py spectacular --file openapi.yaml`): на SQLite другие границы int, и CI падает.
+- Next пререндерит страницы при `npm run build`, где backend недоступен. Для страниц с данными — `export const dynamic = 'force-dynamic'`.
+- TextChoices выносить на уровень модуля: тело `class Meta` не видит вложенные классы модели.
+- Тесты с настоящими aiogram `Update` — `addCleanup(Update.event_type.fget.cache_clear)`, иначе segfault 139 в CI после «OK». Страховка — в `core/test_runner.py`.
+- Локальный `.env` — docker-шаблон с хостами `db`/`redis`, поэтому тесты вне Docker — с пустыми `DATABASE_URL` и `REDIS_URL`.
+- `*.sh` — только LF (`.gitattributes`). CRLF ломает backend-контейнер на Windows.
+- `main` в Actions может быть красным из-за deploy-джобы без SSH-секретов (12-Q2), при этом проверки зелёные — не путать.
+- `cars/` — legacy, не трогать без решения владельца.
+
+## Определение «готово»
+См. `docs/BRIEF.md` §5.
+
 ## Агенты и модели
 Агенты лежат в .claude/agents/. Основная сессия координирует и принимает решения, работу делегирует:
 - code-scout (Haiku) — найти в коде, получить путь:строки. Не читать файлы целиком в основной сессии.
