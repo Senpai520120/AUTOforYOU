@@ -3324,10 +3324,6 @@ components:
           type: string
           title: Телефон
           maxLength: 20
-        role:
-          allOf:
-          - $ref: '#/components/schemas/RegisterRoleEnum'
-          default: buyer
       required:
       - email
     RegisterRequest:
@@ -3359,10 +3355,6 @@ components:
           type: string
           title: Телефон
           maxLength: 20
-        role:
-          allOf:
-          - $ref: '#/components/schemas/RegisterRoleEnum'
-          default: buyer
         agreed_to_terms:
           type: boolean
           writeOnly: true
@@ -3371,11 +3363,6 @@ components:
       - email
       - password
       - password2
-    RegisterRoleEnum:
-      enum:
-      - buyer
-      - dealer
-      type: string
     ReportCreate:
       type: object
       properties:
@@ -3420,6 +3407,14 @@ components:
           title: Коментар
       required:
       - reason
+    RoleEnum:
+      enum:
+      - buyer
+      - dealer
+      - broker
+      - moderator
+      - admin
+      type: string
     SellerTypeEnum:
       enum:
       - private
@@ -3765,7 +3760,7 @@ components:
           maxLength: 20
         role:
           allOf:
-          - $ref: '#/components/schemas/UserProfileRoleEnum'
+          - $ref: '#/components/schemas/RoleEnum'
           readOnly: true
           title: Роль
         is_verified_dealer:
@@ -3809,12 +3804,6 @@ components:
           type: string
           title: Телефон
           maxLength: 20
-    UserProfileRoleEnum:
-      enum:
-      - buyer
-      - dealer
-      - admin
-      type: string
     Vehicle:
       type: object
       properties:

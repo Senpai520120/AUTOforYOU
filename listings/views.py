@@ -50,6 +50,7 @@ def _apply_filters(qs, params):
     ),
 )
 class ListingListView(generics.ListAPIView):
+    permission_classes = [permissions.AllowAny]
     serializer_class = ListingSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['vehicle__make', 'vehicle__model', 'vehicle__vin']
@@ -67,6 +68,7 @@ class ListingListView(generics.ListAPIView):
     get=extend_schema(tags=['listings'], summary='Детали объявления'),
 )
 class ListingDetailView(generics.RetrieveAPIView):
+    permission_classes = [permissions.AllowAny]
     serializer_class = ListingSerializer
 
     def get_queryset(self):

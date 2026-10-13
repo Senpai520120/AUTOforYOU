@@ -2,13 +2,13 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
 
 from .models import CustomUser, DealerApplication, TrustedShop
-from .services import approve_application, reject_application
+from .services import approve_application, assign_role, reject_application, revoke_role
 
 
 def ban_users(modeladmin, request, queryset):
     from local_listings.models import LocalListing
     count = 0
-    for user in queryset.exclude(is_staff=True):
+    for user in queryset.exclude(is_superuser=True):
         if not user.is_banned:
             user.is_banned = True
             user.is_active = False
@@ -37,7 +37,17 @@ class CustomUserAdmin(UserAdmin):
     list_filter = ('role', 'is_verified_dealer', 'is_banned', 'is_email_verified', 'is_staff')
     search_fields = ('email', 'phone')
     ordering = ('-created_at',)
-    actions = [ban_users, unban_users]
+    actions = [ban_users, unban_users, 'assign_broker', 'revoke_broker', 'assign_moderator', 'revoke_moderator']
+    # role и is_verified_dealer меняются только actions/сервисом, не формой.
+    readonly_fields = ('role', 'is_verified_dealer')
+
+    def _role_action(self, request, queryset, func, role, text, level):
+        # Роли назначает только superuser: view-only staff с чужим правом actions не получает.
+        if not request.user.is_superuser:
+            self.message_user(request, 'Ролі призначає лише суперкористувач.', messages.ERROR)
+            return
+        n = sum(func(u, role, request.user) for u in queryset)
+        self.message_user(request, f'{text}: {n}.', level)
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
@@ -46,10 +56,26 @@ class CustomUserAdmin(UserAdmin):
         ('Права', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Даты', {'fields': ('last_login',)}),
     )
+    @admin.action(permissions=['change'], description='Призначити брокером')
+    def assign_broker(self, request, queryset):
+        self._role_action(request, queryset, assign_role, CustomUser.Role.BROKER, 'Призначено брокером', messages.SUCCESS)
+
+    @admin.action(permissions=['change'], description='Зняти роль брокера')
+    def revoke_broker(self, request, queryset):
+        self._role_action(request, queryset, revoke_role, CustomUser.Role.BROKER, 'Знято роль брокера', messages.WARNING)
+
+    @admin.action(permissions=['change'], description='Призначити модератором')
+    def assign_moderator(self, request, queryset):
+        self._role_action(request, queryset, assign_role, CustomUser.Role.MODERATOR, 'Призначено модератором', messages.SUCCESS)
+
+    @admin.action(permissions=['change'], description='Зняти роль модератора')
+    def revoke_moderator(self, request, queryset):
+        self._role_action(request, queryset, revoke_role, CustomUser.Role.MODERATOR, 'Знято роль модератора', messages.WARNING)
+
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'password1', 'password2', 'role'),
+            'fields': ('email', 'password1', 'password2'),
         }),
     )
 
@@ -90,10 +116,15 @@ class DealerApplicationAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     search_fields = ('user__email', 'company_name', 'full_name')
     raw_id_fields = ('user', 'reviewed_by')
-    readonly_fields = ('created_at', 'reviewed_at', 'reviewed_by')
+    # status меняется только actions через сервис: правка в форме обходила бы
+    # approve_application (is_verified_dealer, role, письмо) - 01-Q2.
+    readonly_fields = ('status', 'agreed_to_processing_at', 'created_at', 'reviewed_at', 'reviewed_by')
     actions = [_approve, _reject]
 
     fieldsets = (
-        (None, {'fields': ('user', 'company_name', 'full_name', 'contact_phone', 'documents')}),
+        (None, {'fields': (
+            'user', 'company_name', 'full_name', 'contact_phone', 'documents',
+            'agreed_to_processing_at',
+        )}),
         ('Рассмотрение', {'fields': ('status', 'reviewed_by', 'review_notes', 'created_at', 'reviewed_at')}),
     )

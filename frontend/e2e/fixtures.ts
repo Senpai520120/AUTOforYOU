@@ -2,7 +2,7 @@ import { test as base, request as pwRequest, type APIRequestContext } from '@pla
 import fs from 'fs';
 import path from 'path';
 
-export type Role = 'buyer' | 'seller' | 'dealer' | 'staff';
+export type Role = 'buyer' | 'seller' | 'dealer' | 'staff' | 'broker' | 'fakeadmin';
 
 export const storageStatePath = (role: Role) => path.join(__dirname, '.auth', `${role}.json`);
 

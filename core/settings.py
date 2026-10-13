@@ -223,7 +223,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
@@ -271,7 +271,7 @@ SPECTACULAR_SETTINGS = {
             'saved_search_match', 'deal_proposed', 'deal_confirmed', 'deal_cancelled',
             'review_received',
         ],
-        'UserRoleEnum': ['buyer', 'dealer', 'admin'],
+        'UserRoleEnum': ['buyer', 'dealer', 'broker', 'moderator', 'admin'],
     },
     'ENUM_GENERATE_CHOICE_DESCRIPTION': False,
     'TITLE': 'AUTOforYOU API',

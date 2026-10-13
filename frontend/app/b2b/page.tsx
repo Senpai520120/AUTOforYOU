@@ -14,11 +14,11 @@ export default function B2BPage() {
   const [data, setData] = useState<PaginatedResponse<Listing> | null>(null);
   const [fetching, setFetching] = useState(true);
 
-  const canAccess = user && (user.is_verified_dealer || user.role === 'admin');
+  const canAccess = user && (user.is_verified_dealer || user.is_staff);
 
   useEffect(() => {
     if (!loading && !user) { router.push('/login'); return; }
-    if (!loading && user && !canAccess) return;
+    if (!loading && user && !canAccess) { setFetching(false); return; }
     if (user && canAccess) {
       listingsApi.b2bBoard({}).then(setData).finally(() => setFetching(false));
     } else if (!loading) {

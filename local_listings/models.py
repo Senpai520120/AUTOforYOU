@@ -177,6 +177,9 @@ class LocalListing(models.Model):
         verbose_name = 'Місцеве оголошення'
         verbose_name_plural = 'Місцеві оголошення'
         ordering = ['-created_at']
+        permissions = [
+            ('moderate_locallisting', 'Може модерувати оголошення'),
+        ]
         indexes = [
             models.Index(fields=['status'], name='ll_status_idx'),
             models.Index(fields=['make'], name='ll_make_idx'),

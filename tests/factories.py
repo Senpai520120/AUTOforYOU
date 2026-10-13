@@ -45,6 +45,29 @@ def make_staff(email=None, superuser=False, **kw):
     return make_user(email, **kw)
 
 
+def make_broker(email=None, **kw):
+    """Брокер: role + группа «Брокери» + is_staff (как действие админки)."""
+    from users.services import assign_role
+    user = make_user(email, **kw)
+    assign_role(user, 'broker')
+    return user
+
+
+def make_moderator(email=None, **kw):
+    """Модератор: role + группа «Модератори» (право moderate_locallisting) + is_staff."""
+    from users.services import assign_role
+    user = make_user(email, **kw)
+    assign_role(user, 'moderator')
+    return user
+
+
+def make_admin_role(email=None, **kw):
+    """Администратор по роли: role='admin' + is_staff (без суперправ)."""
+    kw.setdefault('role', 'admin')
+    kw.setdefault('is_staff', True)
+    return make_user(email, **kw)
+
+
 def auth_client(user) -> APIClient:
     """APIClient с JWT-заголовком пользователя."""
     client = APIClient()

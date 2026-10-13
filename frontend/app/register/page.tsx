@@ -6,7 +6,7 @@ import { apiFetch } from '@/api/client';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ email: '', password: '', password2: '', role: 'buyer', first_name: '', phone: '' });
+  const [form, setForm] = useState({ email: '', password: '', password2: '', first_name: '', phone: '' });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -54,15 +54,6 @@ export default function RegisterPage() {
                 required={f.key !== 'first_name' && f.key !== 'phone'} />
             </div>
           ))}
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Роль</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
-              value={form.role} onChange={e => set('role', e.target.value)}>
-              <option value="buyer">Покупець</option>
-              <option value="dealer">Перекупник</option>
-            </select>
-          </div>
-
           <div className="flex items-start gap-3 pt-1">
             <input
               id="agreed_to_terms"

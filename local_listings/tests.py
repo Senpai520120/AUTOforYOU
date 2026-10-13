@@ -17,6 +17,7 @@ from tests.factories import (
     TEST_PASSWORD,
     auth_client,
     make_local_listing,
+    make_moderator,
     make_staff,
     make_user,
 )
@@ -950,7 +951,7 @@ class TestListingVisibilityByStatus(APITestCase):
     def setUp(self):
         self.owner = make_user('vis_owner@test.com')
         self.stranger = make_user('vis_stranger@test.com')
-        self.staff = make_user('vis_staff@test.com', is_staff=True)
+        self.staff = make_moderator('vis_staff@test.com')
         self.region = Region.objects.create(name='Одеська', slug='odeska')
         self.city = City.objects.create(name='Одеса', slug='odesa', region=self.region)
         self.listing = _make_listing(self.owner, self.region, self.city)

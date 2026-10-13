@@ -94,7 +94,7 @@ class ListingBuyersView(APIView):
 
     def get(self, request, listing_id):
         listing = get_object_or_404(LocalListing, pk=listing_id)
-        if listing.owner_id != request.user.pk and not request.user.is_staff:
+        if listing.owner_id != request.user.pk and not request.user.is_admin_role:
             return Response({'detail': 'Тільки власник може переглядати покупців.'}, status=403)
         from messaging.models import Conversation
         convs = Conversation.objects.filter(local_listing=listing).select_related('initiator')

@@ -128,13 +128,13 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
         request = self.context.get('request')
         is_auth = request and request.user and request.user.is_authenticated
         is_owner = is_auth and request.user == instance.owner
-        is_staff = is_auth and request.user.is_staff
 
         # Phone is always None in detail — use /contact/ endpoint instead
         data['contact_phone'] = None
 
         # Причину відхилення бачить тільки власник або адмін
-        if not (is_owner or is_staff):
+        # has_perm - только если не владелец: права не должны давать лишних запросов в кабинете
+        if not (is_owner or (is_auth and request.user.has_perm('local_listings.moderate_locallisting'))):
             data['rejection_reason'] = None
 
         return data
@@ -176,6 +176,18 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         if city and region and city.region_id != region.id:
             raise serializers.ValidationError({'city': 'Місто не належить до вказаної області.'})
         return attrs
+
+    def validate_seller_type(self, value):
+        # 05-Q22: статус «дилер» самостійно не обирається - тільки верифікований дилер.
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if value == LocalListing.SellerType.DEALER and not (
+            user and user.is_authenticated and user.is_verified_dealer
+        ):
+            raise serializers.ValidationError(
+                'Тип продавця «дилер» доступний лише верифікованим дилерам.'
+            )
+        return value
 
     def validate_year(self, value):
         current_year = datetime.date.today().year

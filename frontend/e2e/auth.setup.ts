@@ -1,7 +1,7 @@
 import { test as setup, expect } from '@playwright/test';
 import path from 'path';
 
-export const ROLES = ['buyer', 'seller', 'dealer', 'staff'] as const;
+export const ROLES = ['buyer', 'seller', 'dealer', 'staff', 'broker', 'fakeadmin'] as const;
 export type Role = (typeof ROLES)[number];
 export const authFile = (role: Role) => path.join(__dirname, '.auth', `${role}.json`);
 

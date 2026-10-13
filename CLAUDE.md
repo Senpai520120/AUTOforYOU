@@ -50,6 +50,14 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 ### 6. Инкрементальные коммиты
 Понятные сообщения после каждого логического шага.
 
+## Роли и права
+- `role` — только метка. Регистрация всегда даёт `buyer`, поле `role` в запросе игнорируется.
+- `dealer` — только `is_verified_dealer=True` (ставит `approve_application`, не админка вручную).
+- `broker`, `moderator`, `admin` назначает только администратор (действия «Призначити…» в админке пользователей).
+- `is_staff` — только доступ в Django Admin. Модерация — `user.has_perm('local_listings.moderate_locallisting')` (группы «Модератори», «Адміністратори»).
+- Хелперы и классы: `users/permissions.py` (`IsBroker`, `IsBrokerOrAdmin`, `IsModerator`, `IsAdminRole`), `user.is_broker/is_moderator/is_admin_role`.
+- `DEFAULT_PERMISSION_CLASSES = IsAuthenticated`: у публичного view — явный `AllowAny`. Тест-аудит: `core/tests.py`.
+
 ## Именование
 - Модели: CamelCase, в единственном числе (`Vehicle`, `Listing`, `Calculation`).
 - URL: kebab-case (`/api/v1/vehicles/`, `/api/v1/pricing/calculate/`).

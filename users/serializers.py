@@ -9,17 +9,13 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, label='Підтвердження пароля')
     agreed_to_terms = serializers.BooleanField(write_only=True)
-    # Роль назначает себе сам пользователь, поэтому список ограничен
-    # самореєстрируемыми. 'admin' сюда не входит: администратор создаётся
-    # только через createsuperuser или админку.
-    role = serializers.ChoiceField(
-        choices=[CustomUser.Role.BUYER, CustomUser.Role.DEALER],
-        default=CustomUser.Role.BUYER,
-    )
+    # Роль при регистрации не принимается: поле role в запросе молча игнорируется
+    # (DRF отбрасывает неизвестные ключи), пользователь всегда buyer.
+    # dealer ставит только approve_application; broker/moderator/admin - админка.
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'role', 'agreed_to_terms')
+        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms')
 
     def validate(self, attrs):
         if attrs['password'] != attrs.pop('password2'):

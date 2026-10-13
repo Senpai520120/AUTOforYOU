@@ -89,6 +89,7 @@ class VinReportView(APIView):
     },
 )
 class VinDecodeView(APIView):
+    permission_classes = [permissions.AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'expensive'
 

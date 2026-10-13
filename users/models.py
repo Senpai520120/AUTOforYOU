@@ -5,6 +5,14 @@ from django.db import models
 
 
 class CustomUserManager(BaseUserManager):
+    def brokers_and_admins(self):
+        """Брокеры и администраторы (роль), включая суперпользователей."""
+        return self.filter(
+            models.Q(role=CustomUser.Role.BROKER)
+            | models.Q(role=CustomUser.Role.ADMIN, is_staff=True)
+            | models.Q(is_superuser=True)
+        )
+
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError('Email обязателен')
@@ -25,6 +33,8 @@ class CustomUser(AbstractUser):
     class Role(models.TextChoices):
         BUYER = 'buyer', 'Покупатель'
         DEALER = 'dealer', 'Перекупщик'
+        BROKER = 'broker', 'Брокер'
+        MODERATOR = 'moderator', 'Модератор'
         ADMIN = 'admin', 'Администратор'
 
     objects = CustomUserManager()
@@ -50,6 +60,19 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.email
+
+    @property
+    def is_admin_role(self):
+        # Голое поле role прав не даёт: admin подтверждается is_staff (его ставит только админка).
+        return self.is_superuser or (self.role == self.Role.ADMIN and self.is_staff)
+
+    @property
+    def is_broker(self):
+        return self.role == self.Role.BROKER
+
+    @property
+    def is_moderator(self):
+        return self.role == self.Role.MODERATOR
 
 
 class TrustedShop(models.Model):

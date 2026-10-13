@@ -42,8 +42,15 @@ class CityAdmin(admin.ModelAdmin):
 
 # ─── Дії модерації ────────────────────────────────────────────────────────────
 
+def _can_moderate(request):
+    return request.user.has_perm('local_listings.moderate_locallisting')
+
+
 def approve_listings(modeladmin, request, queryset):
     """Масово одобрити вибрані оголошення (тільки pending)."""
+    if not _can_moderate(request):
+        modeladmin.message_user(request, 'Немає права модерувати оголошення.', messages.ERROR)
+        return
     count = 0
     for listing in queryset.filter(status=LocalListing.Status.PENDING):
         approve_listing(listing, request.user)
@@ -56,6 +63,9 @@ approve_listings.short_description = 'Одобрити (→ active)'
 
 def reject_with_reason(modeladmin, request, queryset):
     """Відхилити вибрані оголошення з вказанням причини — проміжна форма."""
+    if not _can_moderate(request):
+        modeladmin.message_user(request, 'Немає права модерувати оголошення.', messages.ERROR)
+        return None
     if 'confirm' in request.POST:
         reason = request.POST.get('reason', '').strip() or 'Не відповідає правилам розміщення.'
         count = 0
@@ -133,6 +143,19 @@ class LocalListingAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    # Модератор (не superuser) змінює статус лише actions, а не формою: інакше через форму
+    # можна переписати власника, статус, відмітки модерації, телефон і тип продавця.
+    _MODERATOR_READONLY = [
+        'owner', 'status', 'moderated_by', 'moderated_at', 'promoted_until',
+        'expires_at', 'seller_type', 'contact_phone',
+    ]
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            fields += [f for f in self._MODERATOR_READONLY if f not in fields]
+        return fields
 
     @admin.display(description='Оголошення')
     def short_title(self, obj):

@@ -20,12 +20,13 @@ from .services import (
     send_message_to_conversation,
     unread_count_for_user,
 )
+from .services import handles_imports as _handles_imports
 
 
 def _can_access(user, conv: Conversation) -> bool:
     is_participant = conv.participants.filter(pk=user.pk).exists()
     is_admin_imported = (
-        getattr(user, 'is_staff', False) and conv.imported_listing_id is not None
+        _handles_imports(user) and conv.imported_listing_id is not None
     )
     return is_participant or is_admin_imported
 
@@ -59,7 +60,7 @@ class ConversationListView(APIView):
 
     def get(self, request):
         user = request.user
-        if getattr(user, 'is_staff', False):
+        if _handles_imports(user):
             qs = Conversation.objects.filter(
                 Q(participants=user) | Q(imported_listing__isnull=False)
             ).distinct()

@@ -1,8 +1,21 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, дальше 1.2 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, дальше 1.3 (Opus) → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.2: Роли и права по умолчанию (2026-10-13) — ЗАВЕРШЕНО
+
+- `Role.BROKER`/`MODERATOR`, хелперы, `users/permissions.py`; регистрация игнорирует `role` (201, `buyer`; тесты для admin/dealer/broker/moderator). Миграции: `users/0009` (choices), `0010` (группы «Брокери»/«Модератори»/«Адміністратори», с reverse), `local_listings/0006` (право `moderate_locallisting`).
+- Модерация — `has_perm` вместо `is_staff`; 05-Q22 (`seller_type=dealer` только верифицированным); импортные диалоги (06-S9) — только broker/admin.
+- `DEFAULT_PERMISSION_CLASSES=IsAuthenticated`, явный `AllowAny`, `cars/` через `core/urls.py` (`git diff cars/` пуст). Тест-аудит `core/tests.py`.
+- Админка: `status` заявки дилера только через actions (atomic), действия назначения/снятия ролей (идемпотентны). Журнал аудита (Н-8) — пока logger `audit`.
+- Фронт: `/b2b` по `is_staff` (09-S2), типы и метки ролей, нет выбора роли в регистрации. `e2e_seed` + учётки `broker`, `fakeadmin`; `roles.spec.ts`.
+- Ревью безопасности: `is_admin_role` = superuser или (`role=admin` и `is_staff`), миграция `users/0011` снимает самозваный admin; `revoke_role` убирает брокера из импортных диалогов; actions ролей только для superuser; модератору закрыты поля объявления (`status`, `promoted_until`…) в форме админки. Тесты: 503 OK (дважды), Playwright 103+ passed; `roles.spec` нашёл баг: вечный спиннер на `/b2b` без доступа — исправлен.
+- **Ждёт решения владельца:** модератор/брокер получают `is_staff=True` и проходят проверки `is_staff` в `listings/permissions.py`, `listings/views.py`, `shipments/views.py`, `integrations/views.py` (LotImportView): видят B2B и контейнеры, могут запускать импорт лотов. Вне файлов задачи. Также: права на прокси «Черга модерації» (прокси объявлен в admin.py) и редактирование `is_staff`/`groups` в форме пользователя (сейчас только у superuser).
+- Не сделано: проверка границ модератора на `SiteSettings` и `Lead` (моделей нет — 1.12, 2.1). `is_staff` остался в `listings/permissions.py`, `listings/views.py`, `shipments/views.py` (вне «Файлов» задачи).
 
 ---
 

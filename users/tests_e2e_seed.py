@@ -77,7 +77,7 @@ class E2ESeedTests(TestCase):
         _run('e2e_seed', ENV_OK)
         self.assertEqual(first, _counts())
 
-        self.assertEqual(first['users'], 4)
+        self.assertEqual(first['users'], 6)
         self.assertEqual(first['local'], 2)
         self.assertEqual(first['listings'], 2)
         self.assertEqual(first['shipments'], 1)
@@ -110,7 +110,7 @@ class E2ESeedTests(TestCase):
             description='обычное объявление',
         )
         _run('e2e_seed', ENV_OK)
-        self.assertEqual(User.objects.count(), 5)
+        self.assertEqual(User.objects.count(), 7)
 
         out = _run('e2e_cleanup', ENV_OK)
         self.assertIn('удалено', out)

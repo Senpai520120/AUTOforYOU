@@ -70,6 +70,9 @@ class Command(BaseCommand):
             'seller': {'role': 'buyer'},
             'dealer': {'role': 'dealer', 'is_verified_dealer': True},
             'staff': {'role': 'buyer', 'is_staff': True},
+            'broker': {'role': 'broker', 'is_staff': True},
+            # самозваная роль admin без is_staff и без верификации: регресс 09-S2
+            'fakeadmin': {'role': 'admin'},
         }
         result = {}
         for name, extra in spec.items():

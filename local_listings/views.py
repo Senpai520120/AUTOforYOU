@@ -90,7 +90,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.owner == request.user or request.user.is_staff
+        return obj.owner == request.user or request.user.has_perm('local_listings.moderate_locallisting')
 
 
 @extend_schema_view(
@@ -122,6 +122,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     ),
 )
 class LocalListingListCreateView(generics.ListCreateAPIView):
+    # права по методу в get_permissions: GET - AllowAny, POST - IsAuthenticated
     filter_backends = [LocalListingFilter]
 
     def get_permissions(self):
@@ -167,14 +168,14 @@ class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         if not user.is_authenticated:
             return qs.filter(status=LocalListing.Status.ACTIVE)
-        if user.is_staff:
+        if user.has_perm('local_listings.moderate_locallisting'):
             return qs
         return qs.filter(Q(status=LocalListing.Status.ACTIVE) | Q(owner=user))
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
         if request.method not in permissions.SAFE_METHODS:
-            if obj.owner != request.user and not request.user.is_staff:
+            if obj.owner != request.user and not request.user.has_perm('local_listings.moderate_locallisting'):
                 self.permission_denied(
                     request,
                     message='Тільки власник може редагувати оголошення.',
@@ -253,7 +254,7 @@ ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 
 def _get_owned_listing(pk, user):
     listing = get_object_or_404(LocalListing, pk=pk)
-    if listing.owner != user and not user.is_staff:
+    if listing.owner != user and not user.has_perm('local_listings.moderate_locallisting'):
         return None, Response({'detail': 'Тільки власник може керувати фото.'}, status=status.HTTP_403_FORBIDDEN)
     return listing, None
 
@@ -404,7 +405,7 @@ class LocalListingPromoteView(APIView):
 
     def post(self, request, pk):
         listing = get_object_or_404(LocalListing, pk=pk)
-        if listing.owner != request.user and not request.user.is_staff:
+        if listing.owner != request.user and not request.user.has_perm('local_listings.moderate_locallisting'):
             return Response(
                 {'detail': 'Тільки власник може просувати оголошення.'},
                 status=status.HTTP_403_FORBIDDEN,

@@ -5,6 +5,7 @@ from django.db.models import Q
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -142,6 +143,7 @@ def _lookup_fixed_fees(auction, title_type, on_date):
     ],
 )
 class CalculateView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         serializer = CalculateInputSerializer(data=request.data)
         if not serializer.is_valid():
@@ -373,6 +375,7 @@ class CalculateView(APIView):
     },
 )
 class ActiveRatesView(APIView):
+    permission_classes = [AllowAny]
     # noinspection PyMethodMayBeStatic
     def get(self, request):
         today = date.today()

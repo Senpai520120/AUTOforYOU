@@ -4,6 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import Link from 'next/link';
 
+const ROLE_LABELS: Record<string, string> = {
+  buyer: 'Покупець',
+  dealer: 'Перекупник',
+  broker: 'Брокер',
+  moderator: 'Модератор',
+  admin: 'Адмін',
+};
+
 export default function MePage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -39,7 +47,7 @@ export default function MePage() {
             <p className="text-slate-500 text-sm">{user.email}</p>
             <div className="flex gap-2 mt-1">
               <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-semibold">
-                {user.role === 'dealer' ? 'Перекупник' : user.role === 'admin' ? 'Адмін' : 'Покупець'}
+                {ROLE_LABELS[user.role] ?? 'Покупець'}
               </span>
               {user.is_verified_dealer && (
                 <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-semibold">✓ Верифіковано</span>
