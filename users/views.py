@@ -1,9 +1,21 @@
+from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
+from django.middleware.csrf import rotate_token
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+from .authentication import enforce_csrf
+from .cookies import clear_auth_cookies, set_auth_cookies
 
 from .models import CustomUser, DealerApplication, TrustedShop
 from .serializers import (
@@ -16,25 +28,131 @@ from .serializers import (
 from .services import DuplicatePendingError, apply_for_dealer
 
 
+def _refresh_from_request(request):
+    """refresh из тела (Bearer-клиенты, переходный фронт) или из httpOnly-cookie.
+
+    Тело важнее: браузер сам его не подставит, значит CSRF не нужен.
+    Cookie браузер шлёт сам — тогда CSRF проверяется (шаг 5 задачи 1.3).
+    """
+    body = request.data.get('refresh') if hasattr(request.data, 'get') else None
+    if body:
+        return body
+    cookie = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH_NAME)
+    if cookie:
+        enforce_csrf(request)
+    return cookie
+
+
+def _token_body(data):
+    if settings.AUTH_TOKENS_IN_BODY:
+        return {'ok': True, **data}
+    return {'ok': True}
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Получить JWT (login)',
+    description=(
+        'Ставит httpOnly-cookie `access` и `refresh`. Пока фронт не переведён на cookie '
+        '(AUTH_TOKENS_IN_BODY), токены дублируются в теле. Принимает только JSON.'
+    ),
+)
+class CookieTokenObtainView(TokenObtainPairView):
+    # Login-CSRF: CSRF-токена у гостя ещё нет, а SameSite=Lax не мешает браузеру
+    # ПРИНЯТЬ Set-Cookie после кросс-сайтовой HTML-формы. Только JSON: чужой
+    # сайт не отправит его без CORS-preflight, а preflight отсекает CORS-whitelist.
+    parser_classes = [JSONParser]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as exc:
+            raise InvalidToken(exc.args[0]) from exc
+        data = serializer.validated_data
+        rotate_token(request)  # новый csrftoken на новую сессию, как django.contrib.auth.login
+        response = Response(_token_body(data), status=status.HTTP_200_OK)
+        return set_auth_cookies(response, data['access'], data['refresh'])
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Обновить access-токен',
+    description=(
+        'refresh — из тела или из cookie (тогда нужен заголовок X-CSRFToken). '
+        'Старый refresh уходит в blacklist, новые токены ставятся в cookie.'
+    ),
+)
+class CookieTokenRefreshView(TokenRefreshView):
+    serializer_class = TokenRefreshSerializer
+    parser_classes = [JSONParser]
+
+    def post(self, request, *args, **kwargs):
+        refresh = _refresh_from_request(request)
+        serializer = self.get_serializer(data={'refresh': refresh or ''})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except (TokenError, ValidationError, AuthenticationFailed, ObjectDoesNotExist):
+            # ObjectDoesNotExist: SimpleJWT 5.5 ищет пользователя через .get() — удалённый даёт 500.
+            response = Response(
+                {'detail': 'Сесія завершилась. Увійдіть знову.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            return clear_auth_cookies(response)
+        data = serializer.validated_data
+        response = Response(_token_body(data), status=status.HTTP_200_OK)
+        return set_auth_cookies(response, data['access'], data.get('refresh'))
+
+
 @extend_schema(
     tags=['auth'],
     summary='Выход из системы (отзыв refresh-токена)',
-    description='Помещает переданный refresh-токен в blacklist. После этого им нельзя получить новый access.',
+    description=(
+        'refresh — из тела или из cookie. Работает и с протухшим access. Если пользователь '
+        'аутентифицирован, refresh должен принадлежать ему. Cookie удаляются в любом случае.'
+    ),
+    request=None,
     responses={200: None, 400: None},
 )
 class LogoutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
+    parser_classes = [JSONParser]  # иначе кросс-сайтовая форма стирает cookie жертвы
 
     def post(self, request):
-        refresh = request.data.get('refresh')
+        refresh = _refresh_from_request(request)
         if not refresh:
-            return Response({'error': 'refresh обязателен.'}, status=status.HTTP_400_BAD_REQUEST)
+            response = Response({'detail': 'Сесію вже завершено.'}, status=status.HTTP_400_BAD_REQUEST)
+            return clear_auth_cookies(response)
         try:
             token = RefreshToken(refresh)
+        except TokenError:
+            response = Response({'detail': 'Сесію вже завершено.'}, status=status.HTTP_400_BAD_REQUEST)
+            return clear_auth_cookies(response)
+        # 01-S13: чужой refresh не отзываем.
+        if request.user.is_authenticated and str(token.get('user_id')) != str(request.user.pk):
+            response = Response({'detail': 'Невірний токен сесії.'}, status=status.HTTP_400_BAD_REQUEST)
+            return clear_auth_cookies(response)
+        try:
             token.blacklist()
-        except TokenError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({'ok': True})
+        except TokenError:
+            pass  # уже в blacklist — результат тот же
+        return clear_auth_cookies(Response({'ok': True}))
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Выдать CSRF-cookie',
+    description='Ставит cookie `csrftoken` (не httpOnly). Фронт шлёт её значение в заголовке `X-CSRFToken`.',
+    request=None,
+    responses={204: None},
+)
+@method_decorator(ensure_csrf_cookie, name='get')
+class CsrfView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=['auth'], summary='Регистрация нового пользователя')

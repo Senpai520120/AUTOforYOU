@@ -209,7 +209,40 @@ CORS_ALLOWED_ORIGINS = (
     if _cors_env
     else ['http://localhost:3000', 'http://127.0.0.1:3000']
 )
-CORS_ALLOW_CREDENTIALS = True
+# С задачи 1.3 вход живёт в cookie: «все origin» + credentials позволили бы
+# любому сайту читать личные данные пользователя. Открытый CORS — только без cookie.
+CORS_ALLOW_CREDENTIALS = not CORS_ALLOW_ALL_ORIGINS
+
+# ─── CSRF (задача 1.3) ────────────────────────────────────────────────────────
+# JWT лежит в httpOnly-cookie, поэтому запросы, аутентифицированные cookie,
+# проверяются на CSRF (users/authentication.py). Фронт читает csrftoken из
+# cookie (GET /api/v1/auth/csrf/) и шлёт его в заголовке X-CSRFToken.
+_csrf_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+CSRF_TRUSTED_ORIGINS = (
+    [o.strip() for o in _csrf_env.split(',') if o.strip()]
+    if _csrf_env
+    else ['http://localhost:3000', 'http://127.0.0.1:3000']
+)
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = False   # фронт должен прочитать токен и вернуть в заголовке
+
+# ─── JWT в cookie (задача 1.3) ────────────────────────────────────────────────
+# Единое место параметров — users/cookies.py.
+AUTH_COOKIE_ACCESS_NAME = os.environ.get('AUTH_COOKIE_ACCESS_NAME', 'access')
+AUTH_COOKIE_REFRESH_NAME = os.environ.get('AUTH_COOKIE_REFRESH_NAME', 'refresh')
+AUTH_COOKIE_SECURE = os.environ.get(
+    'AUTH_COOKIE_SECURE', 'false' if DEBUG else 'true',
+).lower() in ('true', '1', 'yes')
+AUTH_COOKIE_SAMESITE = os.environ.get('AUTH_COOKIE_SAMESITE', 'Lax')
+if AUTH_COOKIE_SAMESITE not in ('Lax', 'Strict'):
+    # None отключило бы защиту от CSRF на уровне браузера (и без Secure cookie отбрасываются).
+    raise ImproperlyConfigured('AUTH_COOKIE_SAMESITE: допустимо только Lax или Strict.')
+AUTH_COOKIE_DOMAIN = os.environ.get('AUTH_COOKIE_DOMAIN', '') or None  # пусто = host-only
+# Refresh-cookie уходит только на эндпоинты auth (refresh и logout).
+AUTH_COOKIE_REFRESH_PATH = '/api/v1/auth/'
+# Переходный режим: токены ещё и в теле ответа, пока фронт хранит их
+# в localStorage. Выключается в задаче 1.4.
+AUTH_TOKENS_IN_BODY = True
 
 # ─── Rate Limiting (throttling) ───────────────────────────────────────────────
 # Дефолты env-overridable. Дорогие внешние API (Opendatabot, NHTSA) — 10/час.
@@ -220,7 +253,8 @@ _THROTTLE_EXPENSIVE = os.environ.get('THROTTLE_EXPENSIVE_RATE', '10/hour')
 # ─── DRF ──────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Bearer-заголовок, затем httpOnly-cookie access (с CSRF-проверкой).
+        'users.authentication.CookieJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -278,7 +312,10 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': (
         'Маркетплейс для автоперекупщиков: импорт битых авто с аукционов США '
         '(Copart/IAAI), калькулятор стоимости «под ключ» в Украину, каталог объявлений.\n\n'
-        '**Аутентификация**: Bearer JWT. Получить токен: `POST /api/v1/auth/token/`.\n\n'
+        '**Аутентификация**: `POST /api/v1/auth/token/` ставит httpOnly-cookie `access` и `refresh`. '
+        'Для браузера: cookie `access` + заголовок `X-CSRFToken` на небезопасных методах '
+        '(токен — из cookie `csrftoken`, её ставит `GET /api/v1/auth/csrf/`). '
+        'Для API-клиентов: заголовок `Authorization: Bearer <access>`, CSRF не нужен.\n\n'
         '⚠ **Тестовые тарифы** — все расчёты демонстрационные до подключения реальных ставок.'
     ),
     'VERSION': '2.0.0',
@@ -347,11 +384,12 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@autoforyou.ua
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.environ.get('JWT_ACCESS_MINUTES', '15'))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.environ.get('JWT_REFRESH_DAYS', '7'))),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,   # отзывает старый refresh при ротации
     'AUTH_HEADER_TYPES': ('Bearer',),
+    'UPDATE_LAST_LOGIN': True,          # админка показывает реальный last_login (01-Q7)
 }
 
 # ─── Celery ───────────────────────────────────────────────────────────────────

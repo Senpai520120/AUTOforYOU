@@ -1,8 +1,9 @@
 from django.urls import path
-from drf_spectacular.utils import extend_schema
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .views import (
+    CookieTokenObtainView,
+    CookieTokenRefreshView,
+    CsrfView,
     DealerApplicationStatusView,
     DealerApplyView,
     LogoutView,
@@ -14,18 +15,11 @@ from .views import (
     TrustedShopListView,
 )
 
-TokenObtainPairView = extend_schema(
-    tags=['auth'], summary='Получить JWT-токены (login)'
-)(TokenObtainPairView)
-
-TokenRefreshView = extend_schema(
-    tags=['auth'], summary='Обновить access-токен'
-)(TokenRefreshView)
-
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='auth-register'),
-    path('token/', TokenObtainPairView.as_view(), name='token-obtain'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
+    path('csrf/', CsrfView.as_view(), name='auth-csrf'),
+    path('token/', CookieTokenObtainView.as_view(), name='token-obtain'),
+    path('token/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('token/logout/', LogoutView.as_view(), name='token-logout'),
     path('profile/', ProfileView.as_view(), name='auth-profile'),
     # Личный кабинет

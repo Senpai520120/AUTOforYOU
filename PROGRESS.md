@@ -1,8 +1,20 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, дальше 1.3 (Opus) → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, дальше 1.4 (Opus) → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.3: JWT в httpOnly-cookie + CSRF, бэкенд (2026-10-13) — ЗАВЕРШЕНО
+
+- `users/authentication.py::CookieJWTAuthentication` — сначала Bearer (плохой → 401, как раньше), потом cookie `access`: CSRF на небезопасных методах, мусорная/протухшая cookie и забаненный пользователь → аноним (09-Q7). OpenAPI: `jwtAuth` ИЛИ `cookieAuth`.
+- `users/cookies.py` — единое место флагов: `access` Path=/, `refresh` Path=/api/v1/auth/, HttpOnly, SameSite и Secure из `.env`. Views: login ставит cookie и меняет csrftoken; refresh/logout берут refresh из тела (без CSRF — переходный фронт) или из cookie (с CSRF); logout `AllowAny`, чужой refresh не отзывает (01-S13), нейтральные тексты; `GET /auth/csrf/`.
+- Настройки: `CSRF_TRUSTED_ORIGINS`, `AUTH_COOKIE_*`, `JWT_ACCESS_MINUTES`/`JWT_REFRESH_DAYS`, `UPDATE_LAST_LOGIN`, `AUTH_TOKENS_IN_BODY=True` (выключить в 1.4). Шаблоны `.env.example`, `.env.docker.example`.
+- Ревью безопасности: «критично» — нет; «важно» исправлено: login/refresh/logout принимают только JSON (login-CSRF через HTML-форму), `CORS_ALLOW_CREDENTIALS = not CORS_ALLOW_ALL_ORIGINS`. Желательное тоже: refresh удалённого пользователя 500 → 401, ротация csrftoken при входе, `AUTH_COOKIE_SAMESITE` только Lax/Strict.
+- Тесты: 34 новых в `users/tests.py`; `test_logout_requires_auth` заменён на `test_logout_without_access_still_revokes` — контракт изменён задачей (logout `AllowAny`). Мутации (12 шт.) все красные. Backend 561 OK, tsc и build чистые, `openapi.yaml` перегенерирован против Postgres (ошибок генерации 130, было 131).
+- **Не сделано:** живой прогон `frontend/e2e/auth-cookie-api.spec.ts` (2 теста, `--list` ок) — нужен e2e-стек, а это остановка dev-стека (только с «да» владельца).
+- **Для 1.4 (переходный режим, найдено ревью):** «Вийти» на фронте только чистит localStorage — cookie живут (refresh 7 дней) и 15 минут любой POST фронта без Bearer получает 403 CSRF. В 1.4 «Вийти» должен вызывать `POST /api/v1/auth/token/logout/`.
 
 ---
 

@@ -5,7 +5,7 @@ info:
   description: |-
     Маркетплейс для автоперекупщиков: импорт битых авто с аукционов США (Copart/IAAI), калькулятор стоимости «под ключ» в Украину, каталог объявлений.
 
-    **Аутентификация**: Bearer JWT. Получить токен: `POST /api/v1/auth/token/`.
+    **Аутентификация**: `POST /api/v1/auth/token/` ставит httpOnly-cookie `access` и `refresh`. Для браузера: cookie `access` + заголовок `X-CSRFToken` на небезопасных методах (токен — из cookie `csrftoken`, её ставит `GET /api/v1/auth/csrf/`). Для API-клиентов: заголовок `Authorization: Bearer <access>`, CSRF не нужен.
 
     ⚠ **Тестовые тарифы** — все расчёты демонстрационные до подключения реальных ставок.
 paths:
@@ -19,6 +19,7 @@ paths:
       - legacy
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       deprecated: true
       responses:
@@ -43,6 +44,7 @@ paths:
       - legacy
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       deprecated: true
       responses:
@@ -52,6 +54,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCarList'
           description: ''
+  /api/v1/auth/csrf/:
+    get:
+      operationId: v1_auth_csrf_retrieve
+      description: Ставит cookie `csrftoken` (не httpOnly). Фронт шлёт её значение
+        в заголовке `X-CSRFToken`.
+      summary: Выдать CSRF-cookie
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '204':
+          description: No response body
   /api/v1/auth/me/calculations/:
     get:
       operationId: v1_auth_me_calculations_list
@@ -67,6 +82,7 @@ paths:
       - me
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -89,6 +105,7 @@ paths:
       - me
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -111,6 +128,7 @@ paths:
       - me
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -137,6 +155,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -158,6 +177,7 @@ paths:
       - me
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -190,6 +210,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -221,6 +242,7 @@ paths:
               $ref: '#/components/schemas/PatchedTrustedShopRequest'
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -241,6 +263,7 @@ paths:
       - me
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '204':
           description: No response body
@@ -252,6 +275,7 @@ paths:
       - auth
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -277,6 +301,7 @@ paths:
               $ref: '#/components/schemas/UserProfileRequest'
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -302,6 +327,7 @@ paths:
               $ref: '#/components/schemas/PatchedUserProfileRequest'
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -329,6 +355,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '201':
@@ -340,21 +367,15 @@ paths:
   /api/v1/auth/token/:
     post:
       operationId: v1_auth_token_create
-      description: |-
-        Takes a set of user credentials and returns an access and refresh JSON web
-        token pair to prove the authentication of those credentials.
-      summary: Получить JWT-токены (login)
+      description: Ставит httpOnly-cookie `access` и `refresh`. Пока фронт не переведён
+        на cookie (AUTH_TOKENS_IN_BODY), токены дублируются в теле. Принимает только
+        JSON.
+      summary: Получить JWT (login)
       tags:
       - auth
       requestBody:
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/TokenObtainPairRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TokenObtainPairRequest'
-          multipart/form-data:
             schema:
               $ref: '#/components/schemas/TokenObtainPairRequest'
         required: true
@@ -368,13 +389,16 @@ paths:
   /api/v1/auth/token/logout/:
     post:
       operationId: v1_auth_token_logout_create
-      description: Помещает переданный refresh-токен в blacklist. После этого им нельзя
-        получить новый access.
+      description: refresh — из тела или из cookie. Работает и с протухшим access.
+        Если пользователь аутентифицирован, refresh должен принадлежать ему. Cookie
+        удаляются в любом случае.
       summary: Выход из системы (отзыв refresh-токена)
       tags:
       - auth
       security:
       - jwtAuth: []
+      - cookieAuth: []
+      - {}
       responses:
         '200':
           description: No response body
@@ -383,21 +407,14 @@ paths:
   /api/v1/auth/token/refresh/:
     post:
       operationId: v1_auth_token_refresh_create
-      description: |-
-        Takes a refresh type JSON web token and returns an access type JSON web
-        token if the refresh token is valid.
+      description: refresh — из тела или из cookie (тогда нужен заголовок X-CSRFToken).
+        Старый refresh уходит в blacklist, новые токены ставятся в cookie.
       summary: Обновить access-токен
       tags:
       - auth
       requestBody:
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TokenRefreshRequest'
-          multipart/form-data:
             schema:
               $ref: '#/components/schemas/TokenRefreshRequest'
         required: true
@@ -437,6 +454,7 @@ paths:
       - b2b
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -453,6 +471,7 @@ paths:
       - dealers
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -466,6 +485,7 @@ paths:
       - dealers
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -476,6 +496,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -485,6 +506,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -501,6 +523,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -517,6 +540,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -533,6 +557,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -551,6 +576,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -567,6 +593,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -578,6 +605,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -589,6 +617,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -599,6 +628,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '204':
           description: No response body
@@ -610,6 +640,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -665,6 +696,7 @@ paths:
       - listings
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -687,6 +719,7 @@ paths:
       - listings
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -716,6 +749,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -795,6 +829,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -823,6 +858,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -844,6 +880,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -876,6 +913,7 @@ paths:
               $ref: '#/components/schemas/PatchedLocalListingUpdateRequest'
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -896,6 +934,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '204':
           description: No response body
@@ -914,6 +953,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -933,6 +973,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -956,6 +997,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -977,6 +1019,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '204':
           description: No response body
@@ -996,6 +1039,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1016,6 +1060,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1031,6 +1076,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1055,6 +1101,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1073,6 +1120,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1099,6 +1147,7 @@ paths:
       - local
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1133,6 +1182,7 @@ paths:
               $ref: '#/components/schemas/LotImportRequestRequest'
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '201':
           description: Лот створено (новий Vehicle+Listing)
@@ -1149,6 +1199,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1165,6 +1216,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1180,6 +1232,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1190,6 +1243,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1200,6 +1254,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1210,6 +1265,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1221,6 +1277,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1231,6 +1288,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1267,6 +1325,7 @@ paths:
       - payments
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: checkout_url и form_data для HTML-формы
@@ -1325,6 +1384,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '201':
@@ -1342,6 +1402,7 @@ paths:
       - pricing
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1369,6 +1430,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -1383,6 +1445,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1392,6 +1455,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1408,6 +1472,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1423,6 +1488,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '204':
           description: No response body
@@ -1449,6 +1515,7 @@ paths:
       - shipments
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1471,6 +1538,7 @@ paths:
       - shipments
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1488,6 +1556,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '204':
           description: No response body
@@ -1502,6 +1571,7 @@ paths:
       - v1
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -1527,6 +1597,7 @@ paths:
       - vehicles
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1549,6 +1620,7 @@ paths:
       - vehicles
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1579,6 +1651,7 @@ paths:
       - vehicles
       security:
       - jwtAuth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1613,6 +1686,7 @@ paths:
       - vehicles
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: Звіт реєстру (реальний або демо)
@@ -1636,6 +1710,7 @@ paths:
       - vehicles
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           description: Отчёт (реальный или демо)
@@ -3901,6 +3976,12 @@ components:
       required:
       - id
   securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access
+      description: httpOnly-cookie от POST /api/v1/auth/token/. Небезопасные методы
+        требуют заголовок X-CSRFToken (cookie csrftoken).
     jwtAuth:
       type: http
       scheme: bearer

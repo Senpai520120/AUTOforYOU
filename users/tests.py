@@ -6,11 +6,13 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
+from tests.base import CleanCacheTestCase
 from tests.factories import (
+    TEST_PASSWORD,
     auth_client,
     make_admin_role,
     make_broker,
@@ -250,8 +252,11 @@ class TestJWTLogout(APITestCase):
         resp = self.client.post(TOKEN_REFRESH_URL, {'refresh': self.refresh_str}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_logout_requires_auth(self):
+    def test_logout_without_access_still_revokes(self):
+        # Задача 1.3: logout — AllowAny, чтобы выйти можно было и с протухшим access.
         resp = self.client.post(LOGOUT_URL, {'refresh': self.refresh_str}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        resp = self.client.post(TOKEN_REFRESH_URL, {'refresh': self.refresh_str}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_logout_missing_refresh_returns_400(self):
@@ -943,3 +948,301 @@ class TestDemoteBareAdminMigration(TestCase):
         self.assertEqual(
             (fake.role, dealer_fake.role, real.role), ('buyer', 'dealer', 'admin'),
         )
+
+
+# ─── Задача 1.3: JWT в httpOnly-cookie + CSRF ────────────────────────────────
+
+REFRESH_URL = TOKEN_REFRESH_URL
+CSRF_URL = '/api/v1/auth/csrf/'
+PROFILE_URL = '/api/v1/auth/profile/'
+SHOPS_URL = '/api/v1/auth/me/trusted-shops/'
+
+
+def _expired_access(user):
+    from datetime import timedelta
+
+    from rest_framework_simplejwt.tokens import AccessToken
+    token = AccessToken.for_user(user)
+    token.set_exp(lifetime=-timedelta(minutes=1))
+    return str(token)
+
+
+def _load_settings(env):
+    """Отдельная копия core/settings.py с подменённым окружением (Django-настройки не трогает)."""
+    import importlib.util
+    import os
+
+    from django.conf import settings as dj_settings
+    path = os.path.join(dj_settings.BASE_DIR, 'core', 'settings.py')
+    spec = importlib.util.spec_from_file_location('settings_env_probe', path)
+    module = importlib.util.module_from_spec(spec)
+    with mock.patch.dict(os.environ, env):
+        spec.loader.exec_module(module)
+    return module
+
+
+def _blacklisted(token):
+    from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+    return BlacklistedToken.objects.filter(token__jti=token['jti']).exists()
+
+
+class CookieAuthTests(APITestCase):
+
+    def setUp(self):
+        self.user = make_user()
+        self.client = APIClient(enforce_csrf_checks=True)
+
+    def _login(self):
+        resp = self.client.post(TOKEN_URL, {'email': self.user.email, 'password': TEST_PASSWORD}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        return resp
+
+    def _csrf(self):
+        resp = self.client.get(CSRF_URL)
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        return {'HTTP_X_CSRFTOKEN': self.client.cookies['csrftoken'].value}
+
+    # 23-D20 (часть 1)
+    def test_login_sets_httponly_cookies(self):
+        resp = self._login()
+        access, refresh = resp.cookies['access'], resp.cookies['refresh']
+        self.assertTrue(access['httponly'])
+        self.assertTrue(refresh['httponly'])
+        self.assertEqual(access['samesite'], 'Lax')
+        self.assertEqual(refresh['samesite'], 'Lax')
+        self.assertEqual(access['path'], '/')
+        self.assertEqual(refresh['path'], '/api/v1/auth/')
+        self.assertEqual(access['max-age'], 15 * 60)
+        self.assertEqual(refresh['max-age'], 7 * 24 * 3600)
+        # Переходный режим (AUTH_TOKENS_IN_BODY): токены ещё и в теле.
+        self.assertIn('access', resp.data)
+        self.assertIn('refresh', resp.data)
+
+    def test_login_updates_last_login(self):
+        self._login()
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.last_login)
+
+    @override_settings(AUTH_COOKIE_SECURE=True)
+    def test_secure_flag_from_settings(self):
+        resp = self._login()
+        self.assertTrue(resp.cookies['access']['secure'])
+        self.assertTrue(resp.cookies['refresh']['secure'])
+
+    @override_settings(AUTH_COOKIE_SECURE=False)
+    def test_no_secure_flag_when_disabled(self):
+        resp = self._login()
+        self.assertEqual(resp.cookies['access']['secure'], '')
+
+    @override_settings(AUTH_TOKENS_IN_BODY=False)
+    def test_tokens_not_in_body_when_disabled(self):
+        resp = self._login()
+        self.assertEqual(resp.data, {'ok': True})
+        self.assertIn('access', resp.cookies)
+
+    def test_csrf_endpoint_sets_readable_cookie(self):
+        resp = self.client.get(CSRF_URL)
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(resp.cookies['csrftoken']['httponly'], '')
+
+    def test_cookie_auth_get_profile(self):
+        self._login()
+        self.client.credentials()  # только cookie, без Bearer
+        resp = self.client.get(PROFILE_URL)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['email'], self.user.email)
+
+    def test_cookie_auth_post_without_csrf_forbidden(self):
+        self._login()
+        resp = self.client.post(SHOPS_URL, {'name': 'Shop'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('CSRF', str(resp.data['detail']))
+
+    def test_cookie_auth_post_with_csrf_ok(self):
+        self._login()
+        resp = self.client.post(SHOPS_URL, {'name': 'Shop'}, format='json', **self._csrf())
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_bearer_post_without_csrf_ok(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(self.user)}')
+        resp = self.client.post(SHOPS_URL, {'name': 'Shop'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_bearer_invalid_still_401(self):
+        # Явный API-клиент с плохим токеном — 401, как в SimpleJWT.
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer garbage')
+        resp = self.client.get('/api/v1/pricing/rates/')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_expired_cookie_on_protected_is_401(self):
+        self.client.cookies['access'] = _expired_access(self.user)
+        resp = self.client.get(PROFILE_URL)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn('Bearer', resp['WWW-Authenticate'])
+
+    def test_garbage_cookie_on_allowany_get_is_anonymous(self):
+        self.client.cookies['access'] = 'garbage'
+        resp = self.client.get('/api/v1/pricing/rates/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_banned_user_cookie_is_anonymous(self):
+        self._login()
+        self.user.is_banned = True
+        self.user.save(update_fields=['is_banned'])
+        resp = self.client.get(PROFILE_URL)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # 23-D21
+    def test_refresh_from_cookie_rotates(self):
+        login = self._login()
+        old_refresh = login.cookies['refresh'].value
+        old_access = login.cookies['access'].value
+        resp = self.client.post(REFRESH_URL, **self._csrf())
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertNotEqual(resp.cookies['refresh'].value, old_refresh)
+        self.assertNotEqual(resp.cookies['access'].value, old_access)
+        self.assertEqual(resp.cookies['refresh']['path'], '/api/v1/auth/')
+
+        reuse = APIClient().post(REFRESH_URL, {'refresh': old_refresh}, format='json')
+        self.assertEqual(reuse.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(reuse.cookies['access']['max-age'], 0)
+
+    def test_refresh_from_cookie_without_csrf_forbidden(self):
+        self._login()
+        resp = self.client.post(REFRESH_URL)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_refresh_from_body_without_csrf_ok(self):
+        # Переходный фронт шлёт refresh в теле без X-CSRFToken.
+        login = self._login()
+        resp = self.client.post(REFRESH_URL, {'refresh': login.data['refresh']}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertIn('access', resp.data)
+
+    def test_refresh_garbage_is_neutral_401(self):
+        resp = APIClient().post(REFRESH_URL, {'refresh': 'garbage'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(resp.data, {'detail': 'Сесія завершилась. Увійдіть знову.'})
+
+    # Logout (01-S13)
+    def test_logout_with_expired_access_and_refresh_cookie(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(self.user)
+        self.client.cookies['access'] = _expired_access(self.user)
+        self.client.cookies['refresh'] = str(refresh)
+        resp = self.client.post(LOGOUT_URL, **self._csrf())
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertTrue(_blacklisted(refresh))
+        self.assertEqual(resp.cookies['access']['max-age'], 0)
+        self.assertEqual(resp.cookies['refresh']['max-age'], 0)
+        self.assertEqual(resp.cookies['refresh']['path'], '/api/v1/auth/')
+
+    def test_logout_refresh_cookie_without_csrf_forbidden(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(self.user)
+        self.client.cookies['refresh'] = str(refresh)
+        resp = self.client.post(LOGOUT_URL)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(_blacklisted(refresh))
+
+    def test_logout_foreign_refresh_rejected(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        foreign = RefreshToken.for_user(make_user())
+        resp = auth_client(self.user).post(LOGOUT_URL, {'refresh': str(foreign)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(_blacklisted(foreign))
+
+    def test_logout_own_refresh_in_body(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        own = RefreshToken.for_user(self.user)
+        resp = auth_client(self.user).post(LOGOUT_URL, {'refresh': str(own)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(_blacklisted(own))
+
+    def test_logout_garbage_refresh_neutral_text(self):
+        resp = APIClient().post(LOGOUT_URL, {'refresh': 'garbage'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data, {'detail': 'Сесію вже завершено.'})
+
+    def test_jwt_lifetimes_from_env(self):
+        from datetime import timedelta
+        module = _load_settings({'JWT_ACCESS_MINUTES': '30', 'JWT_REFRESH_DAYS': '14'})
+        self.assertEqual(module.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'], timedelta(minutes=30))
+        self.assertEqual(module.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'], timedelta(days=14))
+
+    def test_open_cors_disables_credentials(self):
+        # Ревью 1.3: «все origin» + credentials = любой сайт читает данные по cookie.
+        self.assertTrue(_load_settings({'CORS_ALLOW_ALL_ORIGINS': 'false'}).CORS_ALLOW_CREDENTIALS)
+        self.assertFalse(_load_settings({'CORS_ALLOW_ALL_ORIGINS': 'true'}).CORS_ALLOW_CREDENTIALS)
+
+    def test_samesite_none_rejected(self):
+        from django.core.exceptions import ImproperlyConfigured
+        with self.assertRaisesMessage(ImproperlyConfigured, 'AUTH_COOKIE_SAMESITE'):
+            _load_settings({'AUTH_COOKIE_SAMESITE': 'None'})
+
+    # Ревью 1.3: login-CSRF через кросс-сайтовую HTML-форму.
+    def test_login_form_encoded_rejected(self):
+        resp = self.client.post(TOKEN_URL, {'email': self.user.email, 'password': TEST_PASSWORD})
+        self.assertEqual(resp.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        self.assertNotIn('access', resp.cookies)
+
+    def test_logout_form_encoded_rejected(self):
+        resp = self.client.post(LOGOUT_URL, {'refresh': 'garbage'})
+        self.assertEqual(resp.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        self.assertNotIn('access', resp.cookies)
+
+    def test_login_rotates_csrf_token(self):
+        before = self._csrf()['HTTP_X_CSRFTOKEN']
+        resp = self._login()
+        self.assertNotEqual(resp.cookies['csrftoken'].value, before)
+
+    def test_cookie_post_on_allowany_without_csrf_forbidden(self):
+        # Действие от имени вошедшего (расчёт попадёт в его историю) — только с CSRF.
+        self._login()
+        resp = self.client.post('/api/v1/pricing/calculate/', {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_cookie_post_foreign_origin_forbidden(self):
+        self._login()
+        resp = self.client.post(
+            SHOPS_URL, {'name': 'Shop'}, format='json',
+            HTTP_ORIGIN='https://evil.example', **self._csrf(),
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('Origin', str(resp.data['detail']))
+
+    def test_refresh_for_deleted_user_is_401(self):
+        login = self._login()
+        self.user.delete()
+        resp = APIClient().post(REFRESH_URL, {'refresh': login.data['refresh']}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # Регрессия: эндпоинт без DRF-аутентификации cookie и CSRF не трогают.
+    def test_liqpay_callback_ignores_cookie_and_csrf(self):
+        self._login()
+        resp = self.client.post('/api/v1/payments/liqpay/callback/', {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data, {'error': 'data и signature обязательны.'})
+
+
+class CookieAuthAllowAnyTests(CleanCacheTestCase):
+    """09-Q7: протухшая cookie не ломает AllowAny-эндпоинты."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.core.management import call_command
+        call_command('seed_rates', verbosity=0)
+        call_command('seed_auction_fees', '--clear', verbosity=0)
+        cls.user = make_user()
+
+    def test_expired_cookie_on_allowany_is_anonymous(self):
+        client = APIClient(enforce_csrf_checks=True)
+        client.cookies['access'] = _expired_access(self.user)
+        resp = client.post('/api/v1/pricing/calculate/', {
+            'auction': 'copart', 'auction_price_usd': '5000', 'engine_cc': 2000,
+            'fuel_type': 'petrol', 'vehicle_year': 2018, 'member_type': 'broker',
+            'payment_type': 'secured', 'title_type': 'salvage',
+            'us_port': 'houston', 'eu_port': 'klaipeda',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, getattr(resp, 'data', None))
