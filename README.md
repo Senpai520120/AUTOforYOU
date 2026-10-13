@@ -25,7 +25,7 @@
 | Сповіщення | Telegram-бот на aiogram 3 |
 | Розгортання | Docker Compose: nginx, backend, frontend, celery worker і beat, bot, db, redis |
 | API-документація | drf-spectacular (Swagger / ReDoc) |
-| Тести | Django test runner (433) + Playwright (33) |
+| Тести | Django test runner (433) + Playwright (80 тестов, 6 из них `fixme`) |
 
 ---
 
@@ -94,7 +94,7 @@ scripts/test-backend.ps1 pricing      # один застосунок
 
 Скрипти самі обнуляють `DATABASE_URL` і `REDIS_URL`: локальний `.env` — шаблон для Docker з хостами `db`/`redis`, а `core/settings.py` його підвантажує. Без обнулення тести йдуть у Postgres/Redis з `.env` або падають. Токен Telegram у тестах обнуляється автоматично.
 
-### E2E — 33 тести, Playwright
+### E2E — 80 тестів, Playwright (6 `fixme` з посиланням на задачу)
 
 Потрібен піднятий стек. Запускати **з `frontend/`**, не з кореня репозиторію:
 
