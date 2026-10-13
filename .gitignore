@@ -56,3 +56,6 @@ htmlcov/
 
 # E2E storageState (токены тестовых пользователей)
 frontend/e2e/.auth/
+
+# e2e-стек: локальный env (шаблон — .env.e2e.example)
+.env.e2e

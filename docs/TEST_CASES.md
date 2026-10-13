@@ -47,15 +47,21 @@ npx playwright test
 
 ## E2E: роли, фикстуры, `@e2e.test`, `@smoke`/`@mobile`, `fixme` (задачи 0.4 и 0.5)
 
-Отдельный стек, боевой `.env` не используется (шаблон `.env.docker.example` + переменные e2e):
+Отдельный стек: env — только из `.env.e2e`, боевой `.env` в контейнеры не попадает (override `docker-compose.e2e.yml`, `!override` заменяет `env_file` у `backend`, `bot`, `celery_worker`, `celery_beat`; `--env-file .env.e2e` подменяет и подстановку `${VAR}` в `docker-compose.yml`).
 
 ```powershell
-cp .env.docker.example .env.e2e      # добавить E2E_SEED_ALLOWED=true, SECURE_SSL_REDIRECT=false (TLS в стеке нет) и E2E_PASSWORD=<случайный>
-docker compose -p autoforyou-e2e --env-file .env.e2e up -d --build
+cp .env.e2e.example .env.e2e         # один раз; файл не коммитится, ключей в него не вписывать; задать E2E_PASSWORD
+$dc = "-p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml"
+docker compose $dc.Split(' ') up -d --build
+docker compose -p autoforyou-e2e exec -T redis redis-cli FLUSHALL    # сброс троттлинга перед КАЖДЫМ прогоном
 docker compose -p autoforyou-e2e exec -T backend python manage.py e2e_seed
 cd frontend; $env:E2E_PASSWORD="<тот же пароль>"; npx playwright test
 docker compose -p autoforyou-e2e down -v
 ```
+
+- **Нет `.env.e2e`** — Compose останавливается с «couldn't find env file … .env.e2e»; запасного `.env` нет. Лечение: `cp .env.e2e.example .env.e2e`.
+- **Ловушка 429.** Логин и расчёт калькулятора ограничены троттлингом в Redis. Несколько прогонов подряд на одном стеке упираются в 429. Свежий стек или `redis-cli FLUSHALL` на e2e-стеке (проект `autoforyou-e2e`, не боевой Redis!) — и всё зелёное.
+- **Проверка изоляции:** положить в боевой `.env` непустой `TELEGRAM_BOT_TOKEN`, поднять стек с override, `docker compose -p autoforyou-e2e exec -T backend printenv TELEGRAM_BOT_TOKEN` — пусто (то же для `bot`, `celery_worker`). Если убрать `!override`, в контейнеры попадают ключи только из боевого `.env` (например `COMPOSE_PROJECT_NAME`). CI-джоба `e2e` делает эту проверку сама с фиктивным токеном.
 
 - **Проекты:** `setup` (ждёт `/` и `/api/v1/pricing/rates/` до 200, до 180 с; логинит 4 роли), `chromium` (всё, кроме `@mobile`), `mobile-chrome` (Pixel 7) и `mobile-safari` (iPhone 13) — только `@mobile`, `firefox` — только `@smoke`.
 - **Роли:** `buyer`, `seller`, `dealer`, `staff` (`<role>@e2e.test`, пароль из `E2E_PASSWORD`). `storageState` пишется в `frontend/e2e/.auth/<role>.json` (в `.gitignore`).

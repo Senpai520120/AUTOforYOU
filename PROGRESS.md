@@ -1,8 +1,21 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.5, 0.6a ✓, дальше 0.6b → 1.2 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, дальше 1.2 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 0.6b: боевой .env отделён от e2e-стека (2026-10-13) — ЗАВЕРШЕНО (CLAUDE.md ждёт решения)
+
+- `docker-compose.e2e.yml`: `env_file: !override [.env.e2e]` (required) у `backend`, `bot`, `celery_worker`, `celery_beat`; у `db` порт наружу снят (`!reset []`), чтобы e2e-стек не конфликтовал с dev-стеком на 5433. `.env.e2e.example` — без ключей (провайдеры пустые, `E2E_SEED_ALLOWED=true`, `E2E_PASSWORD` — заглушка). `.env.e2e` в `.gitignore`.
+- Запуск: `docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml …`. `--env-file` нужен, чтобы подстановка `${VAR}` тоже шла не из боевого `.env`.
+- Проверка через `docker compose config`: у четырёх сервисов `TELEGRAM_BOT_TOKEN` пуст при непустом токене в боевом `.env`. Мутация без `!override`: в `backend` 38 переменных вместо 37 (подмешивается ключ только из боевого `.env`) — проверка ловит. Без `.env.e2e` Compose падает с «couldn't find env file … .env.e2e».
+- CI, джоба `e2e`: `.env.e2e` из шаблона + случайные значения, переменная `DC` со всеми флагами во всех командах, шаг с фиктивным боевым `.env` и проверкой, что токена нет в контейнерах, `FLUSHALL` перед `e2e_seed`.
+- Документы: `docs/TEST_CASES.md` (запуск, нет `.env.e2e`, ловушка 429 и `FLUSHALL`, проверка изоляции), ссылка в `docs/BACKEND_TESTS.md`.
+- Тесты: backend 442 OK (код не менялся). **Живой e2e-прогон не выполнен**: порты 80 и 5433 заняты запущенным dev-стеком `autoforyou` (чужие контейнеры не трогали). Нужно остановить его и прогнать: два прогона подряд после `FLUSHALL` без 429 + `printenv TELEGRAM_BOT_TOKEN` в `backend`/`celery_worker`. CI-джоба не запускалась локально.
+- Замечание: `RuntimeWarning: coroutine 'send_notification.<locals>._send' was never awaited` при прогоне тестов — не ошибка, разобрать позже.
+- **CLAUDE.md — ждёт решения владельца.** Предложение (полный текст по пунктам): `docs/tasks/0.6-test-factories-docs.md`, раздел «Что добавить в CLAUDE.md». Кратко: (1) таблица приложений +11 приложений, `core` — проект; (2) «Тестирование — правила»: скрипты `test-backend`, нет сети в тестах, `tests/factories.py`, `CleanCacheTestCase`, один код в ассерте, проверка мутацией, 401/403 на личные данные; (3) «E2E — правила»: стек с override + `FLUSHALL` + `e2e_seed`, `@e2e.test`, `@smoke`/`@mobile`, `fixme`; (4) «Известные ловушки»; (5) «Определение готово» — ссылка на BRIEF §5.
 
 ---
 

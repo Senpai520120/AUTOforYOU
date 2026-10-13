@@ -2,7 +2,7 @@
 
 Разбор 442 тестов Django: что покрыто, как распределено по типам, где дыры.
 
-E2E-тесты Playwright — отдельно, [`docs/TEST_CASES.md`](TEST_CASES.md).
+E2E-тесты Playwright — отдельно, [`docs/TEST_CASES.md`](TEST_CASES.md). Стек для них поднимается с `docker-compose.e2e.yml` и `.env.e2e` (боевой `.env` не используется), перед прогоном — `redis-cli FLUSHALL` на e2e-стеке (иначе 429 на логин и расчёт); команды — в разделе «E2E» там же.
 
 ---
 

@@ -1,0 +1,33 @@
+# Override для e2e-стека (Playwright). Боевой .env в этот стек не попадает.
+#
+# Запуск (из корня репозитория; один раз: cp .env.e2e.example .env.e2e):
+#   docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+#
+# `--env-file .env.e2e` подменяет и подстановку ${VAR} в docker-compose.yml
+# (POSTGRES_*, NEXT_PUBLIC_*), которую иначе Compose брал бы из корневого .env.
+# `!override` заменяет env_file базового файла, а не добавляет к нему: без
+# этого Compose сложил бы списки и боевые токены попали бы в контейнеры.
+# required: true — без .env.e2e Compose останавливается с ошибкой
+# «env file … .env.e2e not found»; запасного .env нет.
+#
+# Если ошибка: cp .env.e2e.example .env.e2e
+services:
+  backend:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+  bot:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+  celery_worker:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+  celery_beat:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+  # Порт БД наружу e2e не нужен; без этого стек конфликтует с dev-стеком на 5433.
+  db:
+    ports: !reset []
