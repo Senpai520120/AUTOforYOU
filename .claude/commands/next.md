@@ -39,6 +39,9 @@ argument-hint: "[номер задачи, например 0.3 — необяз�
 - В конце через `test-runner`: полный `scripts/test-backend.ps1`; если менялся фронт —
   `npm run build` и `npx tsc --noEmit`; Playwright-спеки этой задачи (Docker Desktop должен быть запущен;
   если стек не поднимается — запиши в отчёт, не трать попытки).
+- Для e2e разрешено без вопроса (постоянное разрешение владельца): остановить dev-стек `docker compose down`
+  **без `-v`**, поднять e2e-стек (команды — CLAUDE.md, «E2E»), после прогона удалить e2e-стек с томами
+  (`docker compose -p autoforyou-e2e … down -v`) и поднять dev-стек обратно (`docker compose up -d`).
 
 ## 6. Ревью безопасности
 
