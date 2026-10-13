@@ -5,10 +5,11 @@ export interface User {
   last_name: string;
   phone: string;
   // role — мітка, а не привілей. Нова реєстрація завжди 'buyer'; broker, moderator
-  // і admin призначає лише адмін. Права перевіряються по is_staff і is_verified_dealer.
+  // і admin призначає лише адмін. Права перевіряються по is_admin_role і is_verified_dealer (is_staff — лише доступ в адмінку).
   role: 'buyer' | 'dealer' | 'broker' | 'moderator' | 'admin';
   is_verified_dealer: boolean;
   is_staff: boolean;
+  is_admin_role: boolean;
   created_at: string;
   telegram_id: number | null;
 }

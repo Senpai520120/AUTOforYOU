@@ -14,7 +14,7 @@ export default function B2BPage() {
   const [data, setData] = useState<PaginatedResponse<Listing> | null>(null);
   const [fetching, setFetching] = useState(true);
 
-  const canAccess = user && (user.is_verified_dealer || user.is_staff);
+  const canAccess = user && (user.is_verified_dealer || user.is_admin_role);
 
   useEffect(() => {
     if (!loading && !user) { router.push('/login'); return; }

@@ -8,7 +8,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from tests.factories import make_staff, make_user
+from tests.factories import make_admin_role, make_broker, make_moderator, make_staff, make_user
 from vehicles.models import Vehicle
 
 from .models import Shipment
@@ -20,7 +20,8 @@ class TestShipmentAccess(APITestCase):
     def setUp(self):
         self.watcher = make_user('watcher@test.com')
         self.stranger = make_user('stranger_ship@test.com')
-        self.staff = make_staff('staff_ship@test.com')
+        self.staff = make_staff('staff_ship@test.com')  # is_staff без роли admin
+        self.admin = make_admin_role('admin_ship@test.com')
 
         self.vehicle = Vehicle.objects.create(
             vin='1HGBH41JXMN109186', make='Toyota', model='Camry', year=2020,
@@ -83,11 +84,42 @@ class TestShipmentAccess(APITestCase):
 
     # ── Адміністратор ─────────────────────────────────────────────────────────
 
-    def test_staff_sees_all_shipments(self):
-        self.client.force_authenticate(user=self.staff)
+    def test_admin_sees_all_shipments(self):
+        self.client.force_authenticate(user=self.admin)
         resp = self.client.get(LIST_URL)
         self.assertEqual(resp.data['count'], 1)
 
-    def test_staff_reads_any_detail(self):
-        self.client.force_authenticate(user=self.staff)
+    def test_admin_reads_any_detail(self):
+        self.client.force_authenticate(user=self.admin)
         self.assertEqual(self.client.get(self._detail_url()).status_code, status.HTTP_200_OK)
+
+    def test_bare_is_staff_sees_nothing(self):
+        # is_staff без роли admin — только доступ в Django Admin.
+        self.client.force_authenticate(user=self.staff)
+        self.assertEqual(self.client.get(LIST_URL).data['count'], 0)
+        self.assertEqual(self.client.get(self._detail_url()).status_code, status.HTTP_404_NOT_FOUND)
+
+    # ── broker / moderator с is_staff=True: чужие контейнеры не видят ─────────
+
+    def test_broker_sees_empty_list(self):
+        self.client.force_authenticate(user=make_broker())
+        self.assertEqual(self.client.get(LIST_URL).data['count'], 0)
+
+    def test_broker_cannot_read_foreign_detail(self):
+        self.client.force_authenticate(user=make_broker())
+        self.assertEqual(self.client.get(self._detail_url()).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_broker_in_watchers_sees_own_shipment(self):
+        broker = make_broker()
+        self.shipment.watchers.add(broker)
+        self.client.force_authenticate(user=broker)
+        self.assertEqual(self.client.get(LIST_URL).data['count'], 1)
+        self.assertEqual(self.client.get(self._detail_url()).status_code, status.HTTP_200_OK)
+
+    def test_moderator_sees_empty_list(self):
+        self.client.force_authenticate(user=make_moderator())
+        self.assertEqual(self.client.get(LIST_URL).data['count'], 0)
+
+    def test_moderator_cannot_read_foreign_detail(self):
+        self.client.force_authenticate(user=make_moderator())
+        self.assertEqual(self.client.get(self._detail_url()).status_code, status.HTTP_404_NOT_FOUND)

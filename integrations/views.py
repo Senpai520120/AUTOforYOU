@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from users.permissions import IsAdminRole
+
 from .importer import import_lot
 from .models import RegistryReport, VinReport
 from .providers import (
@@ -205,7 +207,7 @@ class RegistryReportView(APIView):
     },
 )
 class LotImportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminRole]
 
     def post(self, request):
         ser = LotImportRequestSerializer(data=request.data)

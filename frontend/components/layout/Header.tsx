@@ -45,7 +45,7 @@ export default function Header() {
           {/* Той самий признак, що й на бекенді (IsVerifiedDealerOrAdmin).
               Раніше тут стояло user.role === 'admin' — користувач бачив
               посилання на B2B-дошку, а у відповідь отримував 403. */}
-          {user && (user.is_verified_dealer || user.is_staff) ? (
+          {user && (user.is_verified_dealer || user.is_admin_role) ? (
             <Link href="/b2b" className="hover:text-amber-400 transition-colors">B2B</Link>
           ) : user ? (
             <Link href="/dealers/apply" className="text-amber-300 hover:text-amber-400 transition-colors text-xs border border-amber-400/40 px-2 py-1 rounded">

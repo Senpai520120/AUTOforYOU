@@ -3773,6 +3773,9 @@ components:
           title: Статус персонала
           description: Отметьте, если пользователь может входить в административную
             часть сайта.
+        is_admin_role:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3785,6 +3788,7 @@ components:
       - created_at
       - email
       - id
+      - is_admin_role
       - is_staff
       - is_verified_dealer
       - role

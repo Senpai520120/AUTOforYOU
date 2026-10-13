@@ -34,11 +34,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    is_admin_role = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = CustomUser
         fields = (
             'id', 'email', 'first_name', 'last_name', 'phone', 'role',
-            'is_verified_dealer', 'is_staff', 'created_at', 'telegram_id',
+            'is_verified_dealer', 'is_staff', 'is_admin_role', 'created_at', 'telegram_id',
         )
         # role только для чтения: смена роли — не самообслуживание.
         # Без этого PATCH /auth/profile/ {"role": "admin"} проходил и открывал
@@ -50,7 +52,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # на B2B-доску, а в ответ получал 403.
         read_only_fields = (
             'id', 'email', 'role', 'is_verified_dealer', 'is_staff',
-            'created_at', 'telegram_id',
+            'is_admin_role', 'created_at', 'telegram_id',
         )
 
 

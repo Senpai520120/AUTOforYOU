@@ -166,7 +166,7 @@ class TestB2BGating(APITestCase):
 
     def test_unauthenticated_gets_401(self):
         resp = self.client.get(self.B2B_URL)
-        self.assertIn(resp.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_regular_user_gets_403(self):
         user = make_user('plain@test.com')
@@ -387,6 +387,25 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         resp = self.client.get(PROFILE_URL)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue(resp.data['is_staff'])
+
+    def test_profile_exposes_is_admin_role(self):
+        self.client.force_authenticate(user=make_admin_role('adminflag@test.com'))
+        resp = self.client.get(PROFILE_URL)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIs(resp.data['is_admin_role'], True)
+
+    def test_profile_is_admin_role_false_for_broker_with_is_staff(self):
+        self.client.force_authenticate(user=make_broker('brokerflag@test.com'))
+        resp = self.client.get(PROFILE_URL)
+        self.assertIs(resp.data['is_staff'], True)
+        self.assertIs(resp.data['is_admin_role'], False)
+
+    def test_patch_profile_cannot_set_is_admin_role(self):
+        user = make_user('escalate_adminrole@test.com')
+        self.client.force_authenticate(user=user)
+        resp = self.client.patch(PROFILE_URL, {'is_admin_role': True}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIs(resp.data['is_admin_role'], False)
 
     def test_profile_is_staff_false_for_regular_user(self):
         self.client.force_authenticate(user=make_user('plain@test.com'))

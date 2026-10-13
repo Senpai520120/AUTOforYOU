@@ -12,7 +12,7 @@ from integrations.importer import import_lot
 from integrations.models import RegistryReport
 from integrations.providers import ApifyLotProvider, ManualLotProvider, RealOpendatabotProvider
 from listings.models import Listing
-from tests.factories import auth_client, make_staff, make_user
+from tests.factories import auth_client, make_admin_role, make_broker, make_moderator, make_staff, make_user
 from vehicles.models import Vehicle, VehicleImage
 
 
@@ -414,6 +414,19 @@ class TestLotImportEndpoint(TestCase):
             'lot_data': _VALID_LOT,
         }, format='json')
         self.assertEqual(resp.status_code, 401)
+
+    def _post_as(self, user):
+        self.client.force_authenticate(user)
+        return self.client.post(self.URL, {'source': 'manual', 'lot_data': _VALID_LOT}, format='json')
+
+    def test_broker_with_is_staff_gets_403(self):
+        self.assertEqual(self._post_as(make_broker()).status_code, 403)
+
+    def test_moderator_with_is_staff_gets_403(self):
+        self.assertEqual(self._post_as(make_moderator()).status_code, 403)
+
+    def test_admin_role_can_import(self):
+        self.assertEqual(self._post_as(make_admin_role()).status_code, 201)
 
     def test_invalid_vin_returns_400(self):
         self.client.force_authenticate(self.admin)

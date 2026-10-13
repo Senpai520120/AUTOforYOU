@@ -3,7 +3,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema
 from rest_framework import filters, generics, permissions
 
 from .models import Listing
-from .permissions import IsVerifiedDealerOrAdmin
+from .permissions import IsVerifiedDealerOrAdmin, can_view_wholesale
 from .serializers import ListingCreateSerializer, ListingSerializer
 
 
@@ -59,8 +59,7 @@ class ListingListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        is_dealer = user.is_authenticated and (user.is_verified_dealer or user.is_staff)
-        qs = _base_queryset() if is_dealer else _base_queryset().filter(channel=Listing.Channel.RETAIL)
+        qs = _base_queryset() if can_view_wholesale(user) else _base_queryset().filter(channel=Listing.Channel.RETAIL)
         return _apply_filters(qs, self.request.query_params)
 
 
@@ -75,7 +74,7 @@ class ListingDetailView(generics.RetrieveAPIView):
         qs = _base_queryset()
         user = self.request.user
         # Wholesale только для дилеров/админов
-        if not (user.is_authenticated and (user.is_verified_dealer or user.is_staff)):
+        if not can_view_wholesale(user):
             qs = qs.filter(channel=Listing.Channel.RETAIL)
         return qs
 

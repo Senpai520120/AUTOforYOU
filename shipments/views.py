@@ -15,7 +15,7 @@ def _visible_to(user):
     приватна MyShipmentsView з фільтром по ньому: контроль доступу задумувався,
     але публічна в'ю його ігнорувала.
     """
-    if user.is_staff:
+    if user.is_admin_role:
         return Shipment.objects.all()
     return Shipment.objects.filter(watchers=user)
 

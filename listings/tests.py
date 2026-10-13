@@ -8,8 +8,64 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from listings.models import Listing
-from tests.factories import make_dealer, make_listing, make_staff, make_user, make_vehicle
+from tests.factories import (
+    make_admin_role, make_broker, make_dealer, make_listing, make_moderator,
+    make_staff, make_user, make_vehicle,
+)
 from vehicles.models import Vehicle
+
+
+class TestWholesaleListGating(APITestCase):
+    """Список /listings/: wholesale видят только дилер и admin; is_staff без роли не даёт."""
+
+    URL = '/api/v1/listings/'
+
+    def setUp(self):
+        seller = make_user('seller_list@test.com')
+        self.retail = make_listing(make_vehicle(vin='LISTVIN000000001'), seller, channel='retail')
+        self.wholesale = make_listing(make_vehicle(vin='LISTVIN000000002'), seller, channel='wholesale')
+
+    def _ids(self, user):
+        self.client.force_authenticate(user)
+        resp = self.client.get(self.URL)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        return {item['id'] for item in resp.data['results']}
+
+    def test_broker_sees_retail_only(self):
+        self.assertEqual(self._ids(make_broker()), {self.retail.id})
+
+    def test_moderator_sees_retail_only(self):
+        self.assertEqual(self._ids(make_moderator()), {self.retail.id})
+
+    def test_admin_role_sees_all(self):
+        self.assertEqual(self._ids(make_admin_role()), {self.retail.id, self.wholesale.id})
+
+    def test_dealer_sees_all(self):
+        self.assertEqual(self._ids(make_dealer()), {self.retail.id, self.wholesale.id})
+
+
+class TestB2BBoardByRole(APITestCase):
+    URL = '/api/v1/b2b/board/'
+
+    def test_anon_gets_401(self):
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_broker_with_is_staff_gets_403(self):
+        self.client.force_authenticate(make_broker())
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_moderator_with_is_staff_gets_403(self):
+        self.client.force_authenticate(make_moderator())
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_role_gets_200(self):
+        self.client.force_authenticate(make_admin_role())
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_200_OK)
+
+    def test_dealer_gets_200(self):
+        self.client.force_authenticate(make_dealer())
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_200_OK)
+
 
 class TestWholesaleListingDetailGating(APITestCase):
     """
@@ -47,6 +103,22 @@ class TestWholesaleListingDetailGating(APITestCase):
         self.client.force_authenticate(admin)
         resp = self.client.get(self._url())
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_broker_with_is_staff_gets_404_on_wholesale_detail(self):
+        broker = make_broker()
+        self.assertTrue(broker.is_staff)
+        self.client.force_authenticate(broker)
+        self.assertEqual(self.client.get(self._url()).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_moderator_with_is_staff_gets_404_on_wholesale_detail(self):
+        moderator = make_moderator()
+        self.assertTrue(moderator.is_staff)
+        self.client.force_authenticate(moderator)
+        self.assertEqual(self.client.get(self._url()).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_admin_role_can_access_wholesale_detail(self):
+        self.client.force_authenticate(make_admin_role())
+        self.assertEqual(self.client.get(self._url()).status_code, status.HTTP_200_OK)
 
     def test_retail_listing_accessible_to_all(self):
         v2 = make_vehicle(vin='TESTVINHD000002')
