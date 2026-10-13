@@ -4,6 +4,16 @@
 
 ---
 
+## Задача 0.4: Инфраструктура e2e (2026-10-13) — ЗАВЕРШЕНО
+
+- Команды `users`: `e2e_seed` (только при `E2E_SEED_ALLOWED=true`, пароль из `E2E_PASSWORD`, идемпотентна) и `e2e_cleanup` (только `@e2e.test` и `[E2E]`). 5 новых тестов в `users/tests_e2e_seed.py`.
+- Playwright: проекты `setup`, `chromium`, `firefox` (`@smoke`), `mobile-chrome`, `mobile-safari` (`@mobile`); белый список хоста `E2E_BASE_URL` (обход — `E2E_ALLOW_REMOTE=1`); `auth.setup.ts`, `fixtures.ts`, `auth-smoke.spec.ts`; storageState в `frontend/e2e/.auth/` (в .gitignore).
+- CI: джоба `e2e` — seed, три браузера, cleanup `if: always()`. `.dockerignore`: добавлено `!frontend/e2e/fixtures/` (решение владельца), чтобы сид видел фото.
+- Маркер `[E2E]` для `LocalListing` лежит в `description` (поля заголовка у модели нет).
+- Схема БД не менялась.
+
+---
+
 ## Задача 0.3: Фальшиво-зелёные тесты (2026-10-12) — ЗАВЕРШЕНО
 
 - Исправлены 13-Q1…Q9 и 13-Q10 (часть). Новый хелпер `frontend/e2e/helpers/network.ts` (`expectNoRequest`). В `local_listings/tests.py` оба ассерта сужены до 401. Остальные правки — в `pricing`, `deals`, `tests/`.

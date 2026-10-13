@@ -11,7 +11,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Серверний рендер каталогів', () => {
+test.describe('Серверний рендер каталогів @smoke', () => {
   test.use({ javaScriptEnabled: false });
 
   test('каталог України віддає вміст без JavaScript', async ({ page }) => {

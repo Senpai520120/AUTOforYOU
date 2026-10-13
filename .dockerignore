@@ -13,6 +13,7 @@ db.sqlite3
 media/
 backups/
 frontend/
+!frontend/e2e/fixtures/
 .idea/
 docs/
 tests/

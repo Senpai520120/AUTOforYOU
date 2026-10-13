@@ -112,6 +112,19 @@ npx playwright test
 | `npm run test:e2e:report` | HTML-звіт останнього прогону |
 | `npm run test:e2e:codegen` | Запис дій у код |
 
+### E2E-стек (окремий compose-проект)
+
+Боєвий `.env` не використовується: беремо `.env.docker.example` + `E2E_SEED_ALLOWED=true`, `SECURE_SSL_REDIRECT=false` (у стека немає TLS, інакше API редіректить на https), `E2E_PASSWORD=<випадковий>` (лише для тестового стека).
+
+```bash
+docker compose -p autoforyou-e2e up -d --build
+docker compose -p autoforyou-e2e exec -T backend python manage.py e2e_seed
+cd frontend && E2E_PASSWORD=<той самий> npx playwright test
+docker compose -p autoforyou-e2e down -v
+```
+
+Конфіг відмовляється працювати з `E2E_BASE_URL`, якого немає в білому списку (localhost, 127.0.0.1, nginx, frontend), якщо не задано `E2E_ALLOW_REMOTE=1`. Деталі — [`docs/TEST_CASES.md`](docs/TEST_CASES.md).
+
 Детальний розбір усіх тест-кейсів — [`docs/TEST_CASES.md`](docs/TEST_CASES.md).
 
 ---

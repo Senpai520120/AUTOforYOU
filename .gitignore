@@ -53,3 +53,6 @@ blob-report/
 # coverage.py
 .coverage
 htmlcov/
+
+# E2E storageState (токены тестовых пользователей)
+frontend/e2e/.auth/

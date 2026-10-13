@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test';
 // відсутності банера ловила б футер і завжди була б хибною.
 const DEMO_BANNER = 'Тестові тарифи — розрахунок демонстраційний';
 
-test.describe('Каталог імпорту з США', () => {
+test.describe('Каталог імпорту з США @smoke', () => {
   test('сторінка каталогу відповідає 200 і рендерить заголовок', async ({ page }) => {
     const resp = await page.goto('/listings');
     expect(resp?.status()).toBe(200);

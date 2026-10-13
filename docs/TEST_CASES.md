@@ -45,6 +45,30 @@ npx playwright test
 
 ---
 
+## E2E-стек, роли и фикстуры (задача 0.4)
+
+Отдельный стек, боевой `.env` не используется (шаблон `.env.docker.example` + переменные e2e):
+
+```powershell
+cp .env.docker.example .env.e2e      # добавить E2E_SEED_ALLOWED=true, SECURE_SSL_REDIRECT=false (TLS в стеке нет) и E2E_PASSWORD=<случайный>
+docker compose -p autoforyou-e2e --env-file .env.e2e up -d --build
+docker compose -p autoforyou-e2e exec -T backend python manage.py e2e_seed
+cd frontend; $env:E2E_PASSWORD="<тот же пароль>"; npx playwright test
+docker compose -p autoforyou-e2e down -v
+```
+
+- **Проекты:** `setup` (ждёт `/` и `/api/v1/pricing/rates/` до 200, до 180 с; логинит 4 роли), `chromium` (всё, кроме `@mobile`), `mobile-chrome` (Pixel 7) и `mobile-safari` (iPhone 13) — только `@mobile`, `firefox` — только `@smoke`.
+- **Роли:** `buyer`, `seller`, `dealer`, `staff` (`<role>@e2e.test`, пароль из `E2E_PASSWORD`). `storageState` пишется в `frontend/e2e/.auth/<role>.json` (в `.gitignore`).
+- **Фикстуры** (`e2e/fixtures.ts`): `api(role)` — API-контекст с токеном; `uniqueEmail` — `e2e-<ts>-<worker>@e2e.test`; `asRole(role)` — путь к storageState. В спеке: `test.use({ storageState: storageStatePath('buyer') })`.
+- **Теги:** `@smoke` в названии describe — публичные проверки (идут и в firefox); `@mobile` — мобильные сценарии.
+- **Регистрация** в тестах — только на `@e2e.test`; чистка: `manage.py e2e_cleanup`.
+
+Ручные проверки обхода:
+1. Неверный пароль: `$env:E2E_PASSWORD="wrong"; npx playwright test --project=setup` — `вхід buyer` падает с сообщением «неправильний E2E_PASSWORD або не виконано e2e_seed».
+2. Белый список: `$env:E2E_BASE_URL="https://example.com"; npx playwright test --list` — ошибка «не в білому списку»; с `E2E_ALLOW_REMOTE=1` конфиг загружается (только для `@smoke`).
+
+---
+
 ## Сводка
 
 **33 теста в 6 файлах**, прогон около 18 секунд.

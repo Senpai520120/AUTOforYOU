@@ -129,6 +129,13 @@ jobs:
           # Стек поднимается с DEBUG=false — как в проде. Но TLS здесь нет,
           # и без этого Django редиректил бы весь HTTP на HTTPS.
           echo "SECURE_SSL_REDIRECT=false" >> .env
+          # Только для тестового стека: разрешение e2e_seed и случайный пароль
+          # тестовых пользователей (маскируем в логах).
+          E2E_PASS="e2e_$(head -c 18 /dev/urandom | base64 | tr -d '[:space:]/+=')"
+          echo "::add-mask::${E2E_PASS}"
+          echo "E2E_SEED_ALLOWED=true" >> .env
+          echo "E2E_PASSWORD=${E2E_PASS}" >> .env
+          echo "E2E_PASSWORD=${E2E_PASS}" >> "$GITHUB_ENV"
           echo "==== .env (без значений) ===="
           cut -d= -f1 .env | grep -v '^#' | grep -v '^$' | sort -u
 
@@ -147,6 +154,9 @@ jobs:
           docker compose logs --tail 100
           exit 1
 
+      - name: Seed e2e data
+        run: docker compose exec -T backend python manage.py e2e_seed
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -158,13 +168,19 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Install Chromium
+      - name: Install browsers
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run Playwright
         working-directory: frontend
         run: npx playwright test
+        env:
+          E2E_PASSWORD: ${{ env.E2E_PASSWORD }}
+
+      - name: Clean up e2e data
+        if: always()
+        run: docker compose exec -T backend python manage.py e2e_cleanup
 
       - name: Upload report
         if: always()

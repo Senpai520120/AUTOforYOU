@@ -8,7 +8,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Головна сторінка', () => {
+test.describe('Головна сторінка @smoke', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem('cookie_consent', 'necessary');
