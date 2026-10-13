@@ -2,34 +2,14 @@
 Тесты B2B-гейтинга на уровне detail-вьюхи листинга.
 Проверяет, что прямой доступ по ID к wholesale-листингу возвращает 404 для неверифицированных.
 """
-from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from listings.models import Listing
+from tests.factories import make_dealer, make_listing, make_staff, make_user, make_vehicle
 from vehicles.models import Vehicle
-
-User = get_user_model()
-
-
-def _make_user(email='user@test.com', **kwargs):
-    return User.objects.create_user(email=email, password='testpass123', **kwargs)
-
-
-def _make_vehicle(vin='TESTVINHD000001'):
-    return Vehicle.objects.create(
-        make='Ford', model='F-150', year=2021, vin=vin,
-        fuel_type='petrol', engine_cc=3500, mileage_km=20000,
-    )
-
-
-def _make_listing(vehicle, seller, channel='retail'):
-    return Listing.objects.create(
-        vehicle=vehicle, seller=seller, price=15000, currency='USD', channel=channel,
-    )
-
 
 class TestWholesaleListingDetailGating(APITestCase):
     """
@@ -38,9 +18,9 @@ class TestWholesaleListingDetailGating(APITestCase):
     """
 
     def setUp(self):
-        self.seller = _make_user('seller@test.com')
-        self.vehicle = _make_vehicle()
-        self.wholesale = _make_listing(self.vehicle, self.seller, channel='wholesale')
+        self.seller = make_user('seller@test.com')
+        self.vehicle = make_vehicle()
+        self.wholesale = make_listing(self.vehicle, self.seller, channel='wholesale')
 
     def _url(self):
         return f'/api/v1/listings/{self.wholesale.id}/'
@@ -50,27 +30,27 @@ class TestWholesaleListingDetailGating(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_regular_user_gets_404_on_wholesale_detail(self):
-        user = _make_user('buyer@test.com')
+        user = make_user('buyer@test.com')
         self.client.force_authenticate(user)
         resp = self.client.get(self._url())
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_verified_dealer_can_access_wholesale_detail(self):
-        dealer = _make_user('dealer@test.com', is_verified_dealer=True, role='dealer')
+        dealer = make_dealer()
         self.client.force_authenticate(dealer)
         resp = self.client.get(self._url())
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data['id'], self.wholesale.id)
 
     def test_admin_can_access_wholesale_detail(self):
-        admin = User.objects.create_superuser(email='adm@test.com', password='pass')
+        admin = make_staff(superuser=True)
         self.client.force_authenticate(admin)
         resp = self.client.get(self._url())
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     def test_retail_listing_accessible_to_all(self):
-        v2 = _make_vehicle('TESTVINHD000002')
-        retail = _make_listing(v2, self.seller, channel='retail')
+        v2 = make_vehicle(vin='TESTVINHD000002')
+        retail = make_listing(v2, self.seller, channel='retail')
         resp = self.client.get(f'/api/v1/listings/{retail.id}/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
@@ -85,11 +65,11 @@ class TestListingListQueryCount(APITestCase):
     """
 
     def setUp(self):
-        self.seller = _make_user('seller_qc@test.com')
+        self.seller = make_user('seller_qc@test.com')
         # Создаём 5 листингов с разными автомобилями
         for i in range(5):
-            v = _make_vehicle(f'QCVIN0000000{i:04d}')
-            _make_listing(v, self.seller, channel='retail')
+            v = make_vehicle(vin=f'QCVIN0000000{i:04d}')
+            make_listing(v, self.seller, channel='retail')
 
     def test_listing_list_query_count(self):
         # 3 запроса: COUNT (пагинация) + Listing JOIN Vehicle+Seller + prefetch VehicleImage
@@ -105,8 +85,8 @@ class TestListingListQueryCount(APITestCase):
     def test_listing_list_scales_flat(self):
         """15 листингов — всё равно ровно 3 запроса (нет N+1)."""
         for i in range(10):
-            v = _make_vehicle(f'SCALEVIN{i:08d}')
-            _make_listing(v, self.seller, channel='retail')
+            v = make_vehicle(vin=f'SCALEVIN{i:08d}')
+            make_listing(v, self.seller, channel='retail')
 
         with self.assertNumQueries(3):
             resp = self.client.get('/api/v1/listings/')
@@ -127,7 +107,7 @@ class TestListingChoiceConstraints(TestCase):
     """
 
     def setUp(self):
-        self.user = User.objects.create_user(email='constraint@test.com', password='pass')
+        self.user = make_user()
         self.vehicle = Vehicle.objects.create(
             vin='WBAVA37547NL12345', make='BMW', model='X5', year=2019,
             engine_cc=3000, fuel_type='diesel', mileage_km=80000,

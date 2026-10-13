@@ -4,27 +4,16 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from integrations.importer import import_lot
 from integrations.models import RegistryReport
 from integrations.providers import ApifyLotProvider, ManualLotProvider, RealOpendatabotProvider
 from listings.models import Listing
+from tests.factories import auth_client, make_staff, make_user
 from vehicles.models import Vehicle, VehicleImage
-
-
-def _auth_client(email='registry_test@test.com'):
-    """Возвращает APIClient с JWT авторизованного тестового пользователя."""
-    User = get_user_model()
-    user = User.objects.create_user(email=email, password='pass')
-    refresh = RefreshToken.for_user(user)
-    client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(refresh.access_token)}')
-    return client
 
 
 # ── Провайдер: без ключа → demo ───────────────────────────────────────────────
@@ -136,7 +125,7 @@ class TestRegistryReportEndpoint(APITestCase):
         from django.core.cache import cache
         cache.clear()
         RegistryReport.objects.all().delete()
-        self.client = _auth_client('endpoint_test@test.com')
+        self.client = auth_client(make_user('endpoint_test@test.com'))
 
     @patch('integrations.views.get_opendatabot_provider')
     def test_successful_response_has_required_fields(self, mock_factory):
@@ -233,7 +222,7 @@ class TestRegistryReportCacheSave(TestCase):
         }
         mock_factory.return_value = mock_provider
 
-        client = _auth_client()
+        client = auth_client(make_user())
         client.get('/api/v1/vehicles/1HGBH41JXMN109186/registry/')
 
         self.assertEqual(
@@ -333,11 +322,7 @@ class TestApifyLotProvider(SimpleTestCase):
 class TestImportLotService(TestCase):
 
     def setUp(self):
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        self.seller = User.objects.create_superuser(
-            email='admin@test.com', password='pass',
-        )
+        self.seller = make_staff('admin@test.com', superuser=True)
         Vehicle.objects.filter(vin='1HGBH41JXMN109186').delete()
 
     def _lot_data(self):
@@ -400,11 +385,8 @@ class TestLotImportEndpoint(TestCase):
     URL = '/api/v1/lots/import/'
 
     def setUp(self):
-        from django.contrib.auth import get_user_model
-        from rest_framework.test import APIClient
-        User = get_user_model()
-        self.admin = User.objects.create_superuser(email='adm@lots.com', password='pass')
-        self.user = User.objects.create_user(email='buyer@lots.com', password='pass')
+        self.admin = make_staff('adm@lots.com', superuser=True)
+        self.user = make_user('buyer@lots.com')
         self.client = APIClient()
         Vehicle.objects.filter(vin='1HGBH41JXMN109186').delete()
 
@@ -479,16 +461,17 @@ class TestRegistryRequiresAuth(TestCase):
         from rest_framework.test import APIClient
         client = APIClient()
         resp = client.get(REGISTRY_URL)
-        self.assertIn(resp.status_code, [401, 403])
+        self.assertEqual(resp.status_code, 401)
 
     def test_authenticated_user_can_access(self):
-        client = _auth_client('registry_access_unique@test.com')
+        client = auth_client(make_user('registry_access_unique@test.com'))
         with patch('integrations.views.get_opendatabot_provider') as mock_prov:
             mock_prov.return_value.get_vehicle_info.return_value = {
                 'vin': '1HGBH41JXMN109186', 'demo': True, 'provider': 'opendatabot',
             }
             resp = client.get(REGISTRY_URL)
         self.assertEqual(resp.status_code, 200)
+        mock_prov.return_value.get_vehicle_info.assert_called_once()
 
 
 class TestExpensiveEndpointThrottle(TestCase):
@@ -500,7 +483,7 @@ class TestExpensiveEndpointThrottle(TestCase):
 
     def test_registry_throttle_deny_returns_429(self):
         from rest_framework.throttling import ScopedRateThrottle
-        client = _auth_client('thr1@test.com')
+        client = auth_client(make_user('thr1@test.com'))
         with patch.object(ScopedRateThrottle, 'allow_request', return_value=False), \
              patch.object(ScopedRateThrottle, 'wait', return_value=60.0):
             resp = client.get(REGISTRY_URL)
@@ -526,8 +509,7 @@ class TestImportLotTaskIdempotency(TestCase):
     """
 
     def setUp(self):
-        User = get_user_model()
-        self.seller = User.objects.create_user(email='seller_celery@test.com', password='pass')
+        self.seller = make_user('seller_celery@test.com')
 
     _LOT = {
         'vin': 'CELERYTEST00001',
@@ -580,7 +562,7 @@ class VinReportAccessTest(APITestCase):
         self.assertEqual(self.client.get(self.URL).status_code, 401)
 
     def test_authenticated_allowed(self):
-        user = get_user_model().objects.create_user(email='vin@test.com', password='pass1234')
+        user = make_user('vin@test.com')
         self.client.force_authenticate(user=user)
         # Платный Opendatabot замокан — реального запроса нет (13-S9).
         with patch('integrations.views.get_opendatabot_provider') as mock_prov:

@@ -1,6 +1,6 @@
 # Backend-тесты
 
-Разбор 433 тестов Django: что покрыто, как распределено по типам, где дыры.
+Разбор 442 тестов Django: что покрыто, как распределено по типам, где дыры.
 
 E2E-тесты Playwright — отдельно, [`docs/TEST_CASES.md`](TEST_CASES.md).
 
@@ -25,7 +25,7 @@ scripts/test-backend.ps1 users.tests.TestB2BGating   # один класс
 scripts/test-backend.ps1 -v2                         # с именами тестов
 ```
 
-### Изоляция
+### Изоляция (задача 0.2)
 
 Под тест-раннером (`'test' in sys.argv`, флаг `_TESTING` в `core/settings.py`) результат не зависит от `.env`:
 
@@ -38,6 +38,14 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 
 БД для тестов создаётся и удаляется автоматически. Прогон занимает около 4,5 минут.
 
+### Тестовые данные: `tests/factories.py` (задача 0.6)
+
+Простые функции без `factory_boy`: `make_user` (email по счётчику, `is_email_verified=True`; `verified=False` — неподтверждённый), `make_dealer`, `make_staff(superuser=...)`, `auth_client(user)` (JWT через `RefreshToken`), `make_region_city`, `make_local_listing`, `make_vehicle`, `make_listing`. Локальные `_make_user`/`_auth_client` в тестах не заводят; допустимы только тонкие обёртки с особой сигнатурой (`_make_listing` в `local_listings`, `make_listing` в `tests/test_favorites…`). Точечные проверки (B2B-гейтинг, wholesale в каталоге, согласие, 409, registry 401/429) живут в тестах своего приложения, а `tests/test_e2e.py` содержит только сквозные цепочки.
+
+### Тесты используют собственный seed, а не данные админки
+
+Ожидаемые цифры калькулятора привязаны к placeholder-значениям `seed_rates`/`seed_auction_fees`, которые тест создаёт сам в `setUpTestData`. Правка тарифов в админке тесты не ломает; правка seed-команд — ломает (обновлять ожидания в `pricing/tests.py` и `tests/test_e2e.py::TestCalculatorAPIE2E`). Подробнее — [`TEST_CASES.md`](TEST_CASES.md).
+
 ---
 
 ## Распределение
@@ -45,10 +53,13 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 | Приложение | Тестов | Основные темы |
 |---|---:|---|
 | `local_listings` | 87 | Модерация, права владельца, фильтры, фото, продвижение, антиспам, видимость по статусам |
-| `pricing` | 64 | Калькулятор, акциз, аукционные сборы, кэш тарифов, курс НБУ |
+| `pricing` | 68 | Калькулятор, акциз, аукционные сборы, кэш тарифов, курс НБУ |
 | `integrations` | 46 | VIN-провайдеры, импорт лотов, троттлинг платных API |
-| `users` | 38 | Заявки дилеров, B2B-гейтинг, JWT, согласия, эскалация привилегий |
-| `tests/test_e2e.py` | 38 | Сквозные сценарии через API |
+| `users` | 42 | Заявки дилеров, B2B-гейтинг, JWT, согласия, эскалация привилегий |
+| `tests/test_e2e.py` | 25 | Сквозные цепочки через API: регистрация → JWT → профиль, калькулятор, LiqPay, заявка дилера |
+| `tests/test_environment.py` | 6 | Страховка изоляции окружения (0.2) |
+| `tests/test_factories.py` | 3 | Общие фабрики `tests/factories.py` (0.6) |
+| `users/tests_e2e_seed.py` | 5 | Команда `e2e_seed` (данные для Playwright, 0.4) |
 | `deals` | 31 | Сделки, отзывы, рейтинг продавца |
 | `tests/test_favorites…` | 28 | Избранное, уведомления, сохранённые поиски |
 | `telegram_bot` | 41 | Команды бота через webhook, привязка аккаунта, middleware, задачи, автопост |
@@ -62,7 +73,7 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 
 ## Что покрыто хорошо
 
-### Калькулятор — 64 теста
+### Калькулятор — 68 тестов
 
 Самая проверенная часть, и это оправдано: ошибка тут стоит пользователю денег.
 
@@ -75,10 +86,10 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 | `TestCalculateLandedCost*` | Полная разбивка, все статьи и итог |
 | `TestCalculateLandedCostDecimalPrecision` | Только `Decimal`, никаких `float` |
 | `TestCopart*`, `TestIAAI*` | Тиры аукционных сборов, фиксированные и процентные |
-| `TestAuctionFeeBoundary`, `TestIAAITierBoundaryDB` | Границы тиров — классический источник ошибок на единицу |
+| `TestAuctionFeeBoundary`, `TestIAAITierBoundaryDB` | Выбор тира на границах диапазона (`_lookup_tier`): `TestAuctionFeeBoundary` создаёт тиры сам, `TestIAAITierBoundaryDB` — на seed-данных IAAI. Классический источник ошибок на единицу |
 | `TestZeroPriceEdgeCase` | Нулевая цена |
 | `TestPricingCacheInvalidation` | Правка ставки инвалидирует кэш |
-| `TestLandedCostE2ECopartBroker` | Сквозной расчёт через API |
+| `TestLandedCostE2ECopartBroker` | Сквозной расчёт на внутренних функциях (`pricing/tests.py`), без HTTP. Через API считает `tests/test_e2e.py::TestCalculatorAPIE2E` |
 
 ### Модерация и права — `local_listings`, 87 тестов
 
@@ -88,7 +99,7 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 
 `TestListingVisibilityByStatus` — объявление вне `active` видят только владелец и `staff`. Проверяются все статусы по отдельности.
 
-`TestAntispamListing`, `TestContactEndpoint` — телефон не отдаётся в списке и не отдаётся до модерации.
+`TestAntispamListing` — телефон и ссылка в описании помечают объявление для модерации, обычные числа — нет. `TestContactEndpoint` — телефон не отдаётся в списке и в детали, контакт — только авторизованному (аноним — 401).
 
 `TestBannedUser` — забаненный не получает JWT, его объявления скрыты, новые подать нельзя.
 
@@ -96,7 +107,7 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 
 | Класс | Что закрывает |
 |---|---|
-| `TestB2BGating`, `TestB2BGatingE2E` | Оптовая доска только верифицированным дилерам |
+| `TestB2BGating` | Оптовая доска только верифицированным дилерам |
 | `TestWholesaleListingDetailGating` | Прямой доступ по ID к оптовому лоту — 404 |
 | `TestRoleIsNotSelfAssignable` | Пользователь не назначает себе `role: admin` ни при регистрации, ни через профиль |
 | `TestShipmentAccess` | Контейнеры и VIN внутри — только тем, кто их отслеживает |
@@ -115,7 +126,7 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 | **Невалидный ввод** | Нечисловая и отрицательная сумма платежа, неизвестная валюта и `purpose`, несуществующий листинг, `role: admin` при регистрации |
 | **Нарушение бизнес-правил** | Дубликат заявки дилера — 409, повторное подтверждение сделки, отзыв на неподтверждённую сделку, сообщение самому себе, превышение лимита активных объявлений и лимита фото |
 | **Ограничения БД** | `TestListingChoiceConstraints` — статус, канал и валюта вне `choices` отклоняются и при `create`, и при `update` |
-| **Троттлинг** | `TestExpensiveEndpointThrottle`, `TestRegistryThrottleE2E` — после лимита 429 |
+| **Троттлинг** | `TestExpensiveEndpointThrottle` — ответ 429, когда `ScopedRateThrottle.allow_request` замокан в `False`. Сам счётчик лимита (11-й запрос подряд) не проверяется (13-Q11) |
 | **Подделка платежа** | Неверная подпись LiqPay отклоняется, листинг не трогается |
 | **Идемпотентность** | Повторный колбэк LiqPay не задваивает платёж, повторный импорт лота не создаёт дубль |
 | **Отсутствие согласия** | Регистрация без галочки — 400, объявление без согласия с правилами — 400, заявка дилера без согласия на обработку — 400 |
@@ -133,7 +144,7 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 
 **`TestAuctionFeeBoundary`, `TestIAAITierBoundaryDB`** — границы тиров: ставка на первом рубле нового тира.
 
-**`TestTokenDisabledInTests`** — токен Telegram пуст под тест-раннером. Страхует от возврата к сетевым вызовам в тестах.
+**`TelegramTokenDisabledInTestsTest`** (`telegram_bot/tests.py`) — токен Telegram пуст под тест-раннером. Страхует от возврата к сетевым вызовам в тестах.
 
 **`TestPricingCacheInvalidation`** — правка ставки в БД делает кэш недействительным.
 
@@ -150,7 +161,7 @@ coverage report --skip-empty
 ```
 
 ```
-TOTAL    4463    753    83%
+TOTAL    7969    582    93%
 ```
 
 `coverage` не входит в `requirements.txt` — это инструмент разработчика, в проде он не нужен.

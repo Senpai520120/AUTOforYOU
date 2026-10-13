@@ -5,6 +5,8 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from tests.factories import make_dealer, make_listing, make_staff, make_user, make_vehicle
+
 from .models import DealerApplication
 from .services import DuplicatePendingError, apply_for_dealer, approve_application, reject_application
 
@@ -12,14 +14,6 @@ User = get_user_model()
 
 APPLY_URL = '/api/v1/dealers/apply/'
 STATUS_URL = '/api/v1/dealers/application/'
-
-
-def _make_user(email='user@test.com', **kwargs):
-    return User.objects.create_user(email=email, password='testpass123', **kwargs)
-
-
-def _make_admin(email='admin@test.com'):
-    return User.objects.create_superuser(email=email, password='testpass123')
 
 
 _APPLY_DATA = {
@@ -31,13 +25,36 @@ _APPLY_DATA = {
 }
 
 
+# ── Менеджер и строковые представления моделей ────────────────────────────────
+
+class TestUserModel(APITestCase):
+    def test_create_user_without_email_raises(self):
+        with self.assertRaisesMessage(ValueError, 'Email обязателен'):
+            User.objects.create_user(email='')
+
+    def test_create_superuser_sets_admin_flags(self):
+        admin = User.objects.create_superuser(email='root@test.com', password='x-Pass-12345')
+        self.assertTrue(admin.is_staff)
+        self.assertTrue(admin.is_superuser)
+        self.assertEqual(admin.role, 'admin')
+
+    def test_str_is_email(self):
+        self.assertEqual(str(make_user('s@test.com')), 's@test.com')
+
+    def test_dealer_application_str_contains_company_and_email(self):
+        user = make_user('d@test.com')
+        app = apply_for_dealer(user, _APPLY_DATA['company_name'], 'Іван', '+380991234567')
+        self.assertIn('d@test.com', str(app))
+        self.assertIn(_APPLY_DATA['company_name'], str(app))
+
+
 # ── Сервисный слой ────────────────────────────────────────────────────────────
 
 class TestDealerApplicationService(APITestCase):
 
     def setUp(self):
-        self.user = _make_user()
-        self.admin = _make_admin()
+        self.user = make_user()
+        self.admin = make_staff(superuser=True)
 
     def test_apply_creates_pending(self):
         app = apply_for_dealer(self.user, 'ТОВ Авто', 'Іван', '+380991234567')
@@ -84,7 +101,7 @@ class TestDealerApplicationService(APITestCase):
 class TestDealerApplyAPI(APITestCase):
 
     def setUp(self):
-        self.user = _make_user()
+        self.user = make_user()
         self.client.force_authenticate(self.user)
 
     def test_apply_returns_201(self):
@@ -110,7 +127,7 @@ class TestDealerApplyAPI(APITestCase):
 class TestDealerApplicationStatusAPI(APITestCase):
 
     def setUp(self):
-        self.user = _make_user()
+        self.user = make_user()
         self.client.force_authenticate(self.user)
 
     def test_no_application_returns_404(self):
@@ -135,19 +152,19 @@ class TestB2BGating(APITestCase):
         self.assertIn(resp.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
 
     def test_regular_user_gets_403(self):
-        user = _make_user('plain@test.com')
+        user = make_user('plain@test.com')
         self.client.force_authenticate(user)
         resp = self.client.get(self.B2B_URL)
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_verified_dealer_gets_200(self):
-        user = _make_user('dealer@test.com', is_verified_dealer=True, role='dealer')
+        user = make_dealer('dealer@test.com')
         self.client.force_authenticate(user)
         resp = self.client.get(self.B2B_URL)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     def test_admin_gets_200(self):
-        admin = _make_admin('admin2@test.com')
+        admin = make_staff('admin2@test.com', superuser=True)
         self.client.force_authenticate(admin)
         resp = self.client.get(self.B2B_URL)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -159,21 +176,10 @@ class TestWholesaleCatalogFilter(APITestCase):
 
     LISTINGS_URL = '/api/v1/listings/'
 
-    def _make_listing(self, channel, seller):
-        from listings.models import Listing
-        from vehicles.models import Vehicle
-        v = Vehicle.objects.create(
-            make='Toyota', model='Camry', year=2020, vin=f'VIN{channel[:1].upper()}001',
-            fuel_type='petrol', engine_cc=2000, mileage_km=50000,
-        )
-        return Listing.objects.create(
-            vehicle=v, seller=seller, price=10000, currency='USD', channel=channel,
-        )
-
     def setUp(self):
-        self.seller = _make_user('seller@test.com')
-        self.retail = self._make_listing('retail', self.seller)
-        self.wholesale = self._make_listing('wholesale', self.seller)
+        self.seller = make_user('seller@test.com')
+        self.retail = make_listing(make_vehicle(), self.seller, channel='retail')
+        self.wholesale = make_listing(make_vehicle(), self.seller, channel='wholesale')
 
     def test_anonymous_sees_only_retail(self):
         resp = self.client.get(self.LISTINGS_URL)
@@ -182,7 +188,7 @@ class TestWholesaleCatalogFilter(APITestCase):
         self.assertNotIn(self.wholesale.id, ids)
 
     def test_regular_user_sees_only_retail(self):
-        user = _make_user('buyer@test.com')
+        user = make_user('buyer@test.com')
         self.client.force_authenticate(user)
         resp = self.client.get(self.LISTINGS_URL)
         ids = [r['id'] for r in resp.data['results']] if 'results' in resp.data else [r['id'] for r in resp.data]
@@ -190,7 +196,7 @@ class TestWholesaleCatalogFilter(APITestCase):
         self.assertNotIn(self.wholesale.id, ids)
 
     def test_verified_dealer_sees_wholesale(self):
-        dealer = _make_user('dea@test.com', is_verified_dealer=True, role='dealer')
+        dealer = make_dealer('dea@test.com')
         self.client.force_authenticate(dealer)
         resp = self.client.get(self.LISTINGS_URL)
         ids = [r['id'] for r in resp.data['results']] if 'results' in resp.data else [r['id'] for r in resp.data]
@@ -208,7 +214,7 @@ TOKEN_URL = '/api/v1/auth/token/'
 class TestJWTLogout(APITestCase):
 
     def setUp(self):
-        self.user = _make_user('jwt@test.com')
+        self.user = make_user('jwt@test.com')
         from rest_framework_simplejwt.tokens import RefreshToken
         self.refresh = RefreshToken.for_user(self.user)
         self.access = str(self.refresh.access_token)
@@ -308,7 +314,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         self.assertFalse(user.is_staff)
 
     def test_patch_profile_cannot_change_role(self):
-        user = _make_user('selfpromote@test.com')
+        user = make_user('selfpromote@test.com')
         self.client.force_authenticate(user=user)
 
         resp = self.client.patch(PROFILE_URL, {'role': 'admin'}, format='json')
@@ -320,7 +326,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
     def test_role_admin_without_is_staff_has_no_b2b_access(self):
         # Роль выставлена напрямую в БД — эмулируем состояние, которое
         # раньше можно было получить через API.
-        user = _make_user('fakeadmin@test.com', role='admin')
+        user = make_user('fakeadmin@test.com', role='admin')
         self.assertFalse(user.is_staff)
         self.client.force_authenticate(user=user)
 
@@ -329,7 +335,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_real_admin_has_b2b_access(self):
-        self.client.force_authenticate(user=_make_admin('realadmin@test.com'))
+        self.client.force_authenticate(user=make_staff('realadmin@test.com', superuser=True))
 
         resp = self.client.get(B2B_URL)
 
@@ -339,18 +345,18 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         # Фронт показывает админские разделы по тому же признаку, по которому
         # их проверяет бэкенд. Раньше is_staff в профиль не отдавался, и шапка
         # ориентировалась на role — пользователь видел ссылку на B2B и получал 403.
-        self.client.force_authenticate(user=_make_admin('staffflag@test.com'))
+        self.client.force_authenticate(user=make_staff('staffflag@test.com', superuser=True))
         resp = self.client.get(PROFILE_URL)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue(resp.data['is_staff'])
 
     def test_profile_is_staff_false_for_regular_user(self):
-        self.client.force_authenticate(user=_make_user('plain@test.com'))
+        self.client.force_authenticate(user=make_user('plain@test.com'))
         resp = self.client.get(PROFILE_URL)
         self.assertFalse(resp.data['is_staff'])
 
     def test_patch_profile_cannot_grant_is_staff(self):
-        user = _make_user('escalate_staff@test.com')
+        user = make_user('escalate_staff@test.com')
         self.client.force_authenticate(user=user)
 
         self.client.patch(PROFILE_URL, {'is_staff': True}, format='json')
@@ -366,7 +372,7 @@ class TestDealerApplicationConsent(APITestCase):
     def test_apply_without_consent_returns_400(self):
         # Чекбокс на фронте согласие показывал, но прямой POST в API проходил
         # мимо него — согласие нигде не фиксировалось и доказать его было нельзя.
-        self.client.force_authenticate(user=_make_user('noconsent@test.com'))
+        self.client.force_authenticate(user=make_user('noconsent@test.com'))
         payload = {k: v for k, v in _APPLY_DATA.items() if k != 'agreed_to_processing'}
 
         resp = self.client.post(APPLY_URL, payload, format='json')
@@ -376,7 +382,7 @@ class TestDealerApplicationConsent(APITestCase):
         self.assertFalse(DealerApplication.objects.exists())
 
     def test_apply_with_consent_false_returns_400(self):
-        self.client.force_authenticate(user=_make_user('falseconsent@test.com'))
+        self.client.force_authenticate(user=make_user('falseconsent@test.com'))
 
         resp = self.client.post(
             APPLY_URL, {**_APPLY_DATA, 'agreed_to_processing': False}, format='json',
@@ -386,7 +392,7 @@ class TestDealerApplicationConsent(APITestCase):
         self.assertFalse(DealerApplication.objects.exists())
 
     def test_apply_records_consent_timestamp(self):
-        self.client.force_authenticate(user=_make_user('withconsent@test.com'))
+        self.client.force_authenticate(user=make_user('withconsent@test.com'))
 
         resp = self.client.post(APPLY_URL, _APPLY_DATA, format='json')
 

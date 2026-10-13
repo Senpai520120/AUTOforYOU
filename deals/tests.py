@@ -1,9 +1,9 @@
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from local_listings.models import City, LocalListing, Region
+from local_listings.models import LocalListing
 from messaging.models import Conversation
+from tests.factories import auth_client, make_local_listing, make_user
 
 from .models import Deal
 from .services import (
@@ -13,41 +13,6 @@ from .services import (
     propose_deal,
     seller_rating,
 )
-
-User = get_user_model()
-
-
-def _make_user(email, **kwargs):
-    return User.objects.create_user(
-        email=email,
-        password='testpassword123',
-        **kwargs,
-    )
-
-
-def _make_listing(owner, status=LocalListing.Status.ACTIVE):
-    region, _ = Region.objects.get_or_create(name='Тестова область', slug='test-region')
-    city, _ = City.objects.get_or_create(
-        region=region,
-        name='Тестове місто',
-        defaults={'slug': 'test-city'},
-    )
-    return LocalListing.objects.create(
-        owner=owner,
-        make='Toyota',
-        model='Camry',
-        year=2020,
-        mileage_km=50000,
-        fuel_type='petrol',
-        transmission='auto',
-        body_type='sedan',
-        price=15000,
-        currency='USD',
-        region=region,
-        city=city,
-        status=status,
-    )
-
 
 def _make_conversation(listing, initiator):
     conv, _ = Conversation.objects.get_or_create(
@@ -60,9 +25,9 @@ def _make_conversation(listing, initiator):
 class ProposeDealServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
 
     def test_propose_deal_success(self):
@@ -73,7 +38,7 @@ class ProposeDealServiceTest(TestCase):
         self.assertEqual(deal.listing, self.listing)
 
     def test_propose_deal_only_owner_can_propose(self):
-        other = _make_user('other@example.com')
+        other = make_user('other@example.com')
         with self.assertRaisesMessage(ValueError, 'Тільки власник оголошення може запропонувати угоду.'):
             propose_deal(self.listing, other, self.buyer.pk)
 
@@ -82,7 +47,7 @@ class ProposeDealServiceTest(TestCase):
             propose_deal(self.listing, self.seller, self.seller.pk)
 
     def test_propose_deal_buyer_must_have_conversation(self):
-        stranger = _make_user('stranger@example.com')
+        stranger = make_user('stranger@example.com')
         with self.assertRaisesMessage(ValueError, 'Покупець не писав по цьому оголошенню.'):
             propose_deal(self.listing, self.seller, stranger.pk)
 
@@ -95,9 +60,9 @@ class ProposeDealServiceTest(TestCase):
 class ConfirmDealServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
         self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
 
@@ -124,9 +89,9 @@ class ConfirmDealServiceTest(TestCase):
 class CancelDealServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
         self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
 
@@ -139,7 +104,7 @@ class CancelDealServiceTest(TestCase):
         self.assertEqual(deal.status, Deal.Status.CANCELLED)
 
     def test_outsider_cannot_cancel(self):
-        outsider = _make_user('outsider@example.com')
+        outsider = make_user('outsider@example.com')
         with self.assertRaises(ValueError):
             cancel_deal(self.deal, outsider)
 
@@ -153,9 +118,9 @@ class CancelDealServiceTest(TestCase):
 class CreateReviewServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
         self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
         self.deal = confirm_deal(self.deal, self.buyer)
@@ -172,9 +137,9 @@ class CreateReviewServiceTest(TestCase):
             create_review(self.deal, self.seller, 4)
 
     def test_cannot_review_non_confirmed_deal(self):
-        seller2 = _make_user('seller2@example.com')
-        buyer2 = _make_user('buyer2@example.com')
-        listing2 = _make_listing(seller2)
+        seller2 = make_user('seller2@example.com')
+        buyer2 = make_user('buyer2@example.com')
+        listing2 = make_local_listing(seller2)
         _make_conversation(listing2, buyer2)
         deal2 = propose_deal(listing2, seller2, buyer2.pk)
         # deal2 is still PROPOSED
@@ -193,11 +158,11 @@ class CreateReviewServiceTest(TestCase):
 class SellerRatingServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
+        self.seller = make_user('seller@example.com')
 
     def _make_confirmed_deal_with_review(self, buyer_email, rating):
-        buyer = _make_user(buyer_email)
-        listing = _make_listing(self.seller)
+        buyer = make_user(buyer_email)
+        listing = make_local_listing(self.seller)
         _make_conversation(listing, buyer)
         deal = propose_deal(listing, self.seller, buyer.pk)
         deal = confirm_deal(deal, buyer)
@@ -237,15 +202,13 @@ class DealsAPITest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
 
     def _auth(self, user):
-        from rest_framework_simplejwt.tokens import RefreshToken
-        token = RefreshToken.for_user(user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        self.client = auth_client(user)
 
     def test_get_my_deals_empty(self):
         self._auth(self.seller)
@@ -268,7 +231,7 @@ class DealsAPITest(TestCase):
 
     def test_propose_deal_no_conversation_fails(self):
         self._auth(self.seller)
-        stranger = _make_user('stranger@example.com')
+        stranger = make_user('stranger@example.com')
         resp = self.client.post('/api/v1/deals/', {
             'listing_id': self.listing.pk,
             'buyer_id': stranger.pk,

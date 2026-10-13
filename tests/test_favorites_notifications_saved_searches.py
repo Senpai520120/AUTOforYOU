@@ -10,26 +10,13 @@ from notifications.models import Notification
 from notifications.services import create_notification, unread_count
 from saved_searches.models import SavedSearch
 from saved_searches.tasks import check_saved_searches
-from users.models import CustomUser
+from tests.factories import make_local_listing, make_user
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def make_user(email, role='buyer', **kw):
-    return CustomUser.objects.create_user(email=email, password='pass1234', role=role, **kw)
-
-
 def make_listing(owner, region, city, **kw):
-    defaults = dict(
-        make='Toyota', model='Camry', year=2020,
-        mileage_km=50000, fuel_type='petrol', transmission='auto',
-        body_type='sedan', condition='used',
-        price='500000', currency='UAH', price_type='fixed',
-        region=region, city=city,
-        status=LocalListing.Status.ACTIVE,
-        agreed_to_rules=True,
-    )
-    defaults.update(kw)
-    return LocalListing.objects.create(owner=owner, **defaults)
+    # Тонкая обёртка: регион/город передаются позиционно.
+    return make_local_listing(owner, region=region, city=city, **kw)
 
 
 class SetupMixin(TestCase):

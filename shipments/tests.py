@@ -5,28 +5,22 @@
 список контейнерів разом з VIN автомобілів усередині. Тестів на них не було
 взагалі — жоден прогін цього не ловив.
 """
-from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from tests.factories import make_staff, make_user
 from vehicles.models import Vehicle
 
 from .models import Shipment
 
-User = get_user_model()
-
 LIST_URL = '/api/v1/shipments/'
-
-
-def _make_user(email, **kw):
-    return User.objects.create_user(email=email, password='pass1234', **kw)
 
 
 class TestShipmentAccess(APITestCase):
     def setUp(self):
-        self.watcher = _make_user('watcher@test.com')
-        self.stranger = _make_user('stranger_ship@test.com')
-        self.staff = _make_user('staff_ship@test.com', is_staff=True)
+        self.watcher = make_user('watcher@test.com')
+        self.stranger = make_user('stranger_ship@test.com')
+        self.staff = make_staff('staff_ship@test.com')
 
         self.vehicle = Vehicle.objects.create(
             vin='1HGBH41JXMN109186', make='Toyota', model='Camry', year=2020,

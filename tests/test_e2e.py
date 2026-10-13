@@ -1,6 +1,9 @@
 """
 Сквозные интеграционные тесты — критичные пути «конец в конец».
-Все сценарии идут через реальный HTTP API (APIClient) и реальную БД (in-memory SQLite).
+Все сценарии идут через реальный HTTP API (APIClient) и реальную БД
+(БД теста: SQLite локально, PostgreSQL в CI).
+Точечные проверки (B2B-гейтинг, wholesale, согласие, 409, registry 401/429)
+живут в тестах своих приложений: users, listings, integrations.
 Запуск: python manage.py test tests.test_e2e
 """
 import base64
@@ -9,19 +12,16 @@ import json
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
-from rest_framework_simplejwt.tokens import RefreshToken
 
-from listings.models import Listing
 from payments.models import Payment
 from users.models import DealerApplication
 from users.services import apply_for_dealer, approve_application
 from tests.base import CleanCacheTestCase
-from vehicles.models import Vehicle
+from tests.factories import auth_client, make_listing, make_staff, make_user, make_vehicle
 
 User = get_user_model()
 
@@ -35,7 +35,6 @@ CHECKOUT_URL = '/api/v1/payments/liqpay/checkout/'
 CALLBACK_URL = '/api/v1/payments/liqpay/callback/'
 B2B_URL      = '/api/v1/b2b/board/'
 LISTINGS_URL = '/api/v1/listings/'
-REGISTRY_URL = '/api/v1/vehicles/1HGBH41JXMN109186/registry/'
 APPLY_URL    = '/api/v1/dealers/apply/'
 
 # ── Вспомогательные функции ────────────────────────────────────────────────────
@@ -47,31 +46,6 @@ _REG_DATA = {
     'role': 'buyer',
     'agreed_to_terms': True,
 }
-
-
-def _make_user(email='u@test.com', **kw):
-    return User.objects.create_user(email=email, password='pass123', **kw)
-
-
-def _auth_client(user):
-    client = APIClient()
-    refresh = RefreshToken.for_user(user)
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(refresh.access_token)}')
-    return client
-
-
-def _make_vehicle(vin='E2EVINDEFAULT001'):
-    return Vehicle.objects.create(
-        make='Toyota', model='Camry', year=2020, vin=vin,
-        fuel_type='petrol', engine_cc=2000, mileage_km=50000,
-    )
-
-
-def _make_listing(vehicle, seller, channel='retail', lst_status='in_stock'):
-    return Listing.objects.create(
-        vehicle=vehicle, seller=seller, price=10000, currency='USD',
-        channel=channel, status=lst_status,
-    )
 
 
 def _liqpay_sign(data_b64: str, private_key: str) -> str:
@@ -125,12 +99,6 @@ class TestRegisterLoginProfileFlow(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertEqual(resp.data['email'], _REG_DATA['email'])
         self.assertEqual(resp.data['role'], 'buyer')
-
-    def test_register_without_consent_blocked(self):
-        data = {**_REG_DATA, 'agreed_to_terms': False, 'email': 'noconsent2@test.com'}
-        resp = self.client.post(REGISTER_URL, data, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('agreed_to_terms', resp.data)
 
     def test_profile_without_token_returns_401(self):
         resp = self.client.get(PROFILE_URL)
@@ -291,11 +259,11 @@ class TestLiqPayPaymentFlow(TestCase):
     """
 
     def setUp(self):
-        self.seller = _make_user('seller_liq@test.com')
-        self.buyer  = _make_user('buyer_liq@test.com')
-        self.vehicle = _make_vehicle('LIQVIN000000001')
-        self.listing = _make_listing(self.vehicle, self.seller, lst_status='in_transit')
-        self.buyer_client = _auth_client(self.buyer)
+        self.seller = make_user('seller_liq@test.com')
+        self.buyer  = make_user('buyer_liq@test.com')
+        self.vehicle = make_vehicle(vin='LIQVIN000000001')
+        self.listing = make_listing(self.vehicle, self.seller, status='in_transit')
+        self.buyer_client = auth_client(self.buyer)
         self.anon = APIClient()
 
     def _checkout(self, order_id='e2e-order-001'):
@@ -410,77 +378,18 @@ class TestLiqPayPaymentFlow(TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 4. B2B-гейтинг: обычный юзер → 403/404; дилер/admin → доступ
-# ══════════════════════════════════════════════════════════════════════════════
-
-class TestB2BGatingE2E(TestCase):
-
-    def setUp(self):
-        self.seller   = _make_user('gating_seller@test.com')
-        vehicle       = _make_vehicle('GATINGVIN000001')
-        self.retail   = _make_listing(vehicle, self.seller, channel='retail')
-        self.wholesale = _make_listing(
-            _make_vehicle('GATINGVIN000002'), self.seller, channel='wholesale'
-        )
-
-    def test_anon_cannot_access_b2b_board(self):
-        resp = APIClient().get(B2B_URL)
-        self.assertIn(resp.status_code, (401, 403))
-
-    def test_regular_buyer_gets_403_on_b2b_board(self):
-        client = _auth_client(_make_user('gating_buyer@test.com'))
-        resp = client.get(B2B_URL)
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_regular_buyer_gets_404_on_wholesale_detail(self):
-        client = _auth_client(_make_user('gating_buyer2@test.com'))
-        resp = client.get(f'{LISTINGS_URL}{self.wholesale.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND,
-                         'Wholesale листинг недоступен для обычного покупателя')
-
-    def test_regular_buyer_can_see_retail_listing(self):
-        client = _auth_client(_make_user('gating_buyer3@test.com'))
-        resp = client.get(f'{LISTINGS_URL}{self.retail.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    def test_verified_dealer_accesses_b2b_board(self):
-        dealer = _make_user('gating_dealer@test.com', is_verified_dealer=True, role='dealer')
-        resp = _auth_client(dealer).get(B2B_URL)
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    def test_verified_dealer_can_see_wholesale_detail(self):
-        dealer = _make_user('gating_dealer2@test.com', is_verified_dealer=True, role='dealer')
-        resp = _auth_client(dealer).get(f'{LISTINGS_URL}{self.wholesale.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    def test_admin_accesses_b2b_board(self):
-        admin = User.objects.create_superuser(email='gating_admin@test.com', password='pass')
-        resp = _auth_client(admin).get(B2B_URL)
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    def test_anon_sees_only_retail_in_catalog(self):
-        anon = APIClient()
-        resp = anon.get(LISTINGS_URL)
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        ids = [r['id'] for r in resp.data.get('results', resp.data)]
-        self.assertIn(self.retail.id, ids)
-        self.assertNotIn(self.wholesale.id, ids,
-                         'Wholesale не должен показываться анонимам в каталоге')
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 5. Дилерская заявка → одобрение → is_verified_dealer → доступ к опту
+# 4. Дилерская заявка → одобрение → is_verified_dealer → доступ к опту
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestDealerApplicationFlowE2E(TestCase):
     """Полный цикл: подача заявки → admin одобряет → дилер получает B2B-доступ."""
 
     def setUp(self):
-        self.applicant = _make_user('dealer_e2e@test.com')
-        self.admin     = User.objects.create_superuser(email='admin_e2e@test.com', password='pass')
-        seller         = _make_user('dealer_e2e_seller@test.com')
-        self.wholesale = _make_listing(
-            _make_vehicle('DEALERVIN000001'), seller, channel='wholesale'
+        self.applicant = make_user('dealer_e2e@test.com')
+        self.admin     = make_staff('admin_e2e@test.com', superuser=True)
+        seller         = make_user('dealer_e2e_seller@test.com')
+        self.wholesale = make_listing(
+            make_vehicle(vin='DEALERVIN000001'), seller, channel='wholesale'
         )
 
     def test_full_dealer_verification_flow(self):
@@ -489,7 +398,7 @@ class TestDealerApplicationFlowE2E(TestCase):
         self.assertEqual(app.status, DealerApplication.Status.PENDING)
 
         # 2. До одобрения — нет доступа к B2B
-        client_before = _auth_client(self.applicant)
+        client_before = auth_client(self.applicant)
         self.assertEqual(client_before.get(B2B_URL).status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(
             client_before.get(f'{LISTINGS_URL}{self.wholesale.pk}/').status_code,
@@ -504,7 +413,7 @@ class TestDealerApplicationFlowE2E(TestCase):
         self.assertEqual(self.applicant.role, 'dealer')
 
         # 4. После одобрения — доступ есть (новый токен отражает изменения)
-        client_after = _auth_client(self.applicant)
+        client_after = auth_client(self.applicant)
         self.assertEqual(client_after.get(B2B_URL).status_code, status.HTTP_200_OK)
         self.assertEqual(
             client_after.get(f'{LISTINGS_URL}{self.wholesale.pk}/').status_code,
@@ -512,7 +421,7 @@ class TestDealerApplicationFlowE2E(TestCase):
         )
 
     def test_dealer_application_api_flow(self):
-        client = _auth_client(self.applicant)
+        client = auth_client(self.applicant)
         resp = client.post(APPLY_URL, {
             'company_name': 'ТОВ Авто',
             'full_name': 'Іван Іванов',
@@ -522,62 +431,3 @@ class TestDealerApplicationFlowE2E(TestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data['status'], 'pending')
-
-    def test_duplicate_application_rejected_with_409(self):
-        apply_for_dealer(self.applicant, 'ТОВ 1', 'Іван', '+380')
-        client = _auth_client(self.applicant)
-        resp = client.post(APPLY_URL, {
-            'company_name': 'ТОВ 2',
-            'full_name': 'Іван',
-            'contact_phone': '+380',
-            'agreed_to_processing': True,
-        }, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 6. Throttle: >10 запросов к /registry/ → 429
-# ══════════════════════════════════════════════════════════════════════════════
-
-class TestRegistryThrottleE2E(TestCase):
-    """Платный эндпоинт /registry/ заблокирован после превышения лимита."""
-
-    def setUp(self):
-        cache.clear()
-        self.user = _make_user('throttle_e2e@test.com')
-        self.client = _auth_client(self.user)
-
-    def test_after_limit_returns_429(self):
-        from unittest.mock import patch
-
-        from rest_framework.throttling import ScopedRateThrottle
-
-        # Симулируем превышение лимита: allow_request возвращает False
-        with patch.object(ScopedRateThrottle, 'allow_request', return_value=False), \
-             patch.object(ScopedRateThrottle, 'wait', return_value=3600.0):
-            resp = self.client.get(REGISTRY_URL)
-        self.assertEqual(
-            resp.status_code,
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            'После превышения лимита expensive scope должен вернуть 429',
-        )
-
-    def test_within_limit_responds_normally(self):
-        from unittest.mock import patch
-
-        from rest_framework.throttling import ScopedRateThrottle
-
-        # В пределах лимита allow_request возвращает True.
-        # Провайдер Opendatabot (платный) замокан — реального запроса нет (13-S9).
-        with patch.object(ScopedRateThrottle, 'allow_request', return_value=True),              patch('integrations.views.get_opendatabot_provider') as mock_prov:
-            mock_prov.return_value.get_vehicle_info.return_value = {
-                'vin': '1HGBH41JXMN109186', 'demo': True, 'provider': 'opendatabot',
-            }
-            resp = self.client.get(REGISTRY_URL)
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        mock_prov.return_value.get_vehicle_info.assert_called_once()
-
-    def test_anon_gets_401_not_throttled(self):
-        resp = APIClient().get(REGISTRY_URL)
-        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED,
-                         '/registry/ требует авторизации')

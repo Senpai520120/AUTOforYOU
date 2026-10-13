@@ -1,8 +1,26 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.5 ✓, дальше 0.6 → 1.2 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.5, 0.6a ✓, дальше 0.6b → 1.2 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 0.6a: Тестовые фабрики, дубли, документы (2026-10-13) — ЗАВЕРШЕНО (0.6b впереди)
+
+- `tests/factories.py` (`make_user` — по умолчанию подтверждённый, `verified=False` — нет; `make_dealer`, `make_staff`, `auth_client`, `make_region_city`, `make_local_listing`, `make_vehicle`, `make_listing`) и `tests/test_factories.py` (3 теста). Без `factory_boy`. Локальных `_make_user`/`_auth_client` не осталось; две тонкие обёртки с особой сигнатурой: `_make_listing` в `local_listings/tests.py`, `make_listing` в `tests/test_favorites…`.
+- Переведены: deals, listings, local_listings, reports, shipments, users, integrations, messaging, `tests/test_e2e.py`, `tests/test_favorites…`.
+- Удалённые дубли (удалённый → покрывающий):
+  - `test_register_without_consent_blocked` → `users.TestRegistrationConsent.test_register_without_consent_returns_400`;
+  - `TestB2BGatingE2E` (8): anon/buyer/dealer/admin на b2b → `users.TestB2BGating`; wholesale-деталь buyer 404, retail, dealer → `listings.TestWholesaleListingDetailGating`; анонимный каталог → `users.TestWholesaleCatalogFilter.test_anonymous_sees_only_retail`;
+  - `test_duplicate_application_rejected_with_409` → `users.TestDealerApplyAPI.test_duplicate_pending_returns_409`;
+  - `TestRegistryThrottleE2E` (3) → `integrations.TestExpensiveEndpointThrottle.test_registry_throttle_deny_returns_429`, `TestRegistryRequiresAuth` (401 теперь ровно 401, у провайдера `assert_called_once`).
+- Тесты: было 448, стало 442 (−13 дублей, +3 фабрики, +4 теста `users.TestUserModel` — прямые проверки менеджера и `__str__`, чтобы не упало покрытие `users/models.py`). Полный прогон до добавления 4 тестов: 438 OK; после — `users` 47 OK.
+- Coverage: было TOTAL 8071/578 = 93%, стало 7969/582 = 93%. Единственное падение в продуктовом коде — `users/models.py` (95% → 90%: `create_superuser`, `__str__`); закрыто тестами `TestUserModel`, теперь 99%. Остальные продуктовые файлы без изменений.
+- Документы: `docs/BACKEND_TESTS.md`, `docs/TEST_CASES.md` исправлены по 13-Q19/13-C3, числа фактические, добавлены разделы про фабрики, seed, изоляцию, E2E. Docstring `tests/test_e2e.py` исправлен.
+- Не сделано (0.6b): правка CLAUDE.md, `docker-compose.e2e.yml`, `.env.e2e.example`, CI, шаг `FLUSHALL`, раздел про e2e-override в документах.
+- **CLAUDE.md — ждёт решения владельца.** Текст предложения — в `docs/tasks/0.6-test-factories-docs.md`, раздел «Что добавить в CLAUDE.md». Файл не менялся.
+- Playwright, `npm run build`, `tsc` не запускались: фронт и бэкенд-код не менялись.
 
 ---
 

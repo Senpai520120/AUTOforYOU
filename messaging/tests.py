@@ -4,26 +4,7 @@ from rest_framework.test import APIClient
 from local_listings.models import City, LocalListing, Region
 from messaging.models import Message
 from messaging.services import get_or_create_conversation, unread_count_for_user
-from users.models import CustomUser
-
-
-def make_user(email, role='buyer', **kw):
-    u = CustomUser.objects.create_user(email=email, password='pass1234', role=role, **kw)
-    return u
-
-
-def make_local_listing(owner, region, city, **kw):
-    defaults = dict(
-        make='Toyota', model='Camry', year=2020,
-        mileage_km=50000, fuel_type='petrol', transmission='auto',
-        body_type='sedan', condition='used',
-        price='500000', currency='UAH', price_type='fixed',
-        region=region, city=city,
-        status=LocalListing.Status.ACTIVE,
-        agreed_to_rules=True,
-    )
-    defaults.update(kw)
-    return LocalListing.objects.create(owner=owner, **defaults)
+from tests.factories import make_local_listing, make_user
 
 
 class SetupMixin(TestCase):
@@ -36,7 +17,7 @@ class SetupMixin(TestCase):
         self.admin = make_user('admin@test.com', role='admin', is_staff=True)
         self.region = Region.objects.create(name='Київська', slug='kyivska')
         self.city = City.objects.create(name='Київ', slug='kyiv', region=self.region)
-        self.listing = make_local_listing(self.seller, self.region, self.city)
+        self.listing = make_local_listing(self.seller, region=self.region, city=self.city)
         self.client = APIClient()
 
     def auth(self, user):
