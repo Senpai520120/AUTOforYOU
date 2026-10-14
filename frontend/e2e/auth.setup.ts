@@ -32,12 +32,14 @@ setup('стек готовий', async ({ request, baseURL }) => {
 });
 
 for (const role of ROLES) {
-  setup(`вхід ${role}`, async ({ page, request }) => {
+  setup(`вхід ${role}`, async ({ page }) => {
     const password = process.env.E2E_PASSWORD;
     if (!password) {
       throw new Error('E2E_PASSWORD не задано: експортуйте той самий пароль, з яким виконано e2e_seed.');
     }
-    const resp = await request.post('/api/v1/auth/token/', {
+    // page.request ділить cookie з контекстом браузера: httpOnly access/refresh з відповіді
+    // потрапляють у storageState (задача 1.4 — токенів у тілі й у localStorage більше немає).
+    const resp = await page.request.post('/api/v1/auth/token/', {
       data: { email: `${role}@e2e.test`, password },
     });
     if (resp.status() === 401 || resp.status() === 400) {
@@ -47,15 +49,9 @@ for (const role of ROLES) {
       );
     }
     expect(resp.ok(), `Вхід ${role}: HTTP ${resp.status()}`).toBeTruthy();
-    const { access, refresh } = await resp.json();
-
-    await page.goto('/');
-    await page.evaluate(
-      ([a, r]) => {
-        localStorage.setItem('access', a);
-        if (r) localStorage.setItem('refresh', r);
-      },
-      [access, refresh ?? ''] as [string, string],
+    const names = (await page.context().cookies()).map((c) => c.name);
+    expect(names, `Вхід ${role}: немає cookie access/refresh`).toEqual(
+      expect.arrayContaining(['access', 'refresh']),
     );
     await page.context().storageState({ path: authFile(role) });
   });

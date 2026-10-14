@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { meApi } from '@/api/me';
 import { Shipment } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
@@ -24,15 +23,13 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function MyShipmentsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
-    if (!loading && !user) { router.push('/login'); return; }
     if (user) meApi.shipments().then(d => setShipments(d.results)).finally(() => setFetching(false));
-  }, [user, loading, router]);
+  }, [user, loading]);
 
   if (loading || fetching) return <div className="flex justify-center py-20"><Spinner /></div>;
 

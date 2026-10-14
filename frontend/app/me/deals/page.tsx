@@ -1,8 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { dealsApi } from '@/api/deals';
 import { Deal } from '@/lib/types';
 
@@ -21,17 +20,12 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export default function MyDealsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [fetching, setFetching] = useState(true);
   const [reviewState, setReviewState] = useState<Record<number, { rating: number; text: string }>>({});
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (!user) return;

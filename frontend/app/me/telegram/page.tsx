@@ -1,7 +1,7 @@
 'use client';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { apiFetch } from '@/api/client';
 
 interface LinkTokenResponse {
@@ -12,17 +12,13 @@ interface LinkTokenResponse {
 }
 
 export default function TelegramPage() {
-  const { user, loading, refreshUser } = useAuth();
+  const { user, loading, refreshUser } = useRequireAuth();
   const router = useRouter();
 
   const [generating, setGenerating] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [unlinking, setUnlinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   if (loading || !user) return null;
 

@@ -1,24 +1,21 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { pricingApi } from '@/api/pricing';
 import { Calculation, PaginatedResponse } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
 import Link from 'next/link';
 
 export default function MyCalculationsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [data, setData] = useState<PaginatedResponse<Calculation> | null>(null);
   const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
-    if (!loading && !user) { router.push('/login'); return; }
     if (user) {
       pricingApi.myCalculations().then(setData).finally(() => setFetching(false));
     }
-  }, [user, loading, router]);
+  }, [user, loading]);
 
   if (loading || fetching) return <div className="flex justify-center py-20"><Spinner size="lg" /></div>;
 

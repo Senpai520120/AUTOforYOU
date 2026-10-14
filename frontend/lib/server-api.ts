@@ -1,9 +1,11 @@
 /**
- * Серверні запити до API — для рендера каталогів на сервері.
+ * Серверні запити до API — для рендера сторінок на сервері.
  *
- * Клієнтський api/client.ts тут не годиться: він читає JWT з localStorage,
- * якого на сервері не існує. Тому серверний шар ходить в API анонімно і
- * віддає рівно те, що бачить незалогінений відвідувач і пошуковий робот.
+ * serverGet — анонімний і кешований: віддає рівно те, що бачить
+ * незалогінений відвідувач і пошуковий робот (публічні сторінки, SEO).
+ *
+ * serverGetAuthed — від імені відвідувача: передає в API його httpOnly-cookie
+ * `access` (задача 1.4). Без кешу, тільки для сторінок з force-dynamic.
  *
  * INTERNAL_API_URL задається в Docker (http://backend:8000).
  */
@@ -32,6 +34,38 @@ export function buildQuery(params: SearchParams, allowed: readonly string[]): st
 export async function serverGet<T>(path: string, revalidate = 60): Promise<T | null> {
   try {
     const res = await fetch(`${apiUrl}${path}`, { next: { revalidate } });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+const ACCESS_COOKIE = 'access';
+
+/**
+ * GET від імені поточного відвідувача. null — гість, протухший access або збій API.
+ *
+ * - В API йде тільки cookie `access` (решта cookie браузера бекенду не потрібна).
+ *   Домен cookie значення не має: заголовок Cookie збирається вручну, тому
+ *   працює і через INTERNAL_API_URL=http://backend:8000.
+ * - cache: 'no-store' — відповідь одного користувача не потрапляє в кеш іншого.
+ *   Сторінка, що викликає цю функцію, має бути `export const dynamic = 'force-dynamic'`.
+ * - Обмеження: refresh-cookie має Path=/api/v1/auth/ і до сервера Next не доходить,
+ *   тож протухший access тут не оновити. Сторінка рендериться анонімно, клієнт
+ *   робить refresh (api/client) і викликає router.refresh().
+ */
+export async function serverGetAuthed<T>(path: string): Promise<T | null> {
+  try {
+    // Динамічний імпорт: модуль імпортують і компоненти, яким next/headers не потрібен.
+    const { cookies } = await import('next/headers');
+    const access = (await cookies()).get(ACCESS_COOKIE)?.value;
+    // JWT — base64url і крапки; інше значення не підставляємо в заголовок.
+    if (!access || !/^[\w.-]+$/.test(access)) return null;
+    const res = await fetch(`${apiUrl}${path}`, {
+      headers: { Cookie: `${ACCESS_COOKIE}=${access}` },
+      cache: 'no-store',
+    });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {

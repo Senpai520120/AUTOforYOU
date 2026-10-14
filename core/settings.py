@@ -230,6 +230,9 @@ CSRF_COOKIE_HTTPONLY = False   # фронт должен прочитать то
 # Единое место параметров — users/cookies.py.
 AUTH_COOKIE_ACCESS_NAME = os.environ.get('AUTH_COOKIE_ACCESS_NAME', 'access')
 AUTH_COOKIE_REFRESH_NAME = os.environ.get('AUTH_COOKIE_REFRESH_NAME', 'refresh')
+# Метка «есть сессия» для фронта (не httpOnly, без токена; задача 1.4). Имя жёстко
+# совпадает с frontend/lib/session-hint.ts.
+AUTH_COOKIE_HINT_NAME = 'has_session'
 AUTH_COOKIE_SECURE = os.environ.get(
     'AUTH_COOKIE_SECURE', 'false' if DEBUG else 'true',
 ).lower() in ('true', '1', 'yes')
@@ -240,9 +243,10 @@ if AUTH_COOKIE_SAMESITE not in ('Lax', 'Strict'):
 AUTH_COOKIE_DOMAIN = os.environ.get('AUTH_COOKIE_DOMAIN', '') or None  # пусто = host-only
 # Refresh-cookie уходит только на эндпоинты auth (refresh и logout).
 AUTH_COOKIE_REFRESH_PATH = '/api/v1/auth/'
-# Переходный режим: токены ещё и в теле ответа, пока фронт хранит их
-# в localStorage. Выключается в задаче 1.4.
-AUTH_TOKENS_IN_BODY = True
+# Переходный режим 1.3 (токены ещё и в теле ответа) выключен в задаче 1.4:
+# фронт живёт только на cookie. Bearer-клиенты получают токены иначе
+# (в тестах — RefreshToken.for_user).
+AUTH_TOKENS_IN_BODY = False
 
 # ─── Rate Limiting (throttling) ───────────────────────────────────────────────
 # Дефолты env-overridable. Дорогие внешние API (Opendatabot, NHTSA) — 10/час.
@@ -463,7 +467,12 @@ if not DEBUG and not _TESTING:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    # csrftoken живёт в паре с auth-cookie (задача 1.4): один флаг на оба. Выключать
+    # только на стенде без TLS (локальный e2e по HTTP), по умолчанию на проде true.
+    CSRF_COOKIE_SECURE = AUTH_COOKIE_SECURE
+    if SECURE_SSL_REDIRECT and not AUTH_COOKIE_SECURE:
+        # Флаг стенда без TLS (.env.e2e) не должен попасть на прод с HTTPS.
+        raise ImproperlyConfigured('AUTH_COOKIE_SECURE=false допустим только при SECURE_SSL_REDIRECT=false.')
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     X_FRAME_OPTIONS = 'DENY'
     SECURE_CONTENT_TYPE_NOSNIFF = True

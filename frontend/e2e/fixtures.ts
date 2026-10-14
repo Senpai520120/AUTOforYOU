@@ -7,7 +7,7 @@ export type Role = 'buyer' | 'seller' | 'dealer' | 'staff' | 'broker' | 'fakeadm
 export const storageStatePath = (role: Role) => path.join(__dirname, '.auth', `${role}.json`);
 
 type Fixtures = {
-  /** API-контекст з токеном ролі. */
+  /** API-контекст з токеном ролі (Bearer — без cookie, тож CSRF не потрібен). */
   api: (role: Role) => Promise<APIRequestContext>;
   /** Унікальний email на тестовому домені. */
   uniqueEmail: string;
@@ -15,16 +15,15 @@ type Fixtures = {
   asRole: (role: Role) => string;
 };
 
-type LsItem = { name: string; value: string };
+type StoredCookie = { name: string; value: string };
 
 export const test = base.extend<Fixtures>({
   api: async ({ baseURL }, use) => {
     const contexts: APIRequestContext[] = [];
     await use(async (role) => {
       const state = JSON.parse(fs.readFileSync(storageStatePath(role), 'utf-8'));
-      const access = (state.origins ?? [])
-        .flatMap((o: { localStorage: LsItem[] }) => o.localStorage)
-        .find((i: LsItem) => i.name === 'access')?.value;
+      // Значення httpOnly-cookie access — той самий JWT, що приймає заголовок Bearer.
+      const access = (state.cookies ?? []).find((c: StoredCookie) => c.name === 'access')?.value;
       const ctx = await pwRequest.newContext({
         baseURL,
         extraHTTPHeaders: access ? { Authorization: `Bearer ${access}` } : {},

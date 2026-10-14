@@ -89,12 +89,10 @@ class TestRegisterLoginProfileFlow(APITestCase):
             'password': _REG_DATA['password'],
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        self.assertIn('access', resp.data)
-        self.assertIn('refresh', resp.data)
-        access = resp.data['access']
+        self.assertEqual(resp.data, {'ok': True})  # токены только в httpOnly-cookie (1.4)
+        self.assertIn('access', resp.cookies)
 
-        # Шаг 3: запрос профиля с Bearer-токеном
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+        # Шаг 3: запрос профиля по cookie
         resp = self.client.get(PROFILE_URL)
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertEqual(resp.data['email'], _REG_DATA['email'])

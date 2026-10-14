@@ -1,6 +1,6 @@
 /**
  * E2E: закриті сторінки (23-P2).
- * Захист зараз тільки клієнтський (редірект у useEffect); серверного і ?next= немає (задача 1.4).
+ * Захист клієнтський (useRequireAuth, задача 1.4): гість → /login?next=<шлях>.
  */
 import { test, expect, storageStatePath } from './fixtures';
 
@@ -31,7 +31,7 @@ test.describe('Гість на закритих сторінках', () => {
     });
   }
 
-  test.fixme('08-S7 → задача 1.4: після входу повертає на сторінку з ?next=', async ({ page }) => {
+  test('08-S7: після входу повертає на сторінку з ?next=', async ({ page }) => {
     await page.goto('/me/favorites');
     await expect(page).toHaveURL(/\/login\?next=%2Fme%2Ffavorites/);
     await page.locator('input[type="email"]').fill('buyer@e2e.test');
@@ -40,16 +40,16 @@ test.describe('Гість на закритих сторінках', () => {
     await expect(page).toHaveURL(/\/me\/favorites$/);
   });
 
-  test.fixme('10-S7 → задача 1.4: зовнішній next ігнорується', async ({ page, baseURL }) => {
+  test('10-S7: зовнішній next ігнорується', async ({ page, baseURL }) => {
     await page.goto('/login?next=https://evil.example/');
     await page.locator('input[type="email"]').fill('buyer@e2e.test');
     await page.locator('input[type="password"]').fill(process.env.E2E_PASSWORD ?? '');
     await page.getByRole('button', { name: 'Увійти' }).click();
-    await expect(page).toHaveURL(/\/me/);
+    await expect(page).toHaveURL(/\/me$/);
     expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin);
   });
 
-  test.fixme('08-S7 → задача 1.4: серверний редірект без JS', async ({ request }) => {
+  test.fixme('08-S7 → рішення власника: серверний редірект без JS (refresh-cookie серверу Next не видно)', async ({ request }) => {
     const resp = await request.get('/me', { maxRedirects: 0 });
     expect([307, 308]).toContain(resp.status());
     expect(resp.headers()['location']).toMatch(/\/login/);

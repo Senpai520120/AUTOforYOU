@@ -1,14 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getUnreadCount as getMsgUnread } from '@/api/messages';
 import { getUnreadCount as getNotifUnread } from '@/api/notifications';
 
 export default function Header() {
   const { user, logout } = useAuth();
-  const router = useRouter();
   const [msgUnread, setMsgUnread] = useState(0);
   const [notifUnread, setNotifUnread] = useState(0);
 
@@ -24,10 +22,7 @@ export default function Header() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [user]);
 
-  const handleLogout = () => {
-    logout();
-    router.push('/');
-  };
+  const handleLogout = () => { void logout(); };
 
   return (
     <header className="bg-blue-900 text-white shadow-md">

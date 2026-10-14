@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { meApi } from '@/api/me';
 import { TrustedShop } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
@@ -10,17 +9,15 @@ import Link from 'next/link';
 const TYPE_LABELS: Record<string, string> = { service: 'СТО', painter: 'Маляр', parts: 'Запчасти', other: 'Інше' };
 
 export default function TrustedShopsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [shops, setShops] = useState<TrustedShop[]>([]);
   const [fetching, setFetching] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'service', contacts: '', rating: 5, notes: '' });
 
   useEffect(() => {
-    if (!loading && !user) { router.push('/login'); return; }
     if (user) meApi.trustedShops.list().then(d => setShops(d.results)).finally(() => setFetching(false));
-  }, [user, loading, router]);
+  }, [user, loading]);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();

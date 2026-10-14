@@ -115,6 +115,8 @@
 - [ ] `CORS_ALLOW_ALL_ORIGINS` — **обязательно `false`**. При `true` любой чужой сайт сможет действовать от имени ваших пользователей. Скрипт `deploy.sh` откажется запускаться при `true`.
 - [ ] `CSRF_TRUSTED_ORIGINS` — **обязательно** (задача 1.3): `https://<домен>`, при необходимости `https://www.<домен>`. *Проверка:* вход и выход через сайт работают.
 - [ ] `AUTH_COOKIE_SECURE` — **обязательно `true`** на проде (задача 1.3, нужен HTTPS, задача 7.1). *Проверка:* DevTools → Application → Cookies: у cookie входа стоят `Secure` и `HttpOnly`.
+- [ ] **Проверка после деплоя (задача 1.4):** войти на сайт → DevTools → Application → Local Storage: нет ключей `access` и `refresh`; в Cookies у `access` и `refresh` стоят `HttpOnly` и `Secure`. «Вийти» → cookie `access`, `refresh`, `has_session` исчезли.
+- [ ] `AUTH_COOKIE_SECURE=false` на проде не ставить: при `SECURE_SSL_REDIRECT=true` бэкенд не запустится (`ImproperlyConfigured`), флаг только для стенда без TLS (e2e). `THROTTLE_ANON_RATE` из `.env.e2e` на прод не переносить.
 - [ ] `AUTH_COOKIE_DOMAIN` — пусто, если сайт и API на одном домене (задача 1.3). Можно не трогать.
 - [ ] `SECURE_SSL_REDIRECT` — **обязательно `true`** (по умолчанию так и есть). Перенаправлять с http на https; `false` — только если https делает внешний балансировщик.
   ⚠ Пока нет HTTPS (до задачи 7.1), с `true` сайт уводит на несуществующий https-адрес.

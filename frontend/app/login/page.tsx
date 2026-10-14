@@ -1,12 +1,24 @@
 'use client';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { safeNext } from '@/lib/safe-next';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
+  // useSearchParams без Suspense ламає пререндер сторінки під час build.
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const { login } = useAuth();
   const router = useRouter();
+  // Повернення тільки на шлях цього сайту (08-S7, 10-S7).
+  const next = safeNext(useSearchParams().get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,7 +29,7 @@ export default function LoginPage() {
     setLoading(true); setError('');
     try {
       await login(email, password);
-      router.push('/me');
+      router.replace(next);
     } catch (err: unknown) {
       setError((err as Error).message);
     } finally {

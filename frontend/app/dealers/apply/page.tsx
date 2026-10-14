@@ -1,13 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { dealersApi } from '@/api/dealers';
 import Spinner from '@/components/ui/Spinner';
 
 export default function DealerApplyPage() {
-  const { user, loading } = useAuth();
+  const { loading } = useRequireAuth();
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -20,10 +20,6 @@ export default function DealerApplyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
 

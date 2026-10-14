@@ -27,7 +27,8 @@ export default function CookieBanner() {
     >
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <p className="text-sm flex-1">
-          Ми зберігаємо у вашому браузері дані, потрібні для входу в акаунт. Аналітичні та
+          Ми використовуємо файли cookie, потрібні для входу в акаунт і захисту від підроблених
+          запитів. Аналітичні та
           рекламні сервіси зараз не використовуються — вони не запрацюють без вашої згоди.{' '}
           <Link href="/cookies" className="underline hover:text-amber-400 transition-colors">
             Що саме зберігається

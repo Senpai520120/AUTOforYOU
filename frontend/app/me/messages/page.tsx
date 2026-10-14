@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getConversations, getConversation, sendMessage } from '@/api/messages';
 import type { ConversationSummary, ConversationDetail } from '@/lib/types';
@@ -16,8 +16,7 @@ function timeAgo(iso: string) {
 }
 
 export default function MessagesPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const searchParams = useSearchParams();
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -30,10 +29,6 @@ export default function MessagesPage() {
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   const loadConversations = useCallback(async () => {
     try {

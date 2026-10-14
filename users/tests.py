@@ -9,6 +9,7 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from tests.base import CleanCacheTestCase
 from tests.factories import (
@@ -1014,9 +1015,6 @@ class CookieAuthTests(APITestCase):
         self.assertEqual(refresh['path'], '/api/v1/auth/')
         self.assertEqual(access['max-age'], 15 * 60)
         self.assertEqual(refresh['max-age'], 7 * 24 * 3600)
-        # Переходный режим (AUTH_TOKENS_IN_BODY): токены ещё и в теле.
-        self.assertIn('access', resp.data)
-        self.assertIn('refresh', resp.data)
 
     def test_login_updates_last_login(self):
         self._login()
@@ -1034,11 +1032,32 @@ class CookieAuthTests(APITestCase):
         resp = self._login()
         self.assertEqual(resp.cookies['access']['secure'], '')
 
-    @override_settings(AUTH_TOKENS_IN_BODY=False)
-    def test_tokens_not_in_body_when_disabled(self):
+    # Метка сессии для фронта (1.4): читается JS, токена не содержит.
+    def test_login_sets_readable_session_hint(self):
+        resp = self._login()
+        hint = resp.cookies['has_session']
+        self.assertEqual(hint.value, '1')
+        self.assertEqual(hint['httponly'], '')
+        self.assertEqual(hint['path'], '/')
+        self.assertEqual(hint['max-age'], 7 * 24 * 3600)
+
+    def test_refresh_failure_clears_session_hint(self):
+        resp = APIClient().post(REFRESH_URL, {'refresh': 'garbage'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(resp.cookies['has_session']['max-age'], 0)
+
+    # 23-D20 (часть 2): с задачи 1.4 токены только в cookie, в теле их нет.
+    def test_token_body_has_no_tokens(self):
         resp = self._login()
         self.assertEqual(resp.data, {'ok': True})
         self.assertIn('access', resp.cookies)
+        self.assertIn('refresh', resp.cookies)
+
+        resp = self.client.post(REFRESH_URL, **self._csrf())
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data, {'ok': True})
+        self.assertIn('access', resp.cookies)
+        self.assertIn('refresh', resp.cookies)
 
     def test_csrf_endpoint_sets_readable_cookie(self):
         resp = self.client.get(CSRF_URL)
@@ -1114,11 +1133,11 @@ class CookieAuthTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_refresh_from_body_without_csrf_ok(self):
-        # Переходный фронт шлёт refresh в теле без X-CSRFToken.
-        login = self._login()
-        resp = self.client.post(REFRESH_URL, {'refresh': login.data['refresh']}, format='json')
+        # Bearer-клиенты шлют refresh в теле без X-CSRFToken.
+        refresh = RefreshToken.for_user(self.user)
+        resp = APIClient(enforce_csrf_checks=True).post(REFRESH_URL, {'refresh': str(refresh)}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        self.assertIn('access', resp.data)
+        self.assertIn('access', resp.cookies)
 
     def test_refresh_garbage_is_neutral_401(self):
         resp = APIClient().post(REFRESH_URL, {'refresh': 'garbage'}, format='json')
@@ -1137,6 +1156,7 @@ class CookieAuthTests(APITestCase):
         self.assertEqual(resp.cookies['access']['max-age'], 0)
         self.assertEqual(resp.cookies['refresh']['max-age'], 0)
         self.assertEqual(resp.cookies['refresh']['path'], '/api/v1/auth/')
+        self.assertEqual(resp.cookies['has_session']['max-age'], 0)
 
     def test_logout_refresh_cookie_without_csrf_forbidden(self):
         from rest_framework_simplejwt.tokens import RefreshToken
@@ -1213,9 +1233,9 @@ class CookieAuthTests(APITestCase):
         self.assertIn('Origin', str(resp.data['detail']))
 
     def test_refresh_for_deleted_user_is_401(self):
-        login = self._login()
+        refresh = RefreshToken.for_user(self.user)
         self.user.delete()
-        resp = APIClient().post(REFRESH_URL, {'refresh': login.data['refresh']}, format='json')
+        resp = APIClient().post(REFRESH_URL, {'refresh': str(refresh)}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     # Регрессия: эндпоинт без DRF-аутентификации cookie и CSRF не трогают.

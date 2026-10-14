@@ -1,16 +1,9 @@
 'use client';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import LocalListingForm from '@/components/local/LocalListingForm';
 
 export default function NewLocalListingPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
+  const { user, loading } = useRequireAuth();
 
   if (loading || !user) return null;
 

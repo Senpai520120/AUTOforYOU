@@ -1,6 +1,6 @@
 /**
  * E2E (API): JWT у httpOnly-cookie + CSRF (задача 1.3, 23-D20, частина 23-P8).
- * Фронт ще на localStorage (задача 1.4) — перевіряємо бекенд через request API.
+ * Бекенд через request API; браузерні сценарії фронту — auth-cookie.spec.ts (задача 1.4).
  */
 import { test, expect } from './fixtures';
 

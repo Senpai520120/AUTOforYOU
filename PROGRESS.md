@@ -1,8 +1,26 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, дальше 1.4 (Opus) → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, дальше 1.5 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.4: фронтенд на cookie-аутентификации (2026-10-14) — ЗАВЕРШЕНО
+
+- `api/client.ts`: `credentials:'include'`, без `Authorization`; `Content-Type` только с телом (08-Q16); `X-CSRFToken` на POST/PUT/PATCH/DELETE и upload (`lib/csrf.ts`, при отсутствии cookie — `GET /auth/csrf/`). Refresh — single-flight в вкладке + `navigator.locks` между вкладками; «эпоха» сессии: 401 на запрос, ушедший до refresh, просто повторяется. Refresh 401 → один повтор → событие `auth:expired`; 429/5xx на refresh из сессии не выкидывают. 401 не редиректит, кидается `ApiError` со `status`.
+- Метка сессии `has_session=1` (не httpOnly, без токена; `users/cookies.py`, `AUTH_COOKIE_HINT_NAME`): без неё фронт не зовёт profile/refresh — гость не тратит анонимный лимит (найдено ревью). Бэкенд ставит её вместе с refresh и удаляет в `clear_auth_cookies`.
+- `lib/auth-context.tsx`: профиль по cookie, `login` → `POST token/` (400/401 → «Невірний email або пароль»), `logout` → `POST token/logout/` и полный переход на `/` только при 200/400, иначе сообщение «Не вдалося вийти» (ревью: при сбое сети cookie остаются). Одноразовая очистка старых `localStorage.access/refresh`. Удалены `Tokens`, `tokens`, `refreshToken`.
+- `lib/use-require-auth.ts` + `lib/safe-next.ts`: 15 страниц (`app/me/**`, `b2b`, `local/new`, `local/[id]/edit`, `dealers/apply`) — один хук, `/login?next=<путь>`; `next` и ссылка уведомления — только путь сайта (не `//`, `/\`, без управляющих символов). `/login` в `Suspense`.
+- `lib/server-api.ts::serverGetAuthed` — только cookie `access` (значение проверяется `^[\w.-]+$`), `cache:'no-store'`. Используется на `/me` (`app/me/page.tsx` — серверная обёртка с `force-dynamic` и меткой `data-ssr-auth`, кабинет — `MeDashboard.tsx`). После refresh клиент делает `router.refresh()`. **Следующий шаг — 2.9: B2B-лот на `serverGetAuthed`.**
+- Бэкенд: `AUTH_TOKENS_IN_BODY=False`; `CSRF_COOKIE_SECURE = AUTH_COOKIE_SECURE` в прод-блоке + `ImproperlyConfigured` при `SECURE_SSL_REDIRECT` без `AUTH_COOKIE_SECURE`. Тесты: `test_token_body_has_no_tokens`, метка сессии; Bearer-тесты берут токен через `RefreshToken.for_user`.
+- Тексты 11-S5: `/cookies` (таблица `access`/`refresh`/`has_session`/`csrftoken`/`cookie_consent`), `consent.ts`, `CookieBanner`, комментарии `WholesaleHint`, `server-api`.
+- E2E: `auth.setup.ts` сохраняет cookie в storageState, `fixtures.api` берёт Bearer из cookie `access`; `auth.spec.ts`, `private-pages.spec.ts` (`?next=` и внешний `next` — из fixme в тесты) переписаны; новый `auth-cookie.spec.ts` (23-P8, 23-P3, 23-P4, 09-Q7, 08-S7, 11-S5, сбой выхода, утечка SSR, очистка старых токенов). 23-P4 сделан без отдельного стека с `JWT_ACCESS_MINUTES=1`: удаление cookie `access` = то, что делает браузер по Max-Age, время шапки — `page.clock`.
+- `.env.e2e.example`: `AUTH_COOKIE_SECURE=false` (стенд по HTTP), `THROTTLE_ANON_RATE=2000/hour` — весь набор Playwright с одного IP выбирал 60/hour к мобильным проектам.
+- Вне раздела «Файлы» (неизбежно для зелёного Playwright и ревью): `e2e/auth.setup.ts`, `fixtures.ts`, `auth.spec.ts`, `private-pages.spec.ts`, `auth-cookie-api.spec.ts` (комментарий), `users/cookies.py`, `users/views.py` (описание OpenAPI), `tests/test_e2e.py`, `.env.e2e.example`, `app/local/[id]/edit`, `app/dealers/apply`, `app/me/notifications` (safeNext).
+- Проверки: backend 563 OK (+ users 138 OK после правок ревью); tsc и build чистые (`/me` — ƒ dynamic); eslint — новых ошибок нет (3 старые в `e2e/fixtures.ts`). **Весь Playwright: 127 passed / 4 skipped (fixme) / 0 failed.** Мутации Django: `AUTH_TOKENS_IN_BODY=True` и имя метки — красные. E2E-мутации отдельно не гонялись (пересборка образа); роль мутации сыграли прогоны на промежуточных сборках: без метки сессии — 429 и 13 красных, с гонкой в 23-P4 — красный.
+- Ревью безопасности: «критично» — нет; три «важно» (лимит гостя, ложный выход при сбое, старые токены в localStorage) и желательные (обходы `next`, утечка SSR, защита флага Secure) исправлены.
+- **Открыто:** серверный редирект `/me` без JS (fixme в `private-pages.spec.ts`) — сервер Next не видит refresh-cookie (Path=/api/v1/auth/); нужно решение владельца (например, редирект по отсутствию `has_session`). Тест на ссылку уведомления через `safeNext` — нет засева уведомлений, проверено только кодом.
 
 ---
 

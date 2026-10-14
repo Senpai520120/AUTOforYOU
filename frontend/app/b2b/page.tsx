@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { listingsApi } from '@/api/listings';
 import { Listing, PaginatedResponse } from '@/lib/types';
 import ListingCard from '@/components/listings/ListingCard';
@@ -9,22 +8,20 @@ import Spinner from '@/components/ui/Spinner';
 import Link from 'next/link';
 
 export default function B2BPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [data, setData] = useState<PaginatedResponse<Listing> | null>(null);
   const [fetching, setFetching] = useState(true);
 
   const canAccess = user && (user.is_verified_dealer || user.is_admin_role);
 
   useEffect(() => {
-    if (!loading && !user) { router.push('/login'); return; }
     if (!loading && user && !canAccess) { setFetching(false); return; }
     if (user && canAccess) {
       listingsApi.b2bBoard({}).then(setData).finally(() => setFetching(false));
     } else if (!loading) {
       setFetching(false);
     }
-  }, [user, loading, canAccess, router]);
+  }, [user, loading, canAccess]);
 
   if (loading || fetching) return <div className="flex justify-center py-20"><Spinner /></div>;
 

@@ -20,10 +20,11 @@ export default function CookiesPage() {
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-2">1. Що ми використовуємо</h2>
           <p>
-            Для роботи сайту ми зберігаємо дані у вашому браузері. Основна частина зберігається
-            не у файлах cookie, а в <strong>localStorage</strong> — це інша технологія, але з точки
-            зору захисту персональних даних до неї застосовуються ті самі вимоги, тому ми розкриваємо
-            її нарівні з cookie.
+            Для входу в акаунт сайт використовує <strong>файли cookie</strong> з позначкою 
+            <strong>HttpOnly</strong>: їх читає лише наш сервер, скрипти на сторінці доступу до них
+            не мають. Окремо в сховищі браузера (<strong>localStorage</strong>) зберігається тільки
+            ваш вибір щодо cookie. З точки зору захисту персональних даних до обох технологій
+            застосовуються ті самі вимоги, тому ми розкриваємо їх разом.
           </p>
         </section>
 
@@ -37,7 +38,7 @@ export default function CookiesPage() {
             <table className="w-full text-sm border-collapse border border-slate-200 rounded">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="border border-slate-200 px-3 py-2 text-left">Ключ</th>
+                  <th className="border border-slate-200 px-3 py-2 text-left">Назва</th>
                   <th className="border border-slate-200 px-3 py-2 text-left">Технологія</th>
                   <th className="border border-slate-200 px-3 py-2 text-left">Мета</th>
                   <th className="border border-slate-200 px-3 py-2 text-left">Термін</th>
@@ -46,15 +47,27 @@ export default function CookiesPage() {
               <tbody>
                 <tr>
                   <td className="border border-slate-200 px-3 py-2 font-mono">access</td>
-                  <td className="border border-slate-200 px-3 py-2">localStorage</td>
+                  <td className="border border-slate-200 px-3 py-2">cookie, HttpOnly</td>
                   <td className="border border-slate-200 px-3 py-2">Токен доступу до акаунта</td>
-                  <td className="border border-slate-200 px-3 py-2">15 хвилин</td>
+                  <td className="border border-slate-200 px-3 py-2">15 хвилин (налаштовується)</td>
                 </tr>
                 <tr>
                   <td className="border border-slate-200 px-3 py-2 font-mono">refresh</td>
-                  <td className="border border-slate-200 px-3 py-2">localStorage</td>
-                  <td className="border border-slate-200 px-3 py-2">Продовження сесії без повторного входу</td>
-                  <td className="border border-slate-200 px-3 py-2">7 днів</td>
+                  <td className="border border-slate-200 px-3 py-2">cookie, HttpOnly</td>
+                  <td className="border border-slate-200 px-3 py-2">Продовження сесії без повторного входу. Надсилається лише на адреси входу й виходу</td>
+                  <td className="border border-slate-200 px-3 py-2">7 днів (налаштовується)</td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-200 px-3 py-2 font-mono">has_session</td>
+                  <td className="border border-slate-200 px-3 py-2">cookie</td>
+                  <td className="border border-slate-200 px-3 py-2">Позначка «ви увійшли» без токена — щоб не робити зайвих запитів, коли ви не в акаунті</td>
+                  <td className="border border-slate-200 px-3 py-2">7 днів (налаштовується)</td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-200 px-3 py-2 font-mono">csrftoken</td>
+                  <td className="border border-slate-200 px-3 py-2">cookie</td>
+                  <td className="border border-slate-200 px-3 py-2">Захист від підроблених запитів (CSRF) від імені вашого акаунта</td>
+                  <td className="border border-slate-200 px-3 py-2">1 рік</td>
                 </tr>
                 <tr>
                   <td className="border border-slate-200 px-3 py-2 font-mono">cookie_consent</td>
@@ -66,8 +79,8 @@ export default function CookiesPage() {
             </table>
           </div>
           <p className="text-sm text-slate-500 mt-2">
-            Значення <span className="font-mono">access</span> і <span className="font-mono">refresh</span>{' '}
-            видаляються під час виходу з акаунта.
+            Cookie <span className="font-mono">access</span> і <span className="font-mono">refresh</span> 
+            видаляються під час виходу з акаунта, а сесія скасовується на сервері.
           </p>
 
           <h3 className="font-semibold text-slate-700 mt-6 mb-1">
@@ -88,17 +101,12 @@ export default function CookiesPage() {
                   <td className="border border-slate-200 px-3 py-2">Сесія адміністратора</td>
                   <td className="border border-slate-200 px-3 py-2">2 тижні</td>
                 </tr>
-                <tr>
-                  <td className="border border-slate-200 px-3 py-2 font-mono">csrftoken</td>
-                  <td className="border border-slate-200 px-3 py-2">Захист форм адмінпанелі від CSRF</td>
-                  <td className="border border-slate-200 px-3 py-2">1 рік</td>
-                </tr>
               </tbody>
             </table>
           </div>
           <p className="text-sm text-slate-500 mt-2">
-            Ці cookie встановлюються лише при відвідуванні <span className="font-mono">/admin</span>{' '}
-            і не стосуються звичайних користувачів сайту.
+            Cookie <span className="font-mono">sessionid</span> встановлюється лише при відвідуванні{' '}
+            <span className="font-mono">/admin</span> і не стосується звичайних користувачів сайту.
           </p>
 
           <h3 className="font-semibold text-slate-700 mt-6 mb-1">

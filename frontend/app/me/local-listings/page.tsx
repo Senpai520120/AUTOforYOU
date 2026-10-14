@@ -1,8 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { localApi } from '@/api/local';
 import { dealsApi } from '@/api/deals';
 import { LocalListing } from '@/lib/types';
@@ -33,18 +32,13 @@ interface ModalState {
 }
 
 export default function MyLocalListingsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [listings, setListings] = useState<LocalListing[]>([]);
   const [fetching, setFetching] = useState(true);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [soldModal, setSoldModal] = useState<SoldModalState | null>(null);
   const [proposingTo, setProposingTo] = useState<number | null>(null);
   const [soldError, setSoldError] = useState('');
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (!user) return;

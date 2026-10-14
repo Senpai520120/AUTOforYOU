@@ -2,8 +2,8 @@
  * E2E: вхід і вихід (23-P1, 23-P3).
  * Пароль — тільки з E2E_PASSWORD (той самий, з яким виконано e2e_seed).
  */
-import fs from 'fs';
-import { test, expect, storageStatePath } from './fixtures';
+import type { Page } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 const GUEST = { cookies: [], origins: [] };
 
@@ -30,7 +30,9 @@ test.describe('Вхід (23-P1)', () => {
     await expect(page).toHaveURL(/\/me$/);
     await expect(page.getByRole('banner').getByRole('button', { name: 'Вийти' })).toBeVisible();
     await expect(page.getByText('seller@e2e.test').first()).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('access'))).toBeTruthy();
+    // Сесія — тільки httpOnly-cookie (задача 1.4).
+    expect(await page.evaluate(() => localStorage.getItem('access'))).toBeNull();
+    expect(await cookieNames(page)).toContain('access');
   });
 
   test('невірний пароль → повідомлення, лишаємось на /login, токена немає', async ({ page }) => {
@@ -46,44 +48,40 @@ test.describe('Вхід (23-P1)', () => {
 
     await expect(page.getByText('Невірний email або пароль')).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
-    expect(await page.evaluate(() => localStorage.getItem('access'))).toBeNull();
-    expect(await page.evaluate(() => localStorage.getItem('refresh'))).toBeNull();
+    expect(await cookieNames(page)).not.toContain('access');
+    expect(await cookieNames(page)).not.toContain('refresh');
   });
 });
 
 test.describe('Вихід (23-P3)', () => {
-  test.use({ storageState: storageStatePath('seller') });
+  // Власний вхід, а не storageState seller: вихід відкликає refresh на сервері,
+  // і спільний стан інших тестів зламався б.
+  test.use({ storageState: GUEST });
 
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem('cookie_consent', 'necessary'));
+    const login = await page.request.post('/api/v1/auth/token/', {
+      data: { email: 'seller@e2e.test', password: e2ePassword() },
+    });
+    expect(login.status()).toBe(200);
   });
 
-  test('після «Вийти» /me веде на /login, токенів у localStorage немає', async ({ page }) => {
+  test('після «Вийти» /me веде на /login, cookie сесії видалено', async ({ page }) => {
     await page.goto('/me');
     await expect(page.getByText('seller@e2e.test').first()).toBeVisible();
 
     await page.getByRole('banner').getByRole('button', { name: 'Вийти' }).click();
     await expect(page.getByRole('banner').getByRole('link', { name: 'Увійти' })).toBeVisible();
 
-    expect(await page.evaluate(() => localStorage.getItem('access'))).toBeNull();
-    expect(await page.evaluate(() => localStorage.getItem('refresh'))).toBeNull();
+    expect(await cookieNames(page)).not.toContain('access');
+    expect(await cookieNames(page)).not.toContain('refresh');
 
     await page.goto('/me');
     await expect(page).toHaveURL(/\/login/);
   });
-
-  test.fixme('08-S2 → задача 1.4: refresh після виходу відхилено сервером', async ({ page, request }) => {
-    const state = JSON.parse(fs.readFileSync(storageStatePath('seller'), 'utf-8'));
-    const refresh = state.origins
-      .flatMap((o: { localStorage: { name: string; value: string }[] }) => o.localStorage)
-      .find((i: { name: string }) => i.name === 'refresh')?.value;
-    expect(refresh).toBeTruthy();
-
-    await page.goto('/me');
-    await page.getByRole('banner').getByRole('button', { name: 'Вийти' }).click();
-    await expect(page.getByRole('banner').getByRole('link', { name: 'Увійти' })).toBeVisible();
-
-    const resp = await request.post('/api/v1/auth/token/refresh/', { data: { refresh } });
-    expect(resp.status()).toBe(401);
-  });
+  // Відкликання refresh після виходу (08-S2) — e2e/auth-cookie.spec.ts, 23-P3.
 });
+
+async function cookieNames(page: Page): Promise<string[]> {
+  return (await page.context().cookies()).map((c) => c.name);
+}

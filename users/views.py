@@ -53,8 +53,8 @@ def _token_body(data):
     tags=['auth'],
     summary='Получить JWT (login)',
     description=(
-        'Ставит httpOnly-cookie `access` и `refresh`. Пока фронт не переведён на cookie '
-        '(AUTH_TOKENS_IN_BODY), токены дублируются в теле. Принимает только JSON.'
+        'Ставит httpOnly-cookie `access` и `refresh`. Токенов в теле нет '
+        '(AUTH_TOKENS_IN_BODY=False с задачи 1.4). Принимает только JSON.'
     ),
 )
 class CookieTokenObtainView(TokenObtainPairView):

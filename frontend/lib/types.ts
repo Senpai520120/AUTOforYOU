@@ -145,11 +145,6 @@ export interface DealerApplication {
   reviewed_at: string | null;
 }
 
-export interface Tokens {
-  access: string;
-  refresh: string;
-}
-
 // ─── C2C: місцеві оголошення ─────────────────────────────────────────────────
 
 export interface Region {
