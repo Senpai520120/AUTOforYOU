@@ -49,7 +49,7 @@ test.describe('Гість на закритих сторінках', () => {
     expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin);
   });
 
-  test.fixme('08-S7 → рішення власника: серверний редірект без JS (refresh-cookie серверу Next не видно)', async ({ request }) => {
+  test.fixme('08-S7 → задача 6.2: серверний редірект без JS (proxy.ts за cookie has_session)', async ({ request }) => {
     const resp = await request.get('/me', { maxRedirects: 0 });
     expect([307, 308]).toContain(resp.status());
     expect(resp.headers()['location']).toMatch(/\/login/);

@@ -20,7 +20,7 @@
 - Вне раздела «Файлы» (неизбежно для зелёного Playwright и ревью): `e2e/auth.setup.ts`, `fixtures.ts`, `auth.spec.ts`, `private-pages.spec.ts`, `auth-cookie-api.spec.ts` (комментарий), `users/cookies.py`, `users/views.py` (описание OpenAPI), `tests/test_e2e.py`, `.env.e2e.example`, `app/local/[id]/edit`, `app/dealers/apply`, `app/me/notifications` (safeNext).
 - Проверки: backend 563 OK (+ users 138 OK после правок ревью); tsc и build чистые (`/me` — ƒ dynamic); eslint — новых ошибок нет (3 старые в `e2e/fixtures.ts`). **Весь Playwright: 127 passed / 4 skipped (fixme) / 0 failed.** Мутации Django: `AUTH_TOKENS_IN_BODY=True` и имя метки — красные. E2E-мутации отдельно не гонялись (пересборка образа); роль мутации сыграли прогоны на промежуточных сборках: без метки сессии — 429 и 13 красных, с гонкой в 23-P4 — красный.
 - Ревью безопасности: «критично» — нет; три «важно» (лимит гостя, ложный выход при сбое, старые токены в localStorage) и желательные (обходы `next`, утечка SSR, защита флага Secure) исправлены.
-- **Открыто:** серверный редирект `/me` без JS (fixme в `private-pages.spec.ts`) — сервер Next не видит refresh-cookie (Path=/api/v1/auth/); нужно решение владельца (например, редирект по отсутствию `has_session`). Тест на ссылку уведомления через `safeNext` — нет засева уведомлений, проверено только кодом.
+- Серверный редирект `/me` без JS — решение владельца (2026-10-14): задача 6.2, `proxy.ts` по наличию cookie `has_session`, права проверяет API. Fixme в `private-pages.spec.ts` ссылается на 6.2. Тест на ссылку уведомления через `safeNext` — нет засева уведомлений, проверено только кодом.
 
 ---
 
