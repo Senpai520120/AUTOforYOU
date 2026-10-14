@@ -1,8 +1,21 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, дальше 1.6 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, дальше 1.7 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.6: подтверждение email, Turnstile + honeypot (2026-10-14) — ЗАВЕРШЕНО
+
+- Бэкенд: `users/tokens.py` (токен с `is_email_verified` и email, TTL `EMAIL_VERIFY_TTL_HOURS`), `users/emails.py` + шаблоны, `verify-email/`, `verify-email/resend/` (scope `verify_resend`), `auth/config/` (без секретов, `no-store`), `IsEmailVerified` на `POST /local/listings/`, начале диалога/сообщении, `dealers/apply/` (403 `email_not_verified`), data-миграция `0012_grandfather_email_verified`, 18+ (`is_adult`), одинаковый 201 на дубль email (01-S11), `users.E001/W002/E002` (system check капчи).
+- `integrations/captcha.py`: Turnstile / honeypot (всегда) / off, `require_captcha(request, data, point=…)`; вход — капча после `CAPTCHA_LOGIN_AFTER_FAILURES` неудач (порядок: блокировка → капча → попытка). Honeypot `form_token` одноразовый (nonce, IP, TTL 1 ч).
+- Фронт: `Captcha.tsx` (`resetKey`, `expired-callback`, сообщение о провале скрипта), «Перевірте пошту», `/verify-email`, баннер в `/me`, обработка 403 на формах.
+- Ревью безопасности: исправлены тайминг-различие занятого email, многоразовый form_token, тестовые ключи Cloudflare на проде (E002), `assertRaises(Exception)`. Оставлено на 1.7: сброс пароля должен ставить `is_email_verified=True` и отзывать сессии (захват аккаунта до регистрации владельцем); желательное — проверка `hostname` в siteverify, пороги капчи по IP (password spraying), `Referrer-Policy` на `/verify-email`, имя honeypot-поля `website`.
+- e2e: в стеке нет Mailpit — сценарии «письмо → ссылка» и «повторная ссылка» `test.fixme` (verify-captcha.spec.ts:70,72); нужна задача на mail-catcher в `docker-compose.e2e.yml`. Блокировка ставится на (MAX+1)-й попытке, капча проверяется раньше — спека login-limit шлёт её с токеном. auth-cookie.spec.ts:247 флейкает из-за общего аккаунта buyer и nginx `limit_req` (счётчик в памяти nginx, FLUSHALL не сбрасывает).
+- Для 1.12: Turnstile (Cloudflare) обрабатывает IP посетителя. Для этапа 7: `challenges.cloudflare.com` в `script-src` и `frame-src`.
+- `openapi.yaml` НЕ перегенерирован (нужен Postgres) — сделать отдельно.
+- Факт 1 сессия при оценке 2.
 
 ---
 

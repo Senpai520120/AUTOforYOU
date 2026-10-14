@@ -5,6 +5,7 @@
  */
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect } from './fixtures';
+import { captchaToken, captchaTokens, registerViaApi } from './helpers/captcha';
 
 const GUEST = { cookies: [], origins: [] };
 const MAX_FAILURES = 5;
@@ -16,17 +17,15 @@ function e2ePassword(): string {
 }
 
 async function register(request: APIRequestContext, email: string) {
-  const password = e2ePassword();
-  const resp = await request.post('/api/v1/auth/register/', {
-    data: { email, password, password2: password, agreed_to_terms: true },
-  });
-  expect(resp.status()).toBe(201);
+  await registerViaApi(request, email, e2ePassword());
 }
 
 async function failLogins(request: APIRequestContext, email: string, n: number) {
+  // После 3 неудач вход требует капчу (1.6): токен honeypot одноразовый — свой на каждый запрос.
+  const tokens = await captchaTokens(request, n);
   for (let i = 0; i < n; i++) {
     const resp = await request.post('/api/v1/auth/token/', {
-      data: { email, password: `${e2ePassword()}-wrong` },
+      data: { email, password: `${e2ePassword()}-wrong`, captcha_token: tokens[i] },
     });
     expect(resp.status()).toBe(401);
   }
@@ -47,6 +46,13 @@ test.describe('Блокування входу (23-P9)', () => {
     test.setTimeout(150_000);
     await register(request, uniqueEmail);
     await failLogins(request, uniqueEmail, MAX_FAILURES);
+    // Блокировка ставится на (MAX_FAILURES+1)-й попытке, а капча проверяется раньше неё (1.6):
+    // эту попытку шлём с токеном, чтобы аккаунт реально оказался заблокирован.
+    const lockToken = await captchaToken(request);
+    const lockResp = await request.post('/api/v1/auth/token/', {
+      data: { email: uniqueEmail, password: `${e2ePassword()}-wrong`, captcha_token: lockToken },
+    });
+    expect(lockResp.status()).toBe(429);
 
     await page.goto('/login');
     await page.locator('input[type="email"]').fill(uniqueEmail);
@@ -86,8 +92,15 @@ test.describe('Блокування входу (23-P9)', () => {
     for (let i = 0; i < MAX_FAILURES; i++) {
       await page.locator('input[type="email"]').fill(uniqueEmail);
       await page.locator('input[type="password"]').fill(`wrong-${i}`);
+      // Відповідь чекаємо явно: текст помилки попередньої спроби ще на екрані, і без цього
+      // наступна спроба стартувала б, поки летить попередня (після 3-ї кнопка ще й чекає капчу).
+      const attempt = page.waitForResponse(
+        (r) => r.url().includes('/auth/token/') && r.request().method() === 'POST',
+      );
       await page.getByRole('button', { name: 'Увійти' }).click();
+      expect((await attempt).status()).toBe(401);
       await expect(page.getByText('Невірний email або пароль')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Увійти' })).toBeVisible();
     }
     await page.locator('input[type="password"]').fill('wrong-last');
     const tokenResponse = page.waitForResponse(

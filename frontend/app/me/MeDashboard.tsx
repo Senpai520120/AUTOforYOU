@@ -1,6 +1,9 @@
 'use client';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
+import { useState } from 'react';
+import { ApiError } from '@/api/client';
+import { resendVerificationEmail } from '@/lib/email-verify';
 
 const ROLE_LABELS: Record<string, string> = {
   buyer: 'Покупець',
@@ -9,6 +12,39 @@ const ROLE_LABELS: Record<string, string> = {
   moderator: 'Модератор',
   admin: 'Адмін',
 };
+
+function VerifyEmailBanner() {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [msg, setMsg] = useState('');
+  const resend = async () => {
+    setState('sending');
+    try {
+      await resendVerificationEmail();
+      setState('sent');
+    } catch (err) {
+      setMsg(err instanceof ApiError && err.status === 429
+        ? 'Забагато спроб. Спробуйте пізніше.'
+        : 'Не вдалося надіслати лист. Спробуйте пізніше.');
+      setState('error');
+    }
+  };
+  return (
+    <div role="status" data-testid="verify-email-banner"
+      className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-900">
+      <p className="font-semibold">Підтвердіть email</p>
+      <p className="mt-1">Без підтвердження не можна додавати оголошення, писати повідомлення та подавати заявку дилера.</p>
+      {state === 'sent' ? (
+        <p className="mt-2 font-semibold">Лист надіслано. Перевірте пошту.</p>
+      ) : (
+        <button type="button" onClick={resend} disabled={state === 'sending'}
+          className="mt-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-semibold px-4 py-1.5 rounded-lg">
+          Надіслати ще раз
+        </button>
+      )}
+      {state === 'error' && <p className="mt-2 text-red-700">{msg}</p>}
+    </div>
+  );
+}
 
 export default function MeDashboard() {
   const { user, loading, logout } = useRequireAuth();
@@ -30,6 +66,7 @@ export default function MeDashboard() {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {!user.is_email_verified && <VerifyEmailBanner />}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center text-2xl font-bold text-blue-700">

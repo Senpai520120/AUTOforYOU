@@ -282,7 +282,7 @@ _REG_BASE = {
 class TestRegistrationConsent(APITestCase):
 
     def test_register_without_consent_returns_400(self):
-        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': False}, format='json')
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': False, 'is_adult': True}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('agreed_to_terms', resp.data)
 
@@ -291,13 +291,13 @@ class TestRegistrationConsent(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_register_with_consent_sets_agreed_to_terms_at(self):
-        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True}, format='json')
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True, 'is_adult': True}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         user = User.objects.get(email=_REG_BASE['email'])
         self.assertIsNotNone(user.agreed_to_terms_at)
 
     def test_register_with_consent_returns_201(self):
-        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True}, format='json')
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True, 'is_adult': True}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
 
@@ -322,7 +322,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         # Решение 1.2: поле role в запросе молча игнорируется (не 400): пользователь всегда buyer.
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'admin', 'agreed_to_terms': True},
+            {**_REG_BASE, 'role': 'admin', 'agreed_to_terms': True, 'is_adult': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -335,7 +335,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         # Раньше самовыбор dealer был разрешён; теперь dealer ставит только approve_application.
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'dealer', 'agreed_to_terms': True},
+            {**_REG_BASE, 'role': 'dealer', 'agreed_to_terms': True, 'is_adult': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -347,7 +347,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
     def test_register_ignores_role_broker(self):
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'broker', 'agreed_to_terms': True},
+            {**_REG_BASE, 'role': 'broker', 'agreed_to_terms': True, 'is_adult': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -356,7 +356,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
     def test_register_ignores_role_moderator(self):
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'moderator', 'agreed_to_terms': True},
+            {**_REG_BASE, 'role': 'moderator', 'agreed_to_terms': True, 'is_adult': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)

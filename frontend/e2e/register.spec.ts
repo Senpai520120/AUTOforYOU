@@ -28,6 +28,7 @@ test.describe("Реєстрація — згода з умовами", () => {
     await page.locator('input[type="password"]').first().fill('StrongPass123!');
     await page.locator('input[type="password"]').nth(1).fill('StrongPass123!');
 
+    await page.getByLabel(/18 років/).check();
     const consent = page.getByLabel(/Погоджуюсь з/);
     const isRegisterPost = (r: { url(): string; method(): string }) =>
       r.url().includes('/auth/register/') && r.method() === 'POST';

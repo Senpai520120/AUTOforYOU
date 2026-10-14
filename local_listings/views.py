@@ -24,6 +24,8 @@ from rest_framework.views import APIView
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
 
+from users.permissions import IsEmailVerified
+
 from .filters import LocalListingFilter
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .serializers import (
@@ -127,7 +129,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [permissions.IsAuthenticated()]
+            return [permissions.IsAuthenticated(), IsEmailVerified()]
         return [permissions.AllowAny()]
 
     def get_serializer_class(self):

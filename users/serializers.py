@@ -9,13 +9,17 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, label='Підтвердження пароля')
     agreed_to_terms = serializers.BooleanField(write_only=True)
+    # Подтверждение 18+ (Q-шаг 7): без него 400. Версия текста и дата - по механике Н-32.
+    is_adult = serializers.BooleanField(write_only=True)
     # Роль при регистрации не принимается: поле role в запросе молча игнорируется
     # (DRF отбрасывает неизвестные ключи), пользователь всегда buyer.
     # dealer ставит только approve_application; broker/moderator/admin - админка.
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms')
+        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms', 'is_adult')
+        # Уникальность email проверяет RegisterView (01-S11: дубль не раскрываем).
+        extra_kwargs = {'email': {'validators': []}}
 
     def validate(self, attrs):
         if attrs['password'] != attrs.pop('password2'):
@@ -23,6 +27,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         if not attrs.pop('agreed_to_terms'):
             raise serializers.ValidationError(
                 {'agreed_to_terms': 'Необхідно погодитися з умовами використання.'}
+            )
+        if not attrs.pop('is_adult'):
+            raise serializers.ValidationError(
+                {'is_adult': 'Підтвердіть, що вам виповнилося 18 років.'}
             )
         return attrs
 
@@ -40,7 +48,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = (
             'id', 'email', 'first_name', 'last_name', 'phone', 'role',
-            'is_verified_dealer', 'is_staff', 'is_admin_role', 'created_at', 'telegram_id',
+            'is_verified_dealer', 'is_staff', 'is_admin_role', 'is_email_verified',
+            'created_at', 'telegram_id',
         )
         # role только для чтения: смена роли — не самообслуживание.
         # Без этого PATCH /auth/profile/ {"role": "admin"} проходил и открывал
@@ -52,7 +61,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # на B2B-доску, а в ответ получал 403.
         read_only_fields = (
             'id', 'email', 'role', 'is_verified_dealer', 'is_staff',
-            'is_admin_role', 'created_at', 'telegram_id',
+            'is_admin_role', 'is_email_verified', 'created_at', 'telegram_id',
         )
 
 

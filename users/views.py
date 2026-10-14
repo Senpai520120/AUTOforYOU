@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
+from django.db import IntegrityError, transaction
 from django.core.exceptions import ObjectDoesNotExist
 from django.middleware.csrf import rotate_token
 from django.utils.decorators import method_decorator
@@ -15,6 +17,11 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from integrations.captcha import captcha_public_config, require_captcha
+from django.contrib.auth import get_user_model
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+
 from .authentication import enforce_csrf
 from . import lockout
 from .cookies import clear_auth_cookies, set_auth_cookies
@@ -27,7 +34,10 @@ from .serializers import (
     TrustedShopSerializer,
     UserProfileSerializer,
 )
+from .emails import send_already_registered_email, send_verification_email
+from .permissions import IsEmailVerified
 from .services import DuplicatePendingError, apply_for_dealer
+from .tokens import email_verification_token
 
 
 def _refresh_from_request(request):
@@ -71,11 +81,16 @@ class CookieTokenObtainView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         email = request.data.get('email') if hasattr(request.data, 'get') else None
         email = email if isinstance(email, str) else ''
-        # Порядок проверок (контракт с 1.6): throttle → блокировка → [капча, ждёт 1.6] → пароль.
+        # Порядок проверок: throttle → блокировка → капча → занять попытку → пароль.
         retry_after, count = None, 0
         if email:
             retry_after = lockout.is_locked(email)
-            if not retry_after:
+        if not retry_after:
+            # Капча: всегда при CAPTCHA_ON_LOGIN, иначе после N неудач по аккаунту (счётчик 1.5).
+            failures = lockout.failure_count(email) if email else 0
+            if settings.CAPTCHA_ON_LOGIN or failures >= settings.CAPTCHA_LOGIN_AFTER_FAILURES:
+                require_captcha(request, request.data, point='login', extra={'captcha_required': True})
+            if email:
                 count, retry_after = lockout.reserve_attempt(email, BaseThrottle().get_ident(request))
         if retry_after:
             response = Response(
@@ -196,6 +211,96 @@ class RegisterView(generics.CreateAPIView):
     throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
     throttle_scope = 'register'
 
+    def create(self, request, *args, **kwargs):
+        require_captcha(request, request.data, point='register')
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        # 01-S11: на занятый email отвечаем так же, как на новый; владельцу уходит отдельное письмо.
+        # Хеш пароля считаем и для занятого email: ответ не выдаёт существование аккаунта по времени.
+        existing = CustomUser.objects.filter(email__iexact=data['email']).first()
+        if existing is None:
+            try:
+                with transaction.atomic():
+                    user = serializer.save()
+            except IntegrityError:  # гонка двух регистраций одного email: отвечаем как на занятый
+                existing = CustomUser.objects.filter(email__iexact=data['email']).first()
+            else:
+                send_verification_email(user)
+        if existing is not None:
+            make_password(data['password'])
+            send_already_registered_email(existing)
+        body = {key: data.get(key, '') for key in ('email', 'first_name', 'last_name', 'phone')}
+        return Response(body, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Подтвердить email по ссылке из письма',
+    request={'application/json': {'type': 'object', 'properties': {
+        'uid': {'type': 'string'}, 'token': {'type': 'string'}}, 'required': ['uid', 'token']}},
+    responses={200: None, 400: None},
+)
+class VerifyEmailView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []  # без cookie-сессии: не нужен CSRF, ссылка открывается откуда угодно
+    parser_classes = [JSONParser]
+
+    def post(self, request):
+        invalid = Response(
+            {'detail': 'Посилання недійсне або термін його дії минув.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+        uid = request.data.get('uid') if hasattr(request.data, 'get') else None
+        token = request.data.get('token') if hasattr(request.data, 'get') else None
+        if not isinstance(uid, str) or not isinstance(token, str):
+            return invalid
+        try:
+            user = get_user_model().objects.get(pk=force_str(urlsafe_base64_decode(uid)))
+        except (TypeError, ValueError, OverflowError, ObjectDoesNotExist):
+            return invalid
+        if not email_verification_token.check_token(user, token):
+            return invalid
+        user.is_email_verified = True
+        user.save(update_fields=['is_email_verified'])
+        return Response({'ok': True})
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Отправить письмо подтверждения ещё раз',
+    request=None,
+    responses={200: None, 429: None},
+)
+class ResendVerificationView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'verify_resend'
+
+    def post(self, request):
+        if not request.user.is_email_verified:
+            send_verification_email(request.user)
+        return Response({'ok': True})
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Публичная конфигурация входа и регистрации',
+    description='Капча (провайдер, публичный ключ, пороги) и флаг обязательности подтверждения email. Без секретов.',
+    responses={200: None},
+)
+class AuthConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        response = Response({
+            'captcha': captcha_public_config(request),
+            'email_verification_required': settings.EMAIL_VERIFICATION_REQUIRED,
+        })
+        response['Cache-Control'] = 'no-store'
+        return response
+
 
 @extend_schema_view(
     get=extend_schema(tags=['auth'], summary='Получить профиль текущего пользователя'),
@@ -275,9 +380,10 @@ class TrustedShopDetailView(generics.RetrieveUpdateDestroyAPIView):
     ),
 )
 class DealerApplyView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsEmailVerified]
 
     def post(self, request):
+        require_captcha(request, request.data, point='dealer_apply')
         serializer = DealerApplicationCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

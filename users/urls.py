@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AuthConfigView,
     CookieTokenObtainView,
     CookieTokenRefreshView,
     CsrfView,
@@ -11,12 +12,17 @@ from .views import (
     MyShipmentsView,
     ProfileView,
     RegisterView,
+    ResendVerificationView,
     TrustedShopDetailView,
     TrustedShopListView,
+    VerifyEmailView,
 )
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='auth-register'),
+    path('verify-email/', VerifyEmailView.as_view(), name='auth-verify-email'),
+    path('verify-email/resend/', ResendVerificationView.as_view(), name='auth-verify-email-resend'),
+    path('config/', AuthConfigView.as_view(), name='auth-config'),
     path('csrf/', CsrfView.as_view(), name='auth-csrf'),
     path('token/', CookieTokenObtainView.as_view(), name='token-obtain'),
     path('token/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),

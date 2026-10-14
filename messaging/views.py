@@ -6,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from users.permissions import IsEmailVerified
+
 from .models import Conversation
 from .serializers import (
     ConversationDetailSerializer,
@@ -32,7 +34,7 @@ def _can_access(user, conv: Conversation) -> bool:
 
 
 class StartConversationView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'messages'
 
@@ -78,6 +80,12 @@ class ConversationListView(APIView):
 
 class ConversationDetailView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        # Читать переписку можно и без подтверждения, писать - нет.
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsEmailVerified()]
+        return super().get_permissions()
 
     def _get(self, pk, user):
         conv = get_object_or_404(

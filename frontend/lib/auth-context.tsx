@@ -6,9 +6,23 @@ import { useRouter } from 'next/navigation';
 import { ApiError, AUTH_EXPIRED_EVENT, AUTH_REFRESHED_EVENT, apiGet, apiPost } from '@/api/client';
 import { hasSessionHint } from './session-hint';
 
+/** Помилка входу; captchaRequired — сервер вимагає капчу (після N невдач або CAPTCHA_ON_LOGIN). */
+export class LoginError extends Error {
+  captchaRequired: boolean;
+  constructor(message: string, captchaRequired = false) {
+    super(message);
+    this.captchaRequired = captchaRequired;
+  }
+}
+
+export interface LoginCaptcha {
+  captcha_token?: string;
+  website?: string;
+}
+
 interface AuthCtx {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, captcha?: LoginCaptcha) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   loading: boolean;
@@ -69,10 +83,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [router]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, captcha?: LoginCaptcha) => {
     try {
-      await apiPost('/api/v1/auth/token/', { email, password });
+      await apiPost('/api/v1/auth/token/', { email, password, ...captcha });
     } catch (err) {
+      const body = err instanceof ApiError ? (err.data as { code?: string; captcha_required?: boolean } | null) : null;
+      if (err instanceof ApiError && err.status === 400 && body?.code === 'captcha_failed') {
+        throw new LoginError('Перевірку не пройдено. Спробуйте ще раз.', true);
+      }
+      if (err instanceof ApiError && err.status === 401 && body?.captcha_required) {
+        throw new LoginError('Невірний email або пароль', true);
+      }
       if (err instanceof ApiError && err.status === 429) {
         const sec = Number((err.data as { retry_after?: unknown } | null)?.retry_after);
         const min = Number.isFinite(sec) && sec > 0 ? Math.ceil(sec / 60) : null;

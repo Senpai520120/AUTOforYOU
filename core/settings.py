@@ -261,8 +261,25 @@ NUM_PROXIES_COUNT = int(os.environ.get('NUM_PROXIES', '0'))
 LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', '5'))
 LOGIN_FAILURE_WINDOW_MINUTES = int(os.environ.get('LOGIN_FAILURE_WINDOW_MINUTES', '15'))
 LOGIN_LOCKOUT_MINUTES = int(os.environ.get('LOGIN_LOCKOUT_MINUTES', '15'))
-# Порог показа капчи на входе (Q2). Саму проверку капчи подключает задача 1.6.
+
+# ─── Подтверждение email и антибот (задача 1.6) ──────────────────────────────
+_TRUE = ('true', '1', 'yes')
+EMAIL_VERIFY_TTL_HOURS = int(os.environ.get('EMAIL_VERIFY_TTL_HOURS', '48'))
+# false - ограничения до подтверждения email выключены (IsEmailVerified пропускает всех).
+EMAIL_VERIFICATION_REQUIRED = os.environ.get('EMAIL_VERIFICATION_REQUIRED', 'true').lower() in _TRUE
+# turnstile | honeypot | off. off допустим только при DEBUG=True и в тестах (system check).
+# Honeypot работает всегда (кроме off); Turnstile добавляется поверх, когда задан секрет.
+CAPTCHA_PROVIDER = os.environ.get('CAPTCHA_PROVIDER', 'honeypot').strip().lower()
+TURNSTILE_SITE_KEY = os.environ.get('TURNSTILE_SITE_KEY', '')
+TURNSTILE_SECRET_KEY = os.environ.get('TURNSTILE_SECRET_KEY', '')
+# Срок жизни одноразового form_token (honeypot), секунды.
+CAPTCHA_FORM_TOKEN_MAX_AGE = int(os.environ.get('CAPTCHA_FORM_TOKEN_MAX_AGE', '3600'))
+# Минимум секунд между выдачей формы и отправкой (honeypot-режим без Turnstile).
+CAPTCHA_MIN_FILL_SECONDS = int(os.environ.get('CAPTCHA_MIN_FILL_SECONDS', '3'))
+# Вход: капча после N неудач (Q2); CAPTCHA_ON_LOGIN=true - требовать всегда.
 CAPTCHA_LOGIN_AFTER_FAILURES = int(os.environ.get('CAPTCHA_LOGIN_AFTER_FAILURES', '3'))
+CAPTCHA_ON_LOGIN = os.environ.get('CAPTCHA_ON_LOGIN', 'false').lower() in _TRUE
+IS_TESTING = _TESTING
 
 # ─── DRF ──────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
@@ -289,6 +306,7 @@ REST_FRAMEWORK = {
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
         'register': os.environ.get('THROTTLE_REGISTER_RATE', '5/hour'),
         'refresh': os.environ.get('THROTTLE_REFRESH_RATE', '30/min'),
+        'verify_resend': os.environ.get('THROTTLE_VERIFY_RESEND_RATE', '3/hour'),
     },
     'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -508,6 +526,7 @@ if _TESTING:
     TURNSTILE_SITE_KEY = ''
     TURNSTILE_SECRET_KEY = ''
     CAPTCHA_PROVIDER = 'off'
+    CAPTCHA_ON_LOGIN = False
     EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
     EMAIL_HOST_USER = ''
     EMAIL_HOST_PASSWORD = ''

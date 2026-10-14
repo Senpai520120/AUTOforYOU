@@ -8,6 +8,7 @@ export interface User {
   // і admin призначає лише адмін. Права перевіряються по is_admin_role і is_verified_dealer (is_staff — лише доступ в адмінку).
   role: 'buyer' | 'dealer' | 'broker' | 'moderator' | 'admin';
   is_verified_dealer: boolean;
+  is_email_verified: boolean;
   is_staff: boolean;
   is_admin_role: boolean;
   created_at: string;

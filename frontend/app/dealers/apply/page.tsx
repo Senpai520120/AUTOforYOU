@@ -5,6 +5,10 @@ import Link from 'next/link';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { dealersApi } from '@/api/dealers';
 import Spinner from '@/components/ui/Spinner';
+import Captcha from '@/components/ui/Captcha';
+import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import { apiErrorText, useAuthConfig, useCaptchaState } from '@/lib/captcha';
+import { isEmailNotVerified } from '@/lib/email-verify';
 
 export default function DealerApplyPage() {
   const { loading } = useRequireAuth();
@@ -20,6 +24,9 @@ export default function DealerApplyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [notVerified, setNotVerified] = useState(false);
+  const { config } = useAuthConfig();
+  const captcha = useCaptchaState();
 
   if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
 
@@ -46,6 +53,7 @@ export default function DealerApplyPage() {
       return;
     }
     setError(null);
+    setNotVerified(false);
     setSubmitting(true);
     try {
       await dealersApi.apply({
@@ -54,13 +62,15 @@ export default function DealerApplyPage() {
         contact_phone: form.contact_phone,
         documents: form.documents || undefined,
         agreed_to_processing: agreedToProcessing,
+        ...captcha.payload(),
       });
       setSuccess(true);
     } catch (err: unknown) {
-      const detail = (err as { detail?: string })?.detail;
-      setError(detail || 'Помилка при поданні заявки. Спробуйте ще раз.');
+      if (isEmailNotVerified(err)) setNotVerified(true);
+      else setError(apiErrorText(err, 'Помилка при поданні заявки. Спробуйте ще раз.'));
     } finally {
       setSubmitting(false);
+      captcha.bump(); // токен одноразовий: новий після кожної відповіді сервера
     }
   };
 
@@ -138,6 +148,10 @@ export default function DealerApplyPage() {
           </label>
         </div>
 
+        <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
+          resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
+
+        {notVerified && <EmailNotVerified />}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
             {error}
@@ -146,7 +160,7 @@ export default function DealerApplyPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !captcha.ready}
           className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-semibold py-2.5 rounded-xl transition-colors"
         >
           {submitting ? 'Відправляємо...' : 'Подати заявку'}

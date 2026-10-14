@@ -1,6 +1,8 @@
 'use client';
 import { Suspense, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { LoginError, useAuth } from '@/lib/auth-context';
+import Captcha from '@/components/ui/Captcha';
+import { useAuthConfig, useCaptchaState } from '@/lib/captcha';
 import { safeNext } from '@/lib/safe-next';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -23,17 +25,24 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { config } = useAuthConfig();
+  const captcha = useCaptchaState();
+  // Капча: одразу при CAPTCHA_ON_LOGIN, інакше після відповіді сервера captcha_required.
+  const [captchaRequired, setCaptchaRequired] = useState(false);
+  const showCaptcha = !!config && (config.captcha.on_login || captchaRequired) && config.captcha.provider !== 'off';
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError('');
     try {
-      await login(email, password);
+      await login(email, password, showCaptcha ? captcha.payload() : undefined);
       router.replace(next);
     } catch (err: unknown) {
+      if (err instanceof LoginError && err.captchaRequired) setCaptchaRequired(true);
       setError((err as Error).message);
     } finally {
       setLoading(false);
+      if (showCaptcha || captchaRequired) captcha.bump(); // токен одноразовий
     }
   };
 
@@ -52,8 +61,12 @@ function LoginForm() {
             <input type="password" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
               value={password} onChange={e => setPassword(e.target.value)} />
           </div>
+          {showCaptcha && (
+            <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
+              resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
+          )}
           {error && <p className="text-red-600 text-sm">{error}</p>}
-          <button type="submit" disabled={loading}
+          <button type="submit" disabled={loading || (showCaptcha && !captcha.ready)}
             className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors">
             {loading ? 'Вхід...' : 'Увійти'}
           </button>

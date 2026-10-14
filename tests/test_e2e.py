@@ -45,6 +45,7 @@ _REG_DATA = {
     'password2': 'StrongPass123!',
     'role': 'buyer',
     'agreed_to_terms': True,
+    'is_adult': True,
 }
 
 
