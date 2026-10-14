@@ -20,6 +20,20 @@ E2E_PREFIX = '[E2E]'
 E2E_VIN_PREFIX = 'E2E'
 E2E_CONTAINER_PREFIX = 'E2E-'
 
+E2E_SITE_SETTINGS = {
+    'owner_legal_form': 'fop',
+    'owner_legal_name': f'{E2E_PREFIX} Тестовий Власник',
+    'owner_code': '1234567890',
+    'owner_address': 'м. Київ, вул. Тестова, 1',
+    'support_email': 'support@e2e.test',
+    'privacy_email': 'privacy@e2e.test',
+    'phone': '+380500000000',
+    'telegram_channel_url': 'https://t.me/e2e_channel',
+    'legal_docs_approved': True,
+    'legal_docs_updated_at': date(2026, 10, 1),
+    'legal_docs_version': '2026-10-01',
+}
+
 FIXTURE_PHOTOS = ('car-1.jpg', 'car-2.jpg')
 
 
@@ -54,6 +68,7 @@ class Command(BaseCommand):
             vehicles = self._listings(users['seller'])
             self._shipment(users['buyer'], vehicles['retail'])
             self._conversation(users['buyer'], users['seller'])
+            self._site_settings()
 
         self.stdout.write('E2E seed: сводка (создано / уже было)')
         for key in sorted(set(self.created) | set(self.existing)):
@@ -179,3 +194,13 @@ class Command(BaseCommand):
         if created:
             Message.objects.create(conversation=conv, sender=buyer, text=f'{E2E_PREFIX} Здравствуйте!')
         self._note('conversations', created)
+
+    def _site_settings(self):
+        """Реквизиты и документы для legal.spec.ts (синглтон pk=1)."""
+        from site_settings.models import SiteSettings
+
+        obj = SiteSettings.load()
+        for field, value in E2E_SITE_SETTINGS.items():
+            setattr(obj, field, value)
+        obj.save()
+        self._note('site_settings', False)

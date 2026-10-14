@@ -416,3 +416,28 @@ export interface SellerRating {
   has_badge: boolean;
   badge_threshold: number;
 }
+
+export type OwnerLegalForm = 'fop' | 'tov' | 'other' | '';
+
+/** Публічні налаштування сайту (GET /api/v1/site-settings/). */
+export interface SiteSettings {
+  owner_legal_form: OwnerLegalForm;
+  owner_legal_name: string;
+  owner_code: string;
+  owner_address: string;
+  support_email: string;
+  privacy_email: string;
+  phone: string;
+  manager_contact: string;
+  telegram_channel_url: string;
+  partner_name: string;
+  partner_legal_name: string;
+  data_retention_years: number | null;
+  log_retention_days: number;
+  account_deletion_grace_days: number;
+  legal_docs_approved: boolean;
+  legal_docs_updated_at: string | null;
+  legal_docs_version: string;
+  legal_docs_reconsent_required: boolean;
+  owner_configured: boolean;
+}

@@ -1,106 +1,173 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import LegalPage, { EmailOrMissing, OwnerDetails } from '@/components/legal/LegalPage';
+import { NOT_FILLED, getSiteSettings, privacyContact } from '@/lib/site-settings';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Політика конфіденційності | AUTOforYOU',
 };
 
-export default function PrivacyPage() {
+const H2 = 'text-xl font-semibold text-slate-800 mb-2';
+const UL = 'list-disc list-inside space-y-1 ml-4';
+
+export default async function PrivacyPage() {
+  const s = await getSiteSettings(0);
+  const retention = s?.data_retention_years
+    ? `${s.data_retention_years} р.`
+    : 'визначається власником, до визначення — протягом дії акаунта';
+  const logDays = s?.log_retention_days ?? 90;
+  const graceDays = s?.account_deletion_grace_days ?? 14;
+  const partner = s?.partner_name
+    ? `${s.partner_name}${s.partner_legal_name ? ` (${s.partner_legal_name})` : ''}`
+    : null;
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <p className="text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-4 py-2 mb-8">
-        Шаблон — потребує перевірки юристом перед публікацією
-      </p>
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">Політика конфіденційності</h1>
-
-      <div className="prose prose-slate max-w-none space-y-6 text-slate-700">
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">1. Хто ми</h2>
-          <p>
-            AUTOforYOU — маркетплейс транспортних засобів. Ця Політика пояснює, які персональні дані
-            ми збираємо, як ми їх використовуємо та захищаємо.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">2. Дані, які ми збираємо</h2>
-          <ul className="list-disc list-inside space-y-1 ml-4">
-            <li><strong>Дані облікового запису:</strong> email, ім&apos;я, номер телефону, роль.</li>
-            <li><strong>Дані активності:</strong> переглянуті оголошення, запити до калькулятора.</li>
-            <li><strong>Технічні дані:</strong> IP-адреса, тип браузера, cookie-файли.</li>
-            <li><strong>Дата згоди з Умовами</strong> (зберігається разом з обліковим записом).</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">3. Мета обробки</h2>
-          <ul className="list-disc list-inside space-y-1 ml-4">
-            <li>надання послуг Платформи та підтримка облікового запису;</li>
-            <li>надсилання сповіщень про статус доставки (якщо підключено Telegram);</li>
-            <li>покращення якості сервісу;</li>
-            <li>дотримання вимог законодавства.</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">4. Правова підстава</h2>
-          <p>
-            Обробка ваших даних здійснюється на підставі вашої згоди (ст. 11 Закону України
-            «Про захист персональних даних»), а також виконання договору та законних інтересів
-            Платформи.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">5. Передача даних третім особам</h2>
-          <p>
-            Ми не продаємо ваші персональні дані. Дані можуть передаватися:
-          </p>
-          <ul className="list-disc list-inside space-y-1 ml-4">
-            <li>хостинг-провайдерам для роботи інфраструктури;</li>
-            <li>Telegram (при використанні бота, лише telegram_id);</li>
-            <li>державним органам на законну вимогу.</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">6. Ваші права</h2>
-          <p>Ви маєте право:</p>
-          <ul className="list-disc list-inside space-y-1 ml-4">
-            <li>отримати копію своїх даних;</li>
-            <li>виправити неточні дані;</li>
-            <li>видалити обліковий запис;</li>
-            <li>відкликати згоду на обробку.</li>
-          </ul>
-          <p className="mt-2">
-            Запити направляйте на:{' '}
-            <span className="font-mono text-slate-600">[privacy@autoforyou.ua — заповнити]</span>
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">7. Зберігання та безпека</h2>
-          <p>
-            Дані зберігаються на захищених серверах. Паролі зберігаються в захешованому вигляді.
-            Термін зберігання — протягом дії облікового запису та [X] років після його видалення.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">8. Cookie</h2>
-          <p>
-            Детальніше про використання cookie дивіться у нашій{' '}
-            <Link href="/cookies" className="text-blue-600 hover:underline">
-              Політиці щодо файлів cookie
-            </Link>
-            .
-          </p>
-        </section>
-
-        <p className="text-xs text-slate-400 mt-10 border-t pt-4">
-          Останнє оновлення: [дата — заповнити]
+    <LegalPage title="Політика конфіденційності" settings={s} showOwner={false}>
+      <section>
+        <h2 className={H2}>1. Хто ми</h2>
+        <p>
+          AUTOforYOU — маркетплейс транспортних засобів. Власник персональних даних, зібраних на
+          цьому сайті:
         </p>
-      </div>
-    </div>
+        <p className="mt-2" data-testid="privacy-owner">
+          <OwnerDetails settings={s} />
+        </p>
+        <p className="mt-2">
+          Ця Політика пояснює, які персональні дані ми збираємо, навіщо, кому їх передаємо та як
+          ви можете ними керувати.
+        </p>
+      </section>
+
+      <section>
+        <h2 className={H2}>2. Дані, які ми збираємо</h2>
+        <ul className={UL}>
+          <li><strong>Обліковий запис:</strong> email, ім&apos;я, прізвище, телефон, роль, дата згоди з Умовами, підтвердження email, Telegram-ідентифікатор (якщо ви його прив&apos;язали).</li>
+          <li><strong>Заявка дилера:</strong> назва компанії, ПІБ, телефон, посилання на документи, дата згоди на обробку.</li>
+          <li><strong>Довідник партнерів:</strong> назва, контакти й нотатки, які ви вносите самі (бачите лише ви).</li>
+          <li><strong>Розрахунки:</strong> параметри автомобіля та результат розрахунку вартості.</li>
+          <li><strong>Оголошення:</strong> дані автомобіля, ціна, місто, опис, контактний телефон (показується авторизованим користувачам за запитом) і фото. Решта даних оголошення публічна.</li>
+          <li><strong>Імпортні лоти:</strong> дані продавця лота (публічно або для B2B-покупців).</li>
+          <li><strong>Переписка:</strong> текст повідомлень, час, ознака прочитання (бачать учасники діалогу; адміністратор — для імпортних лотів).</li>
+          <li><strong>Угоди та відгуки:</strong> сторони угоди, статус, оцінка й текст відгуку; рейтинг продавця публічний.</li>
+          <li><strong>Скарги:</strong> автор, об&apos;єкт і причина скарги (бачить модерація).</li>
+          <li><strong>Обране, збережені пошуки, сповіщення:</strong> бачите лише ви.</li>
+          <li><strong>Платежі:</strong> сума, призначення, статус і відповідь платіжного сервісу LiqPay. Дані картки ми не отримуємо.</li>
+          <li><strong>Контейнери та доставка:</strong> підписники відстеження, фото подій доставки.</li>
+          <li><strong>Заявка брокеру:</strong> ім&apos;я, телефон, зручний спосіб зв&apos;язку, email (за бажанням), коментар, знімок розрахунку, джерело переходу (UTM, реферер, сторінка) і згода на обробку.</li>
+          <li><strong>Джерело візиту:</strong> UTM-мітки, реферер і сторінка входу зберігаються у <span className="font-mono">sessionStorage</span> браузера до відправки форми й третім особам не передаються.</li>
+          <li><strong>Підтвердження віку:</strong> факт підтвердження «Мені виповнилося 18 років», версія тексту й дата.</li>
+          <li><strong>Технічні дані:</strong> IP-адреса (обмеження частоти запитів, журнали сервера), cookie входу й згоди.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 className={H2}>3. Мета обробки</h2>
+        <ul className={UL}>
+          <li>створення облікового запису, вхід і підтримка;</li>
+          <li>публікація оголошень, зв&apos;язок покупця й продавця, угоди та відгуки;</li>
+          <li>розрахунок вартості авто та обробка ваших заявок брокеру;</li>
+          <li>оплата платних послуг і бухгалтерський облік;</li>
+          <li>відстеження доставки та сповіщення (email, Telegram);</li>
+          <li>модерація, розгляд скарг, захист від зловживань і ботів;</li>
+          <li>облік каналів залучення (без передачі третім особам);</li>
+          <li>дотримання вимог законодавства.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 className={H2}>4. Правова підстава</h2>
+        <p>
+          Обробка здійснюється на підставі вашої згоди (ст. 11 Закону України «Про захист
+          персональних даних»), виконання договору, стороною якого ви є, та законних інтересів
+          власника щодо безпеки сервісу. Для передачі ваших контактів партнеру потрібна окрема
+          згода.
+        </p>
+      </section>
+
+      <section>
+        <h2 className={H2}>5. Отримувачі даних і передача за кордон</h2>
+        <p>Ми не продаємо ваші персональні дані. Дані можуть передаватися:</p>
+        <ul className={UL}>
+          <li>хостинг-провайдеру для роботи інфраструктури;</li>
+          <li>LiqPay — для оплати послуг;</li>
+          <li>провайдеру електронної пошти (SMTP) — для листів і сповіщень;</li>
+          <li>Telegram — для сповіщень і каналу; сервіс розташований за межами України;</li>
+          <li>сховищу зображень (S3-сумісне, наприклад Cloudflare R2), якщо підключено — за межами України;</li>
+          <li>Cloudflare Turnstile (захист форм від ботів, обробляє IP відвідувача), якщо підключено;</li>
+          <li>Google Analytics, Meta Pixel, TikTok Pixel — якщо підключено, і лише після вашої згоди на cookie;</li>
+          <li>сервісам перевірки VIN і державних реєстрів (NHTSA — лише VIN; carVertical, Opendatabot — VIN і номерний знак за вашим запитом);</li>
+          <li>державним органам на законну вимогу.</li>
+        </ul>
+        <p className="mt-3" data-testid="privacy-partner">
+          <strong>Партнер з пригону авто:</strong> {partner ?? NOT_FILLED}. Послугу пригону
+          надає партнер, а не AUTOforYOU. Партнер отримує ваші контакти від брокера лише за вашою
+          згодою на передачу даних партнеру, з метою пригону автомобіля.
+        </p>
+        <p className="mt-2">
+          В окрему Telegram-групу спілкування з партнером передаються лише код заявки, марка й
+          модель, бюджет, місто та час (UTC). Ім&apos;я й телефон клієнта в цю групу не
+          передаються.
+        </p>
+      </section>
+
+      <section>
+        <h2 className={H2}>6. Ваші права</h2>
+        <p>Ви маєте право:</p>
+        <ul className={UL}>
+          <li>отримати копію своїх даних;</li>
+          <li>виправити неточні дані;</li>
+          <li>видалити обліковий запис;</li>
+          <li>відкликати згоду на обробку;</li>
+          <li>
+            подати скаргу до Уповноваженого Верховної Ради України з прав людини
+            (омбудсмана) або до суду.
+          </li>
+        </ul>
+        <p className="mt-2">
+          Скористатися правами на доступ і видалення можна у розділі{' '}
+          <Link href="/me/data" className="text-blue-600 hover:underline">Мої дані</Link>.
+        </p>
+        <p className="mt-2">
+          Видалення акаунта: підтвердьте дію паролем; протягом {graceDays} днів видалення можна
+          скасувати. Після цього дані знеособлюються; угоди й платежі зберігаються у
+          знеособленому вигляді.
+        </p>
+        <p className="mt-2">
+          Запити направляйте на: <EmailOrMissing email={privacyContact(s)} />
+        </p>
+      </section>
+
+      <section>
+        <h2 className={H2}>7. Зберігання та безпека</h2>
+        <p>
+          Дані зберігаються на захищених серверах, паролі — у захешованому вигляді. Дані акаунта
+          зберігаються, поки акаунт активний, далі діє процедура видалення з розділу 6. Платіжні
+          документи та знеособлені угоди: {retention}. Журнали з IP-адресами зберігаються{' '}
+          {logDays} днів.
+        </p>
+      </section>
+
+      <section>
+        <h2 className={H2}>8. Неповнолітні</h2>
+        <p>
+          Сервіс призначений для осіб, яким виповнилося 18 років. Під час реєстрації ви
+          підтверджуєте вік. Якщо нам стане відомо про дані неповнолітньої особи, ми їх
+          видалимо.
+        </p>
+      </section>
+
+      <section>
+        <h2 className={H2}>9. Cookie</h2>
+        <p>
+          Детальніше про використання cookie дивіться у нашій{' '}
+          <Link href="/cookies" className="text-blue-600 hover:underline">
+            Політиці щодо файлів cookie
+          </Link>
+          .
+        </p>
+      </section>
+    </LegalPage>
   );
 }

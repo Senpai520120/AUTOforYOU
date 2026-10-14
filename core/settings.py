@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     'saved_searches',
     'reports',
     'deals',
+    'site_settings',
 
     'drf_spectacular',
     'django_celery_beat',

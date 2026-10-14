@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/v1/saved-searches/', include('saved_searches.urls')),
     path('api/v1/reports/', include('reports.urls')),
     path('api/v1/deals/', include('deals.urls')),
+    path('api/v1/site-settings/', include('site_settings.urls')),
     path('api/v1/telegram/', include('telegram_bot.urls')),
     path('api/v1/b2b/', include((b2b_urlpatterns, 'b2b'))),
     path('api/v1/dealers/', include((dealer_urlpatterns, 'dealers'))),

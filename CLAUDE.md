@@ -19,6 +19,7 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 | `messaging`  | Диалоги покупатель–продавец                          |
 | `notifications` | Уведомления пользователю                          |
 | `favorites`  | Избранное                                            |
+| `site_settings` | Реквизиты владельца ПДн, контакты, юр. документы (singleton) |
 | `saved_searches` | Сохранённые поиски                               |
 | `reports`    | Жалобы на объявления                                 |
 | `deals`      | Сделки                                               |

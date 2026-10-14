@@ -750,7 +750,7 @@ class TestModerationRequiresPermission(TestCase):
 class TestModeratorBoundaries(TestCase):
     """Q10: модератор не видит платежи, тарифы, Calculation, пользователей и чужие импортные диалоги.
 
-    SiteSettings (1.12) и Lead (2.1) ещё не существуют; их проверка добавится с моделями.
+    SiteSettings (1.12): модератор и брокер не открывают настройки сайта. Lead (2.1) ещё не существует.
     """
 
     def setUp(self):
@@ -781,7 +781,22 @@ class TestModeratorBoundaries(TestCase):
         perms = Group.objects.get(name='Модератори').permissions.values_list(
             'content_type__app_label', flat=True,
         )
-        self.assertEqual(set(perms) & {'payments', 'pricing', 'users'}, set())
+        self.assertEqual(set(perms) & {'payments', 'pricing', 'users', 'site_settings'}, set())
+
+    def test_site_settings_change_get_forbidden(self):
+        from django.urls import reverse
+        url = reverse('admin:site_settings_sitesettings_change', args=[1])
+        for user in (self.moderator, make_broker()):
+            self.client.force_login(user)
+            self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_site_settings_change_post_forbidden(self):
+        from django.urls import reverse
+        url = reverse('admin:site_settings_sitesettings_change', args=[1])
+        for user in (self.moderator, make_broker()):
+            self.client.force_login(user)
+            self.assertEqual(self.client.post(url, {'phone': '+380500000000'}).status_code,
+                             status.HTTP_403_FORBIDDEN)
 
     def test_cannot_open_foreign_imported_conversation(self):
         from messaging.services import get_or_create_conversation
