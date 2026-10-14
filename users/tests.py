@@ -6,6 +6,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core import mail
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -312,6 +313,10 @@ class TestRoleIsNotSelfAssignable(APITestCase):
     давать привилегий. Раньше значение 'admin' открывало B2B-доску и чтение
     чужих переписок по импортным листингам.
     """
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()  # throttle register (5/hour) копится в LocMem-кэше между тестами
 
     def test_register_ignores_role_admin(self):
         # Решение 1.2: поле role в запросе молча игнорируется (не 400): пользователь всегда buyer.
@@ -987,9 +992,10 @@ def _blacklisted(token):
     return BlacklistedToken.objects.filter(token__jti=token['jti']).exists()
 
 
-class CookieAuthTests(APITestCase):
+class CookieAuthTests(CleanCacheTestCase):
 
     def setUp(self):
+        super().setUp()
         self.user = make_user()
         self.client = APIClient(enforce_csrf_checks=True)
 

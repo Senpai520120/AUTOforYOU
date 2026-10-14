@@ -73,11 +73,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiPost('/api/v1/auth/token/', { email, password });
     } catch (err) {
-      // 429 і 5xx розрізняє задача 1.5.
+      if (err instanceof ApiError && err.status === 429) {
+        const sec = Number((err.data as { retry_after?: unknown } | null)?.retry_after);
+        const min = Number.isFinite(sec) && sec > 0 ? Math.ceil(sec / 60) : null;
+        throw new Error(
+          min ? `Забагато спроб. Спробуйте через ${min} хв.` : 'Забагато спроб. Спробуйте пізніше.',
+        );
+      }
       if (err instanceof ApiError && (err.status === 400 || err.status === 401)) {
         throw new Error('Невірний email або пароль');
       }
-      throw new Error('Не вдалося увійти. Спробуйте пізніше.');
+      throw new Error('Сервіс тимчасово недоступний');
     }
     await fetchProfile();
   }, [fetchProfile]);

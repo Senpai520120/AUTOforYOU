@@ -8,6 +8,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, BaseThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -15,6 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .authentication import enforce_csrf
+from . import lockout
 from .cookies import clear_auth_cookies, set_auth_cookies
 
 from .models import CustomUser, DealerApplication, TrustedShop
@@ -62,13 +64,42 @@ class CookieTokenObtainView(TokenObtainPairView):
     # ПРИНЯТЬ Set-Cookie после кросс-сайтовой HTML-формы. Только JSON: чужой
     # сайт не отправит его без CORS-preflight, а preflight отсекает CORS-whitelist.
     parser_classes = [JSONParser]
+    # Scoped-лимит по IP поверх общих anon/user (значения — THROTTLE_LOGIN_RATE).
+    throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
+    throttle_scope = 'login'
 
     def post(self, request, *args, **kwargs):
+        email = request.data.get('email') if hasattr(request.data, 'get') else None
+        email = email if isinstance(email, str) else ''
+        # Порядок проверок (контракт с 1.6): throttle → блокировка → [капча, ждёт 1.6] → пароль.
+        retry_after, count = None, 0
+        if email:
+            retry_after = lockout.is_locked(email)
+            if not retry_after:
+                count, retry_after = lockout.reserve_attempt(email, BaseThrottle().get_ident(request))
+        if retry_after:
+            response = Response(
+                {'detail': 'Забагато спроб. Спробуйте пізніше.', 'retry_after': retry_after},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+            response['Retry-After'] = str(retry_after)
+            return response
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
+        except AuthenticationFailed as exc:
+            # Одинаково для существующего и несуществующего email; попытка уже занята.
+            return Response(
+                {
+                    'detail': exc.detail,
+                    'captcha_required': count >= settings.CAPTCHA_LOGIN_AFTER_FAILURES,
+                },
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         except TokenError as exc:
             raise InvalidToken(exc.args[0]) from exc
+        if email:
+            lockout.reset(email)
         data = serializer.validated_data
         rotate_token(request)  # новый csrftoken на новую сессию, как django.contrib.auth.login
         response = Response(_token_body(data), status=status.HTTP_200_OK)
@@ -86,6 +117,8 @@ class CookieTokenObtainView(TokenObtainPairView):
 class CookieTokenRefreshView(TokenRefreshView):
     serializer_class = TokenRefreshSerializer
     parser_classes = [JSONParser]
+    throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
+    throttle_scope = 'refresh'
 
     def post(self, request, *args, **kwargs):
         refresh = _refresh_from_request(request)
@@ -160,6 +193,8 @@ class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
+    throttle_scope = 'register'
 
 
 @extend_schema_view(

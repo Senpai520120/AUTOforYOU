@@ -128,3 +128,34 @@ class DealerApplicationAdmin(admin.ModelAdmin):
         )}),
         ('Рассмотрение', {'fields': ('status', 'reviewed_by', 'review_notes', 'created_at', 'reviewed_at')}),
     )
+
+
+# --- Вход в админку: тот же счётчик по аккаунту, что и на API (01-S16) ---
+
+from django import forms  # noqa: E402
+from django.contrib.admin.forms import AdminAuthenticationForm  # noqa: E402
+from rest_framework.throttling import BaseThrottle  # noqa: E402
+
+from . import lockout  # noqa: E402
+
+
+class LockoutAdminAuthenticationForm(AdminAuthenticationForm):
+    def clean(self):
+        # cleaned_data: UsernameField уже привёл адрес к NFKC, как при проверке пароля.
+        email = (self.cleaned_data.get('username') or '').strip()
+        if email:
+            retry_after = lockout.is_locked(email)
+            if not retry_after:
+                _, retry_after = lockout.reserve_attempt(email, BaseThrottle().get_ident(self.request))
+            if retry_after:
+                minutes = max(1, -(-retry_after // 60))
+                raise forms.ValidationError(
+                    f'Забагато спроб входу. Спробуйте через {minutes} хв.', code='locked',
+                )
+        cleaned = super().clean()
+        if email:
+            lockout.reset(email)
+        return cleaned
+
+
+admin.site.login_form = LockoutAdminAuthenticationForm

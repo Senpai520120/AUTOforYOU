@@ -1,8 +1,20 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, дальше 1.5 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, дальше 1.6 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.5: защита входа от перебора (2026-10-14) — ЗАВЕРШЕНО
+
+- `users/lockout.py`: счётчик неудач и блокировка по sha256(email) в `django.cache` (`failure_count`, `is_locked`, `register_failure`, `reset`); в лог — хэш (12 симв.) и IP.
+- `CookieTokenObtainView`: порядок throttle `login` → блокировка (429 + `Retry-After` + `retry_after` в теле) → пароль. 401 содержит `captcha_required` (порог `CAPTCHA_LOGIN_AFTER_FAILURES`=3). **Ждёт 1.6:** проверка капчи до пароля (`captcha_failed`) и её тесты.
+- Scoped throttle `login`/`register`/`refresh`; `NUM_PROXIES` из `.env`; nginx: `X-Forwarded-For $remote_addr`, `limit_req` (20 r/min, burst 10 — мягче 10 r/min из задачи, чтобы не ронять e2e с одного IP) на `token/`, `register/`, `admin/login/`, `server_tokens off`.
+- Админка: `LockoutAdminAuthenticationForm` (тот же счётчик, 01-S16). Предупреждение `users.W001` про LocMemCache вне DEBUG.
+- Фронт: `login()` различает 429 («Забагато спроб. Спробуйте через N хв.»), 400/401, 5xx/сеть. Playwright: `login-limit.spec.ts`.
+- Ревью безопасности: исправлены NFKC-обход в админке, HMAC вместо голого sha256, гонка (попытка занимается до проверки пароля), мёртвая проверка LocMemCache. Принято как есть: блокировка чужого аккаунта (в LAUNCH_CHECKLIST), 403/CSRF на входе показывается как «Сервіс тимчасово недоступний».
+- Тесты: `users/tests_lockout.py` (19), мутации проверены.
 
 ---
 

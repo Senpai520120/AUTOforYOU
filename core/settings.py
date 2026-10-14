@@ -254,6 +254,16 @@ _THROTTLE_ANON = os.environ.get('THROTTLE_ANON_RATE', '60/hour')
 _THROTTLE_USER = os.environ.get('THROTTLE_USER_RATE', '300/hour')
 _THROTTLE_EXPENSIVE = os.environ.get('THROTTLE_EXPENSIVE_RATE', '10/hour')
 
+# ─── Защита входа от перебора (задача 1.5) ───────────────────────────────────
+# Сколько прокси стоит перед Django: DRF берёт IP клиента из XFF с конца.
+# 0 — dev без прокси (REMOTE_ADDR); 1 — nginx из docker-compose; 2 — ещё и Cloudflare/LB.
+NUM_PROXIES_COUNT = int(os.environ.get('NUM_PROXIES', '0'))
+LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', '5'))
+LOGIN_FAILURE_WINDOW_MINUTES = int(os.environ.get('LOGIN_FAILURE_WINDOW_MINUTES', '15'))
+LOGIN_LOCKOUT_MINUTES = int(os.environ.get('LOGIN_LOCKOUT_MINUTES', '15'))
+# Порог показа капчи на входе (Q2). Саму проверку капчи подключает задача 1.6.
+CAPTCHA_LOGIN_AFTER_FAILURES = int(os.environ.get('CAPTCHA_LOGIN_AFTER_FAILURES', '3'))
+
 # ─── DRF ──────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -276,7 +286,11 @@ REST_FRAMEWORK = {
         'expensive': _THROTTLE_EXPENSIVE,
         'messages': os.environ.get('THROTTLE_MESSAGES_RATE', '30/hour'),
         'contact': os.environ.get('THROTTLE_CONTACT_RATE', '20/hour'),
+        'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
+        'register': os.environ.get('THROTTLE_REGISTER_RATE', '5/hour'),
+        'refresh': os.environ.get('THROTTLE_REFRESH_RATE', '30/min'),
     },
+    'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
