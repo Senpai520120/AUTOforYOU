@@ -41,8 +41,9 @@ class PartnerNotConfigured(Exception):
 
 
 def notify_new_lead(lead_id: int) -> None:
-    """Заглушка: личное уведомление брокеру (2.2) и журнал в группу (2.15). Без ПДн в логе."""
-    logger.info('lead.notify lead_id=%s', lead_id)
+    """Личное уведомление брокеру (2.2); журнал в группу - 2.15. Без ПДн в логе."""
+    from .tasks import notify_broker_new_lead
+    notify_broker_new_lead.delay(lead_id)
 
 
 def record_metric(event: str) -> None:

@@ -1,5 +1,8 @@
+import string
+
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 
 
@@ -41,6 +44,60 @@ class NeededWhen(models.TextChoices):
     MONTH = 'month', 'Протягом місяця'
     THREE_MONTHS = 'three_months', 'Протягом 3 місяців'
     LATER = 'later', 'Пізніше / поки придивляюсь'
+
+
+class NotifyStatus(models.TextChoices):
+    PENDING = 'pending', 'Очікує'
+    SENT = 'sent', 'Надіслано'
+    SKIPPED = 'skipped_not_configured', 'Telegram не налаштовано'
+    FAILED = 'failed', 'Помилка'
+    SENDING = 'sending', 'Надсилається'
+
+
+def validate_template(value: str) -> None:
+    """Плейсхолдеры - только простые имена: без атрибутов, индексов, !r и :формата."""
+    try:
+        parsed = list(string.Formatter().parse(value))
+    except ValueError:
+        raise ValidationError('Некоректні фігурні дужки в шаблоні.') from None
+    for _, field, spec, conv in parsed:
+        if field is None:
+            continue
+        if conv or spec or not field.isidentifier():
+            raise ValidationError(f'Недопустимий плейсхолдер {{{field}}}: лише прості імена без . [ ! :')
+
+
+
+class LeadNotificationSettings(models.Model):
+    """Singleton (pk=1): кому и что слать брокеру о новой заявке."""
+    telegram_enabled = models.BooleanField('Сповіщати в Telegram', default=True)
+    telegram_chat_id = models.CharField(
+        'Telegram chat_id', max_length=64, blank=True,
+        validators=[RegexValidator(r'^-?\d+$', 'Лише числовий chat_id (наприклад -1001234567890).')],
+        help_text='Числовий ID приватного чату або групи брокера. Не вказуйте публічний канал чи @username: '
+                  'заявки містять персональні дані. Порожньо → TELEGRAM_BROKER_CHAT_ID з .env')
+    new_lead_template = models.TextField(
+        'Шаблон повідомлення', blank=True, validators=[validate_template],
+        help_text='HTML Telegram (<b>, <i>). Плейсхолдери: {id} {name} {phone} {email} {contact_method} '
+                  '{contact_handle} {car} {total_usd} {total_uah} {source} {source_details} {utm_source} '
+                  '{utm_medium} {utm_campaign} {utm_content} {referrer} {page_url} {comment} {admin_url} '
+                  '{cabinet_url}. Значення екрануються автоматично.')
+    notify_brokers_in_app = models.BooleanField('Сповіщення брокерам на сайті', default=True)
+
+    class Meta:
+        verbose_name = 'Налаштування сповіщень про заявки'
+        verbose_name_plural = 'Налаштування сповіщень про заявки'
+
+    def __str__(self):
+        return 'Налаштування сповіщень про заявки'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(pk=1)[0]
 
 
 class LeadCounter(models.Model):
@@ -106,6 +163,12 @@ class Lead(models.Model):
     partner_name = models.CharField('Партнер (знімок)', max_length=255)
     partner_consent_at = models.DateTimeField('Згода на передачу партнеру')
     partner_consent_text = models.CharField('Текст згоди партнеру', max_length=500)
+
+    telegram_status = models.CharField(
+        'Telegram брокеру', max_length=32, choices=NotifyStatus.choices, default=NotifyStatus.PENDING)
+    telegram_sent_at = models.DateTimeField('Надіслано в Telegram', null=True, blank=True)
+    telegram_error = models.CharField('Код помилки Telegram', max_length=200, blank=True)
+    broker_in_app_sent = models.BooleanField(default=False, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

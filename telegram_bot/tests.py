@@ -3,7 +3,7 @@ import uuid
 from datetime import timedelta
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from aiogram import Bot, Dispatcher
 from aiogram.methods import SendMessage
@@ -366,9 +366,12 @@ class SendNotificationTaskTest(TestCase):
         self.user.telegram_id = 123456789
         self.user.save()
 
-        with self.settings(TELEGRAM_BOT_TOKEN='fake-token'):
-            with patch('asyncio.run', return_value=True):
+        with self.settings(TELEGRAM_BOT_TOKEN='123456:ABCdef'):
+            with patch.object(Bot, 'send_message', new_callable=AsyncMock) as send:
                 result = send_notification(self.user.pk, 'Hello')
+        # Корутина реально ожидается (раньше asyncio.run был замокан и давал RuntimeWarning).
+        send.assert_awaited_once()
+        self.assertEqual(send.await_args.kwargs['chat_id'], 123456789)
         self.assertTrue(result['sent'])
 
 

@@ -1,10 +1,11 @@
 from django import forms
-from django.contrib import admin
+from django.conf import settings
+from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils.html import format_html
 
-from .models import Lead, LeadStatusChange
+from .models import Lead, LeadNotificationSettings, LeadStatusChange
 from .services import ALLOWED_TRANSITIONS, change_status
 
 DIRECT = 'пряме'
@@ -71,8 +72,9 @@ class LeadAdminForm(forms.ModelForm):
 @admin.register(Lead)
 class LeadAdmin(admin.ModelAdmin):
     list_display = ('public_id', 'created_at', 'name', 'phone', 'contact_method', 'source_display',
-                    'status', 'total_uah')
-    list_filter = ('status', 'source', UtmSourceFilter)
+                    'status', 'total_uah', 'telegram_status', 'telegram_sent_at')
+    list_filter = ('status', 'source', 'telegram_status', UtmSourceFilter)
+    actions = ['resend_to_broker']
     search_fields = ('public_id', 'name', 'phone')
     date_hierarchy = 'created_at'
     inlines = [LeadStatusChangeInline]
@@ -82,6 +84,7 @@ class LeadAdmin(admin.ModelAdmin):
         'public_id', 'user', 'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment',
         'source', 'landing_slug', 'budget_usd', 'needed_when', 'city', 'vehicle_label',
         'utm', 'referrer', 'entry_page_url', 'page_url', 'first_response_at',
+        'telegram_status', 'telegram_sent_at', 'telegram_error',
         'calculation', 'listing', 'snapshot_summary', 'calculation_snapshot', 'total_usd', 'total_uah',
         'consent_at', 'partner_name', 'partner_consent_at', 'partner_consent_text',
         'created_at', 'updated_at',
@@ -91,10 +94,27 @@ class LeadAdmin(admin.ModelAdmin):
         'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment', 'user',
         'source', 'landing_slug', 'vehicle_label', 'budget_usd', 'needed_when', 'city',
         'utm', 'referrer', 'entry_page_url', 'page_url',
+        'telegram_status', 'telegram_sent_at', 'telegram_error',
         'calculation', 'listing', 'snapshot_summary', 'calculation_snapshot', 'total_usd', 'total_uah',
         'consent_at', 'partner_name', 'partner_consent_at', 'partner_consent_text',
         'created_at', 'updated_at',
     )
+
+    @admin.action(description='Надіслати брокеру повторно', permissions=['change'])
+    def resend_to_broker(self, request, queryset):
+        from .tasks import notify_broker_new_lead
+        count = 0
+        for lead_id in queryset.values_list('pk', flat=True):
+            notify_broker_new_lead.delay(lead_id, force=True)
+            count += 1
+        self.message_user(request, f'Поставлено в чергу: {count}', messages.SUCCESS)
+
+    def changelist_view(self, request, extra_context=None):
+        from .notify import broker_chat_id
+        cfg = LeadNotificationSettings.get_solo()
+        if not (cfg.telegram_enabled and broker_chat_id() and settings.TELEGRAM_BOT_TOKEN):
+            messages.warning(request, 'Telegram для заявок не налаштовано')
+        return super().changelist_view(request, extra_context)
 
     @admin.display(description='Джерело')
     def source_display(self, obj):
@@ -136,3 +156,12 @@ class LeadAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         if new_status != obj.status:
             change_status(obj, new_status, by=request.user, force=bool(form.cleaned_data.get('reopen')))
+
+
+@admin.register(LeadNotificationSettings)
+class LeadNotificationSettingsAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return not LeadNotificationSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

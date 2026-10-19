@@ -179,10 +179,10 @@ class CreateLeadTests(TestCase):
             notify.assert_not_called()
             metric.assert_not_called()
 
-    def test_notify_log_has_no_pii(self):
-        with self.assertLogs('leads.services', 'INFO') as cm:
+    def test_notify_enqueues_task_with_id_only(self):
+        with mock.patch('leads.tasks.notify_broker_new_lead.delay') as delay:
             services.notify_new_lead(7)
-        self.assertEqual(cm.output, ['INFO:leads.services:lead.notify lead_id=7'])
+        delay.assert_called_once_with(7)
 
 
 class PublicIdTests(TestCase):

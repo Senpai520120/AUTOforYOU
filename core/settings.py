@@ -491,6 +491,8 @@ TELEGRAM_BOT_USERNAME = os.environ.get('TELEGRAM_BOT_USERNAME', '')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '')      # @channel или -100xxx
 TELEGRAM_B2B_CHANNEL_ID = os.environ.get('TELEGRAM_B2B_CHANNEL_ID', '')  # опц. B2B-канал
 TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')   # для прод. webhook
+# Запасной chat_id брокера/группы брокеров (основной задаётся в админке, задача 2.2)
+TELEGRAM_BROKER_CHAT_ID = os.environ.get('TELEGRAM_BROKER_CHAT_ID', '')
 
 # URL сайта — используется в Telegram-постах (ссылки на листинги)
 SITE_URL = os.environ.get('SITE_URL', 'https://autoforyou.ua')
@@ -530,6 +532,7 @@ if _TESTING:
     LIQPAY_PUBLIC_KEY = ''
     LIQPAY_PRIVATE_KEY = ''
     TELEGRAM_BOT_TOKEN = ''
+    TELEGRAM_BROKER_CHAT_ID = ''
     TURNSTILE_SITE_KEY = ''
     TURNSTILE_SECRET_KEY = ''
     CAPTCHA_PROVIDER = 'off'
