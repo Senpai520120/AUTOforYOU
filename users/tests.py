@@ -698,7 +698,11 @@ class TestRoleGroupsMigration(TestCase):
         self.assertIn('moderate_locallisting', names['Модератори'])
         self.assertIn('moderate_locallisting', names['Адміністратори'])
         self.assertIn('change_locallisting', names['Модератори'])
-        self.assertEqual(names['Брокери'], {'view_calculation'})
+        self.assertEqual(
+            names['Брокери'],
+            {'view_calculation', 'view_lead', 'change_lead', 'view_leadstatuschange'},
+        )
+        self.assertFalse({c for c in names['Модератори'] if c.endswith('lead')})
 
 
 class TestModerationRequiresPermission(TestCase):

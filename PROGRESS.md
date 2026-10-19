@@ -1,8 +1,19 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, дальше 2.1a → 2.1b → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, дальше 2.1b → 2.2 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 2.1a: приложение `leads` — модели, статусы, сервис, админка (2026-10-20) — ЗАВЕРШЕНО
+
+- Модели `Lead`, `LeadStatusChange`, `LeadCounter`; TextChoices на уровне модуля (`LeadStatus` с `spam`, `PartnerStatus`, `LeadSource` calculator/listing/landing, `ContactMethod`, `NeededWhen`). `public_id` вида `AFY-ГГГГ-NNNN` (счётчик по году, `select_for_update`). CheckConstraint на `status`, `source`, `budget_usd >= 0`. Миграции 0001–0002 (0002 — права: «Брокери» и «Адміністратори» получают view/change заявок, без delete; модераторам ничего).
+- `leads/validators.py`: `normalize_ua_phone` (E.164, 0 после 380 запрещён), `clean_attribution` (4 ключа UTM, URL без query/fragment, referrer только `scheme://netloc`).
+- `leads/services.py`: `create_lead` (снимок расчёта, `partner_name` из `SiteSettings`, `PartnerNotConfigured` для 503 в 2.1b, чужой `Calculation` → `ValueError`), `change_status` + `ALLOWED_TRANSITIONS`, `first_response_at`, хуки `notify_new_lead`/`record_metric` через `on_commit` в try/except (лог только `lead_id`).
+- `LeadAdmin`: «Джерело», фильтры, поиск, ПДн read-only, `assigned_to` только broker/admin, проверка перехода в `clean()`, чекбокс «Перевідкрити» (superuser/admin-роль, в журнал `force:`), добавление закрыто, удаление только superuser.
+- Ревью `security-reviewer`: 6 «важно» + 4 «желательно» исправлены. Тесты: 731 OK (skipped=1 — параллельный `public_id` на SQLite, проверяется на Postgres в CI).
+- Для владельца: подтвердить статус `spam`; текст согласия партнёру (`PARTNER_CONSENT_TEMPLATE` в `services.py`) — на юридическую вычитку; `record_metric` — заглушка до 8.7; согласие хранится на заявке до 1.14.
 
 ---
 
