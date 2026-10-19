@@ -54,6 +54,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCarList'
           description: ''
+  /api/v1/auth/config/:
+    get:
+      operationId: v1_auth_config_retrieve
+      description: Капча (провайдер, публичный ключ, пороги) и флаг обязательности
+        подтверждения email. Без секретов.
+      summary: Публичная конфигурация входа и регистрации
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/v1/auth/csrf/:
     get:
       operationId: v1_auth_csrf_retrieve
@@ -424,6 +437,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/TokenRefresh'
           description: ''
+  /api/v1/auth/verify-email/:
+    post:
+      operationId: v1_auth_verify_email_create
+      summary: Подтвердить email по ссылке из письма
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uid:
+                  type: string
+                token:
+                  type: string
+              required:
+              - uid
+              - token
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+        '400':
+          description: No response body
+  /api/v1/auth/verify-email/resend/:
+    post:
+      operationId: v1_auth_verify_email_resend_create
+      summary: Отправить письмо подтверждения ещё раз
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+        '429':
+          description: No response body
   /api/v1/b2b/board/:
     get:
       operationId: v1_b2b_board_list
@@ -643,6 +696,67 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/leads/:
+    post:
+      operationId: v1_leads_create
+      description: 'Гость или вошедший пользователь. Порядок: throttle, honeypot (заполнен:
+        тихий 201 без записи), капча (400 captcha_failed), поля. Пустой SiteSettings.partner_name
+        даёт 503. ПДн в ответе не возвращаются.'
+      summary: Заявка брокеру
+      tags:
+      - leads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LeadCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LeadCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadCreated'
+          description: ''
+        '400':
+          description: Ошибка полей или captcha_failed
+        '429':
+          description: Лимит заявок
+        '503':
+          description: Партнер не налаштований
+  /api/v1/leads/mine/:
+    get:
+      operationId: v1_leads_mine_list
+      summary: Мои заявки
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - leads
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLeadMineList'
+          description: ''
   /api/v1/listings/:
     get:
       operationId: v1_listings_list
@@ -1545,6 +1659,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Shipment'
           description: ''
+  /api/v1/site-settings/:
+    get:
+      operationId: v1_site_settings_retrieve
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/v1/telegram/link/:
     delete:
       operationId: v1_telegram_link_destroy
@@ -1763,6 +1887,9 @@ components:
       - copart
       - iaai
       type: string
+    BlankEnum:
+      enum:
+      - ''
     BodyTypeEnum:
       enum:
       - sedan
@@ -2006,6 +2133,12 @@ components:
       - used
       - damaged
       type: string
+    ContactMethodEnum:
+      enum:
+      - phone
+      - telegram
+      - viber
+      type: string
     CustomsExciseFuelTypeEnum:
       enum:
       - petrol
@@ -2026,6 +2159,177 @@ components:
       - electric
       - hybrid
       - gas
+      type: string
+    LeadCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 32
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        contact_method:
+          oneOf:
+          - $ref: '#/components/schemas/ContactMethodEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        contact_handle:
+          type: string
+          maxLength: 64
+        comment:
+          type: string
+          maxLength: 1000
+        source:
+          $ref: '#/components/schemas/LeadSourceEnum'
+        landing_slug:
+          type: string
+          maxLength: 100
+        calculation_id:
+          type: integer
+          nullable: true
+        listing_id:
+          type: integer
+          nullable: true
+        budget_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        needed_when:
+          oneOf:
+          - $ref: '#/components/schemas/NeededWhenEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        city:
+          type: string
+          maxLength: 100
+        vehicle_label:
+          type: string
+          maxLength: 150
+        utm:
+          writeOnly: true
+        referrer:
+          writeOnly: true
+        entry_page_url:
+          writeOnly: true
+        page_url:
+          writeOnly: true
+        consent:
+          type: boolean
+        partner_consent:
+          type: boolean
+        website:
+          type: string
+          writeOnly: true
+        captcha_token:
+          type: string
+          writeOnly: true
+      required:
+      - consent
+      - name
+      - partner_consent
+      - phone
+    LeadCreated:
+      type: object
+      description: 'Ответ на создание: без ПДн.'
+      properties:
+        public_id:
+          type: string
+          readOnly: true
+          title: Номер
+        status:
+          allOf:
+          - $ref: '#/components/schemas/LeadStatusEnum'
+          readOnly: true
+          title: Статус
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - public_id
+      - status
+    LeadMine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        public_id:
+          type: string
+          readOnly: true
+          title: Номер
+        status:
+          allOf:
+          - $ref: '#/components/schemas/LeadStatusEnum'
+          readOnly: true
+          title: Статус
+        status_display:
+          type: string
+          readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/LeadSourceEnum'
+          readOnly: true
+          title: Точка входу
+        vehicle_label:
+          type: string
+          readOnly: true
+          title: Марка / модель
+        total_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        total_uah:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        listing_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - listing_id
+      - public_id
+      - source
+      - status
+      - status_display
+      - total_uah
+      - total_usd
+      - vehicle_label
+    LeadSourceEnum:
+      enum:
+      - calculator
+      - listing
+      - landing
+      type: string
+    LeadStatusEnum:
+      enum:
+      - new
+      - in_progress
+      - contract
+      - car_bought
+      - in_transit
+      - customs
+      - delivered
+      - rejected
+      - spam
       type: string
     LegacyCalcResponse:
       type: object
@@ -2998,6 +3302,13 @@ components:
       - licensed
       - broker
       type: string
+    NeededWhenEnum:
+      enum:
+      - asap
+      - month
+      - three_months
+      - later
+      type: string
     PaginatedCalculationList:
       type: object
       required:
@@ -3044,6 +3355,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Car'
+    PaginatedLeadMineList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeadMine'
     PaginatedListingList:
       type: object
       required:
@@ -3432,9 +3766,13 @@ components:
         agreed_to_terms:
           type: boolean
           writeOnly: true
+        is_adult:
+          type: boolean
+          writeOnly: true
       required:
       - agreed_to_terms
       - email
+      - is_adult
       - password
       - password2
     ReportCreate:
@@ -3850,6 +4188,10 @@ components:
         is_admin_role:
           type: boolean
           readOnly: true
+        is_email_verified:
+          type: boolean
+          readOnly: true
+          title: Email підтверджено
         created_at:
           type: string
           format: date-time
@@ -3863,6 +4205,7 @@ components:
       - email
       - id
       - is_admin_role
+      - is_email_verified
       - is_staff
       - is_verified_dealer
       - role

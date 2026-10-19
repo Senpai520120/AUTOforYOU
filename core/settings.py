@@ -306,6 +306,7 @@ REST_FRAMEWORK = {
         'messages': os.environ.get('THROTTLE_MESSAGES_RATE', '30/hour'),
         'contact': os.environ.get('THROTTLE_CONTACT_RATE', '20/hour'),
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
+        'lead': os.environ.get('THROTTLE_LEAD_RATE', '5/hour'),
         'register': os.environ.get('THROTTLE_REGISTER_RATE', '5/hour'),
         'refresh': os.environ.get('THROTTLE_REFRESH_RATE', '30/min'),
         'verify_resend': os.environ.get('THROTTLE_VERIFY_RESEND_RATE', '3/hour'),
@@ -325,6 +326,10 @@ SPECTACULAR_SETTINGS = {
         'CarStatusEnum': ['IN_USA', 'IN_TRANSIT', 'IN_UKRAINE'],
         'ListingStatusEnum': ['in_transit', 'in_stock', 'sold'],
         'ListingChannelEnum': ['retail', 'wholesale'],
+        # Dotted path: у TextChoices есть подписи, хеш списка значений с ними не совпал бы.
+        'LeadStatusEnum': 'leads.models.LeadStatus',
+        'LeadSourceEnum': 'leads.models.LeadSource',
+        'SourceEnum': ['manual', 'apify'],
         'ListingCurrencyEnum': ['USD', 'UAH', 'EUR'],
         'ShipmentStatusEnum': [
             'at_us_warehouse', 'loading', 'in_ocean',
