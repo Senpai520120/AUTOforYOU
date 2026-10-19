@@ -29,6 +29,7 @@ E2E_SITE_SETTINGS = {
     'privacy_email': 'privacy@e2e.test',
     'phone': '+380500000000',
     'telegram_channel_url': 'https://t.me/e2e_channel',
+    'partner_name': f'{E2E_PREFIX} Партнер',
     'legal_docs_approved': True,
     'legal_docs_updated_at': date(2026, 10, 1),
     'legal_docs_version': '2026-10-01',

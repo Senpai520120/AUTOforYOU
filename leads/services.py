@@ -106,7 +106,8 @@ def create_lead(*, user, data: dict, calculation=None, listing=None) -> Lead:
         source = LeadSource.LISTING
     else:
         source = LeadSource.LANDING
-    if listing is not None and not fields.get('vehicle_label'):
+    if listing is not None:
+        # С лотом подпись формирует сервер: клиентскому значению не доверяем.
         vehicle = listing.vehicle
         fields['vehicle_label'] = f'{vehicle.make} {vehicle.model}'.strip()[:150]
 

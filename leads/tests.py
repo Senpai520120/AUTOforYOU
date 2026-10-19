@@ -74,8 +74,14 @@ class CleanAttributionTests(TestCase):
                 self.assertEqual(clean_attribution({'utm': bad})['utm'], {})
 
     def test_utm_whitelist_and_truncate(self):
-        r = clean_attribution({'utm': {'term': 'x', 'source': 'tiktok', 'medium': '', 'campaign': 'c' * 300}})
-        self.assertEqual(r['utm'], {'source': 'tiktok', 'campaign': 'c' * 100})
+        r = clean_attribution({'utm': {'term': 'x', 'source': 'tiktok', 'medium': '', 'campaign': 'c' * 300,
+                                       'content': 'c' * 100}})
+        self.assertEqual(r['utm'], {'source': 'tiktok', 'content': 'c' * 100})
+
+    def test_utm_value_charset(self):
+        r = clean_attribution({'utm': {'source': 'my-src_1.2', 'medium': '<script>', 'campaign': 'весна_2026',
+                                       'content': 'a b'}})
+        self.assertEqual(r['utm'], {'source': 'my-src_1.2', 'campaign': 'весна_2026'})
 
     def test_referrer(self):
         self.assertEqual(clean_attribution({'referrer': 'https://t.me/x?startapp=secret#frag'})['referrer'],
@@ -130,6 +136,11 @@ class CreateLeadTests(TestCase):
         listing = make_listing(make_vehicle(make='Honda', model='Civic'), make_staff())
         lead = create_lead(user=None, data=data(), listing=listing)
         self.assertEqual(lead.source, 'listing')
+        self.assertEqual(lead.vehicle_label, 'Honda Civic')
+
+    def test_vehicle_label_from_listing_ignores_client_value(self):
+        listing = make_listing(make_vehicle(make='Honda', model='Civic'), make_staff())
+        lead = create_lead(user=None, data=data(vehicle_label='Ferrari Fake'), listing=listing)
         self.assertEqual(lead.vehicle_label, 'Honda Civic')
 
     def test_attribution_cleaned(self):

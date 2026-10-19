@@ -1,5 +1,6 @@
 import { CalcResult } from '@/lib/types';
 import DemoBanner from '@/components/ui/DemoBanner';
+import LeadForm from '@/components/leads/LeadForm';
 
 function Row({ label, usd, uah }: { label: string; usd?: string; uah?: string }) {
   return (
@@ -11,7 +12,13 @@ function Row({ label, usd, uah }: { label: string; usd?: string; uah?: string })
   );
 }
 
-export default function CalcBreakdown({ result }: { result: CalcResult }) {
+interface Props {
+  result: CalcResult;
+  listingId?: number;
+  onNewCalculation?: () => void;
+}
+
+export default function CalcBreakdown({ result, listingId, onNewCalculation }: Props) {
   const b = result.breakdown;
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-6 mt-2">
@@ -51,6 +58,13 @@ export default function CalcBreakdown({ result }: { result: CalcResult }) {
       <p className="text-xs text-amber-700 mt-4 bg-amber-50 rounded p-2">
         #{result.calculation_id} · {result.warning}
       </p>
+      <div className="mt-6">
+        {result.is_estimate && (
+          <p className="text-sm text-slate-600 mb-3">Сума орієнтовна: точну вартість підтвердить брокер.</p>
+        )}
+        <LeadForm key={result.calculation_id} source="calculator" calculationId={result.calculation_id}
+          listingId={listingId} onNew={onNewCalculation} />
+      </div>
     </div>
   );
 }

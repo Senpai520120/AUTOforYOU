@@ -29,8 +29,8 @@ test.describe('Юридичні сторінки з реквізитами', () 
     await expect(main.getByRole('link', { name: 'privacy@e2e.test' })).toBeVisible();
     await expect(main.getByRole('link', { name: 'Мої дані' })).toHaveAttribute('href', '/me/data');
     await expect(main.getByText('Уповноваженого Верховної Ради України з прав людини')).toBeVisible();
-    // partner_name не заданий у сіді: чесна позначка, а не вигадане ім'я.
-    await expect(page.getByTestId('privacy-partner')).toContainText('не заповнено');
+    // partner_name задано в сіді (потрібен для заявок, задача 2.3): показується саме воно.
+    await expect(page.getByTestId('privacy-partner')).toContainText('[E2E] Партнер');
     await expect(main.getByText(/переглянуті оголошення/i)).toHaveCount(0);
     await expect(main.getByText('Ім\'я й телефон клієнта в цю групу не передаються')).toBeVisible();
   });

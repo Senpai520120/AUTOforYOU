@@ -30,6 +30,8 @@ function CalculatorForm() {
   const [result, setResult] = useState<CalcResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const listingParam = Number(params.get('listing'));
+  const listingId = Number.isInteger(listingParam) && listingParam > 0 ? listingParam : undefined;
 
   const set = (key: keyof CalcInputs, val: string | number) =>
     setForm(f => ({ ...f, [key]: val }));
@@ -123,7 +125,10 @@ function CalculatorForm() {
       </form>
 
       {loading && <div className="flex justify-center mt-8"><Spinner size="lg" /></div>}
-      {result && <CalcBreakdown result={result} />}
+      {result && (
+        <CalcBreakdown result={result} listingId={listingId}
+          onNewCalculation={() => { setResult(null); window.scrollTo({ top: 0 }); }} />
+      )}
     </>
   );
 }

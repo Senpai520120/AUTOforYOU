@@ -127,6 +127,15 @@ class PublicApiTests(CleanCacheTestCase):
         s.save()
         self.assertEqual(APIClient().get(URL).json()['partner_name'], 'Партнер Тест')
 
+    def test_partner_consent_text_is_single_source(self):
+        from leads.services import PARTNER_CONSENT_TEMPLATE
+        self.assertEqual(APIClient().get(URL).json()['partner_consent_text'], '')
+        s = SiteSettings.load()
+        s.partner_name = 'Партнер Тест'
+        s.save()
+        self.assertEqual(APIClient().get(URL).json()['partner_consent_text'],
+                         PARTNER_CONSENT_TEMPLATE.format(partner='Партнер Тест'))
+
     def test_cache_invalidated_after_direct_save(self):
         self.assertEqual(APIClient().get(URL).json()['phone'], '')  # прогрев кэша
         s = SiteSettings.load()

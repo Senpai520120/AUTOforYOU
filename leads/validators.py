@@ -8,6 +8,7 @@ UTM_KEYS = ('source', 'medium', 'campaign', 'content')
 UTM_MAX_LEN = 100
 URL_MAX_LEN = 500
 
+_UTM_VALUE = re.compile(r'^[\w.\-]{1,100}$')
 _PHONE_JUNK = re.compile(r'[\s()\-]')
 
 
@@ -35,8 +36,8 @@ def _clean_utm(value) -> dict:
     for key in UTM_KEYS:
         v = value.get(key)
         if isinstance(v, str):
-            v = v.strip()[:UTM_MAX_LEN]
-            if v:
+            v = v.strip()
+            if _UTM_VALUE.fullmatch(v):
                 result[key] = v
     return result
 

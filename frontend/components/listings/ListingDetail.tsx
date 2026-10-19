@@ -6,6 +6,7 @@ import { Listing } from '@/lib/types';
 import Badge from '@/components/ui/Badge';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
+import LeadForm from '@/components/leads/LeadForm';
 
 const FUEL: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид',
@@ -15,6 +16,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
   const v = listing.vehicle_detail;
   const imgs = v.images;
   const [imgIdx, setImgIdx] = useState(0);
+  const [leadOpen, setLeadOpen] = useState(false);
 
   const currentImg = imgs[imgIdx];
   const imgSrc = currentImg?.image || currentImg?.source_url || null;
@@ -112,6 +114,14 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
             >
               Порахувати вартість
             </Link>
+            <button type="button" onClick={() => setLeadOpen(true)} aria-expanded={leadOpen}
+              className="border border-blue-700 text-blue-700 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm">
+              Залишити заявку
+            </button>
+            {leadOpen && (
+              <LeadForm source="listing" listingId={listing.id}
+                vehicleLabel={`${v.year} ${v.make} ${v.model}`} onNew={() => setLeadOpen(false)} newLabel="Закрити" />
+            )}
             <WriteSellerButton listingType="imported" listingId={listing.id} />
             <div className="flex justify-center">
               <HeartButton listingType="imported" listingId={listing.id} />

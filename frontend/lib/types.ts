@@ -432,6 +432,8 @@ export interface SiteSettings {
   telegram_channel_url: string;
   partner_name: string;
   partner_legal_name: string;
+  /** Готовий текст згоди партнеру (єдине джерело — бекенд; порожній, якщо партнера немає). */
+  partner_consent_text: string;
   data_retention_years: number | null;
   log_retention_days: number;
   account_deletion_grace_days: number;
@@ -440,4 +442,57 @@ export interface SiteSettings {
   legal_docs_version: string;
   legal_docs_reconsent_required: boolean;
   owner_configured: boolean;
+}
+
+// Заявки брокеру (задача 2.3)
+export type LeadStatus =
+  | 'new' | 'in_progress' | 'contract' | 'car_bought' | 'in_transit'
+  | 'customs' | 'delivered' | 'rejected';
+export type LeadSource = 'calculator' | 'listing' | 'landing';
+export type LeadContactMethod = 'phone' | 'telegram' | 'viber';
+export type LeadNeededWhen = 'asap' | 'month' | 'three_months' | 'later';
+
+export interface LeadCreate {
+  name: string;
+  phone: string;
+  email?: string;
+  contact_method?: LeadContactMethod;
+  contact_handle?: string;
+  comment?: string;
+  source: LeadSource;
+  landing_slug?: string;
+  calculation_id?: number | null;
+  listing_id?: number | null;
+  budget_usd?: string | null;
+  needed_when?: LeadNeededWhen | '';
+  city?: string;
+  vehicle_label?: string;
+  utm?: Record<string, string>;
+  referrer?: string;
+  entry_page_url?: string;
+  page_url?: string;
+  consent: boolean;
+  partner_consent: boolean;
+  // Антиспам (задача 1.6): токен капчі і приховане поле honeypot.
+  captcha_token?: string;
+  website?: string;
+}
+
+export interface LeadCreated {
+  public_id: string;
+  status: LeadStatus;
+  created_at: string;
+}
+
+export interface Lead {
+  id: number;
+  public_id: string;
+  status: LeadStatus;
+  status_display: string;
+  source: LeadSource;
+  vehicle_label: string;
+  total_usd: string | null;
+  total_uah: string | null;
+  listing_id: number | null;
+  created_at: string;
 }
