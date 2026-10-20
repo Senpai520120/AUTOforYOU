@@ -385,3 +385,20 @@ def send_journal_message(lead_id: int) -> str:
             logger.warning('lead.journal lead_id=%s error=%s', lead_id, type(exc).__name__)
         Lead.objects.filter(pk=lead_id).update(journal_sending_at=None)
         return 'failed'
+
+
+# ─── Обезличивание при удалении аккаунта (1.8) ─────────────────────────────────
+
+def anonymize_user_leads(user) -> int:
+    """Стирает контакты в заявках пользователя и отвязывает их от аккаунта.
+
+    Не трогает то, что нужно для сверки с партнёром и доказательства согласий (2.15):
+    public_id, partner_name/partner_status, journal_message_id, attribution_until,
+    calculation_snapshot, UTM/реферер/страницы, журналы статусов и экспорта, ConsentRecord.
+    Возвращает число заявок.
+    """
+    from users.display import DELETED_NAME
+
+    return Lead.objects.filter(user=user).update(
+        name=DELETED_NAME, phone='', email='', contact_handle='', comment='', user=None,
+    )

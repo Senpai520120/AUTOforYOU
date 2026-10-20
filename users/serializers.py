@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import RegexValidator
 from django.db import transaction
 from django.utils import timezone
 from django.utils.encoding import force_str
@@ -53,16 +54,23 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+UA_PHONE_VALIDATOR = RegexValidator(r'^\+380\d{9}$', 'Телефон у форматі +380XXXXXXXXX.')
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     is_admin_role = serializers.BooleanField(read_only=True)
+    # Дата окончательного удаления в период отмены (1.8): баннер «Акаунт буде видалено <дата>».
+    deletion_scheduled_for = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = (
             'id', 'email', 'first_name', 'last_name', 'phone', 'role',
             'is_verified_dealer', 'is_staff', 'is_admin_role', 'is_email_verified',
-            'created_at', 'telegram_id',
+            'created_at', 'telegram_id', 'deletion_scheduled_for',
         )
+        # Пустой телефон разрешён (DRF не запускает валидаторы на пустой строке), 01-S17.
+        extra_kwargs = {'phone': {'validators': [UA_PHONE_VALIDATOR]}}
         # role только для чтения: смена роли — не самообслуживание.
         # Без этого PATCH /auth/profile/ {"role": "admin"} проходил и открывал
         # B2B-доску и чужие переписки по импортным листингам.
@@ -75,6 +83,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'id', 'email', 'role', 'is_verified_dealer', 'is_staff',
             'is_admin_role', 'is_email_verified', 'created_at', 'telegram_id',
         )
+
+    def get_deletion_scheduled_for(self, obj) -> str | None:
+        from .services import deletion_due_at
+        due = deletion_due_at(obj)
+        return due.isoformat() if due else None
+
+
+class AccountDeleteSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True, max_length=128, trim_whitespace=False)
+
+    def validate_password(self, value):
+        if not self.context['request'].user.check_password(value):
+            raise serializers.ValidationError('Невірний пароль.')
+        return value
 
 
 class TrustedShopSerializer(serializers.ModelSerializer):

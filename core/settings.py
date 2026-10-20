@@ -339,6 +339,8 @@ REST_FRAMEWORK = {
         'refresh': os.environ.get('THROTTLE_REFRESH_RATE', '30/min'),
         'verify_resend': os.environ.get('THROTTLE_VERIFY_RESEND_RATE', '3/hour'),
         'password_reset': os.environ.get('THROTTLE_PASSWORD_RESET_RATE', '5/hour'),
+        # Выгрузка «Мої дані» (1.8): тяжёлый запрос по всем таблицам пользователя.
+        'data_export': os.environ.get('THROTTLE_DATA_EXPORT_RATE', '5/day'),
     },
     'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -508,6 +510,11 @@ CELERY_BEAT_SCHEDULE = {
     'flush-expired-tokens-daily': {
         'task': 'users.tasks.flush_expired_tokens',
         'schedule': _crontab(hour=3, minute=30),
+    },
+    # Обезличивание аккаунтов после периода отмены (1.8, Q3)
+    'anonymize-due-accounts-daily': {
+        'task': 'users.tasks.anonymize_due_accounts',
+        'schedule': _crontab(hour=3, minute=45),
     },
     # Досыл журнала заявок в группу с партнёром (2.15), порог возраста - в админке
     'resend-lead-journal': {

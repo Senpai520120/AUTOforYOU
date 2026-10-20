@@ -13,6 +13,8 @@ export interface User {
   is_admin_role: boolean;
   created_at: string;
   telegram_id: number | null;
+  // Період скасування видалення (1.8): дата остаточного видалення або null.
+  deletion_scheduled_for: string | null;
 }
 
 export interface VehicleImage {

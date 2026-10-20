@@ -103,6 +103,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCalculationList'
           description: ''
+  /api/v1/auth/me/export/:
+    get:
+      operationId: v1_auth_me_export_retrieve
+      description: Только данные самого пользователя; контрагенты - отображаемым именем.
+        Лимит data_export.
+      summary: Выгрузка всех моих данных (JSON-файл)
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: ''
+        '401':
+          description: No response body
+        '429':
+          description: No response body
   /api/v1/auth/me/shipments/:
     get:
       operationId: v1_auth_me_shipments_list
@@ -417,6 +439,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserProfile'
           description: ''
+    delete:
+      operationId: v1_auth_profile_destroy
+      description: 'Ставит аккаунт на удаление с периодом отмены (SiteSettings.account_deletion_grace_days):
+        объявления снимаются, все сессии отзываются, cookie удаляются. По истечении
+        периода данные обезличиваются задачей anonymize_due_accounts. Отмена - cancel-deletion/.'
+      summary: Запросить удаление аккаунта (подтверждение паролем)
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDeletionScheduled'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '429':
+          description: No response body
+  /api/v1/auth/profile/cancel-deletion/:
+    post:
+      operationId: v1_auth_profile_cancel_deletion_create
+      description: 'Снятые объявления остаются снятыми: владелец публикует их заново
+        сам.'
+      summary: Отменить удаление аккаунта (в период отмены)
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+        '401':
+          description: No response body
   /api/v1/auth/register/:
     post:
       operationId: v1_auth_register_create
@@ -2222,6 +2288,14 @@ paths:
           description: Некорректный VIN
 components:
   schemas:
+    AccountDeletionScheduled:
+      type: object
+      properties:
+        deletion_scheduled_for:
+          type: string
+          format: date-time
+      required:
+      - deletion_scheduled_for
     ActiveRatesResponse:
       type: object
       properties:
@@ -4677,6 +4751,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
     PaymentTypeEnum:
       enum:
@@ -5276,6 +5351,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
         role:
           allOf:
@@ -5307,8 +5383,13 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        deletion_scheduled_for:
+          type: string
+          nullable: true
+          readOnly: true
       required:
       - created_at
+      - deletion_scheduled_for
       - email
       - id
       - is_admin_role
@@ -5331,6 +5412,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
     Vehicle:
       type: object

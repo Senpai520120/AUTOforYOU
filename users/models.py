@@ -67,6 +67,11 @@ class CustomUser(AbstractUser):
     # Версия сессий (1.7): claim `sv` в JWT. revoke_all_sessions увеличивает её, токены со старой
     # версией (и без claim, как версия 0) отклоняются сразу - и access, и refresh.
     session_version = models.PositiveIntegerField(default=0, verbose_name='Версія сесій')
+    # Удаление аккаунта (1.8, Q3): запрос ставит deletion_scheduled_at (начало периода отмены),
+    # по истечении периода anonymize_user ставит deleted_at. deleted_at отличает удалённого
+    # от забаненного и неактивного: по нему контрагенты видят «Користувач видалений».
+    deletion_scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Видалення заплановано')
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='Видалено (знеособлено)')
     created_at = models.DateTimeField(auto_now_add=True)
 
     USERNAME_FIELD = 'email'

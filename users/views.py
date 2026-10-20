@@ -1,17 +1,22 @@
+import json
 import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, transaction
+from django.http import HttpResponse
 from django.middleware.csrf import rotate_token
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.csrf import ensure_csrf_cookie
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
 from rest_framework import generics, permissions, status
+from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
@@ -27,10 +32,12 @@ from . import lockout
 from .authentication import enforce_csrf
 from .cookies import clear_auth_cookies, set_auth_cookies
 from .emails import send_already_registered_email, send_verification_email
+from .export import build_user_export
 from .jwt import TokenObtainPairSerializer, TokenRefreshSerializer, VersionedRefreshToken
 from .models import CustomUser, DealerApplication, TrustedShop
 from .permissions import IsEmailVerified
 from .serializers import (
+    AccountDeleteSerializer,
     DealerApplicationCreateSerializer,
     DealerApplicationSerializer,
     PasswordChangeSerializer,
@@ -40,7 +47,14 @@ from .serializers import (
     TrustedShopSerializer,
     UserProfileSerializer,
 )
-from .services import DuplicatePendingError, apply_for_dealer, revoke_all_sessions
+from .services import (
+    AccountDeletionError,
+    DuplicatePendingError,
+    apply_for_dealer,
+    cancel_account_deletion,
+    revoke_all_sessions,
+    schedule_account_deletion,
+)
 from .tasks import send_password_reset_email_task
 from .tokens import email_verification_token
 
@@ -411,13 +425,81 @@ class AuthConfigView(APIView):
     get=extend_schema(tags=['auth'], summary='Получить профиль текущего пользователя'),
     put=extend_schema(tags=['auth'], summary='Обновить профиль'),
     patch=extend_schema(tags=['auth'], summary='Частично обновить профиль'),
+    delete=extend_schema(
+        tags=['auth'],
+        summary='Запросить удаление аккаунта (подтверждение паролем)',
+        description=(
+            'Ставит аккаунт на удаление с периодом отмены (SiteSettings.account_deletion_grace_days): '
+            'объявления снимаются, все сессии отзываются, cookie удаляются. По истечении периода '
+            'данные обезличиваются задачей anonymize_due_accounts. Отмена - cancel-deletion/.'
+        ),
+        request=AccountDeleteSerializer,
+        responses={202: inline_serializer('AccountDeletionScheduled', {
+            'deletion_scheduled_for': drf_serializers.DateTimeField()}), 400: None, 401: None, 429: None},
+    ),
 )
-class ProfileView(generics.RetrieveUpdateAPIView):
+class ProfileView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return self.request.user
+
+    def get_throttles(self):
+        # Подбор пароля с украденной сессией: DELETE под лимитом password_reset, как смена пароля.
+        if self.request.method == 'DELETE':
+            self.throttle_scope = 'password_reset'
+            return [ScopedRateThrottle(), *super().get_throttles()]
+        return super().get_throttles()
+
+    def destroy(self, request, *args, **kwargs):
+        serializer = AccountDeleteSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        try:
+            due = schedule_account_deletion(request.user)
+        except AccountDeletionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        response = Response({'deletion_scheduled_for': due.isoformat()}, status=status.HTTP_202_ACCEPTED)
+        return clear_auth_cookies(response)
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Отменить удаление аккаунта (в период отмены)',
+    description='Снятые объявления остаются снятыми: владелец публикует их заново сам.',
+    request=None,
+    responses={200: UserProfileSerializer, 401: None},
+)
+class CancelDeletionView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def post(self, request):
+        cancel_account_deletion(request.user)
+        return Response(UserProfileSerializer(request.user).data)
+
+
+@extend_schema(
+    tags=['me'],
+    summary='Выгрузка всех моих данных (JSON-файл)',
+    description='Только данные самого пользователя; контрагенты - отображаемым именем. Лимит data_export.',
+    responses={200: {'type': 'object'}, 401: None, 429: None},
+)
+class DataExportView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle, UserRateThrottle]
+    throttle_scope = 'data_export'
+
+    def get(self, request):
+        data = build_user_export(request.user)
+        filename = f'autoforyou-data-{timezone.localdate():%Y-%m-%d}.json'
+        response = HttpResponse(
+            json.dumps(data, cls=DjangoJSONEncoder, ensure_ascii=False, indent=2),
+            content_type='application/json; charset=utf-8',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Cache-Control'] = 'no-store'
+        return response
 
 
 # --- Личный кабинет ---

@@ -143,7 +143,8 @@ def _vals(qs, *fields):
 
 def st_user(c):
     return list(CustomUser.objects.filter(pk=c.u['a'].pk).values_list(
-        'password', 'session_version', 'first_name', 'last_name', 'phone', 'telegram_id', 'role'))
+        'password', 'session_version', 'first_name', 'last_name', 'phone', 'telegram_id', 'role',
+        'deletion_scheduled_at', 'deleted_at', 'email'))
 
 
 def st_shops(c):
@@ -226,7 +227,12 @@ MATRIX: list[Case] = [
     Case('auth-profile', 'patch', other=200, state=st_user, payload={'first_name': 'Змінено'}),
     Case('auth-profile', 'put', other=200, state=st_user,
          payload={'first_name': 'Змінено', 'last_name': 'Тест', 'phone': '+380501112233'}),
-    # DELETE profile/ и me/export/ (1.8), cancel-deletion - ждут задачу 1.8 (эндпоинтов ещё нет)
+    Case('auth-profile', 'delete', owner_code=202, other=202, state=st_user, payload={'password': TEST_PASSWORD},
+         note='удаление ставится только своему аккаунту (пароль - свой)'),
+    Case('auth-profile-cancel-deletion', 'post', other=200, state=st_user,
+         note='отмена - только своего удаления'),
+    Case('me-export', 'get', other=200, forbid=lambda c: [c.u['a'].email, 'СТО Секрет', 'Іван'],
+         note='выгрузка только своих данных'),
 
     # ---- личный кабинет (23-D6...D9) -------------------------------------------------
     Case('me-calculations', 'get', other=200, ids=_ids('calc')),
@@ -492,6 +498,9 @@ class AuthzMatrixTests(CleanCacheTestCase):
             'dealer': make_dealer('dealer@test.com'),
         }
         a, c_user = u['a'], u['c']
+        # Владельцу поставлено удаление: чужой cancel-deletion не должен его сбросить (1.8).
+        from django.utils import timezone
+        CustomUser.objects.filter(pk=a.pk).update(deletion_scheduled_at=timezone.now())
         ns = SimpleNamespace(u=u)
         ns.calc = Calculation.objects.create(
             user=a, inputs_snapshot={'make': 'Toyota'}, rates_snapshot={'usd_uah': '41.5'},

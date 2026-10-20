@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ApiError } from '@/api/client';
 import { resendVerificationEmail } from '@/lib/email-verify';
+import { formatDeletionDate } from '@/lib/deletion';
 
 const ROLE_LABELS: Record<string, string> = {
   buyer: 'Покупець',
@@ -46,12 +47,27 @@ function VerifyEmailBanner() {
   );
 }
 
+function DeletionBanner({ date }: { date: string }) {
+  return (
+    <div role="status" data-testid="deletion-banner"
+      className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-900">
+      <p className="font-semibold">Акаунт буде видалено {formatDeletionDate(date)}</p>
+      <p className="mt-1">До цієї дати видалення можна скасувати.</p>
+      <Link href="/me/data"
+        className="inline-block mt-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-1.5 rounded-lg">
+        Скасувати видалення
+      </Link>
+    </div>
+  );
+}
+
 export default function MeDashboard() {
   const { user, loading, logout } = useRequireAuth();
 
   if (loading || !user) return null;
 
   const menuItems = [
+    { href: '/me/profile', icon: '👤', title: 'Профіль', desc: 'Ім\'я, прізвище, телефон' },
     { href: '/me/notifications', icon: '🔔', title: 'Сповіщення', desc: 'Алерти про оголошення, повідомлення' },
     { href: '/me/messages', icon: '💬', title: 'Повідомлення', desc: 'Переписка по оголошеннях' },
     { href: '/me/favorites', icon: '♥', title: 'Обране', desc: 'Збережені оголошення' },
@@ -64,6 +80,7 @@ export default function MeDashboard() {
     { href: '/me/shipments', icon: '📦', title: 'Мої контейнери', desc: 'Відстежувані шипменти' },
     { href: '/me/security', icon: '🔒', title: 'Безпека', desc: 'Зміна пароля, вихід на всіх пристроях' },
     { href: '/me/telegram', icon: '✈️', title: 'Прив\'язати Telegram', desc: 'Отримуйте сповіщення у Telegram' },
+    { href: '/me/data', icon: '🗂️', title: 'Мої дані', desc: 'Завантажити копію даних, видалити акаунт' },
   ];
   if (user.role === 'broker' || user.is_admin_role) {
     menuItems.unshift({ href: '/broker/leads', icon: '📥', title: 'Заявки', desc: 'Заявки клієнтів і їх статуси' });
@@ -71,6 +88,7 @@ export default function MeDashboard() {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {user.deletion_scheduled_for && <DeletionBanner date={user.deletion_scheduled_for} />}
       {!user.is_email_verified && <VerifyEmailBanner />}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <div className="flex items-center gap-4">
