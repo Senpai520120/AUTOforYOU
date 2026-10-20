@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ApiError } from '@/api/client';
 import { brokerLeadsApi } from '@/api/leads';
 import { leadStatusLabel } from '@/lib/labels';
-import type { BrokerLeadDetail, LeadPartnerStatus, LeadStatus } from '@/lib/types';
+import type { BrokerLeadDetail, LeadPartnerStatus, LeadQuestionKey, LeadStatus } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
 import AccessDenied from './AccessDenied';
 import LeadStatusBadge from './LeadStatusBadge';
@@ -20,6 +20,18 @@ const PARTNER_STATUSES: { value: LeadPartnerStatus; label: string }[] = [
   { value: 'bought', label: 'Куплено' },
   { value: 'rejected', label: 'Відмова' },
 ];
+
+const QUESTIONS: { key: LeadQuestionKey; label: string }[] = [
+  { key: 'q_budget_ok', label: 'Бюджет не нижче порога' },
+  { key: 'q_term_ok', label: 'Термін не більше 3 місяців' },
+  { key: 'q_knows_repair', label: 'Знає про ремонт' },
+  { key: 'q_ready_deposit', label: 'Готовий до депозиту' },
+];
+const QUALIFICATION_COLORS: Record<string, string> = {
+  hot: 'bg-red-100 text-red-800',
+  cold: 'bg-sky-100 text-sky-800',
+  unrated: 'bg-slate-100 text-slate-700',
+};
 
 function interval(fromIso: string, toIso: string): string {
   const mins = Math.max(0, Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 60000));
@@ -230,6 +242,33 @@ export default function BrokerLeadCard({ id }: { id: number }) {
             {PARTNER_STATUSES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </label>
+      </Section>
+
+      <Section title="Кваліфікація">
+        <p className="mb-3">
+          <span data-testid="lead-qualification"
+            className={`inline-block text-xs px-2 py-1 rounded font-semibold ${QUALIFICATION_COLORS[lead.qualification] ?? QUALIFICATION_COLORS.unrated}`}>
+            {lead.qualification_display}
+          </span>
+        </p>
+        <div className="space-y-2 text-sm">
+          {QUESTIONS.map((q) => (
+            <fieldset key={q.key} className="flex flex-wrap items-center gap-3" disabled={busy}>
+              <legend className="sr-only">{q.label}</legend>
+              <span className="w-64 text-slate-700" aria-hidden="true">{q.label}</span>
+              {([['Так', true], ['Ні', false]] as const).map(([text, value]) => (
+                <label key={text} className="flex items-center gap-1">
+                  <input type="radio" name={q.key} checked={lead[q.key] === value}
+                    onChange={() => act(() => brokerLeadsApi.setQualification(lead.id, { [q.key]: value }))} />
+                  <span>{text}<span className="sr-only"> — {q.label}</span></span>
+                </label>
+              ))}
+            </fieldset>
+          ))}
+        </div>
+        {lead.attribution_until && (
+          <p className="mt-3 text-xs text-slate-500">Атрибуція партнера діє до {fmt(lead.attribution_until)}</p>
+        )}
       </Section>
 
       <Section title="Журнал статусів">

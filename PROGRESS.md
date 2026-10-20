@@ -1,8 +1,19 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, дальше 2.15 → 1.1 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, дальше 1.1 → 1.7 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 2.15: журнал заявок для партнёра, квалификация, атрибуция, CSV, воронка (2026-10-20) — ЗАВЕРШЕНО
+
+- `Lead`: квалификация (`qualification`, четыре `q_*`), окно атрибуции `attribution_until` (`add_months`, последний день месяца), `journal_message_id`/`journal_sent_at`/`journal_sending_at`. Новые модели: `LeadJournalSettings` (порог 3 из 4, 8000 USD, 12 мес., `journal_retry_minutes`; меняет только superuser), `LeadPartnerStatusChange` и `LeadExportLog` — только добавление (`AppendOnlyQuerySet`, запрет save/delete). Миграции leads 0006–0008.
+- Журнал в группу партнёра (`LEAD_JOURNAL_CHAT_ID`): белый список (AFY-ID, авто только из лота/расчёта, бюджет, город, время UTC), в свободных полях телефон/@ник/email → «не вказано»; `send_journal_task` с `self.retry` без ПДн, beat-задача `resend_journal` (каждые 5 мин, пакет 50, до 7 дней); отправка вне транзакции с меткой `journal_sending_at`, без дублей.
+- API брокера: `POST /broker/leads/{id}/qualification/`, `GET /broker/leads/export.csv` (фильтры статус/период, потоковый, `csv_safe` с `lstrip`, throttle `lead_export` общий с админкой, аудит без поискового запроса). Админка: колонки/фильтры квалификации и статуса партнёра, CSV, воронка `/admin/leads/lead/funnel/` (право `view_funnel` у «Адміністратори»); правки через сервисы с проверкой владельца (брокер не меняет чужую заявку и в админке).
+- Фронт: блок «Кваліфікація» в `BrokerLeadCard`, «Завантажити CSV» в `BrokerLeadList`. E2E `lead-journal.spec.ts` 3/3, `broker`+`lead` 41/41.
+- Проверки: бэкенд 936 OK, ruff чисто. Ревью `security-reviewer`: 3 «важно» + 5 «желательно» исправлены. Квалификация и статус партнёра — POST (в задаче PATCH), как соседние эндпоинты 2.4.
+- Для владельца: подтвердить пороги (3 из 4, 8000 USD, 12 мес.) с партнёром и договором; заполнить `LEAD_JOURNAL_CHAT_ID`; юрист — срок хранения `LeadExportLog` и окно атрибуции. В 1.8 не обезличивать `public_id`, `partner_name`, `journal_message_id`, `partner_status`, журналы и `attribution_until`.
 
 ---
 

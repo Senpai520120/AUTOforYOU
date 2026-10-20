@@ -16,6 +16,7 @@ from integrations.captcha import HONEYPOT_FIELD, require_captcha
 from site_settings.models import SiteSettings
 from users.permissions import IsBrokerOrAdmin
 
+from . import exports
 from .models import Lead, LeadCounter, LeadSource, LeadStatus
 from .serializers import (
     BrokerLeadDetailSerializer,
@@ -24,6 +25,7 @@ from .serializers import (
     LeadCreateSerializer,
     LeadMineSerializer,
     PartnerStatusSerializer,
+    QualificationSerializer,
     StatusChangeSerializer,
 )
 from .services import (
@@ -32,6 +34,7 @@ from .services import (
     PartnerNotConfigured,
     broker_change_status,
     create_lead,
+    qualify_lead,
     set_partner_status,
     take_lead,
 )
@@ -264,3 +267,54 @@ class BrokerLeadPartnerStatusView(_BrokerLeadMixin, APIView):
         except AlreadyTaken:
             return Response({'detail': TAKEN_BY_OTHER}, status=status.HTTP_409_CONFLICT)
         return self.detail(lead)
+
+
+@extend_schema(tags=['broker'], summary='Кваліфікація заявки (чотири відповіді так/ні)',
+               request=QualificationSerializer,
+               responses={200: BrokerLeadDetailSerializer,
+                          409: OpenApiResponse(description='Заявку вже взяв інший брокер'), **_BROKER_ERRORS})
+class BrokerLeadQualificationView(_BrokerLeadMixin, APIView):
+    def post(self, request, pk):
+        lead = self.get_lead(pk)
+        serializer = QualificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            qualify_lead(lead, dict(serializer.validated_data), by=request.user,
+                         is_admin=request.user.is_admin_role)
+        except AlreadyTaken:
+            return Response({'detail': TAKEN_BY_OTHER}, status=status.HTTP_409_CONFLICT)
+        return self.detail(lead)
+
+
+@extend_schema(
+    tags=['broker'], summary='CSV-експорт заявок (без персональних даних)',
+    description='Только broker и admin. Параметры: status, date_from, date_to (YYYY-MM-DD, по UTC, включительно). '
+                'Колонки без имени, телефона, email, комментария, referrer и URL. Каждая выгрузка пишется в аудит.',
+    responses={(200, 'text/csv'): OpenApiResponse(description='CSV-файл'),
+               400: OpenApiResponse(description='Неверный фильтр'),
+               401: _BROKER_ERRORS[401], 403: _BROKER_ERRORS[403], 429: OpenApiResponse(description='Лимит выгрузок')},
+)
+class LeadExportView(APIView):
+    permission_classes = [IsBrokerOrAdmin]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'lead_export'
+
+    def get(self, request):
+        params = request.query_params
+        errors = {}
+        status_ = params.get('status', '').strip()
+        if status_ and status_ not in LeadStatus.values:
+            errors['status'] = 'Невідомий статус.'
+        days = {}
+        for name in ('date_from', 'date_to'):
+            raw = params.get(name, '').strip()
+            if raw:
+                try:
+                    days[name] = exports.parse_day(raw)
+                except ValueError:
+                    errors[name] = 'Очікується дата у форматі РРРР-ММ-ДД.'
+        if errors:
+            raise ValidationError(errors)
+        qs = exports.filter_leads(status_, days.get('date_from'), days.get('date_to'))
+        filters = {'status': status_, **{k: v.isoformat() for k, v in days.items()}}
+        return exports.csv_response(qs, user=request.user, channel='api', filters=filters)

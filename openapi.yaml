@@ -623,6 +623,47 @@ paths:
           description: Не broker и не admin
         '404':
           description: Заявку не знайдено
+  /api/v1/broker/leads/{id}/qualification/:
+    post:
+      operationId: v1_broker_leads_qualification_create
+      summary: Кваліфікація заявки (чотири відповіді так/ні)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - broker
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QualificationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QualificationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QualificationRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrokerLeadDetail'
+          description: ''
+        '409':
+          description: Заявку вже взяв інший брокер
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не broker и не admin
+        '404':
+          description: Заявку не знайдено
   /api/v1/broker/leads/{id}/status/:
     post:
       operationId: v1_broker_leads_status_create
@@ -699,6 +740,29 @@ paths:
           description: Не broker и не admin
         '404':
           description: Заявку не знайдено
+  /api/v1/broker/leads/export.csv:
+    get:
+      operationId: v1_broker_leads_export.csv_retrieve
+      description: 'Только broker и admin. Параметры: status, date_from, date_to (YYYY-MM-DD,
+        по UTC, включительно). Колонки без имени, телефона, email, комментария, referrer
+        и URL. Каждая выгрузка пишется в аудит.'
+      summary: CSV-експорт заявок (без персональних даних)
+      tags:
+      - broker
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          description: CSV-файл
+        '400':
+          description: Неверный фильтр
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не broker и не admin
+        '429':
+          description: Лимит выгрузок
   /api/v1/dealers/application/:
     get:
       operationId: v1_dealers_application_retrieve
@@ -2167,6 +2231,14 @@ components:
         car:
           type: string
           readOnly: true
+        qualification:
+          allOf:
+          - $ref: '#/components/schemas/QualificationEnum'
+          readOnly: true
+          title: Кваліфікація
+        qualification_display:
+          type: string
+          readOnly: true
         email:
           type: string
           format: email
@@ -2238,9 +2310,36 @@ components:
           type: string
           format: date-time
           readOnly: true
+        q_budget_ok:
+          type: boolean
+          readOnly: true
+          nullable: true
+          title: Бюджет не нижче порога
+        q_term_ok:
+          type: boolean
+          readOnly: true
+          nullable: true
+          title: Термін не більше 3 місяців
+        q_knows_repair:
+          type: boolean
+          readOnly: true
+          nullable: true
+          title: Знає про ремонт
+        q_ready_deposit:
+          type: boolean
+          readOnly: true
+          nullable: true
+          title: Готовий до депозиту
+        attribution_until:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          title: Атрибуція до
       required:
       - allowed_transitions
       - assigned_to
+      - attribution_until
       - budget_usd
       - calculation_snapshot
       - car
@@ -2265,6 +2364,12 @@ components:
       - partner_status_display
       - phone
       - public_id
+      - q_budget_ok
+      - q_knows_repair
+      - q_ready_deposit
+      - q_term_ok
+      - qualification
+      - qualification_display
       - referrer
       - source
       - source_display
@@ -2355,6 +2460,14 @@ components:
         car:
           type: string
           readOnly: true
+        qualification:
+          allOf:
+          - $ref: '#/components/schemas/QualificationEnum'
+          readOnly: true
+          title: Кваліфікація
+        qualification_display:
+          type: string
+          readOnly: true
       required:
       - assigned_to
       - car
@@ -2367,6 +2480,8 @@ components:
       - partner_status_display
       - phone
       - public_id
+      - qualification
+      - qualification_display
       - source
       - source_display
       - status
@@ -4237,6 +4352,29 @@ components:
       - bump
       - top
       type: string
+    QualificationEnum:
+      enum:
+      - unrated
+      - hot
+      - cold
+      type: string
+    QualificationRequest:
+      type: object
+      description: 'Частичное обновление: переданные ключи записываются (null очищает),
+        остальные не трогаются.'
+      properties:
+        q_budget_ok:
+          type: boolean
+          nullable: true
+        q_term_ok:
+          type: boolean
+          nullable: true
+        q_knows_repair:
+          type: boolean
+          nullable: true
+        q_ready_deposit:
+          type: boolean
+          nullable: true
     ReasonEnum:
       enum:
       - spam

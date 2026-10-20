@@ -498,6 +498,8 @@ export interface Lead {
 }
 
 // Кабінет брокера (задача 2.4)
+export type LeadQualification = 'unrated' | 'hot' | 'cold';
+export type LeadQuestionKey = 'q_budget_ok' | 'q_term_ok' | 'q_knows_repair' | 'q_ready_deposit';
 export type LeadPartnerStatus = '' | 'no_answer' | 'thinking' | 'deposit' | 'bought' | 'rejected';
 
 // email приходить лише для себе й адміна; для інших — тільки відображуване ім’я.
@@ -518,6 +520,8 @@ export interface BrokerLeadRow {
   status_display: string;
   partner_status: LeadPartnerStatus;
   partner_status_display: string;
+  qualification: LeadQualification;
+  qualification_display: string;
   total_usd: string | null;
   total_uah: string | null;
   source: LeadSource;
@@ -566,6 +570,11 @@ export interface BrokerLeadDetail extends BrokerLeadRow {
   allowed_transitions: LeadStatus[];
   partner_name: string;
   updated_at: string;
+  q_budget_ok: boolean | null;
+  q_term_ok: boolean | null;
+  q_knows_repair: boolean | null;
+  q_ready_deposit: boolean | null;
+  attribution_until: string | null;
 }
 
 export interface BrokerLeadList extends PaginatedResponse<BrokerLeadRow> {

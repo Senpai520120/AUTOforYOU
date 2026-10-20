@@ -307,6 +307,7 @@ REST_FRAMEWORK = {
         'contact': os.environ.get('THROTTLE_CONTACT_RATE', '20/hour'),
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
         'lead': os.environ.get('THROTTLE_LEAD_RATE', '5/hour'),
+        'lead_export': os.environ.get('THROTTLE_LEAD_EXPORT_RATE', '10/hour'),
         'register': os.environ.get('THROTTLE_REGISTER_RATE', '5/hour'),
         'refresh': os.environ.get('THROTTLE_REFRESH_RATE', '30/min'),
         'verify_resend': os.environ.get('THROTTLE_VERIFY_RESEND_RATE', '3/hour'),
@@ -474,6 +475,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'local_listings.tasks.expire_listings',
         'schedule': _crontab(hour=9, minute=20),
     },
+    # Досыл журнала заявок в группу с партнёром (2.15), порог возраста - в админке
+    'resend-lead-journal': {
+        'task': 'leads.tasks.resend_journal',
+        'schedule': _crontab(minute='*/5'),
+    },
 }
 
 # ─── Telegram-бот ─────────────────────────────────────────────────────────────
@@ -493,6 +499,8 @@ TELEGRAM_B2B_CHANNEL_ID = os.environ.get('TELEGRAM_B2B_CHANNEL_ID', '')  # оп�
 TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')   # для прод. webhook
 # Запасной chat_id брокера/группы брокеров (основной задаётся в админке, задача 2.2)
 TELEGRAM_BROKER_CHAT_ID = os.environ.get('TELEGRAM_BROKER_CHAT_ID', '')
+# Журнал заявок в группу с партнёром (2.15): только AFY-ID, авто, бюджет, город, время; без ПДн.
+LEAD_JOURNAL_CHAT_ID = os.environ.get('LEAD_JOURNAL_CHAT_ID', '')
 
 # URL сайта — используется в Telegram-постах (ссылки на листинги)
 SITE_URL = os.environ.get('SITE_URL', 'https://autoforyou.ua')
@@ -533,6 +541,7 @@ if _TESTING:
     LIQPAY_PRIVATE_KEY = ''
     TELEGRAM_BOT_TOKEN = ''
     TELEGRAM_BROKER_CHAT_ID = ''
+    LEAD_JOURNAL_CHAT_ID = ''
     TURNSTILE_SITE_KEY = ''
     TURNSTILE_SECRET_KEY = ''
     CAPTCHA_PROVIDER = 'off'

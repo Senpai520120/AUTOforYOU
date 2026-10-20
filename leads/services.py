@@ -1,14 +1,29 @@
-"""Бизнес-логика заявок: создание, смена статуса, номер AFY-ГГГГ-NNNN."""
+"""Бизнес-логика заявок: создание, смена статуса, номер AFY-ГГГГ-NNNN, квалификация, журнал в группу."""
+import calendar
+import html
 import logging
+import re
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from site_settings.models import SiteSettings
 from users.consents import record_consents
 from users.models import ConsentDocument, ConsentMethod
 
-from .models import Lead, LeadCounter, LeadSource, LeadStatus, LeadStatusChange
+from .models import (
+    Lead,
+    LeadCounter,
+    LeadJournalSettings,
+    LeadPartnerStatusChange,
+    LeadSource,
+    LeadStatus,
+    LeadStatusChange,
+    Qualification,
+)
 from .validators import clean_attribution, normalize_ua_phone
 
 logger = logging.getLogger(__name__)
@@ -47,9 +62,15 @@ class PartnerNotConfigured(Exception):
 
 
 def notify_new_lead(lead_id: int) -> None:
-    """Личное уведомление брокеру (2.2); журнал в группу - 2.15. Без ПДн в логе."""
+    """Личное уведомление брокеру (2.2). Без ПДн в логе."""
     from .tasks import notify_broker_new_lead
     notify_broker_new_lead.delay(lead_id)
+
+
+def notify_journal(lead_id: int) -> None:
+    """Журнал в группу с партнёром (2.15): отдельная отправка, не влияет на уведомление брокеру."""
+    from .tasks import send_journal_task
+    send_journal_task.delay(lead_id)
 
 
 def record_metric(event: str) -> None:
@@ -59,7 +80,7 @@ def record_metric(event: str) -> None:
 
 def _after_commit(lead_id: int) -> None:
     # Сбой уведомления не должен ронять создание заявки; в лог только lead_id.
-    for hook, args in ((notify_new_lead, (lead_id,)), (record_metric, ('lead_created',))):
+    for hook, args in ((notify_new_lead, (lead_id,)), (notify_journal, (lead_id,)), (record_metric, ('lead_created',))):
         try:
             hook(*args)
         except Exception:
@@ -72,6 +93,13 @@ def _next_public_id(year: int) -> str:
     counter.last_number += 1
     counter.save(update_fields=['last_number'])
     return f'AFY-{year}-{counter.last_number:04d}'
+
+
+def add_months(dt: datetime, months: int) -> datetime:
+    """dt + months месяцев; если такого дня нет (31 августа + 6), берётся последний день месяца."""
+    index = dt.month - 1 + months
+    year, month = dt.year + index // 12, index % 12 + 1
+    return dt.replace(year=year, month=month, day=min(dt.day, calendar.monthrange(year, month)[1]))
 
 
 def build_calculation_snapshot(calculation) -> dict:
@@ -118,8 +146,14 @@ def create_lead(*, user, data: dict, calculation=None, listing=None) -> Lead:
         fields['vehicle_label'] = f'{vehicle.make} {vehicle.model}'.strip()[:150]
 
     now = timezone.now()
+    journal_cfg = LeadJournalSettings.get_solo()
+    budget = fields.get('budget_usd')
+    if budget is not None:
+        # Автоматический ответ на вопрос о бюджете; брокер может поправить вручную.
+        fields['q_budget_ok'] = Decimal(str(budget)) >= journal_cfg.hot_budget_usd
     with transaction.atomic():
         lead = Lead.objects.create(
+            attribution_until=add_months(now, journal_cfg.attribution_window_months),
             public_id=_next_public_id(now.year),
             user=user,
             phone=normalize_ua_phone(data.get('phone')),
@@ -236,6 +270,118 @@ def set_partner_status(lead: Lead, value: str, *, by, is_admin: bool = False) ->
                 lead=locked, from_status=locked.status, to_status=locked.status, changed_by=by,
                 note=f'partner: {old or "—"} → {value or "—"}'[:500],
             )
+            LeadPartnerStatusChange.objects.create(lead=locked, from_status=old, to_status=value, changed_by=by)
     lead.partner_status = locked.partner_status
     lead.updated_at = locked.updated_at
     return lead
+
+
+Q_FIELDS = ('q_budget_ok', 'q_term_ok', 'q_knows_repair', 'q_ready_deposit')
+
+
+def compute_qualification(lead: Lead, cfg: LeadJournalSettings | None = None) -> str:
+    """hot: «так» не меньше hot_min_score из четырёх; cold: ответили на все, но меньше; иначе unrated."""
+    cfg = cfg or LeadJournalSettings.get_solo()
+    answers = [getattr(lead, f) for f in Q_FIELDS]
+    if any(a is None for a in answers):
+        return Qualification.UNRATED
+    return Qualification.HOT if sum(answers) >= cfg.hot_min_score else Qualification.COLD
+
+
+def qualify_lead(lead: Lead, answers: dict, *, by, is_admin: bool = False) -> Lead:
+    """Записывает ответы (ключи Q_FIELDS; None очищает) и пересчитывает qualification по порогам из админки.
+    Если на бюджет не ответили, а он известен - ответ считается автоматически."""
+    unknown = set(answers) - set(Q_FIELDS)
+    if unknown:
+        raise ValueError(f'Невідомі поля: {sorted(unknown)}')
+    cfg = LeadJournalSettings.get_solo()
+    with transaction.atomic():
+        locked = Lead.objects.select_for_update().get(pk=lead.pk)
+        _check_owner(locked, by, is_admin)
+        for key, value in answers.items():
+            setattr(locked, key, value)
+        if locked.q_budget_ok is None and locked.budget_usd is not None:
+            locked.q_budget_ok = locked.budget_usd >= cfg.hot_budget_usd
+        locked.qualification = compute_qualification(locked, cfg)
+        locked.save(update_fields=[*Q_FIELDS, 'qualification', 'updated_at'])
+    for f in (*Q_FIELDS, 'qualification', 'updated_at'):
+        setattr(lead, f, getattr(locked, f))
+    return lead
+
+
+_PHONE_LIKE = re.compile(r'\d(?:[\s\-().]*\d){4,}')
+NOT_SET = 'не вказано'
+
+
+def _journal_safe(value: str) -> str:
+    """Свободный текст в группу: 5+ цифр подряд (с пробелами, дефисами, скобками), @ или e-mail -> «не вказано»."""
+    value = (value or '').strip()
+    if not value or '@' in value or _PHONE_LIKE.search(value):
+        return NOT_SET
+    return value[:100]
+
+
+def _journal_car(lead: Lead) -> str:
+    """Марка/модель только из лота или расчёта, но не из клиентского vehicle_label."""
+    if lead.listing_id:
+        vehicle = lead.listing.vehicle
+        return _journal_safe(f'{vehicle.make} {vehicle.model}')
+    inputs = (lead.calculation_snapshot or {}).get('inputs_snapshot') or {}
+    parts = [str(inputs.get(k)) for k in ('make', 'model', 'year') if inputs.get(k)]
+    return _journal_safe(' '.join(parts))
+
+
+def journal_text(lead: Lead) -> str:
+    """Текст для группы с партнёром по белому списку: AFY-ID, авто, бюджет, город, время UTC.
+    Имя, телефон, email, комментарий и ссылки сюда не попадают никогда."""
+    from . import notify
+    budget = f'${notify._money(lead.budget_usd)}' if lead.budget_usd is not None else NOT_SET
+    when = lead.created_at.astimezone(UTC).strftime('%Y-%m-%d %H:%M')
+    lines = [
+        f'🧾 <b>Заявка {html.escape(lead.public_id)}</b>',
+        f'🚗 {html.escape(_journal_car(lead))}',
+        f'💵 Бюджет: {html.escape(budget)}',
+        f'📍 Місто: {html.escape(_journal_safe(lead.city))}',
+        f'🕒 {when} UTC',
+    ]
+    return '\n'.join(lines)
+
+
+SENDING_STALE = timedelta(minutes=5)
+
+
+def send_journal_message(lead_id: int) -> str:
+    """Шлёт запись в LEAD_JOURNAL_CHAT_ID и сохраняет journal_message_id.
+    Возврат: sent / already_sent / in_progress / disabled / not_found / failed (failed - повторить).
+    Отправка идёт вне транзакции: перед ней атомарно ставится метка journal_sending_at.
+    Исключения не пробрасываются, в лог идут только lead_id и класс ошибки."""
+    from django.conf import settings
+
+    from telegram_bot import sender
+
+    chat_id = str(getattr(settings, 'LEAD_JOURNAL_CHAT_ID', '') or '').strip()
+    if not chat_id or not getattr(settings, 'TELEGRAM_BOT_TOKEN', ''):
+        return 'disabled'
+    now = timezone.now()
+    claimed = Lead.objects.filter(pk=lead_id, journal_message_id__isnull=True).filter(
+        Q(journal_sending_at__isnull=True) | Q(journal_sending_at__lt=now - SENDING_STALE),
+    ).update(journal_sending_at=now)
+    if not claimed:
+        lead = Lead.objects.filter(pk=lead_id).values('journal_message_id').first()
+        if lead is None:
+            return 'not_found'
+        return 'already_sent' if lead['journal_message_id'] is not None else 'in_progress'
+    try:
+        lead = Lead.objects.select_related('listing__vehicle').get(pk=lead_id)
+        result = sender.send_message(chat_id, journal_text(lead))
+        if not result.ok or result.message_id is None:
+            logger.warning('lead.journal lead_id=%s reason=%s', lead_id, result.reason or 'no_message_id')
+            raise RuntimeError('send_failed')
+        Lead.objects.filter(pk=lead_id).update(
+            journal_message_id=result.message_id, journal_sent_at=timezone.now(), journal_sending_at=None)
+        return 'sent'
+    except Exception as exc:
+        if str(exc) != 'send_failed':
+            logger.warning('lead.journal lead_id=%s error=%s', lead_id, type(exc).__name__)
+        Lead.objects.filter(pk=lead_id).update(journal_sending_at=None)
+        return 'failed'

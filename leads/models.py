@@ -2,7 +2,7 @@ import string
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
 
@@ -25,6 +25,12 @@ class PartnerStatus(models.TextChoices):
     DEPOSIT = 'deposit', 'Депозит'
     BOUGHT = 'bought', 'Куплено'
     REJECTED = 'rejected', 'Відмова'
+
+
+class Qualification(models.TextChoices):
+    UNRATED = 'unrated', 'Не оцінено'
+    HOT = 'hot', 'Гаряча'
+    COLD = 'cold', 'Холодна'
 
 
 class LeadSource(models.TextChoices):
@@ -100,6 +106,37 @@ class LeadNotificationSettings(models.Model):
         return cls.objects.get_or_create(pk=1)[0]
 
 
+class LeadJournalSettings(models.Model):
+    """Singleton (pk=1): пороги квалификации и окно атрибуции - данные, не константы кода."""
+    hot_min_score = models.PositiveSmallIntegerField(
+        'Мінімум «так» для гарячої заявки', default=3, validators=[MinValueValidator(1), MaxValueValidator(4)],
+        help_text='З чотирьох питань квалифікації.')
+    hot_budget_usd = models.DecimalField(
+        'Поріг бюджету, USD', max_digits=10, decimal_places=2, default=8000, validators=[MinValueValidator(0)],
+        help_text='Бюджет не нижче цієї суми вважається достатнім.')
+    journal_retry_minutes = models.PositiveSmallIntegerField(
+        'Повтор журналу через, хв', default=10, validators=[MinValueValidator(1)],
+        help_text='Заявки без підтвердження відправки в групу журналу старші за цей термін надсилаються повторно.')
+    attribution_window_months = models.PositiveSmallIntegerField(
+        'Вікно атрибуції, міс.', default=12, validators=[MinValueValidator(1), MaxValueValidator(120)],
+        help_text='Діє для нових заявок; уже створені не змінюються.')
+
+    class Meta:
+        verbose_name = 'Налаштування журналу заявок'
+        verbose_name_plural = 'Налаштування журналу заявок'
+
+    def __str__(self):
+        return 'Налаштування журналу заявок'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+
 class LeadCounter(models.Model):
     """Счётчик номеров заявок по году (читается под select_for_update)."""
     year = models.PositiveIntegerField(primary_key=True)
@@ -159,6 +196,18 @@ class Lead(models.Model):
     )
     first_response_at = models.DateTimeField('Перша відповідь', null=True, blank=True)
 
+    qualification = models.CharField(
+        'Кваліфікація', max_length=8, choices=Qualification.choices, default=Qualification.UNRATED)
+    q_budget_ok = models.BooleanField('Бюджет не нижче порога', null=True, blank=True)
+    q_term_ok = models.BooleanField('Термін не більше 3 місяців', null=True, blank=True)
+    q_knows_repair = models.BooleanField('Знає про ремонт', null=True, blank=True)
+    q_ready_deposit = models.BooleanField('Готовий до депозиту', null=True, blank=True)
+    attribution_until = models.DateTimeField('Атрибуція до', null=True, blank=True, editable=False)
+
+    journal_message_id = models.BigIntegerField('ID повідомлення в журналі', null=True, blank=True, editable=False)
+    journal_sent_at = models.DateTimeField('Надіслано в журнал', null=True, blank=True, editable=False)
+    journal_sending_at = models.DateTimeField(null=True, blank=True, editable=False)  # захват отправки
+
     consent_at = models.DateTimeField('Згода на обробку ПДн')
     partner_name = models.CharField('Партнер (знімок)', max_length=255)
     partner_consent_at = models.DateTimeField('Згода на передачу партнеру')
@@ -177,6 +226,7 @@ class Lead(models.Model):
         verbose_name = 'Заявка'
         verbose_name_plural = 'Заявки'
         ordering = ['-created_at']
+        permissions = [('view_funnel', 'Може переглядати «Воронку за місяць»')]
         indexes = [
             models.Index(fields=['status', '-created_at'], name='lead_status_created_idx'),
         ]
@@ -188,6 +238,10 @@ class Lead(models.Model):
             models.CheckConstraint(
                 condition=models.Q(source__in=[c[0] for c in LeadSource.choices]),
                 name='lead_source_valid',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(qualification__in=[c[0] for c in Qualification.choices]),
+                name='lead_qualification_valid',
             ),
             models.CheckConstraint(
                 condition=models.Q(budget_usd__isnull=True) | models.Q(budget_usd__gte=0),
@@ -216,3 +270,75 @@ class LeadStatusChange(models.Model):
 
     def __str__(self):
         return f'{self.lead_id}: {self.from_status} -> {self.to_status}'
+
+
+
+class AppendOnlyQuerySet(models.QuerySet):
+    """Журнал только дополняется: массовые update/delete запрещены (каскады идут через Collector)."""
+
+    def update(self, **kwargs):
+        raise ValidationError('Журнал не змінюється.')
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError('Журнал не змінюється.')
+
+    def delete(self):
+        raise ValidationError('Записи журналу не видаляються.')
+
+
+class LeadPartnerStatusChange(models.Model):
+    """Журнал partner_status: кто, когда, откуда, куда. Только дополняется."""
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='partner_status_changes')
+    from_status = models.CharField(max_length=16, blank=True)
+    to_status = models.CharField(max_length=16, blank=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = 'Зміна статусу партнера'
+        verbose_name_plural = 'Зміни статусу партнера'
+        ordering = ['created_at', 'pk']
+
+    def __str__(self):
+        return f'{self.lead_id}: {self.from_status or "-"} -> {self.to_status or "-"}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Запис журналу не змінюється.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Записи журналу не видаляються.')
+
+
+class LeadExportLog(models.Model):
+    """Аудит выгрузок CSV: кто, когда, с каким фильтром, сколько строк. Без ПДн."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    channel = models.CharField(max_length=8)  # api / admin
+    filters = models.JSONField(default=dict, blank=True)
+    row_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = 'Експорт заявок'
+        verbose_name_plural = 'Журнал експортів заявок'
+        ordering = ['-created_at', '-pk']
+
+    def __str__(self):
+        return f'{self.created_at:%Y-%m-%d %H:%M} {self.channel} {self.row_count}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Запис журналу не змінюється.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Записи журналу не видаляються.')

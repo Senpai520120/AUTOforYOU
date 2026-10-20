@@ -164,6 +164,7 @@ class BrokerLeadListSerializer(_AssigneeMixin, serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     partner_status_display = serializers.CharField(source='get_partner_status_display', read_only=True)
+    qualification_display = serializers.CharField(source='get_qualification_display', read_only=True)
     utm_source = serializers.SerializerMethodField()
     car = serializers.SerializerMethodField()
     assigned_to = serializers.SerializerMethodField()
@@ -173,7 +174,7 @@ class BrokerLeadListSerializer(_AssigneeMixin, serializers.ModelSerializer):
         fields = [
             'id', 'public_id', 'created_at', 'name', 'phone', 'contact_method', 'status', 'status_display',
             'partner_status', 'partner_status_display', 'total_usd', 'total_uah', 'source', 'source_display',
-            'utm_source', 'first_response_at', 'assigned_to', 'car',
+            'utm_source', 'first_response_at', 'assigned_to', 'car', 'qualification', 'qualification_display',
         ]
         read_only_fields = fields
 
@@ -221,6 +222,7 @@ class BrokerLeadDetailSerializer(BrokerLeadListSerializer):
             'email', 'contact_method_display', 'contact_handle', 'comment', 'budget_usd', 'needed_when',
             'needed_when_display', 'city', 'utm', 'referrer', 'entry_page_url', 'page_url',
             'calculation_snapshot', 'listing', 'history', 'allowed_transitions', 'partner_name', 'updated_at',
+            'q_budget_ok', 'q_term_ok', 'q_knows_repair', 'q_ready_deposit', 'attribution_until',
         ]
         read_only_fields = fields
 
@@ -245,3 +247,11 @@ class StatusChangeSerializer(serializers.Serializer):
 
 class PartnerStatusSerializer(serializers.Serializer):
     partner_status = serializers.ChoiceField(choices=PartnerStatus.choices, allow_blank=True)
+
+
+class QualificationSerializer(serializers.Serializer):
+    """Частичное обновление: переданные ключи записываются (null очищает), остальные не трогаются."""
+    q_budget_ok = serializers.BooleanField(allow_null=True, required=False)
+    q_term_ok = serializers.BooleanField(allow_null=True, required=False)
+    q_knows_repair = serializers.BooleanField(allow_null=True, required=False)
+    q_ready_deposit = serializers.BooleanField(allow_null=True, required=False)

@@ -108,6 +108,10 @@ export default function BrokerLeadList() {
         <button type="submit" className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded-lg text-sm font-semibold">
           Знайти
         </button>
+        <a href={brokerLeadsApi.exportUrl(status)}
+          className="border border-blue-700 text-blue-800 hover:bg-blue-50 px-4 py-1.5 rounded-lg text-sm font-semibold">
+          Завантажити CSV
+        </a>
       </form>
 
       {fetching ? (

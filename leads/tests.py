@@ -334,7 +334,9 @@ class LeadAdminTests(TestCase):
     def _post_data(self, lead, **over):
         d = {'status': lead.status, 'partner_status': '', 'assigned_to': '',
              'status_changes-TOTAL_FORMS': '0', 'status_changes-INITIAL_FORMS': '0',
-             'status_changes-MIN_NUM_FORMS': '0', 'status_changes-MAX_NUM_FORMS': '1000'}
+             'status_changes-MIN_NUM_FORMS': '0', 'status_changes-MAX_NUM_FORMS': '1000',
+             'partner_status_changes-TOTAL_FORMS': '0', 'partner_status_changes-INITIAL_FORMS': '0',
+             'partner_status_changes-MIN_NUM_FORMS': '0', 'partner_status_changes-MAX_NUM_FORMS': '1000'}
         d.update(over)
         return d
 
@@ -462,7 +464,9 @@ class LeadAdminRightsTests(TestCase):
     def _form(self, lead, **over):
         d = {'status': lead.status, 'partner_status': '', 'assigned_to': '',
              'status_changes-TOTAL_FORMS': '0', 'status_changes-INITIAL_FORMS': '0',
-             'status_changes-MIN_NUM_FORMS': '0', 'status_changes-MAX_NUM_FORMS': '1000'}
+             'status_changes-MIN_NUM_FORMS': '0', 'status_changes-MAX_NUM_FORMS': '1000',
+             'partner_status_changes-TOTAL_FORMS': '0', 'partner_status_changes-INITIAL_FORMS': '0',
+             'partner_status_changes-MIN_NUM_FORMS': '0', 'partner_status_changes-MAX_NUM_FORMS': '1000'}
         d.update(over)
         return d
 

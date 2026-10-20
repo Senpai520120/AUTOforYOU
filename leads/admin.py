@@ -2,13 +2,29 @@ from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.template.response import TemplateResponse
+from django.urls import path
 from django.utils.html import format_html
+from rest_framework.throttling import ScopedRateThrottle
 
-from .models import Lead, LeadNotificationSettings, LeadStatusChange
-from .services import ALLOWED_TRANSITIONS, change_status
+from . import exports, funnel
+from .models import (
+    Lead,
+    LeadExportLog,
+    LeadJournalSettings,
+    LeadNotificationSettings,
+    LeadPartnerStatusChange,
+    LeadStatusChange,
+)
+from .services import ALLOWED_TRANSITIONS, Q_FIELDS, change_status, qualify_lead, set_partner_status
 
 DIRECT = 'пряме'
+
+
+class _ExportScope:
+    throttle_scope = 'lead_export'  # общий счётчик с API-экспортом
 
 
 class UtmSourceFilter(admin.SimpleListFilter):
@@ -42,6 +58,20 @@ class LeadStatusChangeInline(admin.TabularInline):
         return False
 
 
+class LeadPartnerStatusChangeInline(admin.TabularInline):
+    model = LeadPartnerStatusChange
+    extra = 0
+    can_delete = False
+    fields = ('created_at', 'from_status', 'to_status', 'changed_by')
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 def can_reopen(user) -> bool:
     return bool(user.is_superuser or getattr(user, 'is_admin_role', False))
 
@@ -55,7 +85,7 @@ class LeadAdminForm(forms.ModelForm):
 
     class Meta:
         model = Lead
-        fields = ('status', 'partner_status', 'assigned_to')
+        fields = ('status', 'partner_status', 'assigned_to', *Q_FIELDS)
 
     def clean(self):
         cleaned = super().clean()
@@ -66,24 +96,30 @@ class LeadAdminForm(forms.ModelForm):
                 raise forms.ValidationError('Перевідкривати заявки може лише адміністратор.')
             if not cleaned.get('reopen') and new not in ALLOWED_TRANSITIONS.get(old, set()):
                 raise forms.ValidationError(f'Перехід {old} -> {new} неприпустимий.')
+        owner = self.instance.assigned_to_id
+        user = self.request_user
+        if (self.changed_data and owner not in (None, getattr(user, 'pk', None))
+                and not can_reopen(user)):
+            raise forms.ValidationError('Заявку вже взяв інший брокер: змінювати її може лише він або адміністратор.')
         return cleaned
 
 
 @admin.register(Lead)
 class LeadAdmin(admin.ModelAdmin):
     list_display = ('public_id', 'created_at', 'name', 'phone', 'contact_method', 'source_display',
-                    'status', 'total_uah', 'telegram_status', 'telegram_sent_at')
-    list_filter = ('status', 'source', 'telegram_status', UtmSourceFilter)
-    actions = ['resend_to_broker']
+                    'status', 'partner_status', 'qualification', 'total_uah', 'telegram_status', 'telegram_sent_at')
+    list_filter = ('status', 'partner_status', 'qualification', 'source', 'telegram_status', UtmSourceFilter)
+    actions = ['resend_to_broker', 'export_csv']
     search_fields = ('public_id', 'name', 'phone')
     date_hierarchy = 'created_at'
-    inlines = [LeadStatusChangeInline]
+    inlines = [LeadStatusChangeInline, LeadPartnerStatusChangeInline]
     form = LeadAdminForm
     # Редактируются только status, partner_status, assigned_to, internal-поля брокера.
     readonly_fields = (
         'public_id', 'user', 'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment',
         'source', 'landing_slug', 'budget_usd', 'needed_when', 'city', 'vehicle_label',
         'utm', 'referrer', 'entry_page_url', 'page_url', 'first_response_at',
+        'qualification', 'attribution_until', 'journal_message_id', 'journal_sent_at',
         'telegram_status', 'telegram_sent_at', 'telegram_error',
         'calculation', 'listing', 'snapshot_summary', 'calculation_snapshot', 'total_usd', 'total_uah',
         'consent_at', 'partner_name', 'partner_consent_at', 'partner_consent_text',
@@ -91,6 +127,7 @@ class LeadAdmin(admin.ModelAdmin):
     )
     fields = (
         'public_id', 'status', 'reopen', 'partner_status', 'assigned_to', 'first_response_at',
+        'qualification', *Q_FIELDS, 'attribution_until', 'journal_message_id', 'journal_sent_at',
         'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment', 'user',
         'source', 'landing_slug', 'vehicle_label', 'budget_usd', 'needed_when', 'city',
         'utm', 'referrer', 'entry_page_url', 'page_url',
@@ -108,6 +145,35 @@ class LeadAdmin(admin.ModelAdmin):
             notify_broker_new_lead.delay(lead_id, force=True)
             count += 1
         self.message_user(request, f'Поставлено в чергу: {count}', messages.SUCCESS)
+
+    @admin.action(description='Завантажити CSV (без персональних даних)', permissions=['view'])
+    def export_csv(self, request, queryset):
+        if not ScopedRateThrottle().allow_request(request, _ExportScope()):
+            self.message_user(request, 'Забагато експортів, спробуйте пізніше.', messages.ERROR)
+            return None
+        ids = list(queryset.values_list('pk', flat=True))
+        qs = Lead.objects.filter(pk__in=ids).order_by('created_at', 'pk')
+        # Пошуковий запит q не пишемо: це може бути імʼя або телефон.
+        filters = {k: v for k, v in request.GET.dict().items() if k != 'q'}
+        filters['selected'] = len(ids)
+        return exports.csv_response(qs, user=request.user, channel='admin', filters=filters)
+
+    def get_urls(self):
+        custom = [path('funnel/', self.admin_site.admin_view(self.funnel_view), name='leads_lead_funnel')]
+        return custom + super().get_urls()
+
+    def funnel_view(self, request):
+        user = request.user
+        if not (user.is_superuser or user.has_perm('leads.view_funnel')):
+            raise PermissionDenied
+        year, month = funnel.parse_month(request.GET.get('month'))
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Воронка за місяць',
+            'opts': self.model._meta,
+            'data': funnel.funnel(year, month),
+        }
+        return TemplateResponse(request, 'admin/leads/funnel.html', context)
 
     def changelist_view(self, request, extra_context=None):
         from .notify import broker_chat_id
@@ -151,17 +217,51 @@ class LeadAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         if not change:
             return super().save_model(request, obj, form, change)
-        new_status = obj.status
-        obj.status = Lead.objects.values_list('status', flat=True).get(pk=obj.pk)
+        new_status, new_partner = obj.status, obj.partner_status
+        obj.status, old_partner = Lead.objects.values_list('status', 'partner_status').get(pk=obj.pk)
+        obj.partner_status = old_partner
         super().save_model(request, obj, form, change)
         if new_status != obj.status:
             change_status(obj, new_status, by=request.user, force=bool(form.cleaned_data.get('reopen')))
+        if new_partner != old_partner:
+            set_partner_status(obj, new_partner, by=request.user, is_admin=can_reopen(request.user))
+        if any(f in form.changed_data for f in Q_FIELDS):
+            qualify_lead(obj, {f: getattr(obj, f) for f in Q_FIELDS}, by=request.user,
+                         is_admin=can_reopen(request.user))
 
 
 @admin.register(LeadNotificationSettings)
 class LeadNotificationSettingsAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not LeadNotificationSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LeadJournalSettings)
+class LeadJournalSettingsAdmin(admin.ModelAdmin):
+    # Пороги влияют на квалификацию и сверку с партнёром: только superuser.
+    def has_add_permission(self, request):
+        return request.user.is_superuser and not LeadJournalSettings.objects.exists()
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LeadExportLog)
+class LeadExportLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'user', 'channel', 'row_count', 'filters')
+    readonly_fields = ('created_at', 'user', 'channel', 'row_count', 'filters')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False

@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
@@ -111,3 +112,36 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
     logger.warning('lead.notify lead_id=%s reason=%s', lead_id, result.reason)
     _mark(lead, status, '' if status == NotifyStatus.SKIPPED else result.reason)
     return {'status': status}
+
+
+@shared_task(bind=True, name='leads.tasks.send_journal')
+def send_journal_task(self, lead_id: int):
+    """Запись в журнал-группу; независима от личного уведомления брокеру. Повтор без объекта исключения."""
+    from .services import send_journal_message
+    result = send_journal_message(lead_id)
+    eager = bool(getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False))
+    if result == 'failed' and not eager and self.request.retries < MAX_RETRIES:
+        # Следующий шанс - периодическая задача resend_journal.
+        raise self.retry(countdown=60 * (self.request.retries + 1), max_retries=MAX_RETRIES)
+    return {'status': result}
+
+
+RESEND_BATCH = 50
+RESEND_MAX_AGE = timedelta(days=7)
+
+
+@shared_task(name='leads.tasks.resend_journal')
+def resend_journal():
+    """Периодический досыл журнала для заявок без journal_message_id (старше N минут из админки)."""
+    from .models import LeadJournalSettings
+    from .services import send_journal_message
+
+    if not str(getattr(settings, 'LEAD_JOURNAL_CHAT_ID', '') or '').strip():
+        return {'sent': 0}
+    now = timezone.now()
+    older = now - timedelta(minutes=LeadJournalSettings.get_solo().journal_retry_minutes)
+    ids = list(Lead.objects.filter(
+        journal_message_id__isnull=True, created_at__lte=older, created_at__gte=now - RESEND_MAX_AGE,
+    ).order_by('created_at').values_list('pk', flat=True)[:RESEND_BATCH])
+    sent = sum(1 for pk in ids if send_journal_message(pk) == 'sent')
+    return {'sent': sent, 'tried': len(ids)}
