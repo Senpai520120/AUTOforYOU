@@ -6,6 +6,7 @@
 import logging
 
 from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.encoding import force_bytes
@@ -50,9 +51,26 @@ def send_verification_email(user):
     )
 
 
+def build_password_reset_url(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    return f'{_site_url()}/password-reset/confirm?uid={uid}&token={token}'
+
+
+def send_password_reset_email(user):
+    if not _site_url():
+        logger.warning('SITE_URL не задан: письмо password_reset не отправлено')
+        return False
+    return _send(
+        user, 'AUTOforYOU: скидання пароля', 'users/email/password_reset.txt',
+        {'url': build_password_reset_url(user), 'ttl_minutes': max(1, settings.PASSWORD_RESET_TIMEOUT // 60)},
+        'password_reset',
+    )
+
+
 def send_already_registered_email(user):
     return _send(
         user, 'AUTOforYOU: у вас вже є акаунт', 'users/email/already_registered.txt',
-        {'login_url': f'{_site_url()}/login', 'reset_url': f'{_site_url()}/forgot-password'},
+        {'login_url': f'{_site_url()}/login', 'reset_url': f'{_site_url()}/password-reset'},
         'already_registered',
     )

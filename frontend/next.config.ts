@@ -10,6 +10,15 @@ const apiHostname = apiUrl.hostname;
 const apiPort = apiUrl.port; // empty string when default (80/443)
 
 const nextConfig: NextConfig = {
+  async headers() {
+    // Токен скидання пароля не має потрапляти в Referer при переході зі сторінки (задача 1.7).
+    return [
+      {
+        source: '/password-reset/:path*',
+        headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
+      },
+    ];
+  },
   images: {
     // In dev the Next.js image optimizer fetches from localhost, which resolves
     // to 127.0.0.1 — a private IP blocked by Next.js SSRF protection.

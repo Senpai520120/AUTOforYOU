@@ -14,6 +14,8 @@ from rest_framework.authentication import CSRFCheck
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken
 
+from .jwt import token_session_version
+
 
 def enforce_csrf(request):
     """Та же проверка, что в SessionAuthentication.enforce_csrf. Для GET/HEAD/OPTIONS — no-op."""
@@ -47,6 +49,10 @@ class CookieJWTAuthentication(JWTAuthentication):
         user = super().get_user(validated_token)  # is_active проверяет SimpleJWT
         if getattr(user, 'is_banned', False):
             raise AuthenticationFailed('Користувача заблоковано.', code='user_inactive')
+        # Отзыв всех сессий (1.7): версия в токене должна совпасть с текущей версией пользователя.
+        # Токен без claim `sv` (выдан до деплоя 1.7) считается версией 0.
+        if token_session_version(validated_token) != user.session_version:
+            raise AuthenticationFailed('Сесію завершено. Увійдіть знову.', code='token_revoked')
         return user
 
 

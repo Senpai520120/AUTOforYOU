@@ -24,6 +24,8 @@ interface AuthCtx {
   user: User | null;
   login: (email: string, password: string, captcha?: LoginCaptcha) => Promise<void>;
   logout: () => Promise<void>;
+  /** Завершує всі сесії (усі пристрої) і веде на /login; кидає помилку, якщо сервер не відповів. */
+  logoutAll: () => Promise<void>;
   refreshUser: () => Promise<void>;
   loading: boolean;
 }
@@ -126,8 +128,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.assign('/');
   }, []);
 
+  const logoutAll = useCallback(async () => {
+    await apiPost('/api/v1/auth/token/logout-all/'); // помилка йде до викликача: cookie лишилися
+    setUser(null);
+    window.location.assign('/login');
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, refreshUser: fetchProfile, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, logoutAll, refreshUser: fetchProfile, loading }}>
       {children}
     </AuthContext.Provider>
   );

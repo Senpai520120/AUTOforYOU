@@ -267,6 +267,8 @@ LOGIN_LOCKOUT_MINUTES = int(os.environ.get('LOGIN_LOCKOUT_MINUTES', '15'))
 # ─── Подтверждение email и антибот (задача 1.6) ──────────────────────────────
 _TRUE = ('true', '1', 'yes')
 EMAIL_VERIFY_TTL_HOURS = int(os.environ.get('EMAIL_VERIFY_TTL_HOURS', '48'))
+# Срок ссылки сброса пароля (секунды); его читает django default_token_generator (задача 1.7).
+PASSWORD_RESET_TIMEOUT = int(os.environ.get('PASSWORD_RESET_TIMEOUT', '3600'))
 # false - ограничения до подтверждения email выключены (IsEmailVerified пропускает всех).
 EMAIL_VERIFICATION_REQUIRED = os.environ.get('EMAIL_VERIFICATION_REQUIRED', 'true').lower() in _TRUE
 # turnstile | honeypot | off. off допустим только при DEBUG=True и в тестах (system check).
@@ -311,6 +313,7 @@ REST_FRAMEWORK = {
         'register': os.environ.get('THROTTLE_REGISTER_RATE', '5/hour'),
         'refresh': os.environ.get('THROTTLE_REFRESH_RATE', '30/min'),
         'verify_resend': os.environ.get('THROTTLE_VERIFY_RESEND_RATE', '3/hour'),
+        'password_reset': os.environ.get('THROTTLE_PASSWORD_RESET_RATE', '5/hour'),
     },
     'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -474,6 +477,11 @@ CELERY_BEAT_SCHEDULE = {
     'expire-listings-daily': {
         'task': 'local_listings.tasks.expire_listings',
         'schedule': _crontab(hour=9, minute=20),
+    },
+    # Чистка просроченных JWT в blacklist и сессий Django (01-Q1)
+    'flush-expired-tokens-daily': {
+        'task': 'users.tasks.flush_expired_tokens',
+        'schedule': _crontab(hour=3, minute=30),
     },
     # Досыл журнала заявок в группу с партнёром (2.15), порог возраста - в админке
     'resend-lead-journal': {

@@ -1,8 +1,19 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, дальше 1.7 → 1.9 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, дальше 1.9 → 1.10 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.7: сброс и смена пароля, выход со всех устройств, бан (2026-10-20) — ЗАВЕРШЕНО
+
+- API: `password-reset/` (throttle → honeypot и капча → без обращения к БД, письмо и поиск пользователя — в Celery-задаче; ответ всегда 200 одним текстом), `password-reset/confirm/` (uid + токен Django, `validate_password`), `password-change/` (текущий пароль, throttle), `token/logout-all/`.
+- Сессии: `CustomUser.session_version` (миграция users 0015) + claim `sv` во всех токенах (`users/jwt.py`: `VersionedRefreshToken`, свои `TokenObtainPairSerializer`/`TokenRefreshSerializer`); `revoke_all_sessions` под `select_for_update` увеличивает версию и кладёт refresh в blacklist; `CookieJWTAuthentication` и refresh сверяют `sv` (токены без `sv` = версия 0). После смены пароля текущему устройству выдаются новые токены.
+- Бан: `ban_user`/`unban_user` (отзыв сессий; суперпользователь не банится), в том числе из `reports/admin.py`; `is_banned` в админке только чтение, деактивация `is_active` отзывает сессии. Beat `users.tasks.flush_expired_tokens` (03:30).
+- Фронт: «Забули пароль?», `/password-reset`, `/password-reset/confirm` (токен убирается из адреса, `Referrer-Policy: no-referrer`), `/me/security`, `logoutAll`. E2E-стек: Mailpit для писем.
+- Проверки: бэкенд 996 OK; e2e `password`, `auth-cookie`, `register`, `private-pages` 57 passed. Ревью `security-reviewer`: 3 «важно» + 4 «желательно» исправлены.
+- Для владельца: SMTP и `SITE_URL` (LAUNCH_CHECKLIST 2.4); локальный `.env.e2e` — добавить `THROTTLE_PASSWORD_RESET_RATE=2000/hour` (есть в `.env.e2e.example`); токены, выданные до деплоя 1.7, действуют до первого отзыва сессий.
 
 ---
 

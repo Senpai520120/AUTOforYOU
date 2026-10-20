@@ -16,6 +16,14 @@ services:
     env_file: !override
       - path: .env.e2e
         required: true
+    environment:
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      EMAIL_USE_TLS: "false"
+    depends_on:
+      mailpit:
+        condition: service_started
   bot:
     env_file: !override
       - path: .env.e2e
@@ -24,6 +32,14 @@ services:
     env_file: !override
       - path: .env.e2e
         required: true
+    environment:
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      EMAIL_USE_TLS: "false"
+    depends_on:
+      mailpit:
+        condition: service_started
   celery_beat:
     env_file: !override
       - path: .env.e2e
@@ -42,3 +58,10 @@ services:
       - /bin/sh
       - -c
       - sed 's/rate=20r\/m/rate=6000r\/m/' /etc/nginx/nginx.src.conf > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'
+  # Перехват писем (задача 1.7): SMTP :1025 для backend и celery_worker, HTTP API :8025 для Playwright.
+  # Письма сброса пароля уходят из Celery-воркера, поэтому SMTP-настройки нужны обоим сервисам.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped

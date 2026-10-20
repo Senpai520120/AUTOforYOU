@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 
 from local_listings.models import LocalListing
+from users.services import ban_user
 
 from .models import Report
 
@@ -27,10 +28,7 @@ def ban_reported_user(modeladmin, request, queryset):
         target = report.reported_user or (report.listing.owner if report.listing else None)
         if not target:
             continue
-        if not target.is_banned:
-            target.is_banned = True
-            target.is_active = False
-            target.save(update_fields=['is_banned', 'is_active'])
+        if not target.is_superuser and ban_user(target):  # бан + отзыв всех сессий
             LocalListing.objects.filter(
                 owner=target,
                 status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],

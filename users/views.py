@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
@@ -16,7 +18,6 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, BaseThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
@@ -26,17 +27,24 @@ from . import lockout
 from .authentication import enforce_csrf
 from .cookies import clear_auth_cookies, set_auth_cookies
 from .emails import send_already_registered_email, send_verification_email
+from .jwt import TokenObtainPairSerializer, TokenRefreshSerializer, VersionedRefreshToken
 from .models import CustomUser, DealerApplication, TrustedShop
 from .permissions import IsEmailVerified
 from .serializers import (
     DealerApplicationCreateSerializer,
     DealerApplicationSerializer,
+    PasswordChangeSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     RegisterSerializer,
     TrustedShopSerializer,
     UserProfileSerializer,
 )
-from .services import DuplicatePendingError, apply_for_dealer
+from .services import DuplicatePendingError, apply_for_dealer, revoke_all_sessions
+from .tasks import send_password_reset_email_task
 from .tokens import email_verification_token
+
+logger = logging.getLogger(__name__)
 
 
 def _refresh_from_request(request):
@@ -72,6 +80,7 @@ class CookieTokenObtainView(TokenObtainPairView):
     # Login-CSRF: CSRF-токена у гостя ещё нет, а SameSite=Lax не мешает браузеру
     # ПРИНЯТЬ Set-Cookie после кросс-сайтовой HTML-формы. Только JSON: чужой
     # сайт не отправит его без CORS-preflight, а preflight отсекает CORS-whitelist.
+    serializer_class = TokenObtainPairSerializer
     parser_classes = [JSONParser]
     # Scoped-лимит по IP поверх общих anon/user (значения — THROTTLE_LOGIN_RATE).
     throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
@@ -280,6 +289,103 @@ class ResendVerificationView(APIView):
         if not request.user.is_email_verified:
             send_verification_email(request.user)
         return Response({'ok': True})
+
+
+RESET_REQUESTED_DETAIL = 'Якщо акаунт із такою адресою існує, ми надіслали на неї лист із посиланням.'
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Запросить сброс пароля',
+    description=(
+        'Всегда 200 с одним текстом, существует аккаунт или нет. Порядок: throttle password_reset -> '
+        'honeypot -> капча (400 captcha_failed) -> только затем поиск пользователя и письмо.'
+    ),
+    request=PasswordResetRequestSerializer,
+    responses={200: None, 400: None, 429: None},
+)
+class PasswordResetRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []  # гость; чужая cookie-сессия не должна требовать CSRF
+    parser_classes = [JSONParser]
+    throttle_classes = [ScopedRateThrottle, AnonRateThrottle]
+    throttle_scope = 'password_reset'
+
+    def post(self, request):
+        require_captcha(request, request.data, point='password_reset')
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Всегда одно и то же действие; поиск пользователя - в задаче, не в запросе.
+        try:
+            send_password_reset_email_task.delay(serializer.validated_data['email'])
+        except Exception as exc:  # брокер недоступен: клиенту тот же ответ, в лог - без email
+            logger.error('Не удалось поставить письмо password_reset в очередь: %s', type(exc).__name__)
+        return Response({'detail': RESET_REQUESTED_DETAIL})
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Задать новый пароль по ссылке из письма',
+    request=PasswordResetConfirmSerializer,
+    responses={200: None, 400: None, 429: None},
+)
+class PasswordResetConfirmView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    parser_classes = [JSONParser]
+    throttle_classes = [ScopedRateThrottle, AnonRateThrottle]
+    throttle_scope = 'password_reset'  # капчи нет: токен из письма - секрет и одноразовый
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        with transaction.atomic():
+            user.set_password(serializer.validated_data['new_password'])
+            user.save(update_fields=['password'])
+            revoke_all_sessions(user)
+        lockout.reset(user.email)  # владелец подтвердил почту: блокировка входа снимается
+        return clear_auth_cookies(Response({'ok': True}))
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Сменить пароль (отзыв всех сессий, новая пара cookie текущему устройству)',
+    request=PasswordChangeSerializer,
+    responses={200: None, 400: None, 401: None, 429: None},
+)
+class PasswordChangeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'  # перебор старого пароля с украденной сессией
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        with transaction.atomic():
+            user.set_password(serializer.validated_data['new_password'])
+            user.save(update_fields=['password'])
+            revoke_all_sessions(user)
+        refresh = VersionedRefreshToken.for_user(user)
+        response = Response(_token_body({'access': str(refresh.access_token), 'refresh': str(refresh)}))
+        return set_auth_cookies(response, refresh.access_token, refresh)
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Выйти на всех устройствах',
+    request=None,
+    responses={200: None, 401: None},
+)
+class LogoutAllView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def post(self, request):
+        revoke_all_sessions(request.user)
+        return clear_auth_cookies(Response({'ok': True}))
 
 
 @extend_schema(

@@ -2,17 +2,22 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
 
 from .models import ConsentRecord, CustomUser, DealerApplication, TrustedShop
-from .services import approve_application, assign_role, reject_application, revoke_role
+from .services import (
+    approve_application,
+    assign_role,
+    ban_user,
+    reject_application,
+    revoke_all_sessions,
+    revoke_role,
+    unban_user,
+)
 
 
 def ban_users(modeladmin, request, queryset):
     from local_listings.models import LocalListing
     count = 0
     for user in queryset.exclude(is_superuser=True):
-        if not user.is_banned:
-            user.is_banned = True
-            user.is_active = False
-            user.save(update_fields=['is_banned', 'is_active'])
+        if ban_user(user):  # бан + отзыв всех сессий (01-S12)
             LocalListing.objects.filter(
                 owner=user,
                 status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
@@ -24,7 +29,7 @@ ban_users.short_description = 'Забанити вибраних користу�
 
 
 def unban_users(modeladmin, request, queryset):
-    count = queryset.filter(is_banned=True).update(is_banned=False, is_active=True)
+    count = sum(unban_user(user) for user in queryset.filter(is_banned=True))
     modeladmin.message_user(request, f'Розбанено: {count}.', messages.SUCCESS)
 
 unban_users.short_description = 'Розбанити вибраних користувачів'
@@ -39,7 +44,14 @@ class CustomUserAdmin(UserAdmin):
     ordering = ('-created_at',)
     actions = [ban_users, unban_users, 'assign_broker', 'revoke_broker', 'assign_moderator', 'revoke_moderator']
     # role и is_verified_dealer меняются только actions/сервисом, не формой.
-    readonly_fields = ('role', 'is_verified_dealer')
+    # is_banned - только через actions/ban_user (отзыв сессий, скрытие объявлений).
+    readonly_fields = ('role', 'is_verified_dealer', 'is_banned')
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Отключение аккаунта вручную (is_active) тоже обрывает все сессии (01-S12).
+        if change and 'is_active' in form.changed_data and not obj.is_active:
+            revoke_all_sessions(obj)
 
     def _role_action(self, request, queryset, func, role, text, level):
         # Роли назначает только superuser: view-only staff с чужим правом actions не получает.

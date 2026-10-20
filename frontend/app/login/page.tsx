@@ -72,6 +72,9 @@ function LoginForm() {
           </button>
         </form>
         <p className="mt-4 text-sm text-center text-slate-500">
+          <Link href="/password-reset" className="text-blue-600 hover:underline">Забули пароль?</Link>
+        </p>
+        <p className="mt-2 text-sm text-center text-slate-500">
           Немає акаунту? <Link href="/register" className="text-blue-600 hover:underline">Реєстрація</Link>
         </p>
       </div>

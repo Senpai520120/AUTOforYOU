@@ -83,6 +83,50 @@ def _notify(user, *, approved):
     send_mail(subject, body, 'noreply@autoforyou.ua', [user.email], fail_silently=True)
 
 
+# ─── Сессии и бан ────────────────────────────────────────────────────────────
+
+def revoke_all_sessions(user):
+    """Отзывает все сессии пользователя (задача 1.7).
+
+    session_version += 1 гасит живые access и любой refresh старой версии (в т.ч. ротируемый
+    параллельно: refresh берёт ту же блокировку строки пользователя, см. users/jwt.py).
+    Все refresh дополнительно уходят в blacklist. Работает и для неактивного пользователя
+    (бан, анонимизация 1.8). Версия на переданном объекте обновляется.
+    """
+    from django.contrib.auth import get_user_model
+    from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+
+    with transaction.atomic():
+        locked = get_user_model().objects.select_for_update().get(pk=user.pk)
+        locked.session_version += 1
+        locked.save(update_fields=['session_version'])
+        for outstanding in OutstandingToken.objects.filter(user=locked):
+            BlacklistedToken.objects.get_or_create(token=outstanding)
+        user.session_version = locked.session_version
+
+
+def ban_user(user):
+    """Бан: is_banned, is_active=False, сессии отозваны. Возвращает False, если уже забанен."""
+    if user.is_banned:
+        return False
+    with transaction.atomic():
+        user.is_banned = True
+        user.is_active = False
+        user.save(update_fields=['is_banned', 'is_active'])
+        revoke_all_sessions(user)
+    return True
+
+
+def unban_user(user):
+    """Разбан возвращает is_active только тому, кого забанил ban_user (is_banned=True)."""
+    if not user.is_banned:
+        return False
+    user.is_banned = False
+    user.is_active = True
+    user.save(update_fields=['is_banned', 'is_active'])
+    return True
+
+
 # ─── Назначение ролей (только админка) ───────────────────────────────────────
 
 ROLE_GROUPS = {
