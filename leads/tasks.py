@@ -33,7 +33,7 @@ def _in_app_once(lead: Lead, cfg: LeadNotificationSettings) -> None:
     # Флаг ставится атомарно, чтобы повтор задачи не задвоил уведомления.
     if Lead.objects.filter(pk=lead.pk, broker_in_app_sent=False).update(broker_in_app_sent=True):
         lead.broker_in_app_sent = True
-        notify.notify_brokers_in_app(f'Нова заявка {lead.public_id}', notify.admin_url(lead))
+        notify.notify_brokers_in_app(f'Нова заявка {lead.public_id}', notify.cabinet_url(lead))
 
 
 @shared_task(bind=True, name='leads.tasks.notify_broker_new_lead')
@@ -68,7 +68,7 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
         return {'status': NotifyStatus.FAILED}
 
     # Telegram отклоняет не-https ссылки в кнопках (dev/localhost), поэтому без https кнопки нет.
-    url = notify.admin_url(lead)
+    url = notify.cabinet_url(lead)
     buttons = [{'text': 'Відкрити заявку', 'url': url}] if url.startswith('https://') else None
     # Атомарный захват: второй параллельный запуск не шлёт дубль.
     claim = Lead.objects.filter(pk=lead.pk).exclude(telegram_status=NotifyStatus.SENDING)

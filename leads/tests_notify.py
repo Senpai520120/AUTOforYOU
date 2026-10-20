@@ -202,7 +202,8 @@ class InAppTests(NotifyBase):
             notify_broker_new_lead.delay(lead.pk, force=True)
         n = Notification.objects.get(user=broker)
         self.assertEqual(n.type, 'new_lead')
-        self.assertIn(f'/admin/leads/lead/{lead.pk}/change/', n.link)
+        self.assertTrue(n.link.endswith(f'/broker/leads/{lead.pk}'))
+        self.assertNotIn('/admin/', n.link)
         self.assertFalse(Notification.objects.filter(user=buyer).exists())
         self.assertEqual(Notification.objects.filter(type='new_lead').count(), 1)
 
@@ -388,4 +389,5 @@ class HardeningTests(NotifyBase):
         lead = self.create_lead()
         with mock.patch(SEND, return_value=OK) as send:
             notify_broker_new_lead(lead.pk)
-        self.assertTrue(send.call_args.kwargs['buttons'][0]['url'].startswith('https://'))
+        url = send.call_args.kwargs['buttons'][0]['url']
+        self.assertEqual(url, f'https://autoforyou.ua/broker/leads/{lead.pk}')

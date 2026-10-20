@@ -10,6 +10,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   customs: 'Розмитнення',
   delivered: 'Видано',
   rejected: 'Відмова',
+  spam: 'Спам',
 };
 
 export function leadStatusLabel(status: string, fallback = ''): string {

@@ -1,8 +1,19 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, дальше 2.4 → 1.14 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, дальше 1.14 → 2.15 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 2.4: кабинет брокера (2026-10-20) — ЗАВЕРШЕНО
+
+- API `/api/v1/broker/leads/` (`leads/broker_urls.py`): список (фильтры `status`, `source`, `assigned_to=me`, `utm_source`, `search` по имени/телефону, `ordering`, пагинация 20, `new_count`), карточка `<id>/`, `<id>/status/`, `<id>/take/`, `<id>/partner-status/`. Доступ `IsBrokerOrAdmin`: аноним 401, buyer/dealer/moderator (даже staff) 403.
+- Сервис: `take_lead` (select_for_update, чужая 409, повтор идемпотентен), `broker_change_status` (переход из `new` назначает брокера), `set_partner_status` (журнал `partner: old → new`), `_check_owner` — чужую взятую заявку меняет только назначенный брокер или admin-роль (решение при реализации, записано в файле задачи; можно ослабить). `force` через API недоступен.
+- Сериализаторы: в списке минимум полей; `assigned_to`/`history[].changed_by` — `{id, name, email?}`, email только себе и admin-роли.
+- Фронт: `/broker/leads`, `/broker/leads/[id]` (`BrokerLeadList`, `BrokerLeadCard`, `LeadStatusBadge`, `AccessDenied`), поиск не попадает в URL; ссылка «Заявки» в шапке (десктоп) и в `/me` по роли (косметика, доступ решает API). Telegram-кнопка и in-app ссылка ведут в кабинет.
+- Проверки: бэкенд 860 OK, `tests_broker.py` 43; `broker.spec.ts` 16 passed (chromium, mobile-chrome, mobile-safari), XSS-нагрузки из `e2e_seed` выводятся текстом; openapi через Postgres. Ревью `security-reviewer`: 2 «важно» + 4 «желательно» исправлены.
+- Для владельца: назначить роль broker сотрудникам; nginx — не логировать query `/api/v1/broker/` (LAUNCH_CHECKLIST); `e2e_cleanup` не удаляет `[E2E]`-заявки; DELETE заявки брокером даёт 405 (тесты DELETE — в 1.11).
 
 ---
 

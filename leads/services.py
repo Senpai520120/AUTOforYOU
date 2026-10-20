@@ -36,6 +36,10 @@ class InvalidTransition(Exception):
     pass
 
 
+class AlreadyTaken(Exception):
+    """Заявку уже взял другой брокер (API отвечает 409)."""
+
+
 class PartnerNotConfigured(Exception):
     """SiteSettings.partner_name пуст: заявки не принимаются (API отвечает 503)."""
 
@@ -160,5 +164,71 @@ def change_status(lead: Lead, new_status: str, *, by, note: str = '', force: boo
         )
     lead.status = locked.status
     lead.first_response_at = locked.first_response_at
+    lead.updated_at = locked.updated_at
+    return lead
+
+
+def allowed_transitions(status: str) -> list[str]:
+    """Допустимые переходы из статуса в порядке LeadStatus (для кабинета, без дублирования на фронте)."""
+    allowed = ALLOWED_TRANSITIONS.get(status, set())
+    return [s for s in LeadStatus.values if s in allowed]
+
+
+def take_lead(lead: Lead, by) -> Lead:
+    """«Взяти в роботу»: назначает by и переводит new -> in_progress. Повтор своим - идемпотентен."""
+    with transaction.atomic():
+        locked = Lead.objects.select_for_update().get(pk=lead.pk)
+        if locked.assigned_to_id is not None and locked.assigned_to_id != by.pk:
+            raise AlreadyTaken()
+        if locked.status in (LeadStatus.DELIVERED, LeadStatus.REJECTED, LeadStatus.SPAM):
+            raise InvalidTransition('Заявку закрито, взяти її в роботу не можна')
+        if locked.assigned_to_id != by.pk:
+            locked.assigned_to = by
+            locked.save(update_fields=['assigned_to', 'updated_at'])
+        if locked.status == LeadStatus.NEW:
+            change_status(locked, LeadStatus.IN_PROGRESS, by=by)
+    lead.assigned_to = locked.assigned_to
+    lead.status = locked.status
+    lead.first_response_at = locked.first_response_at
+    lead.updated_at = locked.updated_at
+    return lead
+
+
+def _check_owner(locked: Lead, by, is_admin: bool) -> None:
+    if not is_admin and locked.assigned_to_id not in (None, by.pk):
+        raise AlreadyTaken()
+
+
+def broker_change_status(lead: Lead, new_status: str, *, by, note: str = '', is_admin: bool = False) -> Lead:
+    """Смена статуса из кабинета: чужую заявку (assigned_to другой) меняет только admin.
+    Переход из new автоматически назначает заявку на by (как take). force не принимается."""
+    with transaction.atomic():
+        locked = Lead.objects.select_for_update().get(pk=lead.pk)
+        _check_owner(locked, by, is_admin)
+        change_status(locked, new_status, by=by, note=note)
+        if locked.assigned_to_id is None:
+            locked.assigned_to = by
+            locked.save(update_fields=['assigned_to', 'updated_at'])
+    lead.assigned_to = locked.assigned_to
+    lead.status = locked.status
+    lead.first_response_at = locked.first_response_at
+    lead.updated_at = locked.updated_at
+    return lead
+
+
+def set_partner_status(lead: Lead, value: str, *, by, is_admin: bool = False) -> Lead:
+    """Статус партнёра вручную; каждое изменение пишется в журнал (статус заявки не меняется)."""
+    with transaction.atomic():
+        locked = Lead.objects.select_for_update().get(pk=lead.pk)
+        _check_owner(locked, by, is_admin)
+        old = locked.partner_status
+        if old != value:
+            locked.partner_status = value
+            locked.save(update_fields=['partner_status', 'updated_at'])
+            LeadStatusChange.objects.create(
+                lead=locked, from_status=locked.status, to_status=locked.status, changed_by=by,
+                note=f'partner: {old or "—"} → {value or "—"}'[:500],
+            )
+    lead.partner_status = locked.partner_status
     lead.updated_at = locked.updated_at
     return lead

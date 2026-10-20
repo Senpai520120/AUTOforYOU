@@ -64,6 +64,9 @@ export default function MeDashboard() {
     { href: '/me/shipments', icon: '📦', title: 'Мої контейнери', desc: 'Відстежувані шипменти' },
     { href: '/me/telegram', icon: '✈️', title: 'Прив\'язати Telegram', desc: 'Отримуйте сповіщення у Telegram' },
   ];
+  if (user.role === 'broker' || user.is_admin_role) {
+    menuItems.unshift({ href: '/broker/leads', icon: '📥', title: 'Заявки', desc: 'Заявки клієнтів і їх статуси' });
+  }
 
   return (
     <div className="max-w-2xl mx-auto">

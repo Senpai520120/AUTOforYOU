@@ -70,6 +70,7 @@ class Command(BaseCommand):
             self._shipment(users['buyer'], vehicles['retail'])
             self._conversation(users['buyer'], users['seller'])
             self._site_settings()
+            self._leads(users['buyer'])
 
         self.stdout.write('E2E seed: сводка (создано / уже было)')
         for key in sorted(set(self.created) | set(self.existing)):
@@ -195,6 +196,33 @@ class Command(BaseCommand):
         if created:
             Message.objects.create(conversation=conv, sender=buyer, text=f'{E2E_PREFIX} Здравствуйте!')
         self._note('conversations', created)
+
+    def _leads(self, buyer):
+        """Заявки для кабинета брокера (2.4): клиент buyer с UTM tiktok и заявка с вредным utm_campaign."""
+        from unittest import mock
+
+        from leads.models import Lead
+        from leads.services import create_lead
+
+        spec = (
+            (f'{E2E_PREFIX} Клієнт брокера', buyer,
+             {'source': 'tiktok', 'medium': 'cpc', 'campaign': 'spring'}, '@e2e_client'),
+            (f'{E2E_PREFIX} Гість XSS', None,
+             {'source': 'xss-src', 'campaign': '<script>window.__xss=1</script>'}, ''),
+        )
+        for name, user, utm, handle in spec:
+            created = not Lead.objects.filter(name=name).exists()
+            if created:
+                data = {'name': name, 'phone': '0671234567', 'source': 'landing',
+                        'contact_method': 'telegram' if handle else 'phone', 'contact_handle': handle,
+                        'comment': '' if handle else '<img src=x onerror=window.__xss=2>',
+                        'vehicle_label': f'{E2E_PREFIX} Toyota RAV4'}
+                # Без уведомлений брокеру: сид не должен слать в Telegram.
+                with mock.patch('leads.services.transaction.on_commit'):
+                    lead = create_lead(user=user, data=data)
+                # Вредное значение кладём напрямую: clean_attribution его бы отсёк, а тест проверяет экранирование.
+                Lead.objects.filter(pk=lead.pk).update(utm=utm)
+            self._note('leads', created)
 
     def _site_settings(self):
         """Реквизиты и документы для legal.spec.ts (синглтон pk=1)."""

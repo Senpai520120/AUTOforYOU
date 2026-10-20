@@ -7,7 +7,8 @@ from listings.models import Listing
 from listings.permissions import can_view_wholesale
 from pricing.models import Calculation
 
-from .models import ContactMethod, Lead, LeadSource, LeadStatus, NeededWhen
+from .models import ContactMethod, Lead, LeadSource, LeadStatus, LeadStatusChange, NeededWhen, PartnerStatus
+from .services import allowed_transitions
 from .validators import clean_attribution, normalize_ua_phone
 
 # Чужой и несуществующий объект неразличимы: нет утечки существования.
@@ -141,3 +142,106 @@ class LeadMineSerializer(serializers.ModelSerializer):
             data['status'] = LeadStatus.REJECTED.value
             data['status_display'] = LeadStatus.REJECTED.label
         return data
+
+
+def staff_ref(user, request) -> dict | None:
+    """Сотрудник для кабинета: отображаемое имя; email только себе и admin-роли."""
+    if user is None:
+        return None
+    ref = {'id': user.pk, 'name': f'{user.first_name} {user.last_name}'.strip() or f'Брокер #{user.pk}'}
+    viewer = getattr(request, 'user', None)
+    if viewer is not None and viewer.is_authenticated and (viewer.pk == user.pk or viewer.is_admin_role):
+        ref['email'] = user.email
+    return ref
+
+
+class _AssigneeMixin:
+    def get_assigned_to(self, obj) -> dict | None:
+        return staff_ref(obj.assigned_to, self.context.get('request'))
+
+
+class BrokerLeadListSerializer(_AssigneeMixin, serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    source_display = serializers.CharField(source='get_source_display', read_only=True)
+    partner_status_display = serializers.CharField(source='get_partner_status_display', read_only=True)
+    utm_source = serializers.SerializerMethodField()
+    car = serializers.SerializerMethodField()
+    assigned_to = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Lead
+        fields = [
+            'id', 'public_id', 'created_at', 'name', 'phone', 'contact_method', 'status', 'status_display',
+            'partner_status', 'partner_status_display', 'total_usd', 'total_uah', 'source', 'source_display',
+            'utm_source', 'first_response_at', 'assigned_to', 'car',
+        ]
+        read_only_fields = fields
+
+    def get_utm_source(self, obj) -> str:
+        value = (obj.utm or {}).get('source')
+        return value if isinstance(value, str) else ''
+
+    def get_car(self, obj) -> str:
+        if obj.vehicle_label:
+            return obj.vehicle_label
+        inputs = (obj.calculation_snapshot or {}).get('inputs_snapshot') or {}
+        return ' '.join(str(inputs[k]) for k in ('make', 'model', 'year') if inputs.get(k))
+
+
+class BrokerStatusChangeSerializer(serializers.ModelSerializer):
+    from_status_display = serializers.SerializerMethodField()
+    to_status_display = serializers.SerializerMethodField()
+    changed_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LeadStatusChange
+        fields = ['id', 'from_status', 'from_status_display', 'to_status', 'to_status_display',
+                  'changed_by', 'note', 'created_at']
+        read_only_fields = fields
+
+    def get_from_status_display(self, obj) -> str:
+        return LeadStatus(obj.from_status).label if obj.from_status in LeadStatus.values else ''
+
+    def get_to_status_display(self, obj) -> str:
+        return LeadStatus(obj.to_status).label if obj.to_status in LeadStatus.values else obj.to_status
+
+    def get_changed_by(self, obj) -> dict | None:
+        return staff_ref(obj.changed_by, self.context.get('request')) if obj.changed_by_id else None
+
+
+class BrokerLeadDetailSerializer(BrokerLeadListSerializer):
+    listing = serializers.SerializerMethodField()
+    history = BrokerStatusChangeSerializer(source='status_changes', many=True, read_only=True)
+    allowed_transitions = serializers.SerializerMethodField()
+    needed_when_display = serializers.CharField(source='get_needed_when_display', read_only=True)
+    contact_method_display = serializers.CharField(source='get_contact_method_display', read_only=True)
+
+    class Meta(BrokerLeadListSerializer.Meta):
+        fields = BrokerLeadListSerializer.Meta.fields + [
+            'email', 'contact_method_display', 'contact_handle', 'comment', 'budget_usd', 'needed_when',
+            'needed_when_display', 'city', 'utm', 'referrer', 'entry_page_url', 'page_url',
+            'calculation_snapshot', 'listing', 'history', 'allowed_transitions', 'partner_name', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_listing(self, obj) -> dict | None:
+        if obj.listing_id is None:
+            return None
+        return {'id': obj.listing_id, 'url': f'/listings/{obj.listing_id}'}
+
+    def get_allowed_transitions(self, obj) -> list[str]:
+        return allowed_transitions(obj.status)
+
+
+class StatusChangeSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=LeadStatus.choices)
+    note = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
+
+    def validate_note(self, value):
+        if _CONTROL_MULTILINE.search(value):
+            raise serializers.ValidationError(_CONTROL_MESSAGE)
+        return value
+
+
+class PartnerStatusSerializer(serializers.Serializer):
+    partner_status = serializers.ChoiceField(choices=PartnerStatus.choices, allow_blank=True)

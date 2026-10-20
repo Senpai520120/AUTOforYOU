@@ -514,6 +514,191 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedListingList'
           description: ''
+  /api/v1/broker/leads/:
+    get:
+      operationId: v1_broker_leads_list
+      description: 'Только broker и admin. Фильтры по whitelist: status, source, assigned_to=me,
+        utm_source (точное совпадение, до 100 символов), search (имя или телефон),
+        ordering=created_at|-created_at. Неизвестное значение status/source/assigned_to/ordering
+        или слишком длинное значение дают 400. В ответе new_count - число новых заявок.'
+      summary: Заявки (кабинет брокера)
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - broker
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBrokerLeadListList'
+          description: ''
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не broker и не admin
+  /api/v1/broker/leads/{id}/:
+    get:
+      operationId: v1_broker_leads_retrieve
+      summary: Картка заявки (кабинет брокера)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - broker
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrokerLeadDetail'
+          description: ''
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не broker и не admin
+        '404':
+          description: Заявку не знайдено
+  /api/v1/broker/leads/{id}/partner-status/:
+    post:
+      operationId: v1_broker_leads_partner_status_create
+      summary: Статус партнера (вручну, окремо від статусу заявки)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - broker
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerStatusRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrokerLeadDetail'
+          description: ''
+        '400':
+          description: Невідомий статус
+        '409':
+          description: Заявку вже взяв інший брокер
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не broker и не admin
+        '404':
+          description: Заявку не знайдено
+  /api/v1/broker/leads/{id}/status/:
+    post:
+      operationId: v1_broker_leads_status_create
+      summary: Змінити статус заявки
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - broker
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusChangeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/StatusChangeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StatusChangeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrokerLeadDetail'
+          description: ''
+        '400':
+          description: Недопустимий перехід
+        '409':
+          description: Заявку вже взяв інший брокер
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не broker и не admin
+        '404':
+          description: Заявку не знайдено
+  /api/v1/broker/leads/{id}/take/:
+    post:
+      operationId: v1_broker_leads_take_create
+      summary: Взяти заявку в роботу
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - broker
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrokerLeadDetail'
+          description: ''
+        '400':
+          description: Заявку закрито
+        '409':
+          description: Заявку вже взяв інший брокер
+        '401':
+          description: Не авторизован
+        '403':
+          description: Не broker и не admin
+        '404':
+          description: Заявку не знайдено
   /api/v1/dealers/application/:
     get:
       operationId: v1_dealers_application_retrieve
@@ -1902,6 +2087,332 @@ components:
       - convertible
       - other
       type: string
+    BrokerLeadDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        public_id:
+          type: string
+          readOnly: true
+          title: Номер
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          title: Імʼя
+        phone:
+          type: string
+          readOnly: true
+          title: Телефон
+        contact_method:
+          allOf:
+          - $ref: '#/components/schemas/ContactMethodEnum'
+          readOnly: true
+          title: Спосіб звʼязку
+        status:
+          allOf:
+          - $ref: '#/components/schemas/LeadStatusEnum'
+          readOnly: true
+          title: Статус
+        status_display:
+          type: string
+          readOnly: true
+        partner_status:
+          allOf:
+          - $ref: '#/components/schemas/PartnerStatusEnum'
+          readOnly: true
+          title: Статус партнера
+        partner_status_display:
+          type: string
+          readOnly: true
+        total_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        total_uah:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/LeadSourceEnum'
+          readOnly: true
+          title: Точка входу
+        source_display:
+          type: string
+          readOnly: true
+        utm_source:
+          type: string
+          readOnly: true
+        first_response_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          title: Перша відповідь
+        assigned_to:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        car:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        contact_method_display:
+          type: string
+          readOnly: true
+        contact_handle:
+          type: string
+          readOnly: true
+          title: Нік / контакт
+        comment:
+          type: string
+          readOnly: true
+          title: Коментар
+        budget_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          title: Бюджет, USD
+        needed_when:
+          allOf:
+          - $ref: '#/components/schemas/NeededWhenEnum'
+          readOnly: true
+          title: Коли потрібне авто
+        needed_when_display:
+          type: string
+          readOnly: true
+        city:
+          type: string
+          readOnly: true
+          title: Місто
+        utm:
+          readOnly: true
+        referrer:
+          type: string
+          readOnly: true
+        entry_page_url:
+          type: string
+          readOnly: true
+        page_url:
+          type: string
+          readOnly: true
+        calculation_snapshot:
+          readOnly: true
+          title: Знімок розрахунку
+        listing:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/BrokerStatusChange'
+          readOnly: true
+        allowed_transitions:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        partner_name:
+          type: string
+          readOnly: true
+          title: Партнер (знімок)
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - allowed_transitions
+      - assigned_to
+      - budget_usd
+      - calculation_snapshot
+      - car
+      - city
+      - comment
+      - contact_handle
+      - contact_method
+      - contact_method_display
+      - created_at
+      - email
+      - entry_page_url
+      - first_response_at
+      - history
+      - id
+      - listing
+      - name
+      - needed_when
+      - needed_when_display
+      - page_url
+      - partner_name
+      - partner_status
+      - partner_status_display
+      - phone
+      - public_id
+      - referrer
+      - source
+      - source_display
+      - status
+      - status_display
+      - total_uah
+      - total_usd
+      - updated_at
+      - utm
+      - utm_source
+    BrokerLeadList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        public_id:
+          type: string
+          readOnly: true
+          title: Номер
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          title: Імʼя
+        phone:
+          type: string
+          readOnly: true
+          title: Телефон
+        contact_method:
+          allOf:
+          - $ref: '#/components/schemas/ContactMethodEnum'
+          readOnly: true
+          title: Спосіб звʼязку
+        status:
+          allOf:
+          - $ref: '#/components/schemas/LeadStatusEnum'
+          readOnly: true
+          title: Статус
+        status_display:
+          type: string
+          readOnly: true
+        partner_status:
+          allOf:
+          - $ref: '#/components/schemas/PartnerStatusEnum'
+          readOnly: true
+          title: Статус партнера
+        partner_status_display:
+          type: string
+          readOnly: true
+        total_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        total_uah:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/LeadSourceEnum'
+          readOnly: true
+          title: Точка входу
+        source_display:
+          type: string
+          readOnly: true
+        utm_source:
+          type: string
+          readOnly: true
+        first_response_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          title: Перша відповідь
+        assigned_to:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        car:
+          type: string
+          readOnly: true
+      required:
+      - assigned_to
+      - car
+      - contact_method
+      - created_at
+      - first_response_at
+      - id
+      - name
+      - partner_status
+      - partner_status_display
+      - phone
+      - public_id
+      - source
+      - source_display
+      - status
+      - status_display
+      - total_uah
+      - total_usd
+      - utm_source
+    BrokerStatusChange:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        from_status:
+          type: string
+          readOnly: true
+        from_status_display:
+          type: string
+          readOnly: true
+        to_status:
+          type: string
+          readOnly: true
+        to_status_display:
+          type: string
+          readOnly: true
+        changed_by:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        note:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - changed_by
+      - created_at
+      - from_status
+      - from_status_display
+      - id
+      - note
+      - to_status
+      - to_status_display
     CalculateInputRequest:
       type: object
       properties:
@@ -3309,6 +3820,29 @@ components:
       - three_months
       - later
       type: string
+    PaginatedBrokerLeadListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BrokerLeadList'
     PaginatedCalculationList:
       type: object
       required:
@@ -3516,6 +4050,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Vehicle'
+    PartnerStatusEnum:
+      enum:
+      - no_answer
+      - thinking
+      - deposit
+      - bought
+      - rejected
+      type: string
+    PartnerStatusRequest:
+      type: object
+      properties:
+        partner_status:
+          oneOf:
+          - $ref: '#/components/schemas/PartnerStatusEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+      required:
+      - partner_status
     PatchedLocalListingUpdateRequest:
       type: object
       properties:
@@ -3990,6 +4541,17 @@ components:
       - cleared
       - delivered
       type: string
+    StatusChangeRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/LeadStatusEnum'
+        note:
+          type: string
+          default: ''
+          maxLength: 500
+      required:
+      - status
     TitleTypeEnum:
       enum:
       - clean

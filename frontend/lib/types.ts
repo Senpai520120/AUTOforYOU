@@ -447,7 +447,7 @@ export interface SiteSettings {
 // Заявки брокеру (задача 2.3)
 export type LeadStatus =
   | 'new' | 'in_progress' | 'contract' | 'car_bought' | 'in_transit'
-  | 'customs' | 'delivered' | 'rejected';
+  | 'customs' | 'delivered' | 'rejected' | 'spam';
 export type LeadSource = 'calculator' | 'listing' | 'landing';
 export type LeadContactMethod = 'phone' | 'telegram' | 'viber';
 export type LeadNeededWhen = 'asap' | 'month' | 'three_months' | 'later';
@@ -495,4 +495,79 @@ export interface Lead {
   total_uah: string | null;
   listing_id: number | null;
   created_at: string;
+}
+
+// Кабінет брокера (задача 2.4)
+export type LeadPartnerStatus = '' | 'no_answer' | 'thinking' | 'deposit' | 'bought' | 'rejected';
+
+// email приходить лише для себе й адміна; для інших — тільки відображуване ім’я.
+export interface BrokerStaffRef {
+  id: number;
+  name: string;
+  email?: string;
+}
+
+export interface BrokerLeadRow {
+  id: number;
+  public_id: string;
+  created_at: string;
+  name: string;
+  phone: string;
+  contact_method: LeadContactMethod | '';
+  status: LeadStatus;
+  status_display: string;
+  partner_status: LeadPartnerStatus;
+  partner_status_display: string;
+  total_usd: string | null;
+  total_uah: string | null;
+  source: LeadSource;
+  source_display: string;
+  utm_source: string;
+  first_response_at: string | null;
+  assigned_to: BrokerStaffRef | null;
+  car: string;
+}
+
+export interface BrokerLeadHistoryItem {
+  id: number;
+  from_status: string;
+  from_status_display: string;
+  to_status: string;
+  to_status_display: string;
+  changed_by: BrokerStaffRef | null;
+  note: string;
+  created_at: string;
+}
+
+export interface BrokerLeadDetail extends BrokerLeadRow {
+  email: string;
+  contact_method_display: string;
+  contact_handle: string;
+  comment: string;
+  budget_usd: string | null;
+  needed_when: LeadNeededWhen | '';
+  needed_when_display: string;
+  city: string;
+  utm: Record<string, string>;
+  referrer: string;
+  entry_page_url: string;
+  page_url: string;
+  calculation_snapshot: {
+    created_at?: string;
+    is_estimate?: boolean;
+    inputs_snapshot?: Record<string, unknown>;
+    rates_snapshot?: Record<string, unknown>;
+    breakdown?: Record<string, unknown>;
+    total_usd?: string;
+    total_uah?: string;
+  };
+  listing: { id: number; url: string } | null;
+  history: BrokerLeadHistoryItem[];
+  allowed_transitions: LeadStatus[];
+  partner_name: string;
+  updated_at: string;
+}
+
+export interface BrokerLeadList extends PaginatedResponse<BrokerLeadRow> {
+  new_count: number;
 }

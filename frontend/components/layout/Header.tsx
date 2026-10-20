@@ -47,6 +47,11 @@ export default function Header() {
               B2B-доступ
             </Link>
           ) : null}
+          {/* role приходить із сервера й клієнтом не змінюється; реальний доступ перевіряє API (403).
+              На вузьких екранах пункт «Заявки» є в /me. */}
+          {user && (user.role === 'broker' || user.is_admin_role) && (
+            <Link href="/broker/leads" className="hover:text-amber-400 transition-colors">Заявки</Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-3 text-sm">
