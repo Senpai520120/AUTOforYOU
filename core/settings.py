@@ -17,20 +17,6 @@ load_dotenv(BASE_DIR / '.env', encoding='utf-8', override=False)
 # DEBUG=False по умолчанию; для локальной разработки добавить DEBUG=true в .env
 DEBUG = os.environ.get('DEBUG', 'false').lower() in ('true', '1', 'yes')
 
-# В продакшене SECRET_KEY обязателен — поднимает ImproperlyConfigured при отсутствии.
-# Для dev: insecure-fallback, чтобы runserver работал без .env.
-_secret_key_env = os.environ.get('SECRET_KEY', '')
-if _secret_key_env:
-    SECRET_KEY = _secret_key_env
-elif DEBUG:
-    # Локальная разработка — insecure fallback допустим
-    SECRET_KEY = 'django-insecure-ea+&)bt%jlzm6=lms#20m8khy&^!fg*41^a+l(&3n7e!5hoal+'
-else:
-    raise ImproperlyConfigured(
-        'SECRET_KEY не задан. На проді SECRET_KEY обязателен. '
-        'Сгенерировать: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
-    )
-
 # Флаг тест-раннера: единственный, вычисляется один раз (см. блок изоляции в конце файла).
 _TESTING = 'test' in sys.argv
 
@@ -44,7 +30,14 @@ elif DEBUG:
 elif _TESTING:
     ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
 else:
-    ALLOWED_HOSTS = []   # prod without env var → Django will raise, as intended
+    # 01-Q9: без ALLOWED_HOSTS прод отвечал бы 400 на каждый запрос - лучше не стартовать.
+    raise ImproperlyConfigured('ALLOWED_HOSTS не задан. Укажите домен сайта в .env: ALLOWED_HOSTS=домен,www.домен')
+
+# ─── SECRET_KEY и DEBUG (задача 7.2, 01-S10, 01-C8) ────────────────────────────
+from core.secret_key import check_debug_hosts, resolve_secret_key  # noqa: E402
+
+SECRET_KEY = resolve_secret_key(os.environ, debug=DEBUG, testing=_TESTING, base_dir=BASE_DIR)
+check_debug_hosts(os.environ, debug=DEBUG, allowed_hosts=ALLOWED_HOSTS)
 
 # ─── Приложения ───────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
@@ -162,42 +155,12 @@ CACHES = {
     )
 }
 
-# ─── Медиафайлы и хранилище ───────────────────────────────────────────────────
-# Не заданы S3_*-переменные → локальное хранилище /media/ (dev рабочий без S3).
-# Заданы все три (S3_BUCKET_NAME, S3_REGION, AWS_ACCESS_KEY_ID + SECRET_ACCESS_KEY)
-# → медиафайлы идут в AWS S3 (или совместимое хранилище).
+# ─── Медиафайлы и хранилище (задача 7.2) ───────────────────────────────────────
+# STORAGES вместо удалённых в Django 5.1 DEFAULT_FILE_STORAGE/STATICFILES_STORAGE (01-C1).
+# Без S3-переменных - локально; S3_BUCKET_NAME + ключи - медиа в S3/R2, статика локальная.
+from core.storage_settings import build_storage_settings  # noqa: E402
 
-_S3_BUCKET = os.environ.get('S3_BUCKET_NAME', '')
-_S3_REGION = os.environ.get('S3_REGION', 'eu-central-1')
-_AWS_KEY = os.environ.get('AWS_ACCESS_KEY_ID', '')
-_AWS_SECRET = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
-_S3_ENDPOINT = os.environ.get('S3_ENDPOINT_URL', '')  # для S3-совместимых (Cloudflare R2, MinIO)
-
-USE_S3 = bool(_S3_BUCKET and _AWS_KEY and _AWS_SECRET)
-
-if USE_S3:
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-    STATICFILES_STORAGE = 'storages.backends.s3boto3.S3StaticStorage'
-
-    AWS_ACCESS_KEY_ID = _AWS_KEY
-    AWS_SECRET_ACCESS_KEY = _AWS_SECRET
-    AWS_STORAGE_BUCKET_NAME = _S3_BUCKET
-    AWS_S3_REGION_NAME = _S3_REGION
-    AWS_S3_FILE_OVERWRITE = False
-    AWS_DEFAULT_ACL = 'private'
-    AWS_QUERYSTRING_AUTH = True          # подписанные URL (приватный bucket)
-    AWS_S3_SIGNATURE_VERSION = 's3v4'
-
-    if _S3_ENDPOINT:
-        AWS_S3_ENDPOINT_URL = _S3_ENDPOINT  # Cloudflare R2 / MinIO
-
-    MEDIA_URL = f'https://{_S3_BUCKET}.s3.{_S3_REGION}.amazonaws.com/'
-    STATIC_URL = MEDIA_URL + 'static/'
-else:
-    MEDIA_URL = '/media/'
-    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-    STATIC_URL = '/static/'
-    STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+globals().update(build_storage_settings(os.environ, BASE_DIR))
 
 # ─── Безопасная загрузка изображений (задача 1.10, core/uploads.py) ────────────
 # Тип определяется по содержимому; файл пересохраняется без EXIF/GPS с uuid-именем.
@@ -348,7 +311,12 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
+# 01-S15: схема и Swagger/Redoc в проде только для admin-роли; API_DOCS_PUBLIC=true открывает всем.
+API_DOCS_PUBLIC = os.environ.get('API_DOCS_PUBLIC', 'false').lower() in ('true', '1', 'yes')
 SPECTACULAR_SETTINGS = {
+    'SERVE_PERMISSIONS': (
+        ['rest_framework.permissions.AllowAny'] if API_DOCS_PUBLIC else ['users.permissions.IsAdminRole']
+    ),
     'ENUM_NAME_OVERRIDES': {
         'VehicleFuelTypeEnum': ['petrol', 'diesel', 'electric', 'hybrid'],
         'LocalListingFuelTypeEnum': ['petrol', 'diesel', 'electric', 'hybrid', 'gas'],
@@ -455,7 +423,7 @@ EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'false').lower() in ('true', '1', 'yes')
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@autoforyou.ua')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '') or 'noreply@localhost'
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
@@ -468,9 +436,10 @@ SIMPLE_JWT = {
 }
 
 # ─── Celery ───────────────────────────────────────────────────────────────────
-# Нет REDIS_URL ИЛИ DEBUG=True → задачи выполняются синхронно (eager).
-# Тесты и локальная разработка работают без Redis-воркера.
-if _REDIS_URL and not DEBUG:
+# Нет REDIS_URL или CELERY_EAGER=true → задачи выполняются синхронно (eager).
+# 01-C13: eager включается отдельным флагом, а не от DEBUG.
+CELERY_EAGER = os.environ.get('CELERY_EAGER', 'false').lower() in ('true', '1', 'yes')
+if _REDIS_URL and not CELERY_EAGER:
     CELERY_BROKER_URL = _REDIS_URL
     CELERY_RESULT_BACKEND = _REDIS_URL
     CELERY_TASK_ALWAYS_EAGER = False
@@ -479,6 +448,8 @@ else:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
 
+# Celery не перехватывает корневой логгер: иначе логи задач шли бы мимо фильтра ПДн из LOGGING (7.2).
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_TIMEZONE = 'Europe/Kyiv'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
@@ -544,7 +515,7 @@ TELEGRAM_BROKER_CHAT_ID = os.environ.get('TELEGRAM_BROKER_CHAT_ID', '')
 LEAD_JOURNAL_CHAT_ID = os.environ.get('LEAD_JOURNAL_CHAT_ID', '')
 
 # URL сайта — используется в Telegram-постах (ссылки на листинги)
-SITE_URL = os.environ.get('SITE_URL', 'https://autoforyou.ua')
+SITE_URL = os.environ.get('SITE_URL', '') or 'http://localhost'
 
 # ─── Заголовки безопасности (только в продакшене) ─────────────────────────────
 # В dev (DEBUG=True) и в тест-раннере не включаем — тесты работают по HTTP.
@@ -599,12 +570,50 @@ if _TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
 
-# Логи HTTP-клиентов: на INFO httpx пишет полные URL запросов (в т.ч. с apikey=).
+# ─── Логи (задача 7.2, 12-S8, 01-S14) ─────────────────────────────────────────
+# stdout, на всех handler'ах фильтр ПДн (core/logging_filters.py). django.request - путь без query.
+# httpx/httpcore на WARNING: на INFO они пишут полные URL запросов (в т.ч. с apikey=).
+# В тестах по умолчанию WARNING: INFO-логи сервисов засоряли бы вывод прогона (assertLogs ставит уровень сам).
+LOG_LEVEL = os.environ.get('LOG_LEVEL', '').upper() or ('WARNING' if _TESTING else 'INFO')
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'pii': {'()': 'core.logging_filters.PiiScrubFilter'},
+        'request_path': {'()': 'core.logging_filters.RequestPathFilter'},
+    },
+    'formatters': {
+        'default': {'format': '%(asctime)s %(levelname)s %(name)s: %(message)s'},
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
+            'formatter': 'default',
+            'filters': ['request_path', 'pii'],
+        },
+    },
+    'root': {'handlers': ['console'], 'level': LOG_LEVEL},
     'loggers': {
+        'django': {'handlers': ['console'], 'level': LOG_LEVEL, 'propagate': False},
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
         'httpx': {'level': 'WARNING'},
         'httpcore': {'level': 'WARNING'},
     },
 }
+
+# Приватные файлы (фото трекинга) при публичном CDN-домене: отдельный bucket без публичного домена.
+PRIVATE_S3_BUCKET_NAME = os.environ.get('PRIVATE_S3_BUCKET_NAME', '')
+if globals().get('USE_S3') and globals().get('AWS_S3_CUSTOM_DOMAIN'):
+    if not PRIVATE_S3_BUCKET_NAME and not _TESTING:
+        import logging as _logging
+        _logging.getLogger('core.settings').warning(
+            'S3_CUSTOM_DOMAIN раздаёт весь bucket публично, а приватные фото трекинга лежат в нём же '
+            '(private/). Задайте PRIVATE_S3_BUCKET_NAME (bucket без публичного домена) или закройте '
+            '/private/* правилом CDN.')
+
+if not DEBUG and not _TESTING and SITE_URL.startswith(('http://localhost', 'http://127.0.0.1')):
+    import logging as _logging
+    _logging.getLogger('core.settings').warning(
+        'SITE_URL указывает на localhost при DEBUG=false: ссылки в письмах будут вести на localhost. '
+        'Задайте SITE_URL=https://домен в .env.')

@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, дальше 7.2 → 7.6 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, дальше 7.6 → 8.9 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
 
@@ -8,11 +8,26 @@
 
 ## ⏸ ТОЧКА ОСТАНОВКИ (2026-10-20) — откуда продолжать
 
-- 2026-10-19/20 локальный оркестратор сделал 12 задач (2.1a, 2.1b, 2.2, 2.3, 2.4, 1.14, 2.15, 1.1, 1.7, 1.9, 1.10, 1.11) в ветке `finish-site` (PR #38 в `main`).
-- 2026-10-20 облачная сессия (проба) сделала **1.8** в ветке `task-1.8`, PR `task-1.8` → `finish-site`. После слияния PR продолжать из `finish-site`.
-- **Следующая задача по критическому пути: 7.2** (очистка логов по `log_retention_days`), затем 7.6 → 8.9 → 2.14 → 2.5 → … (ROADMAP.md, «Порядок выполнения»).
-- Перед продолжением: проверить CI PR 1.8; в локальный `.env.e2e` добавить переменные из `.env.e2e.example` (`THROTTLE_*`, в том числе новый `THROTTLE_DATA_EXPORT_RATE`, `PRIVATE_MEDIA_USE_X_ACCEL=true`); для Playwright экспортировать `E2E_PASSWORD` из `.env.e2e`.
+- 2026-10-19/20 локальный оркестратор сделал 12 задач (2.1a … 1.11) в ветке `finish-site` (PR #38 в `main`).
+- 2026-10-20 облачная сессия: ветка `task-1.8` (PR #39 → `finish-site`), по коммиту на задачу: 1.8, 7.2 (далее по плану 7.6 → 8.9 → 2.14 → 2.5).
+- **Следующая задача по критическому пути: 7.6** (мониторинг ошибок), затем 8.9 → 2.14 → 2.5 → 2.6 → … (ROADMAP.md, «Порядок выполнения»).
+- Перед продолжением: проверить CI PR #39; локальные `.env` и `.env.e2e` — задать настоящий `SECRET_KEY` (с 7.2 заглушки из шаблонов не стартуют) и переменные из `.env.e2e.example` (`THROTTLE_*`, `PRIVATE_MEDIA_USE_X_ACCEL=true`); для Playwright экспортировать `E2E_PASSWORD`.
 - Решения владельца, накопленные за прогон, — в разделах задач ниже («Для владельца») и в `docs/LAUNCH_CHECKLIST.md`.
+
+---
+
+## Задача 7.2: прод-настройки Django, хранилища, логи без ПДн (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
+
+- `core/secret_key.py`: фиксированного ключа больше нет. При `DEBUG=true` без ключа он создаётся один раз в `.dev_secret_key` (0600, в `.gitignore`/`.dockerignore`; каталог только для чтения — ключ в памяти с предупреждением), в тестах — случайный. При `DEBUG=false` пустой, короче 50 символов или с маркерами заглушек (`REPLACE`, `local-docker-dev`, `django-insecure`, `not-for-production`, `e2e-only`, `your-`) — `ImproperlyConfigured`. `DEBUG=true` с публичным хостом в `ALLOWED_HOSTS`, `SITE_URL`, `CSRF_TRUSTED_ORIGINS` или `CORS_ALLOWED_ORIGINS` — ошибка старта (обход `ALLOW_DEBUG_ON_PUBLIC_HOST=true`); `docker/entrypoint.sh` не запускает gunicorn с `DEBUG=true`. Пустой `ALLOWED_HOSTS` при `DEBUG=false` — ошибка старта (01-Q9). Celery eager — флаг `CELERY_EAGER` (01-C13).
+- `core/storage_settings.py: build_storage_settings` → `STORAGES` (01-C1): медиа в S3/R2, статика локальная, `MEDIA_ROOT` всегда; `MEDIA_URL` — `S3_CUSTOM_DOMAIN`, для R2 без домена — подписанные URL storage, шаблон amazonaws только для AWS (12-C6). Приватные фото трекинга: подпись всегда (без CDN-домена), отдельный bucket `PRIVATE_S3_BUCKET_NAME`, предупреждение при CDN-домене без него.
+- `core/logging_filters.py`: `scrub` (email, телефоны UA/международные и `%2B`, секреты в query/JSON, Cookie/Authorization/Bearer, голые JWT, имена в JSON) и `PiiScrubFilter` (форматирует запись, маскирует и traceback), `RequestPathFilter` (django.request/django.server без query и без объекта запроса). `LOGGING`: stdout, `LOG_LEVEL`, фильтры на handler'е; Celery не перехватывает корневой логгер. gunicorn access-лог `%(U)s` без query и IP; nginx `log_format main_anon` (`$uri`, IP с обнулённым октетом); compose `x-logging` (`LOG_MAX_SIZE`, `LOG_MAX_FILES`) у всех сервисов. `integrations/tasks.py` без `telegram_id` в логе. Дефолты `SITE_URL=http://localhost`, `DEFAULT_FROM_EMAIL=noreply@localhost` (+ предупреждение на проде). `flushexpiredtokens` в расписании уже был (1.7), покрыт тестом.
+- Попутно: Swagger/Redoc/схема только admin-роли (`API_DOCS_PUBLIC`, 01-S15, строки в матрице 1.11); `next/image` — только хост медиа бэкенда и `NEXT_PUBLIC_IMAGE_HOSTS` (build-arg), без `*.amazonaws.com`, `*.cloudfront.net`, хостов аукционов (08-C8, 08-S10).
+- Тесты: `tests/test_prod_settings.py` (38; старт Django в subprocess, хранилища без сети, фильтры, entrypoint) — у `core` уже есть модуль `core/tests.py`, поэтому не `core/tests/`. `check --deploy` (23-D106) — `skip` до 7.1. E2E `image-hosts.spec.ts`: обход (чужие хосты → 400) зелёный; успех — `test.fixme` → 7.5: в e2e-стеке медиа на localhost, а Next 16 запрещает оптимизатору локальные IP независимо от списка (так было и до задачи).
+- Проверки: бэкенд SQLite 1582 OK (skipped=2); PostgreSQL (tests, core, integrations, users) 945 OK; `openapi.yaml` не изменился; ruff чисто; tsc/lint/build OK; `nginx -t` в `nginx:alpine` OK и формат лога проверен запросом (`127.0.0.0`, путь без query); `docker compose config` — logging у всех сервисов. Мутационная проверка: 28 мутаций, все пойманы. S3/R2 вживую не проверены (нет бакета; MinIO в облаке не поднимал). Ревью `security-reviewer`: критичного нет; 4 «важно» исправлены (обход проверки DEBUG через Host: localhost; Cookie/sessionid/JWT мимо `scrub`; Celery перехватывал root-логгер без фильтра; приватные файлы в публичном bucket), 3 «желательно» исправлены (маркеры e2e-ключа, `%2B`-телефон и имена в JSON, тест `RequestPathFilter`); `error_log` nginx с IP — описан в LAUNCH_CHECKLIST.
+- Для владельца:
+  - **Локальный `.env` (docker) со старым ключом `local-docker-dev-…-REPLACE…` больше не стартует** — задать сгенерированный `SECRET_KEY`; то же для `.env.e2e` (в шаблоне ключ теперь пустой, CI генерирует свой).
+  - При S3/R2 с публичным доменом — задать `PRIVATE_S3_BUCKET_NAME` (отдельный бакет без публичного доступа) и `NEXT_PUBLIC_IMAGE_HOSTS`. Если фото лотов не переносятся (`LOT_PHOTO_ALLOWED_HOSTS` пуст), их CDN-хосты нужно внести в `NEXT_PUBLIC_IMAGE_HOSTS`, иначе фото лотов в каталоге не покажутся.
+  - Swagger `/api/docs/` теперь только для админа; открыть всем — `API_DOCS_PUBLIC=true`.
 
 ---
 

@@ -277,7 +277,11 @@ def private_media_storage():
         from storages.backends.s3boto3 import S3Boto3Storage
 
         # Тот же приватный bucket, отдельный префикс, только подписанные URL.
-        return S3Boto3Storage(location='private', default_acl='private', querystring_auth=True,
+        # custom_domain=None: публичный CDN-домен (S3_CUSTOM_DOMAIN) не должен давать неподписанные ссылки.
+        extra = {}
+        if getattr(settings, 'PRIVATE_S3_BUCKET_NAME', ''):
+            extra['bucket_name'] = settings.PRIVATE_S3_BUCKET_NAME  # отдельный bucket без публичного домена
+        return S3Boto3Storage(**extra, location='private', default_acl='private', querystring_auth=True, custom_domain=None,
                               querystring_expire=int(getattr(settings, 'PRIVATE_MEDIA_URL_EXPIRE', 300)),
                               file_overwrite=False)
     return PrivateMediaStorage()

@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+# DEBUG на сервере (gunicorn) - только осознанно (задача 7.2): трассировки и выключенные SECURE_*.
+case "${DEBUG,,}" in
+  true|1|yes)
+    case "${ALLOW_DEBUG_ON_PUBLIC_HOST,,}" in
+      true|1|yes) echo "[entrypoint] ВНИМАНИЕ: DEBUG=true на сервере (ALLOW_DEBUG_ON_PUBLIC_HOST=true)" >&2 ;;
+      *) echo "[entrypoint] DEBUG=true недопустим для gunicorn: поставьте DEBUG=false в .env" >&2; exit 1 ;;
+    esac ;;
+esac
+
 echo "[entrypoint] Running database migrations..."
 python manage.py migrate --noinput
 
@@ -30,4 +39,5 @@ exec gunicorn core.wsgi:application \
   --workers "${GUNICORN_WORKERS:-3}" \
   --timeout 120 \
   --access-logfile - \
+  --access-logformat '%(t)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(L)s' \
   --error-logfile -

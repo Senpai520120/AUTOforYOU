@@ -156,7 +156,7 @@ pre-commit run --all-files   # перевірка всього дерева
 | `/me/messages`, `/me/deals`, `/me/favorites`, `/me/saved-searches`, `/me/notifications` | Розділи кабінету |
 | `/me/shipments`, `/me/trusted-shops`, `/me/telegram`, `/me/calculations` | Логістика, партнери, бот, історія розрахунків |
 | `/terms`, `/rules`, `/refund`, `/privacy`, `/cookies` | Юридичні документи |
-| `/api/docs/` | Swagger UI |
+| `/api/docs/` | Swagger UI (только admin-роль; `API_DOCS_PUBLIC=true` открывает всем) |
 | `/api/redoc/` | ReDoc |
 | `/admin/` | Django Admin |
 

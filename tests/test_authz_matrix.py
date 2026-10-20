@@ -83,10 +83,6 @@ PUBLIC = {
     'vin-decode': 'публичная расшифровка VIN',
     'pricing-calculate': 'калькулятор',
     'pricing-rates': 'ставки: ждёт задачу 2.6 - по Q8 суммы должны видеть только staff/broker (см. PricingRatesAwaiting26)',
-    # OpenAPI-схема и документация (drf_spectacular): публичны явно
-    'schema': 'OpenAPI-схема (drf_spectacular)',
-    'swagger-ui': 'Swagger UI (drf_spectacular)',
-    'redoc': 'ReDoc (drf_spectacular)',
     'listing-list': 'каталог',
     'listing-detail': 'каталог',
     'local-tariffs': 'тарифы',
@@ -233,6 +229,11 @@ MATRIX: list[Case] = [
          note='отмена - только своего удаления'),
     Case('me-export', 'get', other=200, forbid=lambda c: [c.u['a'].email, 'СТО Секрет', 'Іван'],
          note='выгрузка только своих данных'),
+
+    # ---- OpenAPI и документация (7.2, 01-S15): только admin-роль, API_DOCS_PUBLIC=true открывает всем
+    Case('schema', 'get', owner='admin', other=403, roles={'staff': 403, 'broker': 403, 'admin': 200}),
+    Case('swagger-ui', 'get', owner='admin', other=403, roles={'staff': 403, 'admin': 200}),
+    Case('redoc', 'get', owner='admin', other=403, roles={'staff': 403, 'admin': 200}),
 
     # ---- личный кабинет (23-D6...D9) -------------------------------------------------
     Case('me-calculations', 'get', other=200, ids=_ids('calc')),

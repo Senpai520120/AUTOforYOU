@@ -100,5 +100,5 @@ def send_notification(self, user_id: int, text: str, buttons=None):
             await bot.session.close()
 
     sent = asyncio.run(_send())
-    logger.info('send_notification: user pk=%s (telegram_id=%s) → sent=%s', user_id, telegram_id, sent)
+    logger.info('send_notification: user pk=%s → sent=%s', user_id, sent)
     return {'sent': sent}

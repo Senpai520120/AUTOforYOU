@@ -75,3 +75,5 @@ frontend/e2e/.auth/
 
 # Приватные файлы (фото трекинга, задача 1.10)
 private_media/
+# Локальный SECRET_KEY разработчика (задача 7.2)
+.dev_secret_key
