@@ -221,7 +221,7 @@ test.describe('09-Q7 / 08-Q2: протухла cookie не заважає гос
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
     await page.getByRole('button', { name: 'Розрахувати' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Детализация стоимости «под ключ»' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Деталізація вартості «під ключ»' })).toBeVisible();
     await expect(page).toHaveURL(/\/calculator$/);
   });
 });

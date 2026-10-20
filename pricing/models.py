@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -12,6 +13,8 @@ class DateRangeModel(models.Model):
     """
     valid_from = models.DateField(verbose_name='Действует с')
     valid_to = models.DateField(null=True, blank=True, verbose_name='Действует по')
+    # 2.6 (02-C2): пока среди применённых ставок есть непроверенные, сайт показывает демо-баннер.
+    is_verified = models.BooleanField(default=False, verbose_name='Перевірено власником')
 
     overlap_key_fields: tuple = ()
 
@@ -150,12 +153,9 @@ class UsLandRoute(DateRangeModel):
 
 
 class OceanFreightRate(DateRangeModel):
-    class EuPort(models.TextChoices):
-        KLAIPEDA = 'klaipeda', 'Клайпеда'
-        GDANSK = 'gdansk', 'Гданьск'
-
+    # Порт ЕС - данные (02-C4): новый порт добавляется маршрутом в админке, без правки кода.
     us_port = models.CharField(max_length=50, verbose_name='Порт США')
-    eu_port = models.CharField(max_length=20, choices=EuPort.choices, verbose_name='Порт ЕС')
+    eu_port = models.CharField(max_length=20, verbose_name='Порт ЕС', help_text='Наприклад: klaipeda, gdansk')
     cost_usd = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Стоимость ($)')
 
     overlap_key_fields = ('us_port', 'eu_port')
@@ -169,11 +169,7 @@ class OceanFreightRate(DateRangeModel):
 
 
 class EuToUaDeliveryRate(DateRangeModel):
-    class EuPort(models.TextChoices):
-        KLAIPEDA = 'klaipeda', 'Клайпеда'
-        GDANSK = 'gdansk', 'Гданьск'
-
-    eu_port = models.CharField(max_length=20, choices=EuPort.choices, verbose_name='Порт ЕС')
+    eu_port = models.CharField(max_length=20, verbose_name='Порт ЕС', help_text='Наприклад: klaipeda, gdansk')
     cost_usd = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Стоимость ($)')
 
     overlap_key_fields = ('eu_port',)
@@ -186,11 +182,103 @@ class EuToUaDeliveryRate(DateRangeModel):
         return f'{self.eu_port} → UA: ${self.cost_usd}'
 
 
+class UaDeliveryRate(DateRangeModel):
+    """Доставка по Украине до города/зоны (2.7, Q6): сумма или «уточнюйте» - тогда в расчёте «уточнюється менеджером»."""
+    destination = models.CharField('Місто або зона', max_length=100)
+    eu_port = models.CharField('Порт ЄС', max_length=20, blank=True,
+                               help_text='Порожньо - з будь-якого порту ЄС.')
+    cost_usd = models.DecimalField('Вартість ($)', max_digits=8, decimal_places=2, null=True, blank=True,
+                                   validators=[MinValueValidator(0)])
+    quote_on_request = models.BooleanField('Уточнюйте (ціна за запитом)', default=False)
+    sort_order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    overlap_key_fields = ('destination', 'eu_port')
+
+    class Meta(DateRangeModel.Meta):
+        verbose_name = 'Доставка по Україні'
+        verbose_name_plural = 'Доставка по Україні'
+        ordering = ['sort_order', 'destination']
+        constraints = [
+            *DateRangeModel.Meta.constraints,
+            models.CheckConstraint(
+                condition=(models.Q(quote_on_request=True) | models.Q(cost_usd__isnull=False))
+                & (models.Q(cost_usd__isnull=True) | models.Q(cost_usd__gte=0)),
+                name='pricing_uadeliveryrate_cost_or_quote',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.quote_on_request and self.cost_usd is None:
+            raise ValidationError({'cost_usd': 'Вкажіть вартість або позначте «Уточнюйте».'})
+
+    def __str__(self):
+        price = 'уточнюйте' if self.quote_on_request else f'${self.cost_usd}'
+        return f'{self.destination}{f" (з {self.eu_port})" if self.eu_port else ""}: {price}'
+
+
+class FeeMode(models.TextChoices):
+    """Режим услуги брокера (2.7, Q6): фиксированная сумма или процент от цены покупки на аукционе."""
+    FIXED = 'fixed', 'Фіксована сума'
+    PERCENT = 'percent', 'Відсоток від ціни на аукціоні'
+
+
+class BrokerServiceFee(DateRangeModel):
+    """Статья услуг брокера (2.7): «Послуги брокера», «Сертифікація», «Реєстрація»...
+
+    База процента всегда одна - цена покупки авто на аукционе (решение шага 14), не итог и не митна вартість.
+    """
+    title = models.CharField('Назва', max_length=100)
+    fee_mode = models.CharField('Режим', max_length=10, choices=FeeMode.choices, default=FeeMode.FIXED)
+    amount_usd = models.DecimalField('Сума ($)', max_digits=8, decimal_places=2, null=True, blank=True,
+                                     validators=[MinValueValidator(0)])
+    percent = models.DecimalField('Відсоток від ціни на аукціоні', max_digits=5, decimal_places=2,
+                                  null=True, blank=True, help_text='Наприклад, 2 = 2%.',
+                                  validators=[MinValueValidator(0), MaxValueValidator(100)])
+    sort_order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    overlap_key_fields = ('title',)
+
+    class Meta(DateRangeModel.Meta):
+        verbose_name = 'Послуга брокера'
+        verbose_name_plural = 'Послуги брокера'
+        ordering = ['sort_order', 'title']
+        constraints = [
+            *DateRangeModel.Meta.constraints,
+            models.CheckConstraint(
+                condition=(models.Q(fee_mode='fixed', amount_usd__isnull=False, amount_usd__gte=0, percent__isnull=True)
+                           | models.Q(fee_mode='percent', percent__isnull=False, percent__gte=0, percent__lte=100,
+                                    amount_usd__isnull=True)),
+                name='pricing_brokerservicefee_mode_fields',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.fee_mode == FeeMode.FIXED and (self.amount_usd is None or self.percent is not None):
+            raise ValidationError('Режим «Фіксована сума»: заповніть суму, відсоток залиште порожнім.')
+        if self.fee_mode == FeeMode.PERCENT and (self.percent is None or self.amount_usd is not None):
+            raise ValidationError('Режим «Відсоток»: заповніть відсоток, суму залиште порожньою.')
+
+    def __str__(self):
+        value = f'${self.amount_usd}' if self.fee_mode == FeeMode.FIXED else f'{self.percent}% від ціни аукціону'
+        return f'{self.title}: {value}'
+
+
+class RateSource(models.TextChoices):
+    """Происхождение курса (2.6): курс `demo` из сида включает демо-баннер."""
+    NBU = 'nbu', 'НБУ'
+    MANUAL = 'manual', 'Вручну'
+    DEMO = 'demo', 'Демо (сид)'
+
+
 class ExchangeRate(models.Model):
     from_currency = models.CharField(max_length=3, verbose_name='Из валюты')
     to_currency = models.CharField(max_length=3, verbose_name='В валюту')
     rate = models.DecimalField(max_digits=14, decimal_places=6, verbose_name='Курс')
     date = models.DateField(verbose_name='Дата')
+    source = models.CharField(max_length=10, choices=RateSource.choices, default=RateSource.MANUAL,
+                              verbose_name='Джерело')
 
     class Meta:
         verbose_name = 'Курс валют'
@@ -317,6 +405,44 @@ class CustomsCalcRule(DateRangeModel):
     def __str__(self):
         mark = '✓ звірено' if self.confirmed_by_broker else 'не звірено'
         return f'Правило розмитнення з {self.valid_from} ({mark})'
+
+
+DEFAULT_RESULT_WARNING = (
+    'Розрахунок є орієнтовним. Ставки аукціонних зборів і доставки звіряються з тарифом брокера. '
+    'Фінальний розрахунок підтверджує митний брокер.'
+)
+DEFAULT_DEMO_BANNER_TITLE = 'Тестові тарифи — розрахунок демонстраційний'
+DEFAULT_DEMO_BANNER_TEXT = (
+    'Частина ставок ще не перевірена власником сайту. Не використовуйте ці цифри для реальних угод.'
+)
+DEFAULT_ESTIMATE_NOTE = 'Орієнтовний розрахунок.'
+
+
+class CalculatorSettings(models.Model):
+    """Тексты калькулятора (2.6, 02-C1, 09-C6, Q5). Одна запись pk=1, редактируется в админке."""
+    result_warning = models.TextField('Попередження під результатом', default=DEFAULT_RESULT_WARNING)
+    demo_banner_title = models.CharField('Заголовок демо-банера', max_length=200, default=DEFAULT_DEMO_BANNER_TITLE)
+    demo_banner_text = models.TextField('Текст демо-банера', default=DEFAULT_DEMO_BANNER_TEXT)
+    estimate_note = models.CharField(
+        'Позначка «орієнтовний розрахунок»', max_length=200, default=DEFAULT_ESTIMATE_NOTE,
+        help_text='Показується під підсумком, поки є неперевірені ставки або правило не звірене з брокером.',
+    )
+
+    class Meta:
+        verbose_name = 'Налаштування калькулятора'
+        verbose_name_plural = 'Налаштування калькулятора'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return 'Налаштування калькулятора'
 
 
 class Calculation(models.Model):

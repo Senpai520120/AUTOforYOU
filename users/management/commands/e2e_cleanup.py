@@ -25,6 +25,7 @@ class Command(BaseCommand):
         from listings.models import Listing
         from local_listings.models import LocalListing
         from messaging.models import Conversation
+        from pricing.models import BrokerServiceFee, UaDeliveryRate
         from shipments.models import Shipment
         from vehicles.models import Vehicle
 
@@ -44,6 +45,9 @@ class Command(BaseCommand):
                 (LocalListing, Q(owner_id__in=user_ids) | Q(description__startswith=E2E_PREFIX)),
                 (Vehicle, Q(vin__startswith=E2E_VIN_PREFIX)),
                 (User, Q(pk__in=user_ids)),
+                # Демо-тарифы калькулятора из e2e_seed (2.7): иначе держат демо-баннер на стенде
+                (UaDeliveryRate, Q(destination__startswith=E2E_PREFIX)),
+                (BrokerServiceFee, Q(title__startswith=E2E_PREFIX)),
             )
             counts = {}
             for model, cond in plan:

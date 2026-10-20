@@ -38,6 +38,7 @@ test.describe('Калькулятор вартості', () => {
     });
   });
 
+  // Банер — за is_demo з API (2.6): на сид-тарифах (неперевірених) він видно.
   test('форма містить підписані поля і демо-банер', async ({ page }) => {
     await page.goto('/calculator');
     await expect(page).toHaveTitle(/AUTOforYOU/);
@@ -61,23 +62,24 @@ test.describe('Калькулятор вартості', () => {
     // Раніше тут стояв if (count > 0) навколо кліку і waitForTimeout(3000):
     // тест був зеленим навіть якщо кнопки не існує, а розрахунок не відбувся.
     await expect(
-      page.getByRole('heading', { name: 'Детализация стоимости «под ключ»' }),
+      page.getByRole('heading', { name: 'Деталізація вартості «під ключ»' }),
     ).toBeVisible();
 
     for (const article of [
-      'Цена аукциона',
-      'Аукционный сбор',
-      'Логистика США',
-      'Морской фрахт',
-      'Пошлина 10%',
-      'НДС 20%',
-      'Пенсионный сбор',
+      'Ціна аукціону',
+      'Аукціонний збір',
+      'Логістика США',
+      'Морський фрахт',
+      'Мито 10%',
+      'ПДВ 20%',
     ]) {
       await expect(page.getByRole('cell', { name: article, exact: true })).toBeVisible();
     }
+    // Відсоток пенсійного збору — з applied_rates відповіді (2.6), а не з коду.
+    await expect(page.getByRole('cell', { name: /^Пенсійний збір \d+(\.\d+)?%$/ })).toBeVisible();
 
     // Підсумок має бути додатним числом, а не прочерком.
-    const total = page.getByRole('row').filter({ hasText: 'ИТОГО' });
+    const total = page.getByRole('row').filter({ hasText: 'РАЗОМ' });
     await expect(total).toBeVisible();
     await expect(total).not.toContainText('—');
   });

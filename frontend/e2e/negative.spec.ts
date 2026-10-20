@@ -111,7 +111,7 @@ test.describe('Калькулятор — негативні сценарії', 
     await page.goto('/calculator');
   });
 
-  const RESULT = 'Детализация стоимости «под ключ»';
+  const RESULT = 'Деталізація вартості «під ключ»';
   const isCalcPost = (r: { url(): string; method(): string }) =>
     r.url().includes('/pricing/calculate/') && r.method() === 'POST';
 

@@ -109,7 +109,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
 
           <div className="mt-6 flex flex-col gap-3">
             <Link
-              href={`/calculator?price=${listing.price}&engine_cc=${v.engine_cc}&fuel_type=${v.fuel_type}&year=${v.year}`}
+              href={calculatorHref(listing.id, v)}
               className="bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm text-center"
             >
               Порахувати вартість
@@ -131,4 +131,12 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
       </div>
     </div>
   );
+}
+
+// 09-Q3: у лота немає ціни аукціону — у калькулятор ідуть лише параметри авто і id лота.
+function calculatorHref(listingId: number, v: { engine_cc: number | null; fuel_type: string; year: number; source_auction: string }): string {
+  const q = new URLSearchParams({ fuel_type: v.fuel_type, year: String(v.year), listing: String(listingId) });
+  if (v.engine_cc) q.set('engine_cc', String(v.engine_cc));
+  if (v.source_auction === 'copart' || v.source_auction === 'iaai') q.set('auction', v.source_auction);
+  return `/calculator?${q.toString()}`;
 }

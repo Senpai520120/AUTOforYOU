@@ -71,6 +71,7 @@ class Command(BaseCommand):
             self._conversation(users['buyer'], users['seller'])
             self._site_settings()
             self._leads(users['buyer'])
+            self._ua_delivery_and_broker()
 
         self.stdout.write('E2E seed: сводка (создано / уже было)')
         for key in sorted(set(self.created) | set(self.existing)):
@@ -231,6 +232,24 @@ class Command(BaseCommand):
                 # Вредное значение кладём напрямую: clean_attribution его бы отсёк, а тест проверяет экранирование.
                 Lead.objects.filter(pk=lead.pk).update(utm=utm)
             self._note('leads', created)
+
+    def _ua_delivery_and_broker(self):
+        """Демо-строки для calculator-ua-delivery.spec.ts (2.7): только e2e, не проверены (is_demo)."""
+        from datetime import date
+        from decimal import Decimal
+
+        from pricing.models import BrokerServiceFee, UaDeliveryRate
+
+        start = date(2000, 1, 1)
+        _, created = UaDeliveryRate.objects.get_or_create(
+            destination='[E2E] Київ', eu_port='', valid_from=start, defaults={'cost_usd': Decimal('300')})
+        self._note('ua_delivery_rate', created)
+        _, created = UaDeliveryRate.objects.get_or_create(
+            destination='[E2E] Ужгород', eu_port='', valid_from=start, defaults={'quote_on_request': True})
+        self._note('ua_delivery_rate', created)
+        _, created = BrokerServiceFee.objects.get_or_create(
+            title='[E2E] Послуги брокера', valid_from=start, defaults={'amount_usd': Decimal('500')})
+        self._note('broker_service_fee', created)
 
     def _site_settings(self):
         """Реквизиты и документы для legal.spec.ts (синглтон pk=1)."""

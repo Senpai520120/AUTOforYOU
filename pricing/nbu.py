@@ -43,7 +43,7 @@ def fetch_and_save_rates(rate_date: date | None = None) -> list[str]:
             from_currency=valcode,
             to_currency='UAH',
             date=rate_date,
-            defaults={'rate': nbu_rate},
+            defaults={'rate': nbu_rate, 'source': 'nbu'},
         )
         updated.append(f'{valcode}/UAH = {nbu_rate}')
 
@@ -61,7 +61,7 @@ def fetch_and_save_rates(rate_date: date | None = None) -> list[str]:
             from_currency='USD',
             to_currency='EUR',
             date=rate_date,
-            defaults={'rate': usd_eur},
+            defaults={'rate': usd_eur, 'source': 'nbu'},
         )
         updated.append(f'USD/EUR = {usd_eur}')
 

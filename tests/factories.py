@@ -116,3 +116,13 @@ def make_listing(vehicle, seller, channel='retail', status='in_stock', **kw):
     return Listing.objects.create(
         vehicle=vehicle, seller=seller, channel=channel, status=status, **defaults,
     )
+
+
+def make_lead(**kw):
+    from django.utils import timezone
+
+    from leads.models import Lead
+    defaults = dict(name='Тест', phone='+380501234567', consent_at=timezone.now(), partner_consent_at=timezone.now(),
+                    source='calculator')
+    defaults.update(kw)
+    return Lead.objects.create(**defaults)

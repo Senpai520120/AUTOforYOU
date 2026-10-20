@@ -309,6 +309,8 @@ REST_FRAMEWORK = {
         'data_export': os.environ.get('THROTTLE_DATA_EXPORT_RATE', '5/day'),
         # Отчёты об ошибках фронтенда (7.6), на IP: не даёт забить мониторинг мусором.
         'client_errors': os.environ.get('THROTTLE_CLIENT_ERRORS_RATE', '20/hour'),
+        # Калькулятор (2.6, 02-S2): каждый расчёт пишет Calculation.
+        'calculator': os.environ.get('THROTTLE_CALCULATOR_RATE', '30/hour'),
     },
     'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -390,6 +392,8 @@ LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
 
 # ─── Аукционные сборы ─────────────────────────────────────────────────────────
 AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
+# Анонимные расчёты старше N дней удаляет pricing.tasks.purge_anonymous_calculations (2.6, 02-S2).
+ANON_CALCULATION_TTL_DAYS = int(os.environ.get('ANON_CALCULATION_TTL_DAYS', '30'))
 
 # ─── Anti-spam ────────────────────────────────────────────────────────────────
 # 'soft' = flag listings for review, warn in message response (default)
@@ -471,6 +475,11 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 from celery.schedules import crontab as _crontab  # noqa: E402
 
 CELERY_BEAT_SCHEDULE = {
+    # Очистка старых анонимных расчётов (2.6, 02-S2)
+    'purge-anonymous-calculations-daily': {
+        'task': 'pricing.tasks.purge_anonymous_calculations',
+        'schedule': _crontab(hour=3, minute=45),
+    },
     # Курс НБУ: каждый день в 09:00 по Киеву
     'fetch-nbu-rates-daily': {
         'task': 'pricing.tasks.fetch_nbu_rates_task',

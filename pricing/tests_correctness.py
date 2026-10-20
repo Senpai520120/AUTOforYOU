@@ -58,8 +58,11 @@ class SeededCase(CleanCacheTestCase):
         call_command('seed_rates', verbosity=0)
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
-    def calc(self, **extra):
-        return APIClient().post(CALC_URL, {**PAYLOAD, **extra}, format='json')
+    def calc(self, as_staff=False, **extra):
+        client = APIClient()
+        if as_staff:  # 2.6: список недостающих тарифов в 422 видят только staff/broker
+            client.force_authenticate(make_staff(superuser=True))
+        return client.post(CALC_URL, {**PAYLOAD, **extra}, format='json')
 
 
 # ─── Чистый подбор без БД ────────────────────────────────────────────────────
@@ -238,7 +241,7 @@ class ExchangeRateDateTests(SeededCase):
         self.assertEqual(self.calc(calculation_date='2026-01-20').json()['exchange_rate_date'], '2026-01-20')
 
     def test_no_earlier_rate_is_422(self):
-        resp = self.calc(calculation_date='2026-01-05')
+        resp = self.calc(as_staff=True, calculation_date='2026-01-05')
         self.assertEqual(resp.status_code, 422)
         self.assertIn('ExchangeRate USD→UAH', resp.json()['missing'])
 
@@ -359,14 +362,14 @@ class CustomsRuleTests(SeededCase):
 
     def test_no_bracket_is_422(self):
         PensionFundBracket.objects.all().delete()
-        resp = self.calc()
+        resp = self.calc(as_staff=True)
         self.assertEqual(resp.status_code, 422)
         self.assertIn('PensionFundBracket', resp.json()['missing'])
 
     def test_bracket_gap_for_base_is_422(self):
         PensionFundBracket.objects.filter(min_value_uah=D('0')).update(min_value_uah=D('1000000'), max_value_uah=None)
         PensionFundBracket.objects.exclude(min_value_uah=D('1000000')).delete()
-        resp = self.calc()
+        resp = self.calc(as_staff=True)
         self.assertEqual(resp.status_code, 422)
         self.assertEqual(resp.json()['missing'], ['PensionFundBracket'])
 
@@ -386,7 +389,7 @@ class CustomsRuleTests(SeededCase):
         invalidate('rules')
         resp = self.calc()
         self.assertEqual(resp.status_code, 500)
-        self.assertEqual(resp.json()['error'], 'Не вдалося виконати розрахунок. Спробуйте пізніше.')
+        self.assertEqual(resp.json(), {'error': 'internal_error'})
 
     def test_default_rule_dataclass_matches_model_defaults(self):
         model_rule = CustomsCalcRule(valid_from=TODAY)
@@ -421,7 +424,7 @@ class EvTests(SeededCase):
         CustomsExciseRate.objects.filter(fuel_type='electric').update(ev_excise_eur_per_kwh=None)
         from pricing.cache import invalidate
         invalidate('excise')
-        resp = self.calc(fuel_type='electric', battery_capacity_kwh='60')
+        resp = self.calc(as_staff=True, fuel_type='electric', battery_capacity_kwh='60')
         self.assertEqual(resp.status_code, 422)
         self.assertTrue(any('ставки акцизу EV' in m for m in resp.json()['missing']))
 
@@ -447,7 +450,7 @@ class SnapshotAndAdminTests(SeededCase):
     def test_empty_rates_422_without_500(self):
         for model in (UsLandRoute, OceanFreightRate, EuToUaDeliveryRate, CustomsExciseRate):
             model.objects.all().delete()
-        resp = self.calc()
+        resp = self.calc(as_staff=True)
         self.assertEqual(resp.status_code, 422)
         self.assertEqual(len(resp.json()['missing']), 4)
 

@@ -1944,12 +1944,18 @@ paths:
         '400':
           description: Ошибка валидации входных данных
         '422':
-          description: Отсутствуют активные тарифы в БД
+          description: 'Нет активных тарифов: `not_configured` (+ `missing` для staff/broker)'
+        '429':
+          description: Превышен лимит расчётов (scope `calculator`)
+        '500':
+          description: '`{"error": "internal_error"}` без деталей'
   /api/v1/pricing/rates/:
     get:
       operationId: v1_pricing_rates_retrieve
-      description: Возвращает все тарифы, действующие на сегодняшний день.
-      summary: Активные тарифы
+      description: 'Всем: `options` (значения формы из активных тарифов, без сумм)
+        и `is_demo` (Q11). staff и broker дополнительно получают полную тарифную сетку
+        на сегодня.'
+      summary: Справочники калькулятора (и тарифы для staff/broker)
       tags:
       - pricing
       security:
@@ -1962,7 +1968,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ActiveRatesResponse'
-          description: ''
+          description: Ключи сетки (auction_fee_tiers и др.) - только для staff и
+            broker.
   /api/v1/reports/:
     post:
       operationId: v1_reports_create
@@ -2346,14 +2353,38 @@ components:
         pension_brackets:
           type: array
           items: {}
+        ua_delivery_rates:
+          type: array
+          items: {}
+          description: 'Гостям: id, destination, eu_port, quote_on_request (без сумм);
+            staff/broker - с cost_usd'
+        broker_service_fees:
+          type: array
+          items: {}
+          description: 'Гостям: id, title (без сумм и процентов); staff/broker - с
+            fee_mode, amount_usd, percent'
+        options:
+          type: object
+          additionalProperties: {}
+          description: Справочники формы без сумм (auctions, us_ports, eu_ports, …)
+        is_demo:
+          type: boolean
+        demo_banner:
+          type: object
+          additionalProperties: {}
       required:
       - auction_fee_tiers
       - auction_fixed_fees
+      - broker_service_fees
+      - demo_banner
       - eu_to_ua
       - exchange_rates
       - excise_rates
+      - is_demo
       - ocean_freight
+      - options
       - pension_brackets
+      - ua_delivery_rates
       - us_land_routes
     ArrivalPortEuEnum:
       enum:
@@ -2784,17 +2815,11 @@ components:
           - $ref: '#/components/schemas/AuctionEnum'
           default: copart
         member_type:
-          allOf:
-          - $ref: '#/components/schemas/MemberTypeEnum'
-          default: broker
+          $ref: '#/components/schemas/MemberTypeEnum'
         payment_type:
-          allOf:
-          - $ref: '#/components/schemas/PaymentTypeEnum'
-          default: secured
+          $ref: '#/components/schemas/PaymentTypeEnum'
         title_type:
-          allOf:
-          - $ref: '#/components/schemas/TitleTypeEnum'
-          default: salvage
+          $ref: '#/components/schemas/TitleTypeEnum'
         auction_location:
           type: string
           minLength: 1
@@ -2806,9 +2831,14 @@ components:
           default: houston
           maxLength: 50
         eu_port:
-          allOf:
-          - $ref: '#/components/schemas/EuPortEnum'
+          type: string
+          minLength: 1
           default: klaipeda
+          maxLength: 20
+        ua_delivery_rate:
+          type: integer
+          minimum: 1
+          nullable: true
         calculation_date:
           type: string
           format: date
@@ -3172,11 +3202,6 @@ components:
       required:
       - display_name
       - id
-    EuPortEnum:
-      enum:
-      - klaipeda
-      - gdansk
-      type: string
     FuelType94dEnum:
       enum:
       - petrol
