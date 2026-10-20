@@ -199,6 +199,29 @@ else:
     STATIC_URL = '/static/'
     STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# ─── Безопасная загрузка изображений (задача 1.10, core/uploads.py) ────────────
+# Тип определяется по содержимому; файл пересохраняется без EXIF/GPS с uuid-именем.
+UPLOAD_IMAGE_MAX_SIZE_MB = int(os.environ.get('UPLOAD_IMAGE_MAX_SIZE_MB', '8'))
+# Защита от decompression bomb: ширина × высота.
+UPLOAD_IMAGE_MAX_PIXELS = int(os.environ.get('UPLOAD_IMAGE_MAX_PIXELS', '25000000'))
+# Только из JPEG, PNG, WEBP (другие форматы сервис не пересохраняет и игнорирует).
+UPLOAD_IMAGE_ALLOWED_FORMATS = [
+    f.strip().upper() for f in os.environ.get('UPLOAD_IMAGE_ALLOWED_FORMATS', 'JPEG,PNG,WEBP').split(',')
+    if f.strip()
+]
+UPLOAD_IMAGE_JPEG_QUALITY = int(os.environ.get('UPLOAD_IMAGE_JPEG_QUALITY', '85'))
+# Хосты, с которых upload_lot_photos может качать фото лотов (и редиректы). Пусто — перенос выключен.
+# `*.example.com` — любой поддомен example.com.
+LOT_PHOTO_ALLOWED_HOSTS = [
+    h.strip().lower() for h in os.environ.get('LOT_PHOTO_ALLOWED_HOSTS', '').split(',') if h.strip()
+]
+# Приватные файлы (фото трекинга): вне MEDIA_ROOT, nginx их напрямую не отдаёт.
+PRIVATE_MEDIA_ROOT = os.environ.get('PRIVATE_MEDIA_ROOT', '') or os.path.join(BASE_DIR, 'private_media')
+# true — отдавать через nginx (X-Accel-Redirect на internal-location /protected-media/).
+# Срок жизни подписанной ссылки S3 на приватный файл, секунд.
+PRIVATE_MEDIA_URL_EXPIRE = int(os.environ.get('PRIVATE_MEDIA_URL_EXPIRE', '300'))
+PRIVATE_MEDIA_USE_X_ACCEL = os.environ.get('PRIVATE_MEDIA_USE_X_ACCEL', 'false').lower() in ('true', '1', 'yes')
+
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 # Раньше было CORS_ALLOW_ALL_ORIGINS = DEBUG. Из-за DEBUG=true в .env бэкенд
 # в Docker отдавал Access-Control-Allow-Origin любому сайту вместе с
@@ -307,6 +330,8 @@ REST_FRAMEWORK = {
         'expensive': _THROTTLE_EXPENSIVE,
         'messages': os.environ.get('THROTTLE_MESSAGES_RATE', '30/hour'),
         'contact': os.environ.get('THROTTLE_CONTACT_RATE', '20/hour'),
+        # Загрузка фото (задача 1.10): каждый запрос — декодирование и пересохранение картинок.
+        'uploads': os.environ.get('THROTTLE_UPLOADS_RATE', '30/hour'),
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
         'lead': os.environ.get('THROTTLE_LEAD_RATE', '5/hour'),
         'lead_export': os.environ.get('THROTTLE_LEAD_EXPORT_RATE', '10/hour'),
@@ -406,7 +431,8 @@ SELLER_BADGE_THRESHOLD = int(os.environ.get('SELLER_BADGE_THRESHOLD', '3'))
 LOCAL_LISTING_MAX_ACTIVE = int(os.environ.get('LOCAL_LISTING_MAX_ACTIVE', '10'))
 # Фото: максимальна кількість на оголошення і розмір файлу
 LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
-LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '8'))
+# Пусто — общий UPLOAD_IMAGE_MAX_SIZE_MB (задача 1.10).
+LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '') or 0) or None
 LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'))
 
 # ─── Внешние API ──────────────────────────────────────────────────────────────
@@ -550,6 +576,8 @@ if _TESTING:
     TELEGRAM_BOT_TOKEN = ''
     TELEGRAM_BROKER_CHAT_ID = ''
     LEAD_JOURNAL_CHAT_ID = ''
+    LOT_PHOTO_ALLOWED_HOSTS = []
+    PRIVATE_MEDIA_USE_X_ACCEL = False
     TURNSTILE_SITE_KEY = ''
     TURNSTILE_SECRET_KEY = ''
     CAPTCHA_PROVIDER = 'off'

@@ -182,6 +182,14 @@ class Command(BaseCommand):
         shipment.vehicles.add(vehicle)
         shipment.watchers.add(buyer)
         self._note('shipments', created)
+        # Событие с фото (задача 1.10): проверка приватной отдачи на реальном файле.
+        from shipments.models import TrackingEvent
+
+        if not TrackingEvent.objects.filter(shipment=shipment).exclude(photo='').exclude(photo=None).exists():
+            data = self._photo_bytes(FIXTURE_PHOTOS[0])
+            if data:
+                event = TrackingEvent(shipment=shipment, status=shipment.status, note=f'{E2E_PREFIX} Фото в порту')
+                event.photo.save('e2e-port.jpg', ContentFile(data), save=True)
 
     def _conversation(self, buyer, seller):
         from local_listings.models import LocalListing

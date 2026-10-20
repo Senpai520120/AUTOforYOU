@@ -2009,6 +2009,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Shipment'
           description: ''
+  /api/v1/shipments/{id}/events/{event_id}/photo/:
+    get:
+      operationId: v1_shipments_events_photo_retrieve
+      description: 'Файл фото з приватного сховища. Доступ: хто відстежує контейнер,
+        адміністратор, або співробітник з правом перегляду подій трекінгу в адмінці.
+        Чужим — 404.'
+      summary: Фото події трекінгу (приватне)
+      parameters:
+      - in: path
+        name: event_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - shipments
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/v1/site-settings/:
     get:
       operationId: v1_site_settings_retrieve
@@ -5135,9 +5166,8 @@ components:
           title: Комментарий
         photo:
           type: string
-          format: uri
           nullable: true
-          title: Фото
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -5145,6 +5175,7 @@ components:
       required:
       - created_at
       - id
+      - photo
       - status
       - status_display
     TransmissionEnum:

@@ -1,8 +1,20 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, дальше 1.10 → 1.11 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, дальше 1.11 → 1.8 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.10: безопасные загрузки (2026-10-20, Opus) — ЗАВЕРШЕНО
+
+- `core/uploads.py`: тип по содержимому (Pillow, `formats=`), лимиты байт (до чтения) и пикселей (`UPLOAD_IMAGE_MAX_PIXELS` 25M, `MAX_IMAGE_PIXELS` при импорте), поворот по EXIF, пересохранение без EXIF/GPS/ICC/XMP/PNG-текста, имя `uuid.ext`. `SanitizedImageField` на фото C2C, авто и трекинга (очистка в `FieldFile.save`: API, админка, `advance_status`, `upload_lot_photos`, `e2e_seed`). Миграции `local_listings/0007`, `vehicles/0004`, `shipments/0002` — только смена класса поля.
+- Загрузка фото C2C: throttle `THROTTLE_UPLOADS_RATE` (30/час), всё или ничего, файлы удаляются при откате.
+- `upload_lot_photos`: allowlist `LOT_PHOTO_ALLOWED_HOSTS`, только https, проверка IP после резолва (private/loopback/link-local/CGNAT/reserved), до 3 редиректов, общий дедлайн 30 с, обрыв потока по лимиту. Остаточный риск: DNS-rebinding между проверкой и соединением (ограничен allowlist и https).
+- Фото трекинга — приватное хранилище `PRIVATE_MEDIA_ROOT` (S3: `private/`, подписанные ссылки `PRIVATE_MEDIA_URL_EXPIRE` 300 с), отдача только `GET /api/v1/shipments/<pk>/events/<id>/photo/` (watcher, admin-роль, `view_trackingevent`) через `FileResponse` или `X-Accel-Redirect`. nginx: `nosniff`, `attachment` для не-картинок, `/media/tracking_photos/` 404, internal `/protected-media/`, том `private_media`.
+- Команда `sanitize_existing_images` (по умолчанию план; `--apply`, `--delete-invalid`), перенос старых фото трекинга в приватное хранилище.
+- Проверки: бэкенд 1110 OK, Postgres 591 OK, e2e `uploads`+`cabinet` 16 passed (X-Accel на реальном файле). Ревью `security-reviewer`: 1 «важно» + 6 «желательно» исправлены.
+- Для владельца: заполнить `LOT_PHOTO_ALLOWED_HOSTS` (не `*.amazonaws.com`/`*.cloudfront.net`), на сервере запустить `sanitize_existing_images` (сначала без флагов) и включить `PRIVATE_MEDIA_USE_X_ACCEL`; в локальном `.env.e2e` — `PRIVATE_MEDIA_USE_X_ACCEL=true`, `THROTTLE_UPLOADS_RATE`. Хардкод «15» и «до 8 МБ» в `PhotoUploadBlock` — задача 4.2.
 
 ---
 

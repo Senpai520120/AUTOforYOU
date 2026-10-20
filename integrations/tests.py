@@ -2,9 +2,13 @@
 Тесты интеграции: Opendatabot (провайдер, кэш, эндпоинт) + импорт лотов аукционов.
 """
 from decimal import Decimal
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from django.test import SimpleTestCase, TestCase
+import httpx
+from django.core.management import call_command
+from django.test import SimpleTestCase, TestCase, override_settings
+from PIL import Image as PILImage
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -13,6 +17,7 @@ from integrations.models import RegistryReport
 from integrations.providers import ApifyLotProvider, ManualLotProvider, RealOpendatabotProvider
 from listings.models import Listing
 from tests.factories import auth_client, make_admin_role, make_broker, make_moderator, make_staff, make_user
+from tests.test_uploads import image_bytes, use_temp_media
 from vehicles.models import Vehicle, VehicleImage
 
 # ── Провайдер: без ключа → demo ───────────────────────────────────────────────
@@ -715,3 +720,195 @@ class TestPurgeRegistryErrorsCommand(TestCase):
     def test_confirm_deletes_only_error_records(self):
         self._run('--confirm')
         self.assertEqual(list(RegistryReport.objects.values_list('vin', flat=True)), ['B' * 17])
+
+
+# ── upload_lot_photos: allowlist хостов, лимит, тип по содержимому (1.10, 03-S5, 23-D63) ──
+
+LOT_MODULE = 'integrations.management.commands.upload_lot_photos'
+LOT_CMD = f'{LOT_MODULE}._make_client'
+PUBLIC_IP = '93.184.216.34'
+
+
+@override_settings(LOT_PHOTO_ALLOWED_HOSTS=['cdn.lots.test', '*.img.test'], UPLOAD_IMAGE_MAX_SIZE_MB=1)
+class TestUploadLotPhotos(TestCase):
+    def setUp(self):
+        use_temp_media(self)
+        self.vehicle = Vehicle.objects.create(
+            vin='LOTPHOTO000000001', make='Ford', model='Focus', year=2019,
+            engine_cc=1600, fuel_type='petrol', mileage_km=1000,
+        )
+        self.calls = []
+        # DNS в тестах не ходит: по умолчанию хосты резолвятся в публичный адрес.
+        self.resolved = [PUBLIC_IP]
+        resolver = patch(f'{LOT_MODULE}._resolve', side_effect=lambda host, port: list(self.resolved))
+        self.resolve_mock = resolver.start()
+        self.addCleanup(resolver.stop)
+
+    def _image(self, url='https://cdn.lots.test/a.jpg'):
+        return VehicleImage.objects.create(vehicle=self.vehicle, source_url=url)
+
+    def _run(self, handler):
+        def recording(request):
+            self.calls.append(str(request.url))
+            return handler(request)
+
+        client = httpx.Client(transport=httpx.MockTransport(recording), follow_redirects=False)
+        out = StringIO()
+        with patch(LOT_CMD, return_value=client):
+            call_command('upload_lot_photos', stdout=out)
+        return out.getvalue()
+
+    def test_valid_jpeg_saved_without_exif(self):
+        img = self._image()
+        self._run(lambda r: httpx.Response(200, content=image_bytes(gps=True),
+                                           headers={'content-type': 'image/jpeg'}))
+        img.refresh_from_db()
+        self.assertRegex(img.image.name, r'^vehicle_photos/[0-9a-f]{32}\.jpg$')
+        with img.image.open('rb') as fh, PILImage.open(fh) as saved:
+            self.assertEqual(dict(saved.getexif()), {})
+
+    def test_wildcard_subdomain_allowed(self):
+        img = self._image('https://x1.img.test/a.jpg')
+        self._run(lambda r: httpx.Response(200, content=image_bytes()))
+        img.refresh_from_db()
+        self.assertTrue(img.image)
+
+    def test_wildcard_does_not_match_suffix_without_dot(self):
+        img = self._image('https://evilimg.test/a.jpg')
+        self._run(lambda r: httpx.Response(200, content=image_bytes()))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(self.calls, [])
+
+    def test_response_over_limit_skipped(self):
+        img = self._image()
+        # Без Content-Length: обрыв по счётчику байт при чтении потока.
+        big = image_bytes() + b'\0' * (1024 * 1024)
+        out = self._run(lambda r: httpx.Response(200, stream=httpx.ByteStream(big)))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertIn('ліміт', out)
+
+    def test_html_with_image_content_type_skipped(self):
+        img = self._image()
+        self._run(lambda r: httpx.Response(200, content=b'<html><script>1</script></html>',
+                                           headers={'content-type': 'image/jpeg'}))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+
+    def test_redirect_to_foreign_host_not_followed(self):
+        img = self._image()
+
+        def handler(request):
+            if request.url.host == 'cdn.lots.test':
+                return httpx.Response(302, headers={'location': 'http://169.254.169.254/latest/meta-data'})
+            return httpx.Response(200, content=image_bytes())
+
+        out = self._run(handler)
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(self.calls, ['https://cdn.lots.test/a.jpg'])
+        self.assertIn('169.254.169.254', out)
+
+    def test_redirect_within_allowed_hosts_followed(self):
+        img = self._image()
+
+        def handler(request):
+            if request.url.path == '/a.jpg':
+                return httpx.Response(302, headers={'location': '/b.jpg'})
+            return httpx.Response(200, content=image_bytes())
+
+        self._run(handler)
+        img.refresh_from_db()
+        self.assertTrue(img.image)
+        self.assertEqual(self.calls, ['https://cdn.lots.test/a.jpg', 'https://cdn.lots.test/b.jpg'])
+
+    def test_redirect_loop_stops(self):
+        img = self._image()
+        self._run(lambda r: httpx.Response(302, headers={'location': '/again.jpg'}))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(len(self.calls), 4)  # исходный запрос + 3 редиректа
+
+    def test_source_host_outside_allowlist_not_requested(self):
+        img = self._image('https://evil.test/a.jpg')
+        self._run(lambda r: httpx.Response(200, content=image_bytes()))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(self.calls, [])
+
+    def test_http_source_rejected(self):
+        img = self._image('http://cdn.lots.test/a.jpg')
+        self._run(lambda r: httpx.Response(200, content=image_bytes()))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(self.calls, [])
+
+    def test_redirect_to_http_rejected(self):
+        img = self._image()
+        self._run(lambda r: httpx.Response(302, headers={'location': 'http://cdn.lots.test/b.jpg'}))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(self.calls, ['https://cdn.lots.test/a.jpg'])
+
+    def test_allowed_host_resolving_to_internal_ip_rejected(self):
+        for ip in ('127.0.0.1', '10.0.0.5', '192.168.1.1', '169.254.169.254', '0.0.0.0',
+                   '224.0.0.1', '240.0.0.1', '::1', 'fe80::1', '::ffff:127.0.0.1', '100.64.0.1'):
+            with self.subTest(ip=ip):
+                self.calls.clear()
+                self.resolved = [PUBLIC_IP, ip]  # хоть один внутренний адрес — отказ
+                img = self._image()
+                out = self._run(lambda r: httpx.Response(200, content=image_bytes()))
+                img.refresh_from_db()
+                self.assertFalse(img.image)
+                self.assertEqual(self.calls, [])
+                self.assertIn('внутрішню адресу', out)
+                img.delete()
+
+    def test_redirect_target_resolving_to_internal_ip_rejected(self):
+        img = self._image()
+
+        def resolve(host, port):
+            return ['10.1.2.3'] if host == 'x1.img.test' else [PUBLIC_IP]
+
+        self.resolve_mock.side_effect = resolve
+        self._run(lambda r: httpx.Response(302, headers={'location': 'https://x1.img.test/b.jpg'}))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(self.calls, ['https://cdn.lots.test/a.jpg'])
+
+    def test_unresolvable_host_rejected(self):
+        img = self._image()
+        self.resolve_mock.side_effect = OSError('no such host')
+        self._run(lambda r: httpx.Response(200, content=image_bytes()))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertEqual(self.calls, [])
+
+    def test_slow_download_hits_total_deadline(self):
+        img = self._image()
+        body = image_bytes()
+        chunks = [body[i:i + 64] for i in range(0, len(body), 64)]
+        clock = iter(range(0, 10_000, 10))  # каждый вызов monotonic() — +10 с
+        with patch(f'{LOT_MODULE}.time.monotonic', side_effect=lambda: next(clock)):
+            out = self._run(lambda r: httpx.Response(200, stream=_SlowStream(chunks)))
+        img.refresh_from_db()
+        self.assertFalse(img.image)
+        self.assertIn('час завантаження', out)
+
+    @override_settings(LOT_PHOTO_ALLOWED_HOSTS=[])
+    def test_empty_allowlist_no_network(self):
+        self._image()
+        out = self._run(lambda r: httpx.Response(200, content=image_bytes()))
+        self.assertIn('не настроено', out)
+        self.assertEqual(self.calls, [])
+
+
+class _SlowStream(httpx.SyncByteStream):
+    """Тело ответа кусками (каждый кусок — отдельная итерация iter_bytes)."""
+
+    def __init__(self, chunks):
+        self.chunks = chunks
+
+    def __iter__(self):
+        yield from self.chunks

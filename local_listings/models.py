@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from core.uploads import SanitizedImageField, UuidUploadTo
+
 
 class Region(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name='Область')
@@ -203,7 +205,11 @@ class LocalListingImage(models.Model):
     listing = models.ForeignKey(
         LocalListing, on_delete=models.CASCADE, related_name='images', verbose_name='Оголошення'
     )
-    image = models.ImageField(upload_to='local_listings/', null=True, blank=True, verbose_name='Фото')
+    # Тип по содержимому, без EXIF, uuid-имя (задача 1.10, core/uploads.py).
+    image = SanitizedImageField(
+        upload_to=UuidUploadTo('local_listings'), max_size_setting='LOCAL_LISTING_PHOTO_MAX_SIZE_MB',
+        null=True, blank=True, verbose_name='Фото',
+    )
     source_url = models.CharField(max_length=500, blank=True, verbose_name='URL фото')
     is_primary = models.BooleanField(default=False, verbose_name='Головне фото')
     created_at = models.DateTimeField(auto_now_add=True)

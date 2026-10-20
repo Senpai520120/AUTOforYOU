@@ -41,6 +41,7 @@ services:
         condition: service_started
     volumes:
       - media:/app/media
+      - private_media:/app/private_media
       - static:/app/staticfiles
     # Gunicorn starts only after migrate+collectstatic finish; nginx waits for this.
     healthcheck:
@@ -132,6 +133,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static:/static:ro
       - media:/media:ro
+      # Приватные файлы (internal-location /protected-media/, задача 1.10).
+      - private_media:/private_media:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -143,3 +146,4 @@ volumes:
   postgres_data:
   static:
   media:
+  private_media:

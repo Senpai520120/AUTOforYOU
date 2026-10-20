@@ -72,3 +72,6 @@ frontend/e2e/.auth/
 
 # e2e-стек: локальный env (шаблон — .env.e2e.example)
 .env.e2e
+
+# Приватные файлы (фото трекинга, задача 1.10)
+private_media/

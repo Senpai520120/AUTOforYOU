@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import (
     Avg,
     Count,
@@ -18,9 +19,10 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
+from core.uploads import ImageUploadError, max_bytes_from_setting, sanitize_image
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
 from users.permissions import IsEmailVerified
@@ -250,9 +252,6 @@ class CityListView(generics.ListAPIView):
 
 # ─── Фото оголошень ───────────────────────────────────────────────────────────
 
-ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
-
-
 def _get_owned_listing(pk, user):
     listing = get_object_or_404(LocalListing, pk=pk)
     if listing.owner != user and not user.has_perm('local_listings.moderate_locallisting'):
@@ -268,6 +267,9 @@ def _get_owned_listing(pk, user):
 class LocalListingImageUploadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    # Каждый запрос декодирует и пересохраняет картинки (задача 1.10): отдельный лимит.
+    throttle_classes = [UserRateThrottle, ScopedRateThrottle]
+    throttle_scope = 'uploads'
 
     def post(self, request, pk):
         listing, err = _get_owned_listing(pk, request.user)
@@ -279,8 +281,7 @@ class LocalListingImageUploadView(APIView):
             return Response({'detail': 'Файли не передані (поле: images).'}, status=status.HTTP_400_BAD_REQUEST)
 
         max_photos = getattr(settings, 'LOCAL_LISTING_MAX_PHOTOS', 15)
-        max_size_mb = getattr(settings, 'LOCAL_LISTING_PHOTO_MAX_SIZE_MB', 8)
-        max_size_bytes = max_size_mb * 1024 * 1024
+        max_bytes = max_bytes_from_setting('LOCAL_LISTING_PHOTO_MAX_SIZE_MB')
 
         current_count = listing.images.count()
         if current_count + len(files) > max_photos:
@@ -289,27 +290,34 @@ class LocalListingImageUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        errors = []
+        # Тип — по содержимому (content_type и расширение клиента игнорируются), EXIF снимается,
+        # имя — uuid (задача 1.10). Сначала проверяются все файлы: всё или ничего.
+        errors, cleaned = [], []
         for f in files:
-            if f.content_type not in ALLOWED_IMAGE_TYPES:
-                errors.append(f'{f.name}: тип {f.content_type} не підтримується (тільки jpg/png/webp).')
-            if f.size > max_size_bytes:
-                errors.append(f'{f.name}: розмір {f.size // 1024 // 1024} МБ перевищує ліміт {max_size_mb} МБ.')
+            try:
+                cleaned.append(sanitize_image(f, max_bytes=max_bytes))
+            except ImageUploadError as exc:
+                errors.append(f'{(f.name or "файл")[:100]}: {exc}')
         if errors:
             return Response({'detail': errors}, status=status.HTTP_400_BAD_REQUEST)
 
         has_primary = listing.images.filter(is_primary=True).exists()
         created = []
-        for i, f in enumerate(files):
-            is_primary = not has_primary and i == 0
-            img = LocalListingImage.objects.create(
-                listing=listing,
-                image=f,
-                is_primary=is_primary,
-            )
-            if is_primary:
-                has_primary = True
-            created.append(img)
+        try:
+            with transaction.atomic():
+                for i, content in enumerate(cleaned):
+                    is_primary = not has_primary and i == 0
+                    img = LocalListingImage(listing=listing, image=content, is_primary=is_primary)
+                    created.append(img)  # до save(): файл пишется в pre_save, строка может не записаться
+                    img.save()
+                    if is_primary:
+                        has_primary = True
+        except Exception:
+            # Строки откатились — файлы, уже записанные в хранилище, не должны остаться сиротами.
+            for img in created:
+                if img.image and img.image._committed:
+                    img.image.storage.delete(img.image.name)
+            raise
 
         return Response(
             LocalListingImageSerializer(created, many=True).data,

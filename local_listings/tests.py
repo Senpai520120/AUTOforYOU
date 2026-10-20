@@ -1,13 +1,18 @@
 import io
+import os
 from datetime import timedelta
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import DatabaseError
 from django.test import override_settings
 from django.utils import timezone
 from PIL import Image as PILImage
 from rest_framework import status
 from rest_framework.test import APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
 from integrations.models import VinReport
 from local_listings.models import PromotionTariff
@@ -21,6 +26,7 @@ from tests.factories import (
     make_staff,
     make_user,
 )
+from tests.test_uploads import admin_form_data, image_bytes, use_temp_media
 
 from .models import City, LocalListing, LocalListingImage, Region
 from .services import approve_listing, reject_listing
@@ -446,6 +452,8 @@ def _make_image_file(name='photo.jpg', fmt='JPEG', size=(100, 100), content_type
 
 class TestListingImageUpload(APITestCase):
     def setUp(self):
+        self.media_root = use_temp_media(self)
+        cache.clear()  # счётчики throttle 'uploads' не переходят между тестами
         self.owner = make_user('owner@img.com')
         self.other = make_user('other@img.com')
         self.admin = make_staff('adm@img.com', superuser=True)
@@ -510,6 +518,140 @@ class TestListingImageUpload(APITestCase):
         self._auth(self.admin)
         r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
         self.assertEqual(r.status_code, 201)
+
+    # ─── 23-D19: тип по содержимому, размер, EXIF, имя (задача 1.10) ──────────
+
+    @override_settings(LOCAL_LISTING_PHOTO_MAX_SIZE_MB=1, UPLOAD_IMAGE_MAX_SIZE_MB=50)
+    def test_file_over_c2c_limit_rejected(self):
+        self._auth(self.owner)
+        big = SimpleUploadedFile('big.jpg', b'\xff\xd8' + b'0' * (1024 * 1024), content_type='image/jpeg')
+        r = self.client.post(self.url, {'images': big}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('завеликий', r.data['detail'][0])
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    def test_html_with_jpeg_content_type_rejected(self):
+        self._auth(self.owner)
+        evil = SimpleUploadedFile('x.jpg', b'<html><script>alert(1)</script></html>', content_type='image/jpeg')
+        r = self.client.post(self.url, {'images': evil}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('не є зображенням', r.data['detail'][0])
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    def test_png_with_text_content_type_accepted(self):
+        self._auth(self.owner)
+        png = _make_image_file('pic.txt', fmt='PNG', content_type='text/plain')
+        r = self.client.post(self.url, {'images': png}, format='multipart')
+        self.assertEqual(r.status_code, 201)
+        img = LocalListingImage.objects.get(listing=self.listing)
+        self.assertRegex(img.image.name, r'^local_listings/[0-9a-f]{32}\.png$')
+
+    def test_saved_file_has_no_gps_and_uuid_name(self):
+        self._auth(self.owner)
+        src = SimpleUploadedFile('home-kyiv.jpg', image_bytes(gps=True), content_type='image/jpeg')
+        r = self.client.post(self.url, {'images': src}, format='multipart')
+        self.assertEqual(r.status_code, 201)
+        img = LocalListingImage.objects.get(listing=self.listing)
+        self.assertRegex(img.image.name, r'^local_listings/[0-9a-f]{32}\.jpg$')
+        self.assertTrue(img.image.path.startswith(self.media_root))
+        with PILImage.open(img.image.path) as saved:
+            self.assertEqual(dict(saved.getexif()), {})
+        self.assertNotIn('home-kyiv', r.data[0]['image'])
+
+    def test_one_bad_file_of_three_creates_nothing(self):
+        self._auth(self.owner)
+        files = [
+            _make_image_file('a.jpg'),
+            SimpleUploadedFile('b.jpg', b'not an image', content_type='image/jpeg'),
+            _make_image_file('c.jpg'),
+        ]
+        r = self.client.post(self.url, {'images': files}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(len(r.data['detail']), 1)
+        self.assertTrue(r.data['detail'][0].startswith('b.jpg:'))
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    def test_db_failure_leaves_no_orphan_files(self):
+        # Вторая строка падает уже после записи файла: строки откатываются, файлы удаляются.
+        self._auth(self.owner)
+        original = LocalListingImage.save
+        calls = []
+
+        def flaky_save(instance, *args, **kwargs):
+            original(instance, *args, **kwargs)
+            calls.append(instance.image.name)
+            if len(calls) == 2:
+                raise DatabaseError('boom')
+
+        files = [_make_image_file('a.jpg'), _make_image_file('b.jpg')]
+        with patch.object(LocalListingImage, 'save', flaky_save), self.assertRaises(DatabaseError):
+            self.client.post(self.url, {'images': files}, format='multipart')
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+        for name in calls:
+            self.assertFalse(os.path.exists(os.path.join(self.media_root, name)), name)
+
+    def test_upload_throttled(self):
+        self._auth(self.owner)
+        with patch.dict(SimpleRateThrottle.THROTTLE_RATES, {'uploads': '2/hour'}):
+            for _ in range(2):
+                r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+                self.assertEqual(r.status_code, 201)
+            r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+        self.assertEqual(r.status_code, 429)
+
+    def test_existing_string_values_untouched(self):
+        # Уже сохранённые значения (строка-путь) поле не трогает.
+        img = LocalListingImage.objects.create(listing=self.listing, image='old/name.jpg')
+        img.is_primary = True
+        img.save()
+        img.refresh_from_db()
+        self.assertEqual(img.image.name, 'old/name.jpg')
+
+
+class TestLocalListingImageAdminUpload(APITestCase):
+    """Точка 2: inline фото в админке C2C — ошибка поля, а не 500; файл очищен."""
+
+    def setUp(self):
+        use_temp_media(self)
+        self.admin = make_staff('adm-ll-upl@img.com', superuser=True)
+        region = _make_region('adm-upl-область')
+        self.listing = _make_listing(self.owner_user(), region, _make_city(region, 'adm-upl-місто'))
+        self.client.force_login(self.admin)
+
+    def owner_user(self):
+        return make_user('own-ll-upl@img.com')
+
+    def _post(self, upload):
+        url = f'/admin/local_listings/locallisting/{self.listing.pk}/change/'
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        data = admin_form_data(page.context['adminform'].form, page.context['inline_admin_formsets'])
+        data['images-0-image'] = upload
+        return self.client.post(url, data)
+
+    def test_html_file_gives_field_error(self):
+        r = self._post(SimpleUploadedFile('x.jpg', b'<html></html>', content_type='image/jpeg'))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.context['inline_admin_formsets'][0].formset.errors[0]['image'])
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    @override_settings(LOCAL_LISTING_PHOTO_MAX_SIZE_MB=1, UPLOAD_IMAGE_MAX_SIZE_MB=50)
+    def test_over_c2c_limit_gives_field_error(self):
+        big = io.BytesIO()
+        PILImage.effect_noise((800, 800), 100).convert('RGB').save(big, format='PNG')
+        self.assertGreater(big.tell(), 1024 * 1024)
+        r = self._post(SimpleUploadedFile('big.png', big.getvalue(), content_type='image/png'))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('завеликий', str(r.context['inline_admin_formsets'][0].formset.errors[0]['image']))
+
+    def test_valid_jpeg_saved_clean(self):
+        r = self._post(SimpleUploadedFile('home.jpg', image_bytes(gps=True), content_type='image/jpeg'))
+        self.assertEqual(r.status_code, 302)
+        img = LocalListingImage.objects.get(listing=self.listing)
+        self.assertRegex(img.image.name, r'^local_listings/[0-9a-f]{32}\.jpg$')
+        with PILImage.open(img.image.path) as saved:
+            self.assertEqual(dict(saved.getexif()), {})
 
 
 class TestListingImageDelete(APITestCase):
