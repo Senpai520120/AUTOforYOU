@@ -69,6 +69,26 @@ class CustomUserAdmin(UserAdmin):
     # is_banned - только через actions/ban_user (отзыв сессий, скрытие объявлений).
     readonly_fields = ('role', 'is_verified_dealer', 'is_banned', 'deletion_scheduled_at', 'deleted_at')
 
+    ATTRIBUTION_FIELDS = ('first_touch_utm', 'first_touch_referrer', 'first_touch_entry_url')
+
+    def _can_see_attribution(self, request):
+        user = request.user
+        # Только право: доступ можно отозвать и у admin-роли (группа «Адміністратори» получает его в миграции).
+        return bool(user.is_active and user.has_perm('users.view_attribution'))
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is not None and self._can_see_attribution(request):
+            # Источник визита (2.14): только чтение и только admin; модератор и брокер его не видят.
+            fieldsets = (*fieldsets, ('Джерело візиту', {'fields': self.ATTRIBUTION_FIELDS, 'classes': ('collapse',)}))
+        return fieldsets
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if self._can_see_attribution(request):
+            fields += [f for f in self.ATTRIBUTION_FIELDS if f not in fields]
+        return fields
+
     def has_delete_permission(self, request, obj=None):
         # Удаление каскадом стёрло бы сделки, переписку и отзывы второй стороны (06-S11):
         # вместо него - действие «Анонімізувати» (тот же сервис, что у API).

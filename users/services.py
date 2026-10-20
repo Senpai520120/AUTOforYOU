@@ -255,6 +255,7 @@ def anonymize_user(user, *, due_before=None) -> bool:
         images.delete()
         LocalListing.objects.filter(owner=locked).update(
             status=LocalListing.Status.HIDDEN, contact_phone='', description='', has_contact_in_text=False,
+            referrer='', entry_page_url='',  # источник визита (2.14): UTM без ПДн остаётся
         )
 
         Calculation.objects.filter(user=locked).update(user=None)
@@ -270,6 +271,8 @@ def anonymize_user(user, *, due_before=None) -> bool:
         locked.email = f'deleted-{uuid.uuid4().hex}@deleted.invalid'
         locked.first_name = locked.last_name = locked.phone = ''
         locked.telegram_id = None
+        locked.first_touch_utm = {}
+        locked.first_touch_referrer = locked.first_touch_entry_url = ''
         locked.role = CustomUser.Role.BUYER
         locked.is_verified_dealer = False
         locked.is_staff = False

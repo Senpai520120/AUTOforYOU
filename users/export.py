@@ -42,6 +42,10 @@ def _profile(user):
         'created_at': user.created_at,
         'agreed_to_terms_at': user.agreed_to_terms_at,
         'deletion_scheduled_at': user.deletion_scheduled_at,
+        # Источник первого визита (2.14) - пользователю его собственный.
+        'first_touch_utm': user.first_touch_utm,
+        'first_touch_referrer': user.first_touch_referrer,
+        'first_touch_entry_url': user.first_touch_entry_url,
     }
 
 

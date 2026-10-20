@@ -13,19 +13,37 @@ from .consents import record_consents
 from .models import ConsentDocument, ConsentMethod, CustomUser, DealerApplication, TrustedShop
 
 
+def _first_touch(raw) -> dict:
+    """Источник первого касания для CustomUser; ошибка очистки не мешает регистрации."""
+    from core.attribution import clean_attribution
+    try:
+        data = clean_attribution(raw)
+    except Exception:
+        return {}
+    return {
+        'first_touch_utm': data['utm'], 'first_touch_referrer': data['referrer'],
+        'first_touch_entry_url': data['entry_page_url'],
+    }
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, label='Підтвердження пароля')
     agreed_to_terms = serializers.BooleanField(write_only=True)
     # Подтверждение 18+ (Q-шаг 7): без него 400. Версия текста и дата - по механике Н-32.
     confirmed_age_18 = serializers.BooleanField(write_only=True)
+    # Источник визита из sessionStorage (2.14): любой JSON; мусор тихо отбрасывается в create.
+    attribution = serializers.JSONField(write_only=True, required=False, allow_null=True)
     # Роль при регистрации не принимается: поле role в запросе молча игнорируется
     # (DRF отбрасывает неизвестные ключи), пользователь всегда buyer.
     # dealer ставит только approve_application; broker/moderator/admin - админка.
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms', 'confirmed_age_18')
+        fields = (
+            'email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms',
+            'confirmed_age_18', 'attribution',
+        )
         # Уникальность email проверяет RegisterView (01-S11: дубль не раскрываем).
         extra_kwargs = {'email': {'validators': []}}
 
@@ -43,8 +61,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        source = _first_touch(validated_data.pop('attribution', None))
         with transaction.atomic():
-            user = CustomUser.objects.create_user(**validated_data)
+            user = CustomUser.objects.create_user(**validated_data, **source)
             user.agreed_to_terms_at = timezone.now()
             user.save(update_fields=['agreed_to_terms_at'])
             record_consents(

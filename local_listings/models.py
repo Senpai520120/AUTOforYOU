@@ -172,6 +172,11 @@ class LocalListing(models.Model):
     # ── Антиспам ──
     has_contact_in_text = models.BooleanField(default=False, db_index=True, verbose_name='Контакт у тексті (антиспам)')
 
+    # Источник визита на момент подачи (2.14): не меняется при редактировании, в API не отдаётся.
+    utm = models.JSONField('UTM', default=dict, blank=True, editable=False)
+    referrer = models.CharField('Реферер', max_length=500, blank=True, editable=False)
+    entry_page_url = models.CharField('Сторінка входу', max_length=500, blank=True, editable=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

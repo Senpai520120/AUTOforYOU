@@ -3721,6 +3721,9 @@ components:
         agreed_to_rules:
           type: boolean
           writeOnly: true
+        attribution:
+          writeOnly: true
+          nullable: true
       required:
       - agreed_to_rules
       - body_type
@@ -4965,6 +4968,9 @@ components:
         confirmed_age_18:
           type: boolean
           writeOnly: true
+        attribution:
+          writeOnly: true
+          nullable: true
       required:
       - agreed_to_terms
       - confirmed_age_18

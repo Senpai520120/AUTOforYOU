@@ -151,10 +151,26 @@ class LocalListingAdmin(admin.ModelAdmin):
         'expires_at', 'seller_type', 'contact_phone',
     ]
 
+    ATTRIBUTION_FIELDS = ('utm', 'referrer', 'entry_page_url')
+
+    def _can_see_attribution(self, request):
+        user = request.user
+        # Только право: доступ можно отозвать и у admin-роли (группа «Адміністратори» получает его в миграции).
+        return bool(user.is_active and user.has_perm('users.view_attribution'))
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is not None and self._can_see_attribution(request):
+            # Источник визита на момент подачи (2.14): только admin, только чтение.
+            fieldsets = (*fieldsets, ('Джерело візиту', {'fields': self.ATTRIBUTION_FIELDS, 'classes': ('collapse',)}))
+        return fieldsets
+
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
         if not request.user.is_superuser:
             fields += [f for f in self._MODERATOR_READONLY if f not in fields]
+        if self._can_see_attribution(request):
+            fields += [f for f in self.ATTRIBUTION_FIELDS if f not in fields]
         return fields
 
     @admin.display(description='Оголошення')
