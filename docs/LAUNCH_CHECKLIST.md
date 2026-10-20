@@ -303,7 +303,7 @@
   *Проверка:* повторный запуск показывает «обработано 0».
 - [ ] `BACKUP_TIME`, `BACKUP_DIR`, `BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`, `BACKUP_KEEP_MONTHLY` — **появятся после задачи 7.4** (находка 12-S6: скрипта бэкапа сейчас нет).
 - [ ] `BACKUP_S3_BUCKET`, `BACKUP_S3_ENDPOINT_URL`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_ENCRYPTION_PASSPHRASE` — копия вне сервера, настоятельно рекомендуется (раздел 1). *Проверка:* `docker compose ps backup` — `healthy`; раз в месяц `./scripts/backup-verify.sh` и запись результата.
-- [ ] `SENTRY_DSN` — **появится после задачи 7.6** (раздел 3.9). Пустой допустим: мониторинг выключен, сайт работает. `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE` (оставить `0`, если не нужна трассировка).
+- [ ] `SENTRY_DSN` — по желанию (задача 7.6, раздел 3.9). Пустой допустим: мониторинг выключен, сайт, Celery и бот работают, в логе одна строка «мониторинг ошибок выключен». `SENTRY_ENVIRONMENT` (по умолчанию `production` при `DEBUG=false`), `SENTRY_RELEASE` (по умолчанию `IMAGE_TAG`), `SENTRY_TRACES_SAMPLE_RATE` (оставить `0`), `THROTTLE_CLIENT_ERRORS_RATE` (`20/hour` на IP: отчёты об ошибках из браузера). Ошибки фронтенда идут через backend — DSN в браузер не попадает.
   *Проверка:* `docker compose exec backend python manage.py monitoring_test` → событие в панели.
 
 ### 2.11. Объявления по Украине и справочники [ВОЛНА-2]

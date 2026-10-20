@@ -72,6 +72,8 @@ INSTALLED_APPS = [
     'deals',
     'site_settings',
     'leads',
+    # Проект, не приложение: подключён только ради management-команд (monitoring_test, 7.6). Моделей нет.
+    'core',
 
     'drf_spectacular',
     'django_celery_beat',
@@ -304,6 +306,8 @@ REST_FRAMEWORK = {
         'password_reset': os.environ.get('THROTTLE_PASSWORD_RESET_RATE', '5/hour'),
         # Выгрузка «Мої дані» (1.8): тяжёлый запрос по всем таблицам пользователя.
         'data_export': os.environ.get('THROTTLE_DATA_EXPORT_RATE', '5/day'),
+        # Отчёты об ошибках фронтенда (7.6), на IP: не даёт забить мониторинг мусором.
+        'client_errors': os.environ.get('THROTTLE_CLIENT_ERRORS_RATE', '20/hour'),
     },
     'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',

@@ -1,6 +1,6 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, дальше 7.6 → 8.9 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, 7.6 ✓, дальше 8.9 → 2.14 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
 
@@ -9,10 +9,24 @@
 ## ⏸ ТОЧКА ОСТАНОВКИ (2026-10-20) — откуда продолжать
 
 - 2026-10-19/20 локальный оркестратор сделал 12 задач (2.1a … 1.11) в ветке `finish-site` (PR #38 в `main`).
-- 2026-10-20 облачная сессия: ветка `task-1.8` (PR #39 → `finish-site`), по коммиту на задачу: 1.8, 7.2 (далее по плану 7.6 → 8.9 → 2.14 → 2.5).
-- **Следующая задача по критическому пути: 7.6** (мониторинг ошибок), затем 8.9 → 2.14 → 2.5 → 2.6 → … (ROADMAP.md, «Порядок выполнения»).
+- 2026-10-20 облачная сессия: ветка `task-1.8` (PR #39 → `finish-site`), по коммиту на задачу: 1.8, 7.2, 7.6 (далее по плану 8.9 → 2.14 → 2.5).
+- **Следующая задача по критическому пути: 8.9** (учёт упавших Celery-задач), затем 2.14 → 2.5 → 2.6 → … (ROADMAP.md, «Порядок выполнения»).
 - Перед продолжением: проверить CI PR #39; локальные `.env` и `.env.e2e` — задать настоящий `SECRET_KEY` (с 7.2 заглушки из шаблонов не стартуют) и переменные из `.env.e2e.example` (`THROTTLE_*`, `PRIVATE_MEDIA_USE_X_ACCEL=true`); для Playwright экспортировать `E2E_PASSWORD`.
 - Решения владельца, накопленные за прогон, — в разделах задач ниже («Для владельца») и в `docs/LAUNCH_CHECKLIST.md`.
+
+---
+
+## Задача 7.6: мониторинг ошибок (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
+
+- `core/monitoring.py` (адаптер, протокол Sentry: sentry.io или GlitchTip): `init_monitoring(component)` — пустой `SENTRY_DSN` → выключен без импорта SDK, невалидный → предупреждение без DSN, повтор — no-op, в тестах `.env`-DSN игнорируется; `send_default_pii=False`, без локальных переменных и тела запроса, интеграции Django/Celery/logging (ERROR — события, WARNING — крошки). `before_send` (и `before_send_transaction`): `scrub` для сообщений, исключений, контекста кадров, extra/tags/contexts, крошек, спанов; без cookies/data/env, заголовков Authorization/Cookie/X-CSRFToken/Referer/XFF, query везде (в т.ч. repr `WSGIRequest` из django.request), `user` — только `id`. `capture_message` — no-op при выключенном.
+- Инициализация: web — `core/wsgi.py`/`asgi.py` после `get_wsgi_application()` (не в settings: команды и тесты не поднимают SDK); Celery — сигналы `worker_process_init`, `beat_init` (`core/celery.py`); бот — `run_bot`. `sentry-sdk[django,celery]==2.70.0`.
+- `POST /api/v1/monitoring/client-errors/`: AllowAny, без аутентификации и CSRF, throttle `client_errors` (`THROTTLE_CLIENT_ERRORS_RATE`, 20/hour на IP), тело до 4 КБ (заголовок и поток), сериализатор (message ≤500, digest, path без query, component); `frontend-ssr` принимается только изнутри сети (без X-Forwarded-For). Ответ 204 и при выключенном мониторинге. `manage.py monitoring_test`. `core` добавлен в `INSTALLED_APPS` только ради команды (моделей нет).
+- Фронт: `lib/reportError.ts` (fetch keepalive, без cookie, стека и query), `error.tsx` (отчёт, `Link` «На головну»), `global-error.tsx` (отчёт, inline-стили вместо недоступного `globals.css`), `instrumentation.ts` `onRequestError` → `INTERNAL_API_URL` (таймаут 3 с). DSN в бандле нет (проверено grep по `.next/static`).
+- Проверки: бэкенд SQLite 1607 OK (skipped=2); PostgreSQL (tests, core, telegram_bot) 581 OK; `openapi.yaml` перегенерирован против PostgreSQL (+ client-errors); ruff, tsc, lint (0 ошибок), build OK. **Живая проверка**: локальный приёмник Sentry-envelope + настоящий SDK — 3 события (log.error, logger.exception, capture_message) дошли, в них нет email, телефонов, токенов, паролей из аргументов, `user` пуст. Настоящий sentry.io/GlitchTip не подключался (нет аккаунта). Мутационная проверка: 32 мутации, все пойманы. E2E `error-monitoring.spec.ts`: отчёт со страницы сайта → 204, мусор → 400, GET → 405, поток → 429 (локальный стек); сценарий «ошибка рендера → error.tsx шлёт отчёт» — `test.fixme` → 7.6b (в e2e-стеке нет способа вызвать ошибку рендера без тестовой страницы). Ревью `security-reviewer`: критичного нет; 2 «важно» исправлены (query через repr запроса в extra/крошках; транзакции мимо фильтра), желательные 3, 5, 6, 8 исправлены.
+- Для владельца:
+  - Создать проект в sentry.io (бесплатно) или GlitchTip, `SENTRY_DSN` в `.env`, затем `docker compose exec backend python manage.py monitoring_test`; включить алерты и Data Scrubber в проекте.
+  - Реестра статусов интеграций (3.1) ещё нет — статус мониторинга в админке появится с ним.
+  - Остаточный риск (ревью, желательно): все SSR-отчёты Next идут с одного IP контейнера и делят лимит 20/час; общего дневного потолка событий нет — квоту Sentry можно выжечь ротацией IP. Решить при 7.5 (отдельный лимит/секрет для SSR, лимит в самом Sentry).
 
 ---
 

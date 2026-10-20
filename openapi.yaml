@@ -1787,6 +1787,29 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/monitoring/client-errors/:
+    post:
+      operationId: v1_monitoring_client_errors_create
+      description: 204 при валидных данных, даже если мониторинг выключен. Лимит client_errors
+        на IP, тело до 4 КБ.
+      summary: Отчёт об ошибке фронтенда
+      tags:
+      - monitoring
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientErrorRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '204':
+          description: No response body
+        '400':
+          description: No response body
+        '429':
+          description: No response body
   /api/v1/notifications/:
     get:
       operationId: v1_notifications_retrieve
@@ -2959,6 +2982,32 @@ components:
       - region
       - region_name
       - slug
+    ClientErrorRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+        digest:
+          type: string
+          default: ''
+          maxLength: 100
+        path:
+          type: string
+          default: ''
+          maxLength: 300
+        component:
+          allOf:
+          - $ref: '#/components/schemas/ComponentEnum'
+          default: frontend
+      required:
+      - message
+    ComponentEnum:
+      enum:
+      - frontend
+      - frontend-ssr
+      type: string
     ConditionEnum:
       enum:
       - new

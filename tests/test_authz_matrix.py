@@ -92,6 +92,7 @@ PUBLIC = {
     'seller-rating': 'публичный рейтинг, 404 без активных объявлений (06-S12)',
     'site-settings': 'публичные настройки сайта',
     'lead-create': 'заявка от гостя: капча, honeypot, лимит (2.1a)',
+    'monitoring-client-errors': 'отчёт об ошибке фронтенда: без сессии, только запись в мониторинг, лимит на IP (7.6)',
     # не session/JWT, а подпись/секрет
     'liqpay-callback': 'подпись LiqPay (SHA1), csrf_exempt',
     'telegram-webhook': 'секрет X-Telegram-Bot-Api-Secret-Token (plain View)',

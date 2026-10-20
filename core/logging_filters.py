@@ -22,6 +22,8 @@ _PATTERNS = [
     (re.compile(r'(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+'), f'Bearer {MASK}'),
     # name=value в query-строках и формах
     (re.compile(rf'(?i)\b(\w*{_SECRET_NAMES}\w*)=([^&\s"\']+)'), rf'\1={MASK}'),
+    # name='value' / name="value" (аргументы в коде, контекст кадров в мониторинге 7.6)
+    (re.compile(rf'(?i)\b(\w*{_SECRET_NAMES}\w*)=(["\'])(.*?)\2'), rf'\1=\2{MASK}\2'),
     # "name": "value" в JSON
     (re.compile(rf'(?i)(["\']\w*{_SECRET_NAMES}\w*["\']\s*:\s*)(["\'])(.*?)\2'), rf'\1\2{MASK}\2'),
     (re.compile(rf'(?i)(["\']{_NAME_KEYS}["\']\s*:\s*)(["\'])(.*?)\2'), rf'\1\2{MASK}\2'),

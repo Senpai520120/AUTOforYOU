@@ -238,6 +238,8 @@ class PiiScrubTests(SimpleTestCase):
             '/x?t=eyJhbGci.eyJzdWIi.sig-1 ok': 'eyJhbGci',
             'phone=%2B380501234567&x=1': '380501234567',
             '{"first_name": "Іван", "id": 1}': 'Іван',
+            "def f(password='P4SS', token=\"T0K\"):": 'P4SS',
+            'call(token="T0K2")': 'T0K2',
         }
         for text, leaked in cases.items():
             self.assertNotIn(leaked, scrub(text), text)
