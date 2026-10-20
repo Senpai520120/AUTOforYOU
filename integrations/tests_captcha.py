@@ -30,7 +30,7 @@ SECRET = 'TOP-SECRET-turnstile'
 TURNSTILE = dict(CAPTCHA_PROVIDER='turnstile', TURNSTILE_SITE_KEY='pub', TURNSTILE_SECRET_KEY=SECRET)
 APPLY_DATA = {
     'company_name': 'ТОВ Авто', 'full_name': 'Іван Іванов', 'contact_phone': '+380991234567',
-    'documents': 'https://drive.google.com/doc', 'agreed_to_processing': True,
+    'documents': 'https://drive.google.com/doc', 'agreed_to_processing': True, 'confirmed_age_18': True,
 }
 
 

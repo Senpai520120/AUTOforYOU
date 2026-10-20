@@ -1,8 +1,10 @@
 from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import CustomUser, DealerApplication, TrustedShop
+from .consents import record_consents
+from .models import ConsentDocument, ConsentMethod, CustomUser, DealerApplication, TrustedShop
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -10,14 +12,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True, label='Підтвердження пароля')
     agreed_to_terms = serializers.BooleanField(write_only=True)
     # Подтверждение 18+ (Q-шаг 7): без него 400. Версия текста и дата - по механике Н-32.
-    is_adult = serializers.BooleanField(write_only=True)
+    confirmed_age_18 = serializers.BooleanField(write_only=True)
     # Роль при регистрации не принимается: поле role в запросе молча игнорируется
     # (DRF отбрасывает неизвестные ключи), пользователь всегда buyer.
     # dealer ставит только approve_application; broker/moderator/admin - админка.
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms', 'is_adult')
+        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms', 'confirmed_age_18')
         # Уникальность email проверяет RegisterView (01-S11: дубль не раскрываем).
         extra_kwargs = {'email': {'validators': []}}
 
@@ -28,16 +30,21 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'agreed_to_terms': 'Необхідно погодитися з умовами використання.'}
             )
-        if not attrs.pop('is_adult'):
+        if not attrs.pop('confirmed_age_18'):
             raise serializers.ValidationError(
-                {'is_adult': 'Підтвердіть, що вам виповнилося 18 років.'}
+                {'confirmed_age_18': 'Підтвердіть, що вам виповнилося 18 років.'}
             )
         return attrs
 
     def create(self, validated_data):
-        user = CustomUser.objects.create_user(**validated_data)
-        user.agreed_to_terms_at = timezone.now()
-        user.save(update_fields=['agreed_to_terms_at'])
+        with transaction.atomic():
+            user = CustomUser.objects.create_user(**validated_data)
+            user.agreed_to_terms_at = timezone.now()
+            user.save(update_fields=['agreed_to_terms_at'])
+            record_consents(
+                user, [ConsentDocument.TERMS, ConsentDocument.PRIVACY, ConsentDocument.AGE_18],
+                ConsentMethod.REGISTER,
+            )
         return user
 
 
@@ -81,10 +88,14 @@ class DealerApplicationCreateSerializer(serializers.ModelSerializer):
     # согласие показывает, но доказать его не может — прямой POST в API
     # проходил мимо. Теперь без согласия заявка не создаётся.
     agreed_to_processing = serializers.BooleanField(write_only=True)
+    confirmed_age_18 = serializers.BooleanField(write_only=True)
 
     class Meta:
         model = DealerApplication
-        fields = ('company_name', 'full_name', 'contact_phone', 'documents', 'agreed_to_processing')
+        fields = (
+            'company_name', 'full_name', 'contact_phone', 'documents',
+            'agreed_to_processing', 'confirmed_age_18',
+        )
 
     def validate(self, attrs):
         # pop, а не просто чтение: apply_for_dealer принимает **validated_data
@@ -92,6 +103,10 @@ class DealerApplicationCreateSerializer(serializers.ModelSerializer):
         if not attrs.pop('agreed_to_processing'):
             raise serializers.ValidationError(
                 {'agreed_to_processing': 'Необхідна згода на обробку персональних даних.'}
+            )
+        if not attrs.pop('confirmed_age_18'):
+            raise serializers.ValidationError(
+                {'confirmed_age_18': 'Підтвердіть, що вам виповнилося 18 років.'}
             )
         return attrs
 

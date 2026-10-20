@@ -2,6 +2,22 @@ from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
+
+
+class ConsentDocument(models.TextChoices):
+    TERMS = 'terms', 'Умови використання'
+    PRIVACY = 'privacy', 'Політика конфіденційності'
+    DEALER_PROCESSING = 'dealer_processing', 'Обробка даних (заявка дилера)'
+    LEAD_PROCESSING = 'lead_processing', 'Обробка даних (заявка на підбір)'
+    AGE_18 = 'age_18', 'Підтвердження 18+'
+    PARTNER_TRANSFER = 'partner_transfer', 'Передача контактів партнеру'
+
+
+class ConsentMethod(models.TextChoices):
+    REGISTER = 'register', 'Реєстрація'
+    DEALER_FORM = 'dealer_form', 'Заявка дилера'
+    LEAD_FORM = 'lead_form', 'Заявка на підбір'
 
 
 class CustomUserManager(BaseUserManager):
@@ -150,3 +166,71 @@ class DealerApplication(models.Model):
 
     def __str__(self):
         return f'{self.user.email} — {self.company_name} [{self.get_status_display()}]'
+
+
+class ImmutableError(Exception):
+    """Попытка изменить или удалить запись журнала согласий."""
+
+
+class ConsentRecordQuerySet(models.QuerySet):
+    """Журнал только дополняется. SET_NULL при удалении пользователя/заявки идёт через
+    Collector (sql.UpdateQuery), а не через QuerySet.update, поэтому продолжает работать."""
+
+    def update(self, **kwargs):
+        raise ImmutableError('Журнал згод не змінюється.')
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ImmutableError('Журнал згод не змінюється.')
+
+    def delete(self):
+        raise ImmutableError('Записи журналу згод не видаляються.')
+
+
+class ConsentRecord(models.Model):
+    """
+    Журнал згод: що, коли, якої версії документів і яким способом. Тільки створюється.
+    IP, user-agent і текст чекбокса не зберігаються (мінімум ПДн). Запис переживає
+    видалення акаунта (user -> NULL) як доказ згоди; строк зберігання визначає юрист.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='consent_records', verbose_name='Користувач',
+    )
+    lead = models.ForeignKey(
+        'leads.Lead', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='consent_records', verbose_name='Заявка',
+    )
+    document = models.CharField('Документ', max_length=20, choices=ConsentDocument.choices)
+    doc_version = models.CharField('Версія документів', max_length=32, blank=True, default='')
+    partner_name = models.CharField(
+        'Назва партнера на момент згоди', max_length=255, blank=True, default='',
+        help_text='Заповнюється лише для передачі контактів партнеру.',
+    )
+    given_at = models.DateTimeField('Дата згоди', default=timezone.now, editable=False)
+    method = models.CharField('Спосіб', max_length=12, choices=ConsentMethod.choices)
+    lead_public_id = models.CharField(
+        'Номер заявки (копія)', max_length=20, blank=True, default='',
+        help_text='AFY-ГГГГ-NNNN, не ПДн: лишається, коли заявку обезличено або видалено.',
+    )
+
+    objects = ConsentRecordQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = 'Згода'
+        verbose_name_plural = 'Журнал згод'
+        ordering = ['-given_at', '-id']
+        indexes = [
+            models.Index(fields=['user', 'document'], name='consent_user_doc_idx'),
+            models.Index(fields=['document', 'doc_version'], name='consent_doc_ver_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.document} v{self.doc_version or "-"} {self.given_at:%Y-%m-%d}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ImmutableError('Запис журналу згод не змінюється.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ImmutableError('Записи журналу згод не видаляються.')

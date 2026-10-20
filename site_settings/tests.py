@@ -98,6 +98,12 @@ class PublicApiTests(CleanCacheTestCase):
         self.assertNotIn('id', r.json())
         self.assertNotIn('updated_at', r.json())
 
+    def test_not_throttled_for_regular_visitor(self):
+        # Баннер cookie дёргает endpoint на каждой загрузке страницы: анонимный лимит не должен срабатывать.
+        client = APIClient()
+        codes = {client.get(URL).status_code for _ in range(80)}
+        self.assertEqual(codes, {200})
+
     def test_new_fields_public(self):
         data = APIClient().get(URL).json()
         self.assertEqual(data['log_retention_days'], 90)

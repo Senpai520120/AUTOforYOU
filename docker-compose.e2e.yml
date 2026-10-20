@@ -31,3 +31,14 @@ services:
   # Порт БД наружу e2e не нужен; без этого стек конфликтует с dev-стеком на 5433.
   db:
     ports: !reset []
+  # Весь набор Playwright логинится с одного IP: боевой limit_req (20r/m, 12-S10) даёт 429 и делает
+  # тесты входа зависимыми от порядка прогона. В e2e-стеке поднимаем только лимит; остальное - боевой конфиг.
+  nginx:
+    volumes: !override
+      - ./nginx/nginx.conf:/etc/nginx/nginx.src.conf:ro
+      - static:/static:ro
+      - media:/media:ro
+    command:
+      - /bin/sh
+      - -c
+      - sed 's/rate=20r\/m/rate=6000r\/m/' /etc/nginx/nginx.src.conf > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'

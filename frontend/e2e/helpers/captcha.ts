@@ -32,7 +32,7 @@ export async function registerViaApi(request: APIRequestContext, email: string, 
   const resp = await request.post('/api/v1/auth/register/', {
     data: {
       email, password, password2: password,
-      agreed_to_terms: true, is_adult: true,
+      agreed_to_terms: true, confirmed_age_18: true,
       captcha_token: await captchaToken(request),
     },
   });

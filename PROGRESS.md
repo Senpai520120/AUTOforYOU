@@ -1,8 +1,19 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, дальше 1.14 → 2.15 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, дальше 2.15 → 1.1 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.14: журнал согласий, версия документов, 18+, настройки cookie (2026-10-20) — ЗАВЕРШЕНО
+
+- `ConsentRecord` (`users/models.py`, миграции users 0013–0014): тип документа (terms, privacy, dealer_processing, lead_processing, age_18, partner_transfer), способ, версия из `SiteSettings`, `partner_name`, `lead_public_id`; без IP, user-agent и текста чекбокса. Неизменяемость: `save()` повторно, `obj.delete()`, `QuerySet.update/bulk_update/delete` бросают `ImmutableError`; `SET_NULL` при удалении пользователя/заявки работает. Админка только чтение, только admin-роль.
+- `users/consents.py::record_consents` в одной транзакции с регистрацией (terms, privacy, age_18), заявкой дилера (dealer_processing, age_18) и `create_lead` (lead_processing, partner_transfer). Поле 1.6 `is_adult` переименовано в `confirmed_age_18`; 18+ проверяется сервером. Миграция 0014 переносит согласия существующих заявок (идемпотентна).
+- Фронт: `cookie_consent` — JSON `{level, version, ts}` (старые строки читаются), повторный запрос при новой версии и `reconsent_required`, `hasAnalyticsConsent()` false до повторного согласия; ссылка «Налаштування cookie» в футере; чекбокс 18+ на заявке дилера.
+- `GET /api/v1/site-settings/` без DRF-throttle (кэш 5 мин, без ПДн; баннер запрашивает его на каждой странице). E2E-стек: лимиты nginx и DRF подняты только в `docker-compose.e2e.yml`/`.env.e2e.example` (боевые не менялись); `broker.spec.ts` и `auth-cookie.spec.ts` не зависят от порядка прогона.
+- Проверки: бэкенд 888 OK, `consent.spec.ts` 19/19, связанные спеки зелёные на чистом стеке. Ревью `security-reviewer`: 4 «важно» + 4 «желательно» исправлены.
+- Для владельца: юрист — формулировка и порог 18+, срок хранения журнала; заполнить `legal_docs_version` до запуска; выгрузка `ConsentRecord` — в задаче 1.8. `broker.spec.ts` требует чистого e2e-стека.
 
 ---
 

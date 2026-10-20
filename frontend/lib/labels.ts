@@ -16,3 +16,8 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 export function leadStatusLabel(status: string, fallback = ''): string {
   return (LEAD_STATUS_LABELS as Record<string, string>)[status] || fallback || status;
 }
+
+/** Згоди (задача 1.14): тексти чекбокса 18+ і помилок, щоб не розмазувати по компонентах. */
+export const COOKIE_SETTINGS_LABEL = 'Налаштування cookie';
+export const AGE_18_LABEL = 'Мені виповнилося 18 років';
+export const AGE_18_REQUIRED = 'Підтвердіть, що вам виповнилося 18 років';

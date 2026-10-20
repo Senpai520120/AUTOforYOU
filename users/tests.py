@@ -28,7 +28,7 @@ from tests.factories import (
     make_vehicle,
 )
 
-from .models import DealerApplication
+from .models import ConsentDocument, ConsentMethod, ConsentRecord, DealerApplication, ImmutableError
 from .services import DuplicatePendingError, apply_for_dealer, approve_application, reject_application
 
 User = get_user_model()
@@ -43,6 +43,7 @@ _APPLY_DATA = {
     'contact_phone': '+380991234567',
     'documents': 'https://drive.google.com/doc123',
     'agreed_to_processing': True,
+    'confirmed_age_18': True,
 }
 
 
@@ -282,7 +283,7 @@ _REG_BASE = {
 class TestRegistrationConsent(APITestCase):
 
     def test_register_without_consent_returns_400(self):
-        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': False, 'is_adult': True}, format='json')
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': False, 'confirmed_age_18': True}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('agreed_to_terms', resp.data)
 
@@ -291,13 +292,13 @@ class TestRegistrationConsent(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_register_with_consent_sets_agreed_to_terms_at(self):
-        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True, 'is_adult': True}, format='json')
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True, 'confirmed_age_18': True}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         user = User.objects.get(email=_REG_BASE['email'])
         self.assertIsNotNone(user.agreed_to_terms_at)
 
     def test_register_with_consent_returns_201(self):
-        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True, 'is_adult': True}, format='json')
+        resp = self.client.post(REGISTER_URL, {**_REG_BASE, 'agreed_to_terms': True, 'confirmed_age_18': True}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
 
@@ -322,7 +323,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         # Решение 1.2: поле role в запросе молча игнорируется (не 400): пользователь всегда buyer.
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'admin', 'agreed_to_terms': True, 'is_adult': True},
+            {**_REG_BASE, 'role': 'admin', 'agreed_to_terms': True, 'confirmed_age_18': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -335,7 +336,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
         # Раньше самовыбор dealer был разрешён; теперь dealer ставит только approve_application.
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'dealer', 'agreed_to_terms': True, 'is_adult': True},
+            {**_REG_BASE, 'role': 'dealer', 'agreed_to_terms': True, 'confirmed_age_18': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -347,7 +348,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
     def test_register_ignores_role_broker(self):
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'broker', 'agreed_to_terms': True, 'is_adult': True},
+            {**_REG_BASE, 'role': 'broker', 'agreed_to_terms': True, 'confirmed_age_18': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -356,7 +357,7 @@ class TestRoleIsNotSelfAssignable(APITestCase):
     def test_register_ignores_role_moderator(self):
         resp = self.client.post(
             REGISTER_URL,
-            {**_REG_BASE, 'role': 'moderator', 'agreed_to_terms': True, 'is_adult': True},
+            {**_REG_BASE, 'role': 'moderator', 'agreed_to_terms': True, 'confirmed_age_18': True},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -1291,3 +1292,189 @@ class CookieAuthAllowAnyTests(CleanCacheTestCase):
             'us_port': 'houston', 'eu_port': 'klaipeda',
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, getattr(resp, 'data', None))
+
+
+# ── Журнал согласий (задача 1.14) ─────────────────────────────────────────────
+
+class TestConsentLogRegistration(APITestCase):
+    PAYLOAD = {**_REG_BASE, 'agreed_to_terms': True, 'confirmed_age_18': True}
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
+    def _set_version(self, version):
+        from site_settings.models import SiteSettings
+        s = SiteSettings.load()
+        s.legal_docs_version = version
+        s.save()
+
+    def test_without_age_confirmation_400_and_nothing_created(self):
+        payload = {k: v for k, v in self.PAYLOAD.items() if k != 'confirmed_age_18'}
+        resp = self.client.post(REGISTER_URL, payload, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('confirmed_age_18', resp.data)
+        self.assertFalse(User.objects.filter(email=_REG_BASE['email']).exists())
+        self.assertEqual(ConsentRecord.objects.count(), 0)
+
+    def test_age_false_400(self):
+        resp = self.client.post(REGISTER_URL, {**self.PAYLOAD, 'confirmed_age_18': False}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(ConsentRecord.objects.count(), 0)
+
+    def test_register_writes_three_records_with_version(self):
+        self._set_version('2026-10-01')
+        resp = self.client.post(REGISTER_URL, self.PAYLOAD, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(email=_REG_BASE['email'])
+        records = ConsentRecord.objects.all()
+        self.assertEqual(records.count(), 3)
+        self.assertEqual(
+            sorted(r.document for r in records),
+            [ConsentDocument.AGE_18, ConsentDocument.PRIVACY, ConsentDocument.TERMS],
+        )
+        for r in records:
+            self.assertEqual(r.user, user)
+            self.assertEqual(r.method, ConsentMethod.REGISTER)
+            self.assertEqual(r.doc_version, '2026-10-01')
+        self.assertIsNotNone(user.agreed_to_terms_at)
+
+    def test_new_version_does_not_change_old_records(self):
+        self._set_version('v1')
+        self.client.post(REGISTER_URL, self.PAYLOAD, format='json')
+        self._set_version('v2')
+        self.client.post(REGISTER_URL, {**self.PAYLOAD, 'email': 'second@test.com'}, format='json')
+        self.assertEqual(ConsentRecord.objects.filter(doc_version='v1').count(), 3)
+        self.assertEqual(ConsentRecord.objects.filter(doc_version='v2', user__email='second@test.com').count(), 3)
+
+    def test_empty_version_allowed(self):
+        self.client.post(REGISTER_URL, self.PAYLOAD, format='json')
+        self.assertEqual(ConsentRecord.objects.filter(doc_version='').count(), 3)
+
+    def test_consent_failure_rolls_back_user(self):
+        with mock.patch('users.serializers.record_consents', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(REGISTER_URL, self.PAYLOAD, format='json')
+        self.assertFalse(User.objects.filter(email=_REG_BASE['email']).exists())
+
+    def test_queryset_update_bulk_update_delete_forbidden(self):
+        self.client.post(REGISTER_URL, self.PAYLOAD, format='json')
+        with self.assertRaises(ImmutableError):
+            ConsentRecord.objects.update(doc_version='x')
+        with self.assertRaises(ImmutableError):
+            ConsentRecord.objects.filter(document='terms').update(doc_version='x')
+        with self.assertRaises(ImmutableError):
+            ConsentRecord.objects.bulk_update(list(ConsentRecord.objects.all()), ['doc_version'])
+        with self.assertRaises(ImmutableError):
+            ConsentRecord.objects.all().delete()
+        with self.assertRaises(ImmutableError):
+            ConsentRecord.objects.first().delete()
+        self.assertEqual(ConsentRecord.objects.count(), 3)
+        self.assertEqual(ConsentRecord.objects.exclude(doc_version='').count(), 0)
+
+    def test_record_is_immutable(self):
+        self.client.post(REGISTER_URL, self.PAYLOAD, format='json')
+        record = ConsentRecord.objects.first()
+        record.doc_version = 'hacked'
+        with self.assertRaises(ImmutableError):
+            record.save()
+
+    def test_no_ip_or_user_agent_fields(self):
+        names = {f.name for f in ConsentRecord._meta.get_fields()}
+        for forbidden in ('ip', 'ip_address', 'user_agent', 'text', 'consent_text'):
+            self.assertNotIn(forbidden, names)
+
+
+class TestConsentLogDealer(APITestCase):
+    def setUp(self):
+        super().setUp()
+        self.user = make_user('dealerconsent@test.com')
+        self.client.force_authenticate(self.user)
+
+    def test_without_age_400(self):
+        payload = {k: v for k, v in _APPLY_DATA.items() if k != 'confirmed_age_18'}
+        resp = self.client.post(APPLY_URL, payload, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('confirmed_age_18', resp.data)
+        self.assertFalse(DealerApplication.objects.exists())
+        self.assertEqual(ConsentRecord.objects.count(), 0)
+
+    def test_age_false_400(self):
+        resp = self.client.post(APPLY_URL, {**_APPLY_DATA, 'confirmed_age_18': False}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(DealerApplication.objects.exists())
+        self.assertEqual(ConsentRecord.objects.count(), 0)
+
+    def test_with_age_two_records(self):
+        resp = self.client.post(APPLY_URL, _APPLY_DATA, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        records = ConsentRecord.objects.all()
+        self.assertEqual(
+            sorted(r.document for r in records), [ConsentDocument.AGE_18, ConsentDocument.DEALER_PROCESSING],
+        )
+        self.assertTrue(all(r.method == ConsentMethod.DEALER_FORM and r.user == self.user for r in records))
+        self.assertIsNotNone(DealerApplication.objects.get().agreed_to_processing_at)
+
+
+class TestConsentRecordAdmin(TestCase):
+    URL = '/admin/users/consentrecord/'
+
+    def setUp(self):
+        self.user = make_user()
+        self.record = ConsentRecord.objects.create(
+            user=self.user, document=ConsentDocument.TERMS, method=ConsentMethod.REGISTER,
+        )
+
+    def test_admin_can_view_but_not_add_change_delete(self):
+        self.client.force_login(make_staff(superuser=True))
+        self.assertEqual(self.client.get(self.URL).status_code, 200)
+        self.assertEqual(self.client.get(self.URL + 'add/').status_code, 403)
+        self.assertEqual(self.client.get(f'{self.URL}{self.record.pk}/change/').status_code, 200)  # view-only
+        self.assertEqual(self.client.post(f'{self.URL}{self.record.pk}/change/', {}).status_code, 403)
+        self.assertEqual(self.client.get(f'{self.URL}{self.record.pk}/delete/').status_code, 403)
+        self.assertEqual(self.client.post(f'{self.URL}{self.record.pk}/delete/', {'post': 'yes'}).status_code, 403)
+        self.assertTrue(ConsentRecord.objects.filter(pk=self.record.pk).exists())
+
+    def test_admin_role_staff_can_view(self):
+        self.client.force_login(make_admin_role())
+        self.assertEqual(self.client.get(self.URL).status_code, 200)
+
+    def test_moderator_and_broker_denied(self):
+        for maker in (make_moderator, make_broker):
+            with self.subTest(maker=maker.__name__):
+                self.client.force_login(maker())
+                self.assertEqual(self.client.get(self.URL).status_code, 403)
+
+    def test_regular_user_redirected_to_login(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(self.URL).status_code, 302)
+
+    def test_moderator_does_not_see_section_in_index(self):
+        self.client.force_login(make_moderator())
+        self.assertNotContains(self.client.get('/admin/'), 'consentrecord')
+
+
+class TestConsentRecordUserDeletion(TestCase):
+    def test_deleting_user_keeps_record_with_null_user(self):
+        user = make_user()
+        ConsentRecord.objects.create(user=user, document=ConsentDocument.TERMS, method=ConsentMethod.REGISTER)
+        user.delete()
+        record = ConsentRecord.objects.get()
+        self.assertIsNone(record.user)
+        self.assertEqual(record.document, ConsentDocument.TERMS)
+
+    def test_deleting_lead_keeps_record_with_public_id(self):
+        from leads.models import Lead
+        from leads.services import create_lead
+        from site_settings.models import SiteSettings
+        s = SiteSettings.load()
+        s.partner_name = 'Партнер'
+        s.save()
+        lead = create_lead(user=None, data={'name': 'Іван', 'phone': '0671234567', 'contact_method': 'telegram'})
+        public_id = lead.public_id
+        Lead.objects.filter(pk=lead.pk).delete()
+        records = ConsentRecord.objects.all()
+        self.assertEqual(records.count(), 2)
+        for r in records:
+            self.assertIsNone(r.lead)
+            self.assertEqual(r.lead_public_id, public_id)

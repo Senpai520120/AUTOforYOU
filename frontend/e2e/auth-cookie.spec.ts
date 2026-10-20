@@ -228,6 +228,7 @@ test.describe('08-S7: повернення за ?next=', () => {
   test('гість на /me/favorites → вхід → назад на /me/favorites', async ({ page }) => {
     await page.goto('/me/favorites');
     await expect(page).toHaveURL(/\/login\?next=%2Fme%2Ffavorites$/);
+    await page.waitForLoadState('networkidle');
     await page.locator('input[type="email"]').fill('buyer@e2e.test');
     await page.locator('input[type="password"]').fill(e2ePassword());
     await page.getByRole('button', { name: 'Увійти' }).click();
@@ -246,6 +247,7 @@ test.describe('08-S7: повернення за ?next=', () => {
     const label = JSON.stringify(evil);
     test(`обхід: next=${label} ігнорується`, async ({ page, baseURL }) => {
       await page.goto(`/login?next=${encodeURIComponent(evil)}`);
+      await page.waitForLoadState('networkidle'); // форма має гідратуватися до кліку
       await page.locator('input[type="email"]').fill('buyer@e2e.test');
       await page.locator('input[type="password"]').fill(e2ePassword());
       await page.getByRole('button', { name: 'Увійти' }).click();

@@ -33,7 +33,7 @@ REG = {
     'password': 'StrongPass123!',
     'password2': 'StrongPass123!',
     'agreed_to_terms': True,
-    'is_adult': True,
+    'confirmed_age_18': True,
 }
 
 
@@ -144,14 +144,14 @@ class TestRegisterValidation(CleanCacheTestCase):
         self.assertEqual(self.client.post(REGISTER_URL, data, format='json').status_code, 400)
 
     def test_without_adult_confirmation_returns_400(self):
-        data = {**REG, 'is_adult': False}
+        data = {**REG, 'confirmed_age_18': False}
         resp = self.client.post(REGISTER_URL, data, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('is_adult', resp.data)
+        self.assertIn('confirmed_age_18', resp.data)
         self.assertFalse(User.objects.filter(email=REG['email']).exists())
 
     def test_adult_field_missing_returns_400(self):
-        data = {k: v for k, v in REG.items() if k != 'is_adult'}
+        data = {k: v for k, v in REG.items() if k != 'confirmed_age_18'}
         self.assertEqual(self.client.post(REGISTER_URL, data, format='json').status_code, 400)
 
     @override_settings(SITE_URL='https://site.test')
@@ -217,7 +217,7 @@ class TestUnverifiedRestricted(CleanCacheTestCase):
     def _apply(self):
         return self.client.post(self.APPLY_URL, {
             'company_name': 'ТОВ Авто', 'full_name': 'Іван Іванов', 'contact_phone': '+380991234567',
-            'documents': 'https://drive.google.com/doc', 'agreed_to_processing': True,
+            'documents': 'https://drive.google.com/doc', 'agreed_to_processing': True, 'confirmed_age_18': True,
         }, format='json')
 
     def _assert_blocked(self, resp):

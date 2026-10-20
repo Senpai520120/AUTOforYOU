@@ -4317,13 +4317,13 @@ components:
         agreed_to_terms:
           type: boolean
           writeOnly: true
-        is_adult:
+        confirmed_age_18:
           type: boolean
           writeOnly: true
       required:
       - agreed_to_terms
+      - confirmed_age_18
       - email
-      - is_adult
       - password
       - password2
     ReportCreate:

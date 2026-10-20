@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
 
-from .models import CustomUser, DealerApplication, TrustedShop
+from .models import ConsentRecord, CustomUser, DealerApplication, TrustedShop
 from .services import approve_application, assign_role, reject_application, revoke_role
 
 
@@ -159,3 +159,32 @@ class LockoutAdminAuthenticationForm(AdminAuthenticationForm):
 
 
 admin.site.login_form = LockoutAdminAuthenticationForm
+
+
+@admin.register(ConsentRecord)
+class ConsentRecordAdmin(admin.ModelAdmin):
+    """Журнал згод: лише читання, лише admin/superuser (Q10). Moderator/broker не бачать."""
+    list_display = ('given_at', 'document', 'doc_version', 'method', 'user', 'lead', 'partner_name')
+    list_filter = ('document', 'doc_version', 'method', 'given_at')
+    search_fields = ('user__email',)
+    date_hierarchy = 'given_at'
+    list_select_related = ('user', 'lead')
+    actions = None
+
+    def _is_admin(self, request):
+        return bool(request.user.is_active and request.user.is_admin_role)
+
+    def has_module_permission(self, request):
+        return self._is_admin(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._is_admin(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

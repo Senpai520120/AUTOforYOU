@@ -11,7 +11,8 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 
-from .models import DealerApplication
+from .consents import record_consents
+from .models import ConsentDocument, ConsentMethod, DealerApplication
 
 
 class DuplicatePendingError(Exception):
@@ -27,15 +28,20 @@ def apply_for_dealer(user, company_name, full_name, contact_phone, documents='')
     """
     if DealerApplication.objects.filter(user=user, status=DealerApplication.Status.PENDING).exists():
         raise DuplicatePendingError('У вас уже есть заявка на рассмотрении.')
-    return DealerApplication.objects.create(
-        user=user,
-        company_name=company_name,
-        full_name=full_name,
-        contact_phone=contact_phone,
-        documents=documents,
-        status=DealerApplication.Status.PENDING,
-        agreed_to_processing_at=timezone.now(),
-    )
+    with transaction.atomic():
+        application = DealerApplication.objects.create(
+            user=user,
+            company_name=company_name,
+            full_name=full_name,
+            contact_phone=contact_phone,
+            documents=documents,
+            status=DealerApplication.Status.PENDING,
+            agreed_to_processing_at=timezone.now(),
+        )
+        record_consents(
+            user, [ConsentDocument.DEALER_PROCESSING, ConsentDocument.AGE_18], ConsentMethod.DEALER_FORM,
+        )
+    return application
 
 
 @transaction.atomic

@@ -34,6 +34,7 @@ test.describe('Гість на закритих сторінках', () => {
   test('08-S7: після входу повертає на сторінку з ?next=', async ({ page }) => {
     await page.goto('/me/favorites');
     await expect(page).toHaveURL(/\/login\?next=%2Fme%2Ffavorites/);
+    await page.waitForLoadState('networkidle'); // форма має гідратуватися до кліку
     await page.locator('input[type="email"]').fill('buyer@e2e.test');
     await page.locator('input[type="password"]').fill(process.env.E2E_PASSWORD ?? '');
     await page.getByRole('button', { name: 'Увійти' }).click();
@@ -42,6 +43,7 @@ test.describe('Гість на закритих сторінках', () => {
 
   test('10-S7: зовнішній next ігнорується', async ({ page, baseURL }) => {
     await page.goto('/login?next=https://evil.example/');
+    await page.waitForLoadState('networkidle');
     await page.locator('input[type="email"]').fill('buyer@e2e.test');
     await page.locator('input[type="password"]').fill(process.env.E2E_PASSWORD ?? '');
     await page.getByRole('button', { name: 'Увійти' }).click();

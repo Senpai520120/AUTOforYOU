@@ -523,3 +523,94 @@ class LeadAdminRightsTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         lead.refresh_from_db()
         self.assertEqual(lead.status, 'rejected')
+
+
+class LeadConsentLogTests(TestCase):
+    """Журнал согласий (1.14): lead_processing + partner_transfer пишутся в create_lead."""
+
+    @classmethod
+    def setUpTestData(cls):
+        set_partner('Партнер А')
+
+    def test_guest_lead_writes_records(self):
+        from users.models import ConsentDocument, ConsentMethod, ConsentRecord
+        s = SiteSettings.load()
+        s.legal_docs_version = '2026-10-01'
+        s.save()
+        lead = create_lead(user=None, data=data())
+        records = {r.document: r for r in ConsentRecord.objects.filter(lead=lead)}
+        self.assertEqual(set(records), {ConsentDocument.LEAD_PROCESSING, ConsentDocument.PARTNER_TRANSFER})
+        for r in records.values():
+            self.assertIsNone(r.user)
+            self.assertEqual(r.method, ConsentMethod.LEAD_FORM)
+            self.assertEqual(r.doc_version, '2026-10-01')
+        self.assertEqual(records[ConsentDocument.PARTNER_TRANSFER].partner_name, 'Партнер А')
+        self.assertEqual(records[ConsentDocument.LEAD_PROCESSING].partner_name, '')
+        for r in records.values():
+            self.assertEqual(r.lead_public_id, lead.public_id)
+
+    def test_logged_in_lead_has_user(self):
+        from users.models import ConsentRecord
+        user = make_user()
+        lead = create_lead(user=user, data=data())
+        self.assertEqual(ConsentRecord.objects.filter(lead=lead, user=user).count(), 2)
+
+    def test_old_record_keeps_partner_after_rename(self):
+        from users.models import ConsentDocument, ConsentRecord
+        create_lead(user=None, data=data())
+        set_partner('Партнер Б')
+        create_lead(user=None, data=data())
+        names = sorted(ConsentRecord.objects.filter(
+            document=ConsentDocument.PARTNER_TRANSFER).values_list('partner_name', flat=True))
+        self.assertEqual(names, ['Партнер А', 'Партнер Б'])
+
+    def test_rollback_leaves_no_dangling_records(self):
+        from users.models import ConsentRecord
+        # Падение ПОСЛЕ записи согласий: внешняя транзакция откатывает и заявку, и журнал.
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                create_lead(user=None, data=data())
+                self.assertEqual(ConsentRecord.objects.count(), 2)  # записи уже есть
+                raise RuntimeError('boom')
+        self.assertEqual(Lead.objects.count(), 0)
+        self.assertEqual(ConsentRecord.objects.count(), 0)
+
+    def test_failure_after_consents_inside_create_lead_rolls_back(self):
+        from users.models import ConsentRecord
+
+        def fail_after_write(*args, **kwargs):
+            from users.consents import record_consents as real
+            real(*args, **kwargs)
+            raise RuntimeError('boom')
+
+        with mock.patch('leads.services.record_consents', side_effect=fail_after_write):
+            with self.assertRaises(RuntimeError):
+                create_lead(user=None, data=data())
+        self.assertEqual(Lead.objects.count(), 0)
+        self.assertEqual(ConsentRecord.objects.count(), 0)
+
+    def test_failed_consent_write_rolls_back_lead(self):
+        with mock.patch('leads.services.record_consents', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                create_lead(user=None, data=data())
+        self.assertEqual(Lead.objects.count(), 0)
+
+    def test_no_contact_data_in_record(self):
+        from users.models import ConsentRecord
+        create_lead(user=None, data=data())
+        blob = ' '.join(str(v) for r in ConsentRecord.objects.values() for v in r.values())
+        self.assertNotIn('0671234567', blob)
+        self.assertNotIn('Іван', blob)
+
+    def test_backfill_migration_function(self):
+        from importlib import import_module
+
+        from django.apps import apps
+
+        from users.models import ConsentRecord
+        lead = create_lead(user=None, data=data())
+        ConsentRecord._base_manager.all().delete()  # журнал неизменяем через обычный менеджер
+        import_module('users.migrations.0014_backfill_lead_consents').backfill(apps, None)
+        self.assertEqual(ConsentRecord.objects.filter(lead=lead).count(), 2)
+        import_module('users.migrations.0014_backfill_lead_consents').backfill(apps, None)
+        self.assertEqual(ConsentRecord.objects.filter(lead=lead).count(), 2)  # идемпотентно

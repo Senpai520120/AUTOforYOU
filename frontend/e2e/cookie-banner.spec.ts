@@ -7,6 +7,13 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 const BANNER = 'Налаштування файлів cookie';
 
+/** Рівень з localStorage: значення тепер JSON {level, version, ts} (задача 1.14). */
+const storedLevel = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => {
+    const raw = localStorage.getItem('cookie_consent');
+    return raw === null ? null : (JSON.parse(raw) as { level: string }).level;
+  });
+
 test.describe('Банер cookie (23-P7)', () => {
   test('перший візит: банер видно', async ({ page }) => {
     await page.goto('/');
@@ -22,7 +29,7 @@ test.describe('Банер cookie (23-P7)', () => {
       const banner = page.getByRole('dialog', { name: BANNER });
       await banner.getByRole('button', { name: button }).click();
       await expect(banner).toBeHidden();
-      expect(await page.evaluate(() => localStorage.getItem('cookie_consent'))).toBe(stored);
+      expect(await storedLevel(page)).toBe(stored);
 
       await page.reload();
       // Банер не рендериться до гідратації, тому «банера немає» одразу після reload
@@ -30,7 +37,7 @@ test.describe('Банер cookie (23-P7)', () => {
       await page.goto('/cookies');
       await expect(page.locator('strong', { hasText: label })).toBeVisible();
       await expect(page.getByRole('dialog', { name: BANNER })).toHaveCount(0);
-      expect(await page.evaluate(() => localStorage.getItem('cookie_consent'))).toBe(stored);
+      expect(await storedLevel(page)).toBe(stored);
     });
   }
 
@@ -43,7 +50,7 @@ test.describe('Банер cookie (23-P7)', () => {
 
     await page.getByRole('button', { name: 'Прийняти всі' }).click();
     await expect(page.locator('strong', { hasText: 'Прийняті всі' })).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('cookie_consent'))).toBe('all');
+    expect(await storedLevel(page)).toBe('all');
   });
 
   test('/cookies: «Відкликати згоду» повертає банер і скидає вибір', async ({ page }) => {

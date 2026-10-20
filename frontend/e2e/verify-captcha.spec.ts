@@ -95,6 +95,7 @@ test.describe('Підтвердження email (23-P12)', () => {
     await page.getByPlaceholder('Іван Петрович Іванов').fill('[E2E] Іван Іванов');
     await page.getByPlaceholder('+380991234567').fill('+380991234567');
     await page.getByLabel(/Я даю згоду на обробку/).check();
+    await page.getByLabel(/18 років/).check();
     const applyResponse = page.waitForResponse(
       (r) => r.url().includes('/dealers/apply/') && r.request().method() === 'POST',
     );
@@ -137,7 +138,7 @@ test.describe('Капча: обхід і сервер (23-P12)', () => {
     await page.addInitScript(() => window.localStorage.setItem('cookie_consent', 'necessary'));
   });
 
-  test('без чекбокса 18+ сервер відхиляє реєстрацію (400, is_adult), відповідь показана на API', async ({
+  test('без чекбокса 18+ сервер відхиляє реєстрацію (400, confirmed_age_18), відповідь показана на API', async ({
     request,
     uniqueEmail,
   }) => {
@@ -145,11 +146,11 @@ test.describe('Капча: обхід і сервер (23-P12)', () => {
     const resp = await request.post('/api/v1/auth/register/', {
       data: {
         email: uniqueEmail, password, password2: password, agreed_to_terms: true,
-        is_adult: false, captcha_token: await captchaToken(request),
+        confirmed_age_18: false, captcha_token: await captchaToken(request),
       },
     });
     expect(resp.status()).toBe(400);
-    expect(Object.keys(await resp.json())).toContain('is_adult');
+    expect(Object.keys(await resp.json())).toContain('confirmed_age_18');
   });
 
   test('заповнене honeypot-поле → 400 captcha_failed', async ({ request, uniqueEmail }) => {
@@ -157,7 +158,7 @@ test.describe('Капча: обхід і сервер (23-P12)', () => {
     const resp = await request.post('/api/v1/auth/register/', {
       data: {
         email: uniqueEmail, password, password2: password, agreed_to_terms: true,
-        is_adult: true, website: 'http://spam.example', captcha_token: await captchaToken(request),
+        confirmed_age_18: true, website: 'http://spam.example', captcha_token: await captchaToken(request),
       },
     });
     expect(resp.status()).toBe(400);
@@ -167,7 +168,7 @@ test.describe('Капча: обхід і сервер (23-P12)', () => {
   test('без токена капчі сервер відхиляє реєстрацію (400 captcha_failed)', async ({ request, uniqueEmail }) => {
     const password = e2ePassword();
     const resp = await request.post('/api/v1/auth/register/', {
-      data: { email: uniqueEmail, password, password2: password, agreed_to_terms: true, is_adult: true },
+      data: { email: uniqueEmail, password, password2: password, agreed_to_terms: true, confirmed_age_18: true },
     });
     expect(resp.status()).toBe(400);
     expect((await resp.json()).code).toBe('captcha_failed');

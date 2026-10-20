@@ -17,6 +17,13 @@ test.beforeEach(async ({ page }) => {
 
 const row = (page: Page, name: string) => page.getByTestId('broker-lead-item').filter({ hasText: name });
 
+// Список пагінований, а інші спеки створюють заявки: засіяну заявку шукаємо за унікальним іменем,
+// а не на першій сторінці.
+async function searchLeads(page: Page, text: string) {
+  await page.getByLabel('Ім’я або телефон').fill(text);
+  await page.getByRole('button', { name: 'Знайти' }).click();
+}
+
 async function openXssLead(page: Page) {
   await page.goto('/broker/leads');
   await page.getByLabel('Ім’я або телефон').fill('Гість XSS');
@@ -32,15 +39,20 @@ test.describe('Брокер', () => {
   test('список: джерело tiktok, фільтр за джерелом, картка, «Взяти в роботу» і «Договір»', async ({ page }) => {
     await page.goto('/broker/leads');
     await expect(page.getByRole('heading', { name: 'Заявки', exact: true })).toBeVisible();
+    await searchLeads(page, 'Клієнт брокера');
     await expect(row(page, CLIENT_LEAD)).toBeVisible();
     await expect(row(page, CLIENT_LEAD).getByTestId('lead-utm-source')).toHaveText('tiktok');
     await expect(page.getByTestId('new-count')).toBeVisible();
 
     // Фільтр за джерелом залишає цю заявку й прибирає інші.
     await page.goto('/broker/leads?utm_source=tiktok');
+    await searchLeads(page, 'Клієнт брокера');
     await expect(row(page, CLIENT_LEAD)).toBeVisible();
+    await searchLeads(page, 'Гість XSS');
+    await expect(page.getByText('Заявок за цими умовами немає')).toBeVisible();
     await expect(row(page, XSS_LEAD)).toHaveCount(0);
 
+    await searchLeads(page, 'Клієнт брокера');
     await row(page, CLIENT_LEAD).getByRole('link').click();
     await expect(page.getByRole('heading', { name: /AFY-\d{4}-\d+/ })).toBeVisible();
     await expect(page.getByTestId('lead-status')).toHaveText('Нова');

@@ -8,6 +8,7 @@ import Spinner from '@/components/ui/Spinner';
 import Captcha from '@/components/ui/Captcha';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { apiErrorText, useAuthConfig, useCaptchaState } from '@/lib/captcha';
+import { AGE_18_LABEL, AGE_18_REQUIRED } from '@/lib/labels';
 import { isEmailNotVerified } from '@/lib/email-verify';
 
 export default function DealerApplyPage() {
@@ -21,6 +22,7 @@ export default function DealerApplyPage() {
     documents: '',
   });
   const [agreedToProcessing, setAgreedToProcessing] = useState(false);
+  const [confirmedAge18, setConfirmedAge18] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -52,6 +54,10 @@ export default function DealerApplyPage() {
       setError('Для подання заявки потрібна згода на обробку персональних даних.');
       return;
     }
+    if (!confirmedAge18) {
+      setError(AGE_18_REQUIRED);
+      return;
+    }
     setError(null);
     setNotVerified(false);
     setSubmitting(true);
@@ -62,6 +68,7 @@ export default function DealerApplyPage() {
         contact_phone: form.contact_phone,
         documents: form.documents || undefined,
         agreed_to_processing: agreedToProcessing,
+        confirmed_age_18: confirmedAge18,
         ...captcha.payload(),
       });
       setSuccess(true);
@@ -145,6 +152,19 @@ export default function DealerApplyPage() {
               Політики конфіденційності
             </Link>
             .
+          </label>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <input
+            id="confirmed_age_18"
+            type="checkbox"
+            checked={confirmedAge18}
+            onChange={e => setConfirmedAge18(e.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-2 focus:ring-amber-400"
+          />
+          <label htmlFor="confirmed_age_18" className="text-sm text-slate-600">
+            {AGE_18_LABEL}
           </label>
         </div>
 

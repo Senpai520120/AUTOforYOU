@@ -12,6 +12,9 @@ CACHE_TTL = 300
 class SiteSettingsView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    # Публичный, кэшируемый (5 мин) GET без ПДн. Его дёргает баннер cookie на каждой загрузке
+    # страницы; общий anon-лимит (60/час на IP) съедался бы им и ломал остальные запросы.
+    throttle_classes = []
 
     def get(self, request):
         data = cache.get(PUBLIC_CACHE_KEY)

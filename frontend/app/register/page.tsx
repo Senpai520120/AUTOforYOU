@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/api/client';
 import Captcha from '@/components/ui/Captcha';
+import { AGE_18_LABEL, AGE_18_REQUIRED } from '@/lib/labels';
 import { apiErrorText, useAuthConfig, useCaptchaState } from '@/lib/captcha';
 
 export default function RegisterPage() {
@@ -24,14 +25,14 @@ export default function RegisterPage() {
       return;
     }
     if (!isAdult) {
-      setError('Підтвердіть, що вам виповнилося 18 років');
+      setError(AGE_18_REQUIRED);
       return;
     }
     setLoading(true); setError('');
     try {
       await apiFetch('/api/v1/auth/register/', {
         method: 'POST',
-        body: JSON.stringify({ ...form, agreed_to_terms: true, is_adult: true, ...captcha.payload() }),
+        body: JSON.stringify({ ...form, agreed_to_terms: true, confirmed_age_18: true, ...captcha.payload() }),
       });
       setRegisteredEmail(form.email);
     } catch (err: unknown) {
@@ -101,15 +102,15 @@ export default function RegisterPage() {
 
           <div className="flex items-start gap-3">
             <input
-              id="is_adult"
+              id="confirmed_age_18"
               type="checkbox"
               checked={isAdult}
               onChange={e => setIsAdult(e.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-500 focus:ring-2 focus:ring-amber-400 cursor-pointer"
               required
             />
-            <label htmlFor="is_adult" className="text-sm text-slate-600 cursor-pointer leading-snug">
-              Мені виповнилося 18 років
+            <label htmlFor="confirmed_age_18" className="text-sm text-slate-600 cursor-pointer leading-snug">
+              {AGE_18_LABEL}
             </label>
           </div>
 

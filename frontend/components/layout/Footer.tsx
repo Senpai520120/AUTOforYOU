@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import CookieSettingsLink from '@/components/ui/CookieSettingsLink';
 import { getSiteSettings, ownerTitle } from '@/lib/site-settings';
 
 /** Серверний підвал: реквізити з налаштувань сайту; при недоступному API — без них. */
@@ -42,6 +43,7 @@ export default async function Footer() {
           <Link href="/refund" className="hover:text-slate-300 transition-colors">Повернення коштів</Link>
           <Link href="/privacy" className="hover:text-slate-300 transition-colors">Конфіденційність</Link>
           <Link href="/cookies" className="hover:text-slate-300 transition-colors">Cookie</Link>
+          <CookieSettingsLink />
         </nav>
         <p className="mt-3 text-xs text-slate-500">
           Послугу пригону надає партнер, а не AUTOforYOU

@@ -5,6 +5,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from site_settings.models import SiteSettings
+from users.consents import record_consents
+from users.models import ConsentDocument, ConsentMethod
 
 from .models import Lead, LeadCounter, LeadSource, LeadStatus, LeadStatusChange
 from .validators import clean_attribution, normalize_ua_phone
@@ -135,6 +137,11 @@ def create_lead(*, user, data: dict, calculation=None, listing=None) -> Lead:
             **fields,
         )
         LeadStatusChange.objects.create(lead=lead, from_status='', to_status=LeadStatus.NEW, changed_by=user)
+        # Журнал згод (1.14): ті ж документи, що знімок на Lead; контакти не копіюються.
+        record_consents(
+            user, [ConsentDocument.LEAD_PROCESSING, ConsentDocument.PARTNER_TRANSFER],
+            ConsentMethod.LEAD_FORM, lead=lead, partner_name=partner_name,
+        )
         lead_id = lead.pk
         transaction.on_commit(lambda: _after_commit(lead_id))
     return lead

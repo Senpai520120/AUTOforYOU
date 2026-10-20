@@ -45,7 +45,7 @@ _REG_DATA = {
     'password2': 'StrongPass123!',
     'role': 'buyer',
     'agreed_to_terms': True,
-    'is_adult': True,
+    'confirmed_age_18': True,
 }
 
 
@@ -426,7 +426,7 @@ class TestDealerApplicationFlowE2E(TestCase):
             'full_name': 'Іван Іванов',
             'contact_phone': '+380991234567',
             'documents': 'https://drive.google.com/doc123',
-            'agreed_to_processing': True,
+            'agreed_to_processing': True, 'confirmed_age_18': True,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data['status'], 'pending')
