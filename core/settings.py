@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'deals',
     'site_settings',
     'leads',
+    'task_ledger',
     # Проект, не приложение: подключён только ради management-команд (monitoring_test, 7.6). Моделей нет.
     'core',
 
@@ -454,6 +455,15 @@ else:
 
 # Celery не перехватывает корневой логгер: иначе логи задач шли бы мимо фильтра ПДн из LOGGING (7.2).
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+# Повторы задач с базой core.tasks.ResilientTask и журнал упавших задач (8.9).
+# Без префикса CELERY_: Celery читает settings с namespace='CELERY', и CELERY_TASK_ACKS_LATE стал бы
+# глобальным task_acks_late для всех задач (дубли Telegram и писем при падении воркера).
+RESILIENT_TASK_MAX_RETRIES = int(os.environ.get('RESILIENT_TASK_MAX_RETRIES', '3'))
+# true: сообщение подтверждается после выполнения - при падении воркера задача не теряется (возможен повтор).
+RESILIENT_TASK_ACKS_LATE = os.environ.get('RESILIENT_TASK_ACKS_LATE', 'true').lower() in ('true', '1', 'yes')
+FAILED_TASK_RETENTION_DAYS = int(os.environ.get('FAILED_TASK_RETENTION_DAYS', '90'))
+# Строки аргументов длиннее (или с пробелами - тексты) пишутся только как <str:длина>.
+FAILED_TASK_ARG_MAX_LEN = int(os.environ.get('FAILED_TASK_ARG_MAX_LEN', '64'))
 CELERY_TIMEZONE = 'Europe/Kyiv'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
@@ -490,6 +500,11 @@ CELERY_BEAT_SCHEDULE = {
     'anonymize-due-accounts-daily': {
         'task': 'users.tasks.anonymize_due_accounts',
         'schedule': _crontab(hour=3, minute=45),
+    },
+    # Чистка журнала упавших задач старше FAILED_TASK_RETENTION_DAYS (8.9)
+    'purge-failed-tasks-daily': {
+        'task': 'task_ledger.tasks.purge_failed_tasks',
+        'schedule': _crontab(hour=4, minute=10),
     },
     # Досыл журнала заявок в группу с партнёром (2.15), порог возраста - в админке
     'resend-lead-journal': {

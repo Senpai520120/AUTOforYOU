@@ -23,8 +23,9 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 | `saved_searches` | Сохранённые поиски                               |
 | `reports`    | Жалобы на объявления                                 |
 | `deals`      | Сделки                                               |
+| `task_ledger` | Учёт упавших Celery-задач (`FailedTask`), только просмотр в админке |
 
-`core` — проект (настройки, celery), не приложение.
+`core` — проект (настройки, celery); в `INSTALLED_APPS` только ради management-команд (`monitoring_test`), моделей нет. Базовый класс сетевых задач с повторами — `core.tasks.ResilientTask` (`base=ResilientTask`).
 
 ## Принципы
 
