@@ -148,11 +148,13 @@ test.describe('08-S2: невдалий вихід не вдає вихід', () 
     await expect(logoutButton(page)).toBeVisible();
     await page.route('**/api/v1/auth/token/logout/', (route) => route.abort());
 
-    const dialog = page.waitForEvent('dialog');
-    await logoutButton(page).click();
-    const d = await dialog;
-    expect(d.message()).toContain('Не вдалося вийти');
-    await d.accept();
+    // alert() блокує сторінку до закриття діалогу: приймаємо його в самому обробнику події
+    // (а не після await у тесті), щоб не залежати від гонки між click() і accept() у повільному CI.
+    const messages: string[] = [];
+    page.on('dialog', (d) => { messages.push(d.message()); void d.accept().catch(() => {}); });
+    await logoutButton(page).click({ noWaitAfter: true });
+    await expect.poll(() => messages.length, { timeout: 15_000 }).toBeGreaterThan(0);
+    expect(messages[0]).toContain('Не вдалося вийти');
 
     await expect(page).toHaveURL(/\/me$/);
     await expect(logoutButton(page)).toBeVisible();

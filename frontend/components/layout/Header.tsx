@@ -26,11 +26,11 @@ export default function Header() {
 
   return (
     <header className="bg-blue-900 text-white shadow-md">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight shrink-0">
           <span className="text-amber-400">AUTO</span>
           <span>forYOU</span>
-          <span className="text-xs font-normal text-blue-300 ml-1">Перекупам UA</span>
+          <span className="text-xs font-normal text-blue-300 ml-1 hidden sm:inline">Перекупам UA</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
@@ -54,7 +54,7 @@ export default function Header() {
           )}
         </nav>
 
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm min-w-0">
           {user ? (
             <>
               {/* Notifications bell */}
@@ -79,12 +79,12 @@ export default function Header() {
                   </span>
                 )}
               </Link>
-              <Link href="/me" className="hover:text-amber-400 transition-colors">
+              <Link href="/me" className="hover:text-amber-400 transition-colors truncate min-w-0 max-w-[8rem] sm:max-w-[16rem]">
                 {user.email.split('@')[0]}
               </Link>
               <button
                 onClick={handleLogout}
-                className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors"
+                className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors shrink-0"
               >
                 Вийти
               </button>

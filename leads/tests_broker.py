@@ -138,7 +138,8 @@ class ListFilterTests(BrokerBase):
             with self.subTest(q=q):
                 r = self.bc.get(LIST, {'search': q})
                 self.assertEqual([x['id'] for x in r.data['results']], [lead.pk])
-        self.assertEqual(self.bc.get(LIST, {'search': 'ковал'}).data['count'], 0)
+        # регістр кирилиці залежить від СУБД (SQLite icontains — лише ASCII), тому перевіряємо відсутність підрядка
+        self.assertEqual(self.bc.get(LIST, {'search': 'Петренко'}).data['count'], 0)
         self.assertEqual(self.bc.get(LIST, {'search': 'Коваль'}).data['count'], 1)
 
     def test_search_wildcards_literal(self):
