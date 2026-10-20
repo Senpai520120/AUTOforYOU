@@ -96,9 +96,7 @@ PUBLIC = {
     # не session/JWT, а подпись/секрет
     'liqpay-callback': 'подпись LiqPay (SHA1), csrf_exempt',
     'telegram-webhook': 'секрет X-Telegram-Bot-Api-Secret-Token (plain View)',
-    # legacy, публичность задана в core/urls.py (cars/ не правим); закроет 2.8
-    'calculator': 'legacy, ждёт задачу 2.8',
-    'car-list': 'legacy, ждёт задачу 2.8',
+    # legacy cars/ (calculator, car-list) с 2.8 подключается только при LEGACY_CARS_API_ENABLED (по умолчанию нет)
 }
 # Публичные методы у смешанных view (остальные методы обязаны быть в матрице).
 PUBLIC_METHODS = {
@@ -352,8 +350,9 @@ MATRIX: list[Case] = [
     Case('lot-import', 'post', owner='admin', owner_code=400, other=403, payload={},
          roles={'broker': 403, 'moderator': 403, 'staff': 403, 'dealer': 403},
          note='только role=admin; пустое тело - права пройдены (400)'),
-    Case('listing-create', 'post', owner_code=400, other=400, payload={},
-         note='ждёт задачу 2.8 (23-D49): сейчас любой вошедший может создать Listing; права - строгие после 2.8'),
+    Case('listing-create', 'post', owner='broker', owner_code=400, other=403, payload={},
+         roles={'dealer': 403, 'moderator': 403, 'staff': 403, 'admin': 400},
+         note='2.8 (04-S1, 23-D49): только broker/admin; пустое тело - 400 валидации, остальным 403'),
     Case('liqpay-checkout', 'post', owner_code=200, other=200, state=st_payments,
          payload=lambda c: {'order_id': 'authz-checkout-1', 'amount': '10.00', 'currency': 'USD'},
          note='платёж создаётся своему user; сумма/order_id/listing_id задаёт клиент (#24) - ждёт задачу 4.1 (23-D72)'),

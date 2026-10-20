@@ -31,7 +31,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from core.uploads import ImageUploadError, default_max_bytes, sanitize_image
 from vehicles.models import VehicleImage
@@ -130,6 +130,9 @@ class Command(BaseCommand):
         parser.add_argument('--dry-run', action='store_true', help='Показать список без скачивания')
 
     def handle(self, *args, **options):
+        from core.modules import module_enabled
+        if not module_enabled('lots'):
+            raise CommandError('Каталог лотів заморожено (LOTS_ENABLED=false): імпорт вимкнено (задача 2.8).')
         allowed_hosts = list(getattr(settings, 'LOT_PHOTO_ALLOWED_HOSTS', []) or [])
         if not allowed_hosts:
             self.stdout.write(self.style.WARNING(

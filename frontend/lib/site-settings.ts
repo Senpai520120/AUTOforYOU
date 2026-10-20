@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation';
 import { serverGet } from '@/lib/server-api';
 import type { SiteSettings } from '@/lib/types';
 
@@ -32,4 +33,12 @@ export function privacyContact(s: SiteSettings | null): string {
 /** Email для загальних звернень: support_email, інакше privacy_email. */
 export function supportContact(s: SiteSettings | null): string {
   return s?.support_email || s?.privacy_email || '';
+}
+
+export type FrozenModule = 'lots_enabled' | 'b2b_enabled' | 'dealers_enabled' | 'shipments_enabled';
+
+/** 2.8: сторінка замороженого модуля — 404, поки флаг не true (і коли API налаштувань недоступне). */
+export async function requireModule(flag: FrozenModule): Promise<void> {
+  const settings = await getSiteSettings(0);
+  if (settings?.[flag] !== true) notFound();
 }

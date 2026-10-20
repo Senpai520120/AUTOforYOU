@@ -161,3 +161,72 @@ class TestSanitizeExistingImages(TestCase):
         self.assertFalse(default_storage.exists('tracking_photos/port.jpg'))
         self.assertFalse(os.path.exists(os.path.join(self.media_root, event.photo.name)))
 
+
+
+# ─── 04-S2 / 13-S5 (2.8): VIN и лот видны только там, где авто видно в каталоге ─────────
+
+class VehicleVisibilityTests(TestCase):
+    def setUp(self):
+        from listings.models import Listing
+        from tests.factories import make_listing, make_user
+        seller = make_user()
+        self.retail = make_vehicle(vin='RETAILVIN00000001')
+        self.wholesale = make_vehicle(vin='WHOLESALEVIN00001')
+        self.no_listing = make_vehicle(vin='NOLISTINGVIN00001')
+        self.in_container = make_vehicle(vin='CONTAINERVIN00001')
+        make_listing(self.retail, seller, channel=Listing.Channel.RETAIL)
+        make_listing(self.wholesale, seller, channel=Listing.Channel.WHOLESALE)
+        Shipment.objects.create(container_no='MSCU1234567').vehicles.add(self.in_container)
+
+    def vins(self, user=None, query=''):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        if user is not None:
+            client.force_authenticate(user)
+        resp = client.get(f'/api/v1/vehicles/{query}')
+        self.assertEqual(resp.status_code, 200)
+        return {v['vin'] for v in resp.json()['results']}
+
+    def detail(self, vehicle, user=None):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        if user is not None:
+            client.force_authenticate(user)
+        return client.get(f'/api/v1/vehicles/{vehicle.pk}/').status_code
+
+    def test_anonymous_sees_only_retail(self):
+        self.assertEqual(self.vins(), {'RETAILVIN00000001'})
+
+    def test_buyer_sees_only_retail(self):
+        from tests.factories import make_user
+        self.assertEqual(self.vins(make_user()), {'RETAILVIN00000001'})
+
+    def test_broker_and_moderator_no_wholesale(self):
+        from tests.factories import make_broker, make_moderator
+        for user in (make_broker(), make_moderator()):
+            with self.subTest(role=user.role):
+                self.assertEqual(self.vins(user), {'RETAILVIN00000001'})
+
+    def test_dealer_sees_wholesale(self):
+        from tests.factories import make_dealer
+        self.assertEqual(self.vins(make_dealer()), {'RETAILVIN00000001', 'WHOLESALEVIN00001'})
+
+    def test_dealer_without_b2b_no_wholesale(self):
+        from django.test import override_settings
+
+        from tests.factories import make_dealer
+        with override_settings(B2B_ENABLED=False):
+            self.assertEqual(self.vins(make_dealer()), {'RETAILVIN00000001'})
+
+    def test_admin_sees_all(self):
+        from tests.factories import make_admin_role
+        self.assertEqual(len(self.vins(make_admin_role())), 4)
+
+    def test_detail_404_for_hidden(self):
+        for vehicle in (self.wholesale, self.no_listing, self.in_container):
+            with self.subTest(vin=vehicle.vin):
+                self.assertEqual(self.detail(vehicle), 404)
+        self.assertEqual(self.detail(self.retail), 200)
+
+    def test_search_wholesale_vin_empty(self):
+        self.assertEqual(self.vins(query='?search=WHOLESALEVIN00001'), set())

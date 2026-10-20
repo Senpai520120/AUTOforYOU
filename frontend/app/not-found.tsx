@@ -12,13 +12,13 @@ export default function NotFound() {
       <p className="text-8xl font-extrabold text-blue-700 mb-4">404</p>
       <h1 className="text-2xl font-bold text-slate-900 mb-2">Сторінку не знайдено</h1>
       <p className="text-slate-500 mb-8 max-w-sm">
-        Можливо, посилання застаріло або оголошення вже продано.
+        Можливо, посилання застаріло або сторінку прибрано.
       </p>
       <Link
-        href="/listings"
+        href="/calculator"
         className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 rounded-xl transition-colors"
       >
-        Переглянути каталог
+        Розрахувати вартість
       </Link>
     </div>
   );

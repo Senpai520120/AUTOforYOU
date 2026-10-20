@@ -34,19 +34,9 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-          <Link href="/listings" className="hover:text-amber-400 transition-colors">Пригін/аукціон</Link>
           <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
           <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
-          {/* Той самий признак, що й на бекенді (IsVerifiedDealerOrAdmin).
-              Раніше тут стояло user.role === 'admin' — користувач бачив
-              посилання на B2B-дошку, а у відповідь отримував 403. */}
-          {user && (user.is_verified_dealer || user.is_admin_role) ? (
-            <Link href="/b2b" className="hover:text-amber-400 transition-colors">B2B</Link>
-          ) : user ? (
-            <Link href="/dealers/apply" className="text-amber-300 hover:text-amber-400 transition-colors text-xs border border-amber-400/40 px-2 py-1 rounded">
-              B2B-доступ
-            </Link>
-          ) : null}
+          {/* 2.8: «Пригін/аукціон», B2B і «B2B-доступ» прибрано — модулі заморожено (повернуть при розморожуванні). */}
           {/* role приходить із сервера й клієнтом не змінюється; реальний доступ перевіряє API (403).
               На вузьких екранах пункт «Заявки» є в /me. */}
           {user && (user.role === 'broker' || user.is_admin_role) && (

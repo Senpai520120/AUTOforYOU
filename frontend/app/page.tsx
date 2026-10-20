@@ -16,6 +16,9 @@ const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?
  */
 export const dynamic = 'force-dynamic';
 
+// «Як працює пригон» — сторінка задачі 2.13; поки її немає, кнопка не рендериться (2.8).
+const HOW_IT_WORKS_HREF: string | null = null;
+
 export const metadata: Metadata = {
   title: 'AUTOforYOU — авто з США під ключ',
   description:
@@ -108,12 +111,15 @@ export default async function Home() {
           >
             Порахувати вартість
           </Link>
-          <Link
-            href="/listings"
-            className="bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
-          >
-            Переглянути каталог
-          </Link>
+          {/* 2.8: каталог лотів заморожено — друга кнопка веде на «Як працює пригон» (2.13), коли сторінка є */}
+          {HOW_IT_WORKS_HREF && (
+            <Link
+              href={HOW_IT_WORKS_HREF}
+              className="bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
+            >
+              Як працює пригон
+            </Link>
+          )}
         </div>
         <p className="mt-6 text-xs text-amber-300">
           ⚠ Тестові тарифи — всі розрахунки є демонстраційними
@@ -127,7 +133,7 @@ export default async function Home() {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link
-            href="/listings"
+            href="/calculator"
             className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <div className="text-4xl mb-3" aria-hidden="true">🇺🇸</div>
@@ -135,7 +141,7 @@ export default async function Home() {
               Імпорт з аукціонів США
             </h3>
             <p className="text-sm text-slate-500">
-              Лоти Copart та IAAI, розрахунок «під ключ», відстеження контейнера від складу до гаража.
+              Розрахунок «під ключ»: аукціон, доставка, розмитнення — і заявка брокеру.
             </p>
           </Link>
           <Link
@@ -211,8 +217,8 @@ export default async function Home() {
             <h2 id="latest-heading" className="text-2xl font-bold text-slate-900">
               Свіжі авто
             </h2>
-            <Link href="/listings" className="text-sm text-blue-700 hover:underline">
-              Весь каталог →
+            <Link href="/calculator" className="text-sm text-blue-700 hover:underline">
+              Розрахувати вартість →
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

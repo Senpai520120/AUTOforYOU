@@ -64,9 +64,16 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
         conv.participants.set([initiator.pk, listing.owner_id])
 
     elif listing_type == 'imported':
+        from core.modules import module_enabled
+        from listings.permissions import can_view_wholesale
         try:
-            listing = Listing.objects.get(pk=listing_id)
+            listing = Listing.objects.select_related('vehicle').get(pk=listing_id)
         except Listing.DoesNotExist:
+            raise ValueError('Оголошення не знайдено.')
+        # 2.8: лоты заморожены или wholesale без B2B-доступа - тот же ответ, что и для несуществующего
+        # (иначе перебором id видны марка/модель любого лота в subject_title диалога).
+        if not module_enabled('lots') or (
+                listing.channel == Listing.Channel.WHOLESALE and not can_view_wholesale(initiator)):
             raise ValueError('Оголошення не знайдено.')
 
         conv = Conversation.objects.filter(

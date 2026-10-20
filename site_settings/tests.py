@@ -94,7 +94,8 @@ class PublicApiTests(CleanCacheTestCase):
     def test_anonymous_gets_whitelist_only(self):
         r = APIClient().get(URL)
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(set(r.json()), set(PublicSiteSettingsSerializer.Meta.fields))
+        flags = {'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled'}  # 2.8, из .env
+        self.assertEqual(set(r.json()), set(PublicSiteSettingsSerializer.Meta.fields) | flags)
         self.assertNotIn('id', r.json())
         self.assertNotIn('updated_at', r.json())
 

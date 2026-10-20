@@ -6,11 +6,12 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
-      allow: ['/', '/listings', '/listings/', '/calculator'],
+      allow: ['/', '/calculator'],
       disallow: [
+        '/listings',   // 2.8: каталог лотів заморожено
         '/me/',        // личный кабинет
-        '/b2b/',       // B2B-доска (только дилеры)
-        '/dealers/',   // заявки дилеров
+        '/b2b',        // B2B-доска (заморожено, 2.8)
+        '/dealers',    // заявки дилеров (заморожено, 2.8)
         '/login',
         '/register',
         '/admin/',

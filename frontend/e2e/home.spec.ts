@@ -29,9 +29,10 @@ test.describe('Головна сторінка @smoke', () => {
     const section = page.getByRole('region', { name: 'Два напрямки' });
     await expect(section).toBeVisible();
 
+    // 2.8: каталог лотів заморожено — імпорт веде на калькулятор «під ключ».
     await expect(section.getByRole('link', { name: /Імпорт з аукціонів США/ })).toHaveAttribute(
       'href',
-      '/listings',
+      '/calculator',
     );
     await expect(section.getByRole('link', { name: /Каталог Україна/ })).toHaveAttribute('href', '/ua');
   });

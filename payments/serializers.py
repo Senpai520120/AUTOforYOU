@@ -41,8 +41,9 @@ class LiqPayCheckoutSerializer(serializers.Serializer):
     def validate_listing_id(self, value):
         if value is None:
             return value
+        from core.modules import module_enabled
         from listings.models import Listing
 
-        if not Listing.objects.filter(pk=value).exists():
+        if not module_enabled('lots') or not Listing.objects.filter(pk=value).exists():  # 2.8
             raise serializers.ValidationError(f'Листинг #{value} не найден.')
         return value

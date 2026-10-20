@@ -7,8 +7,10 @@ def can_view_wholesale(user):
     или superuser). is_staff сам по себе прав не даёт: его имеют broker и moderator
     ради доступа в Django Admin.
     """
+    from core.modules import module_enabled
     return bool(
-        user
+        module_enabled('b2b')  # 2.8: B2B заморожен - wholesale не выдаётся никому
+        and user
         and user.is_authenticated
         and (user.is_verified_dealer or user.is_admin_role)
     )

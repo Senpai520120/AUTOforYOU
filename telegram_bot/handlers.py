@@ -53,6 +53,11 @@ async def cmd_latest(message: Message) -> None:
     from asgiref.sync import sync_to_async
     from django.conf import settings
 
+    from core.modules import module_enabled
+    if not module_enabled('lots'):  # 2.8: каталог лотів заморожено
+        await message.answer('Каталог тимчасово недоступний. Розрахувати вартість авто: /calculator на сайті.')
+        return
+
     @sync_to_async
     def _fetch():
         from listings.models import Listing

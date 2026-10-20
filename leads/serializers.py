@@ -3,6 +3,7 @@ import re
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from core.modules import module_enabled
 from listings.models import Listing
 from listings.permissions import can_view_wholesale
 from pricing.models import Calculation
@@ -91,7 +92,9 @@ class LeadCreateSerializer(serializers.Serializer):
                     calculation.user_id is not None and (not authenticated or calculation.user_id != user.pk)):
                 raise serializers.ValidationError({'calculation_id': _INVALID_CALCULATION})
         if listing_id is not None:
-            listing = Listing.objects.select_related('vehicle').filter(pk=listing_id).first()
+            # 2.8: при замороженных лотах заявка по лоту не принимается (vehicle_label иначе раскрывает лот)
+            listing = (Listing.objects.select_related('vehicle').filter(pk=listing_id).first()
+                       if module_enabled('lots') else None)
             if listing is None or (listing.channel == Listing.Channel.WHOLESALE and not can_view_wholesale(user)):
                 raise serializers.ValidationError({'listing_id': _INVALID_LISTING})
 

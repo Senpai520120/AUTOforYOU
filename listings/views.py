@@ -2,9 +2,11 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, generics, permissions
 
+from users.permissions import IsBrokerOrAdmin
+
 from .models import Listing
 from .permissions import IsVerifiedDealerOrAdmin, can_view_wholesale
-from .serializers import ListingCreateSerializer, ListingSerializer
+from .serializers import ListingCreateSerializer, ListingFilterSerializer, ListingSerializer
 
 
 def _base_queryset():
@@ -26,11 +28,11 @@ def _apply_filters(qs, params):
         qs = qs.filter(vehicle__fuel_type=fuel_type)
     if currency:
         qs = qs.filter(currency=currency)
-    if max_price:
-        try:
-            qs = qs.filter(price__lte=max_price)
-        except (ValueError, TypeError):
-            pass
+    if max_price not in (None, ''):
+        # 04-Q1: валидация до запроса - ValidationError DRF даёт 400 с ошибкой поля
+        ser = ListingFilterSerializer(data={'max_price': max_price})
+        ser.is_valid(raise_exception=True)
+        qs = qs.filter(price__lte=ser.validated_data['max_price'])
     return qs
 
 
@@ -80,11 +82,11 @@ class ListingDetailView(generics.RetrieveAPIView):
 
 
 @extend_schema_view(
-    post=extend_schema(tags=['listings'], summary='Создать объявление', description='Требует авторизации.'),
+    post=extend_schema(tags=['listings'], summary='Создать объявление', description='Только broker и admin (04-S1).'),
 )
 class ListingCreateView(generics.CreateAPIView):
     serializer_class = ListingCreateSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsBrokerOrAdmin]  # 04-S1: buyer и дилер - 403, аноним - 401
 
 
 @extend_schema_view(

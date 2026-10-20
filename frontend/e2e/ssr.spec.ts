@@ -49,7 +49,7 @@ test.describe('Серверний рендер каталогів @smoke', () =>
     // /ua раніше в sitemap не потрапляв, хоча це єдиний розділ з реальними
     // оголошеннями.
     expect(xml).toContain('/ua');
-    expect(xml).toContain('/listings');
+    expect(xml).not.toContain('/listings');  // 2.8: каталог лотів заморожено
     expect(xml).toContain('/refund');
   });
 });

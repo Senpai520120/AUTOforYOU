@@ -4,15 +4,29 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.modules import module_enabled
+
 from .models import Favorite
 from .serializers import FavoriteSerializer
+
+
+def _lots_frozen(listing_type) -> bool:
+    """2.8: операции с лотами (imported) при LOTS_ENABLED=false - 404; C2C (local) не затронуто."""
+    return listing_type != 'local' and not module_enabled('lots')
+
+
+def _not_found():
+    return Response({'detail': 'Не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class FavoriteListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = Favorite.objects.filter(user=request.user).select_related(
+        qs = Favorite.objects.filter(user=request.user)
+        if not module_enabled('lots'):  # 2.8: лоты заморожены - в списке только C2C
+            qs = qs.filter(imported_listing__isnull=True)
+        qs = qs.select_related(
             'local_listing',
             'imported_listing__vehicle',
         ).prefetch_related(
@@ -27,6 +41,8 @@ class FavoriteListView(APIView):
         listing_id = request.data.get('listing_id')
         if listing_type not in ('local', 'imported') or not listing_id:
             return Response({'detail': 'listing_type and listing_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if _lots_frozen(listing_type):
+            return _not_found()
 
         kwargs = {'user': request.user}
         if listing_type == 'local':
@@ -49,6 +65,8 @@ class FavoriteListView(APIView):
         """Remove from favorites. Body: {listing_type, listing_id}"""
         listing_type = request.data.get('listing_type')
         listing_id = request.data.get('listing_id')
+        if _lots_frozen(listing_type):
+            return _not_found()
         kwargs = {'user': request.user}
         if listing_type == 'local':
             kwargs['local_listing_id'] = listing_id
@@ -67,6 +85,8 @@ class FavoriteStatusView(APIView):
         listing_id = request.query_params.get('listing_id')
         if not listing_type or not listing_id:
             return Response({'is_favorite': False})
+        if _lots_frozen(listing_type):
+            return _not_found()
         kwargs = {'user': request.user}
         if listing_type == 'local':
             kwargs['local_listing_id'] = listing_id

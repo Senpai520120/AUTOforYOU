@@ -77,7 +77,7 @@ export default function MeDashboard() {
     { href: '/me/leads', icon: '📨', title: 'Мої заявки', desc: 'Заявки брокеру та їх статус' },
     { href: '/me/calculations', icon: '🧮', title: 'Мої розрахунки', desc: 'Історія калькуляцій' },
     { href: '/me/trusted-shops', icon: '🔧', title: 'Мої партнери', desc: 'СТО, маляри, запчастини' },
-    { href: '/me/shipments', icon: '📦', title: 'Мої контейнери', desc: 'Відстежувані шипменти' },
+    // 2.8: «Мої контейнери» (/me/shipments) прибрано — модуль контейнерів заморожено.
     { href: '/me/security', icon: '🔒', title: 'Безпека', desc: 'Зміна пароля, вихід на всіх пристроях' },
     { href: '/me/telegram', icon: '✈️', title: 'Прив\'язати Telegram', desc: 'Отримуйте сповіщення у Telegram' },
     { href: '/me/data', icon: '🗂️', title: 'Мої дані', desc: 'Завантажити копію даних, видалити акаунт' },

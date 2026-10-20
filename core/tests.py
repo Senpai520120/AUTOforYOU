@@ -102,9 +102,45 @@ class TestPublicEndpointsStayPublic(CleanCacheTestCase):
     def test_vehicles(self):
         self.assertEqual(self.client.get('/api/v1/vehicles/').status_code, status.HTTP_200_OK)
 
-    def test_legacy_calculate(self):
-        # LEGACY_CARS_API_ENABLED (задача 2.8) ещё не введён: ожидается 200.
-        self.assertEqual(self.client.get('/api/calculate/').status_code, status.HTTP_200_OK)
 
-    def test_legacy_list(self):
-        self.assertEqual(self.client.get('/api/list/').status_code, status.HTTP_200_OK)
+
+def _reload_urlconf():
+    import importlib
+
+    from django.urls import clear_url_caches
+
+    import core.urls
+    clear_url_caches()
+    importlib.reload(core.urls)
+
+
+class LegacyCarsFlagTests(TestCase):
+    """Q7, 2.8 (23-D56): legacy cars/ API подключается только при LEGACY_CARS_API_ENABLED. Код cars/ не меняется."""
+
+    def setUp(self):
+        self.addCleanup(_reload_urlconf)  # вернуть urlconf с настройками по умолчанию
+
+    def get(self, url, enabled):
+        with override_settings(LEGACY_CARS_API_ENABLED=enabled):
+            _reload_urlconf()
+            return APIClient().get(url).status_code
+
+    def test_calculate_off_404(self):
+        self.assertEqual(self.get('/api/calculate/', False), status.HTTP_404_NOT_FOUND)
+
+    def test_list_off_404(self):
+        self.assertEqual(self.get('/api/list/', False), status.HTTP_404_NOT_FOUND)
+
+    def test_calculate_on_200(self):
+        self.assertEqual(self.get('/api/calculate/', True), status.HTTP_200_OK)
+
+    def test_list_on_200(self):
+        self.assertEqual(self.get('/api/list/', True), status.HTTP_200_OK)
+
+    def test_not_in_openapi_when_off(self):
+        with override_settings(LEGACY_CARS_API_ENABLED=False):
+            _reload_urlconf()
+            from drf_spectacular.generators import SchemaGenerator
+            paths = SchemaGenerator().get_schema(request=None, public=True)['paths']
+        self.assertNotIn('/api/calculate/', paths)
+        self.assertNotIn('/api/list/', paths)

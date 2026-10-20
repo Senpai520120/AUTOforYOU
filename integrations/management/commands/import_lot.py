@@ -44,6 +44,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        from core.modules import module_enabled
+        if not module_enabled('lots'):
+            raise CommandError('Каталог лотів заморожено (LOTS_ENABLED=false): імпорт вимкнено (задача 2.8).')
         seller = self._resolve_seller(options['seller_email'])
         source = options['source']
 

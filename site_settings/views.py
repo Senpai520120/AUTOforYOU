@@ -3,6 +3,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.modules import module_flags
+
 from .models import PUBLIC_CACHE_KEY, SiteSettings
 from .serializers import PublicSiteSettingsSerializer
 
@@ -21,4 +23,5 @@ class SiteSettingsView(APIView):
         if data is None:
             data = dict(PublicSiteSettingsSerializer(SiteSettings.load()).data)
             cache.set(PUBLIC_CACHE_KEY, data, CACHE_TTL)
-        return Response(data)
+        # 2.8: флаги модулей - из .env (только чтение), не из модели и не из кэша
+        return Response({**data, **module_flags()})

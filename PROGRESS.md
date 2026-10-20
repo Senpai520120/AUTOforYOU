@@ -12,9 +12,30 @@
 - 2026-10-20 облачная сессия: ветка `task-1.8` (PR #39 → `finish-site`), по коммиту на задачу: 1.8, 7.2, 7.6, 8.9, 2.14, 2.5. Пакет из 5 задач (7.2 → 2.5) по поручению владельца закрыт, дальше — только по новому сообщению.
 - 2026-10-20 вторая облачная сессия: ветка `task-2.6` (PR → `finish-site`), задачи 2.6 и 2.7.
 - Там же по второму сообщению владельца: исправлены 2 красные проверки CI `finish-site` (gitleaks, e2e `negative.spec`), задачи 8.7 и 2.8.
-- **Следующая задача по критическому пути: 2.8**, затем 3.1 → 3.2a → … (ROADMAP.md, «Порядок выполнения»).
+- **Следующая задача по критическому пути: 3.1**, затем 3.2a → 3.4a → 2.12 → … (ROADMAP.md, «Порядок выполнения»). Пакет из двух задач (8.7, 2.8) закрыт, дальше — только по новому сообщению.
 - Перед продолжением: проверить CI PR #39; локальные `.env` и `.env.e2e` — задать настоящий `SECRET_KEY` (с 7.2 заглушки из шаблонов не стартуют) и переменные из `.env.e2e.example` (`THROTTLE_*`, `PRIVATE_MEDIA_USE_X_ACCEL=true`); для Playwright экспортировать `E2E_PASSWORD`.
 - Решения владельца, накопленные за прогон, — в разделах задач ниже («Для владельца») и в `docs/LAUNCH_CHECKLIST.md`.
+
+---
+
+## Задача 2.8: заморозка модулей и закрытие создания (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
+
+- Флаги `LOTS_ENABLED`, `B2B_ENABLED`, `DEALERS_ENABLED`, `SHIPMENTS_ENABLED`, `LEGACY_CARS_API_ENABLED` (`core/settings.py`, по умолчанию `false`; в тестовом блоке модули `true`), одна точка чтения `core/modules.py::module_enabled`. Шаблоны: `.env.example`, `.env.docker.example` — `false`; `.env.e2e.example` — модули `true` (см. ниже).
+- `core/middleware.py::ModuleFlagMiddleware` (после `CommonMiddleware`, до CSRF и аутентификации, без БД): 404 для любого метода и пользователя на `api/v1/listings/` (вкл. `create/`), `lots/import/`, `vehicles/` и `vehicles/<pk>/`, `b2b/`, `dealers/`, `shipments/`, `auth/me/shipments/`. VIN-сервисы `vehicles/<vin>/decode|report|registry/` и админка не затронуты. Тест классификации маршрутов валит новый маршрут под замороженным префиксом.
+- `cars/` (Q7): маршруты `/api/calculate/`, `/api/list/` подключаются в `core/urls.py` только при `LEGACY_CARS_API_ENABLED`; выключено — 404 и нет в OpenAPI (тесты в `core/tests.py` с перезагрузкой urlconf). `git diff -- cars/` пуст.
+- Обход заморозки через соседние модули закрыт: избранное лотов (404, в списке только C2C), диалог по лоту `messages/start/` (тот же ответ, что для несуществующего; wholesale — только с B2B-доступом), заявка с `listing_id` и платёж с `listing_id` (400), бот `/latest` («Каталог тимчасово недоступний»), сигнал канала (ранний выход при `LOTS` off; wholesale не публикуется при `B2B` off), CLI `import_lot`/`upload_lot_photos` (`CommandError`). `can_view_wholesale` — `false` при `B2B` off. `GET /site-settings/` отдаёт `lots_enabled`, `b2b_enabled`, `dealers_enabled`, `shipments_enabled` (из `.env`, не из кэша).
+- Сохранённые пункты аудита: 04-S1 — `listings/create/` только `IsBrokerOrAdmin` (аноним 401, buyer/dealer 403), чужой `calculation` — 400 (admin-роль — любой), дубль `vehicle`+`channel` — 400, `wholesale` при `B2B` off — 400; 04-S2/13-S5 — `/vehicles/`: гость/buyer только авто с retail-листингом, verified dealer — ещё wholesale при B2B, admin-роль — всё, скрытые — 404, `?search=<VIN>` не выходит за видимое; 04-Q1 — `max_price` через `ListingFilterSerializer` (`abc`, `-1`, слишком большое — 400, не 500), каталог и B2B-доска.
+- Фронт: ссылки убраны (шапка — «Пригін/аукціон», «B2B», «B2B-доступ»; главная — кнопки и карточка «Імпорт» ведут на `/calculator`, «Як працює пригон» появится с 2.13; 404-страница — «Розрахувати вартість»; карточка лота — «На головну»; B2B — без ссылки на заявку дилера; кабинет — без «Мої контейнери»). `sitemap.ts` не запрашивает лоты, `robots.ts` — `Disallow: /listings`, `/b2b`, `/dealers`. Замороженные страницы: `proxy.ts` (Next 16) отдаёт настоящий 404 по флагам из `site-settings` (кеш 30 с, недоступность = выключено) + `layout.tsx` с `requireModule` как вторая линия (сам он не даёт статус 404 под `/me`, где `loading.tsx` раньше начинает стрим).
+- Проверки: бэкенд SQLite полный прогон 1835 OK (skipped=2); PostgreSQL (core, listings, vehicles, favorites, messaging) 125 OK; ruff чисто; `tsc`, `lint` (0 ошибок, те же 22 предупреждения), `build` OK; `openapi.yaml` перегенерирован против PostgreSQL (без `cars`). Мутационная проверка: 17 мутаций — все пойманы. E2E (chromium, облачная связка): с флагами `true` — весь набор 226 passed; упали только облачные `password`/`uploads` (нет Mailpit и nginx), `broker.spec` (данные, накопленные в моей базе повторными прогонами) и 3 спека, проверявшие убранные ссылки (`home`, `ssr`, `test-1` — обновлены, 26 passed); с флагами `false` — `module-flags.spec.ts` (новый, 24 теста), `home`, `calculator-config` — 41 passed.
+- Ревью безопасности (`security-reviewer`): критичного нет; «важно» исправлены все 3 (диалог по лоту, заявка с `listing_id`, бот `/latest`); «желательно» исправлены: wholesale в канал и создание wholesale при B2B off, платёж с `listing_id`, тест middleware на существующих объектах, `vin decode` — один код 200 с моком NHTSA, тесты dealer/B2B off и DELETE избранного, кеш флагов в `proxy.ts`.
+- Не сделано / для владельца:
+  - **E2E в CI** гоняется на стеке с модулями `true` (иначе пришлось бы переделать 16 спеков замороженных модулей); `module-flags.spec.ts` там пропускается с пометкой. **Владельцу:** нужен ли в CI второй прогон e2e со стеком `false` (как прод) — это ~+3 мин на `module-flags` и основные спеки.
+  - `UniqueConstraint(vehicle, channel)` у `Listing` не добавлен (схема БД; проверка дубля в сериализаторе, гонка двух запросов возможна) — при разморозке лотов (2.9/3.3).
+  - 04-Q8, 04-S5/09-S4, 02-S5 — закрыты флагом, исправляются при разморозке (по файлу задачи). Ответ `messages/start/` по замороженному лоту — 400 «Оголошення не знайдено» (как для несуществующего), не 404.
+  - Недоступность `site-settings` при SSR проверена кодом (null = выключено), e2e-мока для серверного запроса нет (`page.route` перехватывает только браузер).
+
+### Для владельца
+- `.env` прод: `LOTS_ENABLED=false`, `B2B_ENABLED=false`, `DEALERS_ENABLED=false`, `SHIPMENTS_ENABLED=false`, `LEGACY_CARS_API_ENABLED=false` (так и по умолчанию). Включать только при разморозке (2.9, 2.10, 2.11, 3.3); после смены — перезапуск backend.
 
 ---
 

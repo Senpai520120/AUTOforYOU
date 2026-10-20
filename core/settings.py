@@ -86,6 +86,8 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    # 2.8: API замороженных модулей - 404 по флагу, до аутентификации
+    'core.middleware.ModuleFlagMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -395,6 +397,15 @@ LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
 
 # ─── Аукционные сборы ─────────────────────────────────────────────────────────
 AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
+
+# Заморожённые модули (2.8, бизнес-план): по умолчанию выключены; включать только при разморозке
+# (2.9, 2.10, 2.11, 3.3). Читаются через core.modules.module_enabled.
+LOTS_ENABLED = os.environ.get('LOTS_ENABLED', 'false').lower() in _TRUE
+B2B_ENABLED = os.environ.get('B2B_ENABLED', 'false').lower() in _TRUE
+DEALERS_ENABLED = os.environ.get('DEALERS_ENABLED', 'false').lower() in _TRUE
+SHIPMENTS_ENABLED = os.environ.get('SHIPMENTS_ENABLED', 'false').lower() in _TRUE
+# Legacy cars/ (Q7): /api/calculate/ и /api/list/ - только при True; код cars/ не меняется.
+LEGACY_CARS_API_ENABLED = os.environ.get('LEGACY_CARS_API_ENABLED', 'false').lower() in _TRUE
 # Анонимные расчёты старше N дней удаляет pricing.tasks.purge_anonymous_calculations (2.6, 02-S2).
 ANON_CALCULATION_TTL_DAYS = int(os.environ.get('ANON_CALCULATION_TTL_DAYS', '30'))
 
@@ -578,6 +589,8 @@ if not DEBUG and not _TESTING:
 TEST_RUNNER = 'core.test_runner.IsolatedDiscoverRunner'
 
 if _TESTING:
+    # 2.8: в тестах модули включены, чтобы их тесты работали; флаги проверяют override_settings.
+    LOTS_ENABLED = B2B_ENABLED = DEALERS_ENABLED = SHIPMENTS_ENABLED = True
     OPENDATABOT_API_KEY = ''
     APIFY_TOKEN = ''
     LIQPAY_PUBLIC_KEY = ''

@@ -484,6 +484,11 @@ export type OwnerLegalForm = 'fop' | 'tov' | 'other' | '';
 
 /** Публічні налаштування сайту (GET /api/v1/site-settings/). */
 export interface SiteSettings {
+  // 2.8: флаги заморожених модулів з .env (лише читання); недоступність налаштувань = «вимкнено»
+  lots_enabled?: boolean;
+  b2b_enabled?: boolean;
+  dealers_enabled?: boolean;
+  shipments_enabled?: boolean;
   owner_legal_form: OwnerLegalForm;
   owner_legal_name: string;
   owner_code: string;

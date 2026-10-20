@@ -23,8 +23,8 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
 
   return (
     <div>
-      <Link href="/listings" className="text-blue-600 text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
-        ← Каталог
+      <Link href="/" className="text-blue-600 text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
+        ← На головну
       </Link>
 
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-8">
