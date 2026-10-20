@@ -129,6 +129,18 @@ docker compose -p autoforyou-e2e down -v
 
 ---
 
+## Захист від витоку секретів
+
+Перед комітом працює gitleaks (конфіг `.gitleaks.toml`, той самий у CI):
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files   # перевірка всього дерева
+```
+
+Ключі й токени — лише в `.env` (він у `.gitignore`), у репозиторій не потрапляють.
+
 ## URL-карта
 
 | Адреса | Опис |

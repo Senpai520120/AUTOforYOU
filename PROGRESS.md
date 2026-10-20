@@ -1,8 +1,18 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, дальше 1.1 → 1.7 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, дальше 1.7 → 1.9 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 1.1: утечки секретов (2026-10-20) — ЗАВЕРШЕНО (код), действия владельца — ниже
+
+- `integrations/providers.py`: Opendatabot, NHTSA, Apify при ошибке отдают общий текст и `error='service_unavailable'`, детали — в лог с маской `apikey=***`. `integrations/views.py`: ошибка провайдера → 503 без сохранения `RegistryReport`; кэш не отдаёт старые записи с `error` (`.exclude(payload__has_key='error')`).
+- Ручная команда `purge_registry_errors` (по умолчанию dry-run, удаление только с `--confirm`) вместо data-миграции: необратимое удаление — решение владельца.
+- `.gitleaks.toml` (allowlist только для тестовых фиктивных значений, docs и `*.example` сканируются), `.pre-commit-config.yaml` (gitleaks v8.21.2), CI-job `secrets-scan` (`gitleaks dir . --redact`). `.gitignore`: `.env.*` кроме `*.example`, `.claude/settings.local.json`, дампы `*.sql`/`*.dump`, ключи `*.pem`/`*.key`/`id_rsa*`; `.dockerignore`: `.claude/`. `LOGGING`: `httpx`/`httpcore` на WARNING. README — установка pre-commit.
+- Проверки: бэкенд 945 OK; тесты на настоящий `httpx.HTTPStatusError` с ключом в URL. Ревью `security-reviewer`: 3 «важно» + 3 «желательно» исправлены. Gitleaks локально не запускался (нет образа) — проверить `pre-commit run --all-files` и первый прогон CI.
+- Владелец: токен Telegram-бота был в истории публичного репозитория (`.claude/settings.local.json`, коммит a47169c; историю по Q1 не чистим). Владелец сообщил 2026-10-19, что токены перевыпущены — убедиться, что отозван именно токен бота AUTO_F_Y. Перевыпустить `OPENDATABOT_API_KEY`, если ключ работал в бою; `pre-commit install`; запустить `purge_registry_errors` (dry-run, затем `--confirm`); закрепить образ gitleaks по digest в CI.
 
 ---
 

@@ -15,7 +15,6 @@ from listings.models import Listing
 from tests.factories import auth_client, make_admin_role, make_broker, make_moderator, make_staff, make_user
 from vehicles.models import Vehicle, VehicleImage
 
-
 # ── Провайдер: без ключа → demo ───────────────────────────────────────────────
 
 class TestOpendatabotProviderNoKey(SimpleTestCase):
@@ -595,3 +594,124 @@ class VinReportAccessTest(APITestCase):
         from integrations.views import VinReportView
         # Тот же лимит, что и у RegistryReportView с тем же внешним API.
         self.assertEqual(VinReportView.throttle_scope, 'expensive')
+
+
+# ── 1.1: утечки секретов (03-S1, 03-S6) ──────────────────────────────────────
+
+_LEAKY_URL = 'https://api.opendatabot.ua/v3/x?apikey=SECRET123'
+
+
+def _http_error():
+    import httpx
+    request = httpx.Request('GET', _LEAKY_URL)
+    return httpx.HTTPStatusError(
+        f"Client error '403 Forbidden' for url '{_LEAKY_URL}'",
+        request=request,
+        response=httpx.Response(403, request=request),
+    )
+
+
+class TestProviderErrorsDoNotLeak(SimpleTestCase):
+
+    @patch('httpx.get')
+    def test_opendatabot_http_error_does_not_leak_key(self, mock_get):
+        mock_get.side_effect = _http_error()
+        result = RealOpendatabotProvider(api_key='SECRET123').get_vehicle_info(vin='1HGBH41JXMN109186')
+        self.assertEqual(result['error'], 'service_unavailable')
+        dumped = str(result)
+        self.assertNotIn('SECRET123', dumped)
+        self.assertNotIn('apikey', dumped)
+
+    @patch('httpx.get')
+    def test_opendatabot_error_logged_masked(self, mock_get):
+        mock_get.side_effect = _http_error()
+        with self.assertLogs('integrations.providers', level='WARNING') as cm:
+            RealOpendatabotProvider(api_key='SECRET123').get_vehicle_info(vin='1HGBH41JXMN109186')
+        out = ' '.join(cm.output)
+        self.assertIn('apikey=***', out)
+        self.assertNotIn('SECRET123', out)
+
+    @patch('httpx.get')
+    def test_nhtsa_error_is_generic(self, mock_get):
+        from integrations.providers import NHTSAVinDecodeProvider
+        mock_get.side_effect = Exception('boom internal host 10.0.0.5')
+        result = NHTSAVinDecodeProvider().decode('1HGBH41JXMN109186')
+        self.assertEqual(result['error'], 'service_unavailable')
+        self.assertNotIn('10.0.0.5', str(result))
+
+    @patch('httpx.post')
+    def test_apify_error_is_generic(self, mock_post):
+        mock_post.side_effect = Exception('boom internal host 10.0.0.5')
+        result = ApifyLotProvider(token='tok').fetch_lot('https://copart.com/lot/1')
+        self.assertEqual(result['error'], 'service_unavailable')
+        self.assertNotIn('10.0.0.5', str(result))
+
+
+class TestRegistryErrorNotCached(APITestCase):
+    URL = '/api/v1/vehicles/1HGBH41JXMN109186/registry/'
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = auth_client(make_user('reg_err@test.com'))
+
+    @patch('httpx.get')
+    def test_registry_endpoint_error_not_cached(self, mock_get):
+        mock_get.side_effect = _http_error()
+        with patch('integrations.views.get_opendatabot_provider',
+                   return_value=RealOpendatabotProvider(api_key='SECRET123')):
+            resp = self.client.get(self.URL)
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(RegistryReport.objects.count(), 0)
+        self.assertNotIn('SECRET123', resp.content.decode())
+
+    def test_old_error_record_not_served_from_cache(self):
+        RegistryReport.objects.create(
+            vin='1HGBH41JXMN109186', provider='opendatabot', payload={'error': 'old', 'leak': 'SECRET123'},
+        )
+        with patch('integrations.views.get_opendatabot_provider',
+                   return_value=RealOpendatabotProvider(api_key='')):
+            resp = self.client.get(self.URL)
+        self.assertNotIn('SECRET123', resp.content.decode())
+        self.assertNotEqual(resp.json().get('cached'), True)
+
+    @patch('httpx.get')
+    def test_registry_endpoint_success_still_cached(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _MOCK_ODB_RESPONSE
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+        with patch('integrations.views.get_opendatabot_provider',
+                   return_value=RealOpendatabotProvider(api_key='k')):
+            first = self.client.get(self.URL)
+            second = self.client.get(self.URL)
+        self.assertEqual(first.status_code, 200)
+        self.assertFalse(first.json()['cached'])
+        self.assertTrue(second.json()['cached'])
+        self.assertEqual(RegistryReport.objects.count(), 1)
+
+
+class TestPurgeRegistryErrorsCommand(TestCase):
+
+    def setUp(self):
+        RegistryReport.objects.create(vin='A' * 17, provider='opendatabot', payload={'error': 'x'})
+        RegistryReport.objects.create(vin='B' * 17, provider='opendatabot', payload={'brand': 'Honda'})
+
+    def _run(self, *args):
+        from io import StringIO
+
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('purge_registry_errors', *args, stdout=out)
+        return out.getvalue()
+
+    def test_dry_run_does_not_delete(self):
+        self.assertEqual(
+            self._run().strip(),
+            'dry-run: записей с error: 1. Для удаления добавьте --confirm.',
+        )
+        self.assertEqual(RegistryReport.objects.count(), 2)
+
+    def test_confirm_deletes_only_error_records(self):
+        self._run('--confirm')
+        self.assertEqual(list(RegistryReport.objects.values_list('vin', flat=True)), ['B' * 17])

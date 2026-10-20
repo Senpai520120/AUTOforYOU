@@ -555,3 +555,13 @@ if _TESTING:
     CELERY_RESULT_BACKEND = 'cache+memory://'
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
+
+# Логи HTTP-клиентов: на INFO httpx пишет полные URL запросов (в т.ч. с apikey=).
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'loggers': {
+        'httpx': {'level': 'WARNING'},
+        'httpcore': {'level': 'WARNING'},
+    },
+}

@@ -10,6 +10,7 @@ from users.permissions import IsAdminRole
 from .importer import import_lot
 from .models import RegistryReport, VinReport
 from .providers import (
+    REGISTRY_ERROR_MESSAGE,
     ManualLotProvider,
     NHTSAVinDecodeProvider,
     get_auction_history_provider,
@@ -165,15 +166,22 @@ class RegistryReportView(APIView):
         # Cache lookup
         cached = None
         if vin_clean:
-            cached = RegistryReport.objects.filter(vin=vin_clean, provider=provider_name).first()
+            cached = RegistryReport.objects.filter(vin=vin_clean, provider=provider_name).exclude(payload__has_key='error').first()
         elif plate:
-            cached = RegistryReport.objects.filter(plate=plate, provider=provider_name).first()
+            cached = RegistryReport.objects.filter(plate=plate, provider=provider_name).exclude(payload__has_key='error').first()
 
         if cached:
             return Response({**cached.payload, 'cached': True, 'cache_id': cached.pk})
 
         # Fetch from provider
         data = get_opendatabot_provider().get_vehicle_info(vin=vin_clean, plate=plate)
+
+        if data.get('error'):
+            # Ошибку не кэшируем и не раздаём из кэша.
+            return Response(
+                {'error': data['error'], 'message': data.get('message', REGISTRY_ERROR_MESSAGE)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         RegistryReport.objects.create(
             vin=vin_clean,

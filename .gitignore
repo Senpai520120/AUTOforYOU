@@ -30,6 +30,17 @@ Thumbs.db
 .env
 .env.local
 *.env
+.env.*
+!.env.*.example
+!.env.example
+
+# Дампы и ключи
+*.dump
+*.sql
+*.sql.gz
+*.pem
+*.key
+id_rsa*
 
 # Backups (содержат данные БД — никогда не коммитить)
 backups/
@@ -44,6 +55,8 @@ dump.sql
 .claude/*
 !.claude/agents/
 !.claude/commands/
+.claude/settings.local.json
+.claude/*.local.*
 
 # Playwright (артефакты случайного запуска из корня репозитория)
 test-results/

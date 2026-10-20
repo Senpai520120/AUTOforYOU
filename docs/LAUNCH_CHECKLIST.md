@@ -672,3 +672,11 @@
 - [ ] **Назначены роли владельца и брокера (задача 1.2):** админка → Пользователи → действие «Призначити брокером» / «Призначити модератором»; владелец — superuser (`role=admin`). *Проверка:* брокер видит импортные диалоги в `/me/messages`, модератор видит очередь модерации и не видит платежи.
 
 - [ ] **Не логировать query в nginx для `/api/v1/broker/` (задача 2.4):** поиск по имени и телефону идёт GET-параметром `search`, то есть ПДн попали бы в access-лог. Отключить `access_log` для этого location или маскировать `$args` (`log_format` без query). *Проверка:* открыть `/broker/leads`, найти заявку по телефону, `grep` по access-логу nginx не находит номер.
+
+### Секреты (задача 1.1)
+
+- [ ] **Токен Telegram-бота отозван (делает владелец, до закрытия задачи 1.1):** @BotFather → `/revoke` → новый токен только в `.env` сервера (`TELEGRAM_BOT_TOKEN`). Старый токен лежит в истории git: файл `.claude/settings.local.json`, коммит `a47169c` (убран из индекса коммитом `a6e0a57`); репозиторий публичный. Решение Q1: историю не переписывать, поэтому отзыв обязателен. *Проверка:* `docker compose exec backend python manage.py shell -c "from django.conf import settings; print(bool(settings.TELEGRAM_BOT_TOKEN))"` печатает `True`, бот отвечает на `/start`. Дату отзыва записать в PROGRESS.md (без значения). Владелец сообщил 2026-10-19, что токены перевыпущены; проверить, что отозван именно токен бота AUTO_F_Y.
+- [ ] **`OPENDATABOT_API_KEY` только в `.env`.** Пока ошибки возвращались пользователю и кэшировались, ключ мог уйти в ответах `/api/v1/vehicles/<vin>/registry/` и в `RegistryReport.payload` (владелец запускает `python manage.py purge_registry_errors` — dry-run, показывает количество; затем `python manage.py purge_registry_errors --confirm` удаляет записи с `error`). Если ключ использовался в боевом режиме, перевыпустить его в кабинете Opendatabot.
+- [ ] **Установить pre-commit на своей машине:** `pip install pre-commit && pre-commit install` (хук gitleaks, конфиг `.gitleaks.toml`).
+- [ ] **Секреты: в репозитории нет ни одного ключа, CI-шаг gitleaks зелёный** (job `secrets-scan`).
+- [ ] **Файлы с данными на диске не отслеживаются git** (`dump.sql`, `backups/`, `db.sqlite3`, `pgdata/`, `media/` проверены: в индексе их нет). Не удалять без решения владельца.
