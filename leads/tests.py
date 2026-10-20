@@ -180,7 +180,7 @@ class CreateLeadTests(TestCase):
                 lead = create_lead(user=None, data=data())
             self.assertEqual(len(callbacks), 1)
             notify.assert_called_once_with(lead.pk)
-            metric.assert_called_once_with('lead_created')
+            metric.assert_called_once_with('lead')
 
     def test_no_hooks_without_commit(self):
         with mock.patch.object(services, 'notify_new_lead') as notify, \
@@ -436,7 +436,7 @@ class HardeningTests(TestCase):
             with self.captureOnCommitCallbacks(execute=True):
                 lead = create_lead(user=None, data=data())
         self.assertTrue(Lead.objects.filter(pk=lead.pk).exists())
-        metric.assert_called_once_with('lead_created')
+        metric.assert_called_once_with('lead')
         self.assertNotIn('Іван', ''.join(cm.output))
 
     def test_foreign_calculation_rejected(self):

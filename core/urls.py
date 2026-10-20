@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/v1/vehicles/<str:vin>/registry/', RegistryReportView.as_view(), name='vin-registry'),
     path('api/v1/lots/import/', LotImportView.as_view(), name='lot-import'),
     path('api/v1/pricing/', include('pricing.urls')),
+    path('api/v1/metrics/', include('metrics.urls')),
     path('api/v1/listings/', include('listings.urls')),
     path('api/v1/shipments/', include('shipments.urls')),
     path('api/v1/payments/', include('payments.urls')),

@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { pricingApi, CalcInputs } from '@/api/pricing';
 import { CalcOption, CalcRatesResponse, CalcResult } from '@/lib/types';
 import { CalcErrorView, describeCalcError } from '@/lib/calc-errors';
+import { sendMetricOncePerSession } from '@/lib/metrics';
 import CalcBreakdown from '@/components/calculator/CalcBreakdown';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
@@ -225,6 +226,7 @@ function CalculatorLoader() {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    sendMetricOncePerSession('calculator_visit');  // 8.7: візит калькулятора, раз за вкладку
     pricingApi.options().then(setData).catch(() => setFailed(true));
   }, []);
 

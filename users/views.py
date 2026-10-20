@@ -27,6 +27,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from integrations.captcha import captcha_public_config, require_captcha
+from metrics.models import MetricKey
+from metrics.services import record_metric_on_commit
 
 from . import lockout
 from .authentication import enforce_csrf
@@ -249,6 +251,7 @@ class RegisterView(generics.CreateAPIView):
                 existing = CustomUser.objects.filter(email__iexact=data['email']).first()
             else:
                 send_verification_email(user)
+                record_metric_on_commit(MetricKey.REGISTRATION)  # 8.7: только новый аккаунт, без ПДн
         if existing is not None:
             make_password(data['password'])
             send_already_registered_email(existing)

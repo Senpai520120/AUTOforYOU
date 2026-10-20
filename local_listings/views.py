@@ -25,6 +25,8 @@ from rest_framework.views import APIView
 from core.uploads import ImageUploadError, max_bytes_from_setting, sanitize_image
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
+from metrics.models import MetricKey
+from metrics.services import record_metric_on_commit
 from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter
@@ -140,6 +142,10 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return _base_queryset().filter(status=LocalListing.Status.ACTIVE)
+
+    def perform_create(self, serializer):
+        serializer.save()
+        record_metric_on_commit(MetricKey.LISTING_SUBMITTED)  # 8.7: дневной счётчик без ПДн
 
 
 @extend_schema_view(
@@ -385,6 +391,7 @@ class LocalListingContactView(APIView):
             pk=pk,
             status=LocalListing.Status.ACTIVE,
         )
+        record_metric_on_commit(MetricKey.PHONE_VIEW)  # 8.7: счётчик без ПДн (журнал показов - 4.5)
         return Response({'contact_phone': listing.contact_phone or None})
 
 

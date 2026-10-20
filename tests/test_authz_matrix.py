@@ -16,7 +16,6 @@
 """
 import shutil
 import tempfile
-import unittest
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -82,7 +81,7 @@ PUBLIC = {
     'vehicle-detail': 'каталог',
     'vin-decode': 'публичная расшифровка VIN',
     'pricing-calculate': 'калькулятор',
-    'pricing-rates': 'ставки: ждёт задачу 2.6 - по Q8 суммы должны видеть только staff/broker (см. PricingRatesAwaiting26)',
+    'pricing-rates': 'справочники формы без сумм; суммы - только staff/broker (2.6, Q11; см. PricingRatesQ11Tests)',
     'listing-list': 'каталог',
     'listing-detail': 'каталог',
     'local-tariffs': 'тарифы',
@@ -93,6 +92,7 @@ PUBLIC = {
     'site-settings': 'публичные настройки сайта',
     'lead-create': 'заявка от гостя: капча, honeypot, лимит (2.1a)',
     'monitoring-client-errors': 'отчёт об ошибке фронтенда: без сессии, только запись в мониторинг, лимит на IP (7.6)',
+    'metric-event': 'дневной счётчик без ПДн: только 2 ключа, без сессии, лимит на IP (8.7)',
     # не session/JWT, а подпись/секрет
     'liqpay-callback': 'подпись LiqPay (SHA1), csrf_exempt',
     'telegram-webhook': 'секрет X-Telegram-Bot-Api-Secret-Token (plain View)',
@@ -682,12 +682,13 @@ class AuthzMatrixCompletenessTests(CleanCacheTestCase):
         self.assertIn("'delete'", problems[0])
 
 
-class PricingRatesAwaiting26Tests(CleanCacheTestCase):
-    """Ждёт задачу 2.6 (Q8): суммы ставок видят только staff/broker. Сейчас pricing-rates публичен."""
+class PricingRatesQ11Tests(CleanCacheTestCase):
+    """2.6 (Q11): гость получает справочники формы без тарифной сетки; суммы - staff/broker (pricing/tests_config.py)."""
 
-    @unittest.expectedFailure
-    def test_rates_closed_to_anonymous(self):
-        self.assertIn(APIClient().get(reverse('pricing-rates')).status_code, (401, 403))
+    def test_anonymous_without_grid(self):
+        resp = APIClient().get(reverse('pricing-rates'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn('auction_fee_tiers', resp.json())
 
 
 class AdminRolesTests(CleanCacheTestCase):

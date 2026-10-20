@@ -1787,6 +1787,37 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/metrics/event/:
+    post:
+      operationId: v1_metrics_event_create
+      description: |-
+        POST /api/v1/metrics/event/ - событие с фронта (визит калькулятора, клик мобильной панели).
+
+        Без аутентификации и сессий (не нужен CSRF, cookie не читаются); IP и user-agent не сохраняются.
+      summary: Подія лічильника (без ПДн)
+      tags:
+      - metrics
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricEventRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MetricEventRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MetricEventRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '204':
+          description: Засчитано
+        '400':
+          description: Ключ не з білого списку
+        '429':
+          description: Ліміт
   /api/v1/monitoring/client-errors/:
     post:
       operationId: v1_monitoring_client_errors_create
@@ -3210,6 +3241,11 @@ components:
       - hybrid
       - gas
       type: string
+    KeyEnum:
+      enum:
+      - calculator_visit
+      - mobile_bar_click
+      type: string
     LeadCreateRequest:
       type: object
       properties:
@@ -4390,6 +4426,13 @@ components:
       - sender
       - sender_name
       - text
+    MetricEventRequest:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/KeyEnum'
+      required:
+      - key
     NeededWhenEnum:
       enum:
       - asap

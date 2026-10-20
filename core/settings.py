@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'site_settings',
     'leads',
     'task_ledger',
+    'metrics',
     # Проект, не приложение: подключён только ради management-команд (monitoring_test, 7.6). Моделей нет.
     'core',
 
@@ -311,6 +312,8 @@ REST_FRAMEWORK = {
         'client_errors': os.environ.get('THROTTLE_CLIENT_ERRORS_RATE', '20/hour'),
         # Калькулятор (2.6, 02-S2): каждый расчёт пишет Calculation.
         'calculator': os.environ.get('THROTTLE_CALCULATOR_RATE', '30/hour'),
+        # События счётчиков с фронта (8.7): визит калькулятора раз за вкладку, клики мобильной панели.
+        'metrics_event': os.environ.get('THROTTLE_METRICS_EVENT_RATE', '120/hour'),
     },
     'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',

@@ -317,11 +317,11 @@ class HookTests(SeededCase):
             self.calc()
         hook.assert_not_called()
 
-    def test_stub_without_metrics_module(self):
-        from pricing.hooks import on_calculation_saved
-        with patch.dict('sys.modules', {'reports.metrics': None}):
-            on_calculation_saved(object())  # ImportError внутри - без падения
-        with patch.dict('sys.modules', {'reports.metrics': None}), self.captureOnCommitCallbacks(execute=True):
+    def test_metric_error_does_not_break_calculation(self):
+        # 8.7: хук пишет счётчик; сбой записи логируется и не ломает расчёт
+        with patch('metrics.services.DailyMetric.objects') as objects, \
+                self.assertLogs('metrics.services', level='WARNING'), self.captureOnCommitCallbacks(execute=True):
+            objects.filter.side_effect = RuntimeError('db down')
             self.assertEqual(self.calc().status_code, 201)
 
 

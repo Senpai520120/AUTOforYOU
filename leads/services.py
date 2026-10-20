@@ -10,6 +10,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from metrics.models import MetricKey
+from metrics.services import record_metric
 from site_settings.models import SiteSettings
 from users.consents import record_consents
 from users.models import ConsentDocument, ConsentMethod
@@ -73,14 +75,10 @@ def notify_journal(lead_id: int) -> None:
     send_journal_task.delay(lead_id)
 
 
-def record_metric(event: str) -> None:
-    """Заглушка серверных счётчиков (8.7). Не падает, без ПДн."""
-    logger.info('metric event=%s', event)
-
-
 def _after_commit(lead_id: int) -> None:
+    # Счётчик заявок (8.7) - здесь же: только после фиксации, сбой не роняет заявку.
     # Сбой уведомления не должен ронять создание заявки; в лог только lead_id.
-    for hook, args in ((notify_new_lead, (lead_id,)), (notify_journal, (lead_id,)), (record_metric, ('lead_created',))):
+    for hook, args in ((notify_new_lead, (lead_id,)), (notify_journal, (lead_id,)), (record_metric, (MetricKey.LEAD,))):
         try:
             hook(*args)
         except Exception:

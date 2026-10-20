@@ -11,9 +11,35 @@
 - 2026-10-19/20 локальный оркестратор сделал 12 задач (2.1a … 1.11) в ветке `finish-site` (PR #38 в `main`).
 - 2026-10-20 облачная сессия: ветка `task-1.8` (PR #39 → `finish-site`), по коммиту на задачу: 1.8, 7.2, 7.6, 8.9, 2.14, 2.5. Пакет из 5 задач (7.2 → 2.5) по поручению владельца закрыт, дальше — только по новому сообщению.
 - 2026-10-20 вторая облачная сессия: ветка `task-2.6` (PR → `finish-site`), задачи 2.6 и 2.7.
-- **Следующая задача по критическому пути: 8.7** (счётчики/метрики; подключить `record_metric` в `pricing/hooks.py` из 2.6), затем 2.8 → 3.1 → … (ROADMAP.md, «Порядок выполнения»). Пакет из двух задач (2.6, 2.7) закрыт, дальше — только по новому сообщению.
+- Там же по второму сообщению владельца: исправлены 2 красные проверки CI `finish-site` (gitleaks, e2e `negative.spec`), задачи 8.7 и 2.8.
+- **Следующая задача по критическому пути: 2.8**, затем 3.1 → 3.2a → … (ROADMAP.md, «Порядок выполнения»).
 - Перед продолжением: проверить CI PR #39; локальные `.env` и `.env.e2e` — задать настоящий `SECRET_KEY` (с 7.2 заглушки из шаблонов не стартуют) и переменные из `.env.e2e.example` (`THROTTLE_*`, `PRIVATE_MEDIA_USE_X_ACCEL=true`); для Playwright экспортировать `E2E_PASSWORD`.
 - Решения владельца, накопленные за прогон, — в разделах задач ниже («Для владельца») и в `docs/LAUNCH_CHECKLIST.md`.
+
+---
+
+## Исправление CI `finish-site` (2026-10-20, облачная сессия)
+
+- Красный прогон PR #38 (после слияния #39) — две джобы:
+  - **gitleaks**: фиктивный пароль регистрации `Strong-Pass-9182` в `tests/test_attribution.py` (2.14) и `users/tests_account_data.py` (1.8) срабатывал как `generic-api-key`. Добавлен в allowlist `.gitleaks.toml` по значению (как пароль матрицы авторизации ранее). Проверено gitleaks 8.24.2 по отслеживаемым файлам: «no leaks found».
+  - **E2E**: 1 из 251 — `negative.spec.ts` «порожня форма не відправляється» ждал `0` в очищенных полях: тест фиксировал баг, который 2.5 исправила (поля — строки). Теперь проверяет пустое значение и `valueMissing` на всех трёх полях; `negative.spec.ts` 16/16 локально.
+- Полный локальный e2e (chromium, облачная связка): 233 passed, 6 failed — `password.spec` (нет Mailpit на :8025) и `uploads.spec` (нет nginx/X-Accel); в CI эти тесты зелёные, это особенность облачного стека.
+
+---
+
+## Задача 8.7: дневные счётчики без ПДн (`DailyMetric`) (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
+
+- Новое приложение `metrics`: `DailyMetric(date, key, value)` с уникальностью `(date, key)`, `MetricKey` (module-level TextChoices: `calculator_visit`, `calculation`, `lead`, `registration`, `listing_submitted`, `phone_view`, `mobile_bar_click`). Полей user/IP/URL нет (тест по `_meta`).
+- `metrics.services.record_metric(key, amount=1, day=None)`: атомарный `update(F('value') + amount)`, создание строки при первом событии, гонка (`IntegrityError`) — повторный update; день по `timezone.localdate()` (Europe/Kyiv); любая ошибка — `logger.warning` без данных, операция не ломается. `record_metric_on_commit(key)` — только после фиксации транзакции.
+- Хуки: расчёт — `pricing/hooks.py::on_calculation_saved` (заглушка 2.6 заменена; вызывается в `on_commit` только на 201, очистка анонимных расчётов счётчик не трогает); заявка — существующий `_after_commit` в `leads/services.py` (заглушка `record_metric('lead_created')` заменена настоящим счётчиком `lead`); регистрация — только новый аккаунт (занятый email не считается); подача частного объявления — `perform_create`; показ телефона — `LocalListingContactView` (только авторизованным: гостям телефон не отдаётся — 401, ничего не считается; журнал показов 4.5 ещё не сделан).
+- `POST /api/v1/metrics/event/`: `AllowAny`, `authentication_classes=[]` (без CSRF и cookie), scope `metrics_event` (`THROTTLE_METRICS_EVENT_RATE`, 120/hour), только `calculator_visit`/`mobile_bar_click`; серверные ключи, пустой ключ, список, лишние поля — 400; ответ 204 без тела.
+- Админка «Щоденні метрики»: только просмотр (add/change/delete — 403), видят admin-роль и superuser; модератор и брокер — 403.
+- Фронт: `lib/metrics.ts` (`sendMetric`, `sendMetricOncePerSession` — флаг в `sessionStorage`, `credentials: 'omit'`, ошибки глушатся); `/calculator` шлёт `calculator_visit` раз за вкладку. `mobile_bar_click` подключит 6.6.
+- Проверки: бэкенд SQLite полный прогон 1777 OK (skipped=2; матрица авторизации дополнена `metric-event`, заглушка `PricingRatesAwaiting26` заменена проверкой Q11); PostgreSQL (metrics, leads) OK; ruff, `tsc`, `lint`, `build` OK; `openapi.yaml` перегенерирован против PostgreSQL. Мутационная проверка: 11 мутаций — 10 поймано сразу; выжившая (`authentication_classes=[]`) закрыта тестом с cookie access без CSRF. E2E `metrics.spec.ts` (новый) + `calculator-config`, `lead` — 49 passed (облачная связка). Значения счётчиков в e2e не сверяются через админку — это делают Django-тесты.
+- Ревью безопасности: по файлу задачи не обязательно (агрегаты без ПДн, проверено тестами); не запускалось.
+
+### Для владельца
+- `.env`: `THROTTLE_METRICS_EVENT_RATE` — можно не трогать. Просмотр: админка → «Щоденні метрики».
 
 ---
 

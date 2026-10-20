@@ -305,7 +305,7 @@ class LeadHooksApiTests(LeadApiBase):
                 resp = self.post(calculation_id=make_calc().pk)
         self.assertEqual(resp.status_code, 201)
         notify.assert_called_once_with(Lead.objects.get().pk)
-        metric.assert_called_once_with('lead_created')
+        metric.assert_called_once_with('lead')
 
     def test_hooks_not_called_on_honeypot(self):
         with mock.patch('leads.services.notify_new_lead') as notify:
