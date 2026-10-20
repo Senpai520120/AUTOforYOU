@@ -20,6 +20,8 @@ keywords = ["apikey", "api_key", "api-key"]
 description = "Фиктивные значения из тестов и документации (по значению, не по путям)"
 regexes = [
   '''SECRET123''',
+  # Фиктивный новый пароль в тестах смены пароля (tests/test_authz_matrix.py)
+  '''N3w-Str0ng-Pass-77''',
   # Плейсхолдеры шаблонов .env*.example и документации: KEY=your_...
   '''(?i)api[_-]?key=your_[a-z0-9_]*''',
 ]
