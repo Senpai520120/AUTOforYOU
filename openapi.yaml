@@ -2775,10 +2775,10 @@ components:
           maximum: 2100
           minimum: 1900
         battery_capacity_kwh:
-          type: integer
-          maximum: 200
-          minimum: 0
-          default: 0
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,1})?$
+          nullable: true
         auction:
           allOf:
           - $ref: '#/components/schemas/AuctionEnum'

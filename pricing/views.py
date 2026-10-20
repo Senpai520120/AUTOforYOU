@@ -1,5 +1,6 @@
 import logging
 from datetime import date
+from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Q
@@ -13,10 +14,12 @@ from rest_framework.views import APIView
 from . import cache as pricing_cache
 from .calculator import (
     LandedCostInputs,
+    MissingRate,
     build_rate_snapshot_from_db,
     calc_auction_fees,
     calculate_landed_cost,
     rate_snapshot_to_dict,
+    select_rates,
 )
 from .models import (
     AuctionFeeTier,
@@ -36,59 +39,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
 
 
-def _is_active(obj, on_date):
-    """True, если запись активна на дату on_date."""
-    return obj.valid_from <= on_date and (obj.valid_to is None or obj.valid_to >= on_date)
-
-
 def _active_on(qs, on_date=None):
     """Вспомогательный ORM-фильтр (используется в ActiveRatesView)."""
     on_date = on_date or date.today()
     return qs.filter(valid_from__lte=on_date).filter(
         Q(valid_to__isnull=True) | Q(valid_to__gte=on_date)
     )
-
-
-def _lookup_tier(auction, bid, member_type, payment_type, title_type, on_date):
-    """
-    Ищет AuctionFeeTier в кэше (in-memory фильтрация).
-    Приоритет: точный title_type → 'any'.
-    """
-    all_tiers = pricing_cache.get_auction_fee_tiers()
-
-    candidates = sorted(
-        [
-            t for t in all_tiers
-            if (
-                t.auction == auction
-                and t.member_type == member_type
-                and t.payment_type == payment_type
-                and t.bid_min <= bid
-                and (t.bid_max is None or t.bid_max >= bid)
-                and _is_active(t, on_date)
-            )
-        ],
-        key=lambda t: t.bid_min,
-    )
-
-    return (
-        next((t for t in candidates if t.title_type == title_type), None)
-        or next((t for t in candidates if t.title_type == 'any'), None)
-    )
-
-
-def _lookup_fixed_fees(auction, title_type, on_date):
-    """Возвращает применимые фиксированные сборы из кэша."""
-    all_fees = pricing_cache.get_auction_fixed_fees()
-    result = []
-    for f in all_fees:
-        if not (f.auction == auction and _is_active(f, on_date)):
-            continue
-        if f.fee_type == 'gate' and f.title_type in (title_type, 'any'):
-            result.append(f)
-        elif f.fee_type in ('environmental', 'virtual_bid'):
-            result.append(f)
-    return result
 
 
 @extend_schema(
@@ -153,190 +109,80 @@ class CalculateView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        today = date.today()
-        calc_date = data.get('calculation_date') or today
+        calc_date = data.get('calculation_date') or date.today()
+        params = {
+            **data,
+            'member_type': data.get('member_type', DEFAULT_MEMBER_TYPE),
+            'payment_type': data.get('payment_type', 'secured'),
+            'title_type': data.get('title_type', 'salvage'),
+        }
 
-        # Параметры аукционного сбора
-        member_type = data.get('member_type', DEFAULT_MEMBER_TYPE)
-        payment_type = data.get('payment_type', 'secured')
-        title_type = data.get('title_type', 'salvage')
-        auction_price = data['auction_price_usd']
-
+        # Подбор тарифов - чистая функция калькулятора (02-Q6); view только загружает каталог.
         try:
-            tier = _lookup_tier(
-                auction=data['auction'],
-                bid=auction_price,
-                member_type=member_type,
-                payment_type=payment_type,
-                title_type=title_type,
-                on_date=calc_date,
-            )
-
-            fixed_fees = _lookup_fixed_fees(
-                auction=data['auction'],
-                title_type=title_type,
-                on_date=calc_date,
-            )
-
-            loc = data['auction_location'].lower()
-            us_p = data['us_port'].lower()
-            eu_p = data['eu_port']
-
-            us_land = next(
-                (r for r in sorted(pricing_cache.get_us_land_routes(), key=lambda x: x.valid_from)
-                 if r.auction_location.lower() == loc
-                 and r.us_port.lower() == us_p
-                 and _is_active(r, calc_date)),
-                None,
-            )
-
-            ocean = next(
-                (r for r in pricing_cache.get_ocean_freight()
-                 if r.us_port.lower() == us_p
-                 and r.eu_port == eu_p
-                 and _is_active(r, calc_date)),
-                None,
-            )
-
-            eu_to_ua = next(
-                (r for r in pricing_cache.get_eu_to_ua()
-                 if r.eu_port == eu_p and _is_active(r, calc_date)),
-                None,
-            )
-
-            # Курс НБУ: сначала точный по дате, затем ближайший предыдущий
-            all_rates = pricing_cache.get_exchange_rates()
-            usd_to_uah = next(
-                (r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'UAH' and r.date == calc_date),
-                None,
-            ) or next(
-                iter(sorted(
-                    [r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'UAH'],
-                    key=lambda r: r.date, reverse=True,
-                )),
-                None,
-            )
-
-            usd_to_eur = next(
-                (r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'EUR' and r.date == calc_date),
-                None,
-            ) or next(
-                iter(sorted(
-                    [r for r in all_rates if r.from_currency == 'USD' and r.to_currency == 'EUR'],
-                    key=lambda r: r.date, reverse=True,
-                )),
-                None,
-            )
-
-            engine_cc = data['engine_cc']
-            excise_rate = next(
-                iter(sorted(
-                    [r for r in pricing_cache.get_customs_excise()
-                     if r.fuel_type == data['fuel_type']
-                     and r.engine_cc_min <= engine_cc
-                     and (r.engine_cc_max is None or r.engine_cc_max >= engine_cc)
-                     and _is_active(r, calc_date)],
-                    key=lambda r: r.engine_cc_min, reverse=True,
-                )),
-                None,
-            )
-
-            approx_uah = data['auction_price_usd'] * usd_to_uah.rate if usd_to_uah else None
-            pension_bracket = None
-            if approx_uah:
-                pension_bracket = next(
-                    iter(sorted(
-                        [r for r in pricing_cache.get_pension_brackets()
-                         if r.min_value_uah <= approx_uah
-                         and (r.max_value_uah is None or r.max_value_uah >= approx_uah)
-                         and _is_active(r, calc_date)],
-                        key=lambda r: r.min_value_uah, reverse=True,
-                    )),
-                    None,
-                )
-
-            missing = []
-            if not tier:
-                missing.append(
-                    f'AuctionFeeTier для {data["auction"]} / {member_type}/{payment_type}/{title_type} / ${auction_price}'
-                )
-            if not us_land:
-                missing.append(f'UsLandRoute для {data["auction_location"]} → {data["us_port"]}')
-            if not ocean:
-                missing.append(f'OceanFreightRate для {data["us_port"]} → {data["eu_port"]}')
-            if not eu_to_ua:
-                missing.append(f'EuToUaDeliveryRate для {data["eu_port"]}')
-            if not usd_to_uah:
-                missing.append('ExchangeRate USD→UAH')
-            if not usd_to_eur:
-                missing.append('ExchangeRate USD→EUR')
-            if not excise_rate:
-                missing.append(f'CustomsExciseRate для {data["fuel_type"]}')
-            if not pension_bracket:
-                missing.append('PensionFundBracket')
-
-            if missing:
-                return Response(
-                    {'error': 'Отсутствуют активные тарифы в БД', 'missing': missing},
-                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-
+            selected = select_rates(pricing_cache.get_catalog(), params, calc_date)
         except Exception as exc:
             logger.exception('Помилка підготовки тарифів калькулятора: %s', type(exc).__name__)
             return Response(
                 {'error': 'Не вдалося виконати розрахунок. Спробуйте пізніше.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        if selected.missing:
+            return _missing_response(selected.missing)
 
-        # Рассчитываем аукционный сбор (чистая функция калькулятора)
-        fee_breakdown = calc_auction_fees(
-            bid=auction_price,
-            tier=tier,
-            fixed_fees=fixed_fees,
-        )
-
+        fee_breakdown = calc_auction_fees(bid=data['auction_price_usd'], tier=selected.tier,
+                                          fixed_fees=selected.fixed_fees)
         rates = build_rate_snapshot_from_db(
             auction_fee_breakdown=fee_breakdown,
-            us_land_route=us_land,
-            ocean_freight=ocean,
-            eu_to_ua=eu_to_ua,
-            usd_to_uah_rate=usd_to_uah,
-            usd_to_eur_rate=usd_to_eur,
-            excise_rate=excise_rate,
+            us_land_route=selected.us_land,
+            ocean_freight=selected.ocean,
+            eu_to_ua=selected.eu_to_ua,
+            usd_to_uah_rate=selected.usd_to_uah,
+            usd_to_eur_rate=selected.usd_to_eur,
+            excise_rate=selected.excise,
             vehicle_year=data['vehicle_year'],
             calculation_year=calc_date.year,
-            pension_rate=pension_bracket,
-            rates_date=str(calc_date),
+            rates_date=calc_date.isoformat(),
+            rule=selected.rule,
+            on_date=calc_date,
             meta={
-                'auction_fee_tier_id': tier.pk,
-                'fixed_fee_ids': [f.pk for f in fixed_fees],
-                'us_land_route_id': us_land.pk,
-                'ocean_freight_id': ocean.pk,
-                'eu_to_ua_id': eu_to_ua.pk,
-                'usd_to_uah_rate_id': usd_to_uah.pk,
-                'usd_to_eur_rate_id': usd_to_eur.pk,
-                'excise_rate_id': excise_rate.pk,
-                'pension_bracket_id': pension_bracket.pk,
+                'auction_fee_tier_id': selected.tier.pk,
+                'fixed_fee_ids': [f.pk for f in selected.fixed_fees],
+                'us_land_route_id': selected.us_land.pk,
+                'ocean_freight_id': selected.ocean.pk,
+                'eu_to_ua_id': selected.eu_to_ua.pk,
+                'usd_to_uah_rate_id': selected.usd_to_uah.pk,
+                'usd_to_eur_rate_id': selected.usd_to_eur.pk,
+                'excise_rate_id': selected.excise.pk,
+                'customs_calc_rule_id': selected.rule.pk,
             },
         )
-
         inputs = LandedCostInputs(
             auction_price_usd=data['auction_price_usd'],
             engine_cc=data['engine_cc'],
             fuel_type=data['fuel_type'],
             vehicle_year=data['vehicle_year'],
             calculation_year=calc_date.year,
-            battery_capacity_kwh=data.get('battery_capacity_kwh', 0),
+            battery_capacity_kwh=data.get('battery_capacity_kwh') or Decimal('0'),
         )
+        try:
+            result = calculate_landed_cost(inputs, rates, selected.pension_brackets, selected.rule)
+        except MissingRate as exc:
+            return _missing_response([str(exc)])
+        except Exception as exc:  # например, правило с неизвестной базой, записанное в обход админки
+            logger.exception('Помилка розрахунку калькулятора: %s', type(exc).__name__)
+            return Response(
+                {'error': 'Не вдалося виконати розрахунок. Спробуйте пізніше.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-        result = calculate_landed_cost(inputs, rates)
         breakdown = result.to_dict()
         rates_dict = rate_snapshot_to_dict(rates)
-        inputs_dict = {k: str(v) if hasattr(v, '__str__') else v for k, v in data.items()}
+        updated_on = selected.rates_updated_on
+        rates_dict['rates_updated_on'] = updated_on.isoformat() if updated_on else None
 
         calc = Calculation.objects.create(
             user=request.user if request.user.is_authenticated else None,
-            inputs_snapshot=inputs_dict,
+            inputs_snapshot=_inputs_snapshot(data),
             rates_snapshot=rates_dict,
             breakdown=breakdown,
             total_usd=result.total_usd,
@@ -348,17 +194,36 @@ class CalculateView(APIView):
             {
                 'calculation_id': calc.pk,
                 'is_estimate': True,
-                'rates_validity_date': str(calc_date),
-                'exchange_rate_date': str(usd_to_uah.date),
+                # Q5: пока брокер не подтвердил правило - интерфейс показывает «орієнтовний розрахунок».
+                'rules_confirmed': bool(selected.rule.confirmed_by_broker),
+                'rates_validity_date': calc_date.isoformat(),
+                'rates_updated_on': updated_on.isoformat() if updated_on else None,
+                'exchange_rate_date': selected.usd_to_uah.date.isoformat(),
                 'warning': (
                     'Розрахунок є орієнтовним. '
                     'Ставки аукціонних зборів — baseline (звірити з тарифом брокера). '
-                    'Ставки акцизу актуальні на янв–чер 2026; фінальний розрахунок підтверджує митний брокер.'
+                    'Фінальний розрахунок підтверджує митний брокер.'
                 ),
                 'breakdown': breakdown,
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+def _missing_response(missing):
+    return Response(
+        {'error': 'Отсутствуют активные тарифы в БД', 'missing': missing},
+        status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+    )
+
+
+def _inputs_snapshot(data) -> dict:
+    """Снимок входов (02-Q9): Decimal - строкой, даты - ISO, None остаётся None."""
+    def conv(value):
+        if value is None or isinstance(value, (bool, int, str)):
+            return value
+        return str(value)  # Decimal -> '5000.00', date -> ISO 'YYYY-MM-DD'
+    return {k: conv(v) for k, v in data.items()}
 
 
 @extend_schema(

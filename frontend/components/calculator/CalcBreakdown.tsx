@@ -58,6 +58,11 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
       <p className="text-xs text-amber-700 mt-4 bg-amber-50 rounded p-2">
         #{result.calculation_id} · {result.warning}
       </p>
+      <p className="text-xs text-slate-500 mt-2" data-testid="calc-estimate-note">
+        {result.rules_confirmed ? 'Розрахунок орієнтовний.' : 'Орієнтовний розрахунок.'}
+        {result.rates_updated_on && <> Ставки оновлено: {formatDate(result.rates_updated_on)}.</>}
+        {result.exchange_rate_date && <> Курс НБУ на {formatDate(result.exchange_rate_date)}.</>}
+      </p>
       <div className="mt-6">
         {result.is_estimate && (
           <p className="text-sm text-slate-600 mb-3">Сума орієнтовна: точну вартість підтвердить брокер.</p>
@@ -67,4 +72,9 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
       </div>
     </div>
   );
+}
+
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return y && m && d ? `${d}.${m}.${y}` : iso;
 }

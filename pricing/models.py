@@ -4,11 +4,45 @@ from django.db import models
 
 
 class DateRangeModel(models.Model):
+    """Тариф с периодом действия (02-Q4).
+
+    valid_to >= valid_from проверяет и clean(), и CheckConstraint в БД. Периоды записей одного ключа
+    (overlap_key_fields) не пересекаются - проверка в clean() (админка). Если пересечение всё же
+    есть (данные в обход clean), калькулятор берёт запись с самым поздним valid_from.
+    """
     valid_from = models.DateField(verbose_name='Действует с')
     valid_to = models.DateField(null=True, blank=True, verbose_name='Действует по')
 
+    overlap_key_fields: tuple = ()
+
     class Meta:
         abstract = True
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=models.F('valid_from')),
+                name='%(app_label)s_%(class)s_valid_range',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.valid_from and self.valid_to and self.valid_to < self.valid_from:
+            raise ValidationError({'valid_to': 'Дата «по» не може бути раніше дати «з».'})
+        if self.valid_from is None or self.overlap_key_fields is None:
+            return
+        same_key = type(self)._default_manager.filter(
+            **{f: getattr(self, f) for f in self.overlap_key_fields}
+        ).exclude(pk=self.pk)
+        # Пересечение [from, to] и [other.from, other.to]; None = без конца.
+        same_key = same_key.filter(models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=self.valid_from))
+        if self.valid_to is not None:
+            same_key = same_key.filter(valid_from__lte=self.valid_to)
+        clash = same_key.order_by('valid_from').first()
+        if clash is not None:
+            raise ValidationError(
+                f'Період перетинається з іншим записом (id={clash.pk}, з {clash.valid_from}'
+                f'{f" по {clash.valid_to}" if clash.valid_to else ""}). Закрийте старий запис датою «по».'
+            )
 
 
 class AuctionFeeTier(DateRangeModel):
@@ -44,19 +78,22 @@ class AuctionFeeTier(DateRangeModel):
     fee_flat = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, verbose_name='Фикс. сбор ($)')
     fee_percent = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True, verbose_name='% от ставки (напр. 0.0600 = 6%)')
 
-    class Meta:
+    overlap_key_fields = ('auction', 'member_type', 'payment_type', 'title_type', 'bid_min')
+
+    class Meta(DateRangeModel.Meta):
         verbose_name = 'Тиер buyer fee'
         verbose_name_plural = 'Тиеры buyer fee'
         ordering = ['auction', 'member_type', 'bid_min']
 
     def clean(self):
+        super().clean()
         flat_set = self.fee_flat is not None
         pct_set = self.fee_percent is not None
         if flat_set == pct_set:
             raise ValidationError('Задайте ровно одно из fee_flat / fee_percent (не оба и не ни одного).')
 
     def __str__(self):
-        fee_str = f'${self.fee_flat}' if self.fee_flat is not None else f'{float(self.fee_percent)*100:.1f}%'
+        fee_str = f'${self.fee_flat}' if self.fee_flat is not None else f'{(self.fee_percent * 100).normalize()}%'
         return (
             f'{self.auction} [{self.member_type}/{self.payment_type}/{self.title_type}] '
             f'${self.bid_min}–{self.bid_max or "∞"} → {fee_str}'
@@ -86,7 +123,9 @@ class AuctionFixedFee(DateRangeModel):
     )
     amount = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Сумма ($)')
 
-    class Meta:
+    overlap_key_fields = ('auction', 'fee_type', 'title_type')
+
+    class Meta(DateRangeModel.Meta):
         verbose_name = 'Фиксированный сбор аукциона'
         verbose_name_plural = 'Фиксированные сборы аукциона'
         ordering = ['auction', 'fee_type']
@@ -100,7 +139,9 @@ class UsLandRoute(DateRangeModel):
     us_port = models.CharField(max_length=50, verbose_name='Порт США')
     cost_usd = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Стоимость ($)')
 
-    class Meta:
+    overlap_key_fields = ('auction_location', 'us_port')
+
+    class Meta(DateRangeModel.Meta):
         verbose_name = 'Сухопутная логистика США'
         verbose_name_plural = 'Сухопутная логистика США'
 
@@ -117,7 +158,9 @@ class OceanFreightRate(DateRangeModel):
     eu_port = models.CharField(max_length=20, choices=EuPort.choices, verbose_name='Порт ЕС')
     cost_usd = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Стоимость ($)')
 
-    class Meta:
+    overlap_key_fields = ('us_port', 'eu_port')
+
+    class Meta(DateRangeModel.Meta):
         verbose_name = 'Морской фрахт'
         verbose_name_plural = 'Морской фрахт'
 
@@ -133,7 +176,9 @@ class EuToUaDeliveryRate(DateRangeModel):
     eu_port = models.CharField(max_length=20, choices=EuPort.choices, verbose_name='Порт ЕС')
     cost_usd = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Стоимость ($)')
 
-    class Meta:
+    overlap_key_fields = ('eu_port',)
+
+    class Meta(DateRangeModel.Meta):
         verbose_name = 'Доставка ЕС → Украина'
         verbose_name_plural = 'Доставка ЕС → Украина'
 
@@ -181,7 +226,9 @@ class CustomsExciseRate(DateRangeModel):
     duty_rate = models.DecimalField(max_digits=5, decimal_places=4, default='0.1000', verbose_name='Ставка пошлины (10%=0.1000)')
     vat_rate = models.DecimalField(max_digits=5, decimal_places=4, default='0.2000', verbose_name='НДС (20%=0.2000)')
 
-    class Meta:
+    overlap_key_fields = ('fuel_type', 'engine_cc_min')
+
+    class Meta(DateRangeModel.Meta):
         verbose_name = 'Ставка акциза/пошлины'
         verbose_name_plural = 'Ставки акциза/пошлины'
 
@@ -197,13 +244,79 @@ class PensionFundBracket(DateRangeModel):
     # ПРОВЕРИТЬ по действующему законодательству Украины
     rate = models.DecimalField(max_digits=5, decimal_places=4, verbose_name='Ставка пенсионного сбора')
 
-    class Meta:
+    overlap_key_fields = ('min_value_uah',)
+
+    class Meta(DateRangeModel.Meta):
         verbose_name = 'Брекет пенсионного сбора'
         verbose_name_plural = 'Брекеты пенсионного сбора'
         ordering = ['min_value_uah']
 
     def __str__(self):
         return f'Пенсионный: {self.min_value_uah}–{self.max_value_uah or "∞"} грн @ {self.rate}'
+
+
+class PensionBase(models.TextChoices):
+    """База для пенсионного сбора (Q5). Какая верна по закону - решает брокер в админке."""
+    AUCTION_PRICE = 'auction_price', 'Ціна аукціону × курс'
+    CUSTOMS_VALUE = 'customs_value', 'Митна вартість, грн'
+    CUSTOMS_VALUE_WITH_TAXES = 'customs_value_with_taxes', 'Митна вартість + мито + акциз + ПДВ'
+    TOTAL_BEFORE_PENSION = 'total_before_pension', 'Повна вартість до збору (логістика + податки)'
+
+
+class CustomsCalcRule(DateRangeModel):
+    """Правило растаможки (2.5, Q5): формулы, зависящие от законодательства, - данные, а не код.
+
+    # ПРОВЕРИТЬ по действующему законодательству: значения по умолчанию воспроизводят прежние цифры
+    калькулятора (временный вариант); брокер подтверждает или меняет их и ставит «Звірено з брокером».
+    """
+    pension_bracket_base = models.CharField(
+        'База вибору брекету пенсійного збору', max_length=32, choices=PensionBase.choices,
+        default=PensionBase.AUCTION_PRICE,
+        help_text='За якою сумою обирається ставка (3/4/5%). За замовчуванням - ціна аукціону × курс.',
+    )
+    pension_rate_base = models.CharField(
+        'База нарахування пенсійного збору', max_length=32, choices=PensionBase.choices,
+        default=PensionBase.TOTAL_BEFORE_PENSION,
+        help_text='Від якої суми рахується збір. За замовчуванням - повна вартість до збору.',
+    )
+    customs_value_includes_eu_to_ua = models.BooleanField(
+        'Митна вартість включає доставку ЄС → Україна', default=False,
+        help_text='Вимкнено: митна вартість = аукціон + США + фрахт до порту ЄС.',
+    )
+    age_coeff_min = models.PositiveSmallIntegerField(
+        'Віковий коефіцієнт: мінімум', default=1, help_text='Коефіцієнт не менше цього числа.')
+    age_coeff_max = models.PositiveSmallIntegerField(
+        'Віковий коефіцієнт: максимум', default=15, help_text='Коефіцієнт не більше цього числа.')
+    age_offset_years = models.PositiveSmallIntegerField(
+        'Віковий коефіцієнт: зсув, років', default=0,
+        help_text='Вік = рік розрахунку − рік випуску − зсув. Частина брокерів рахує зі зсувом 1.',
+    )
+    confirmed_by_broker = models.BooleanField(
+        'Звірено з брокером', default=False,
+        help_text='Поки не відмічено, сайт показує «орієнтовний розрахунок». Відмітити після звірки цифр.',
+    )
+    confirmed_at = models.DateField('Дата звірки', null=True, blank=True)
+    note = models.TextField(
+        'Примітка', blank=True,
+        default='ПЕРЕВІРИТИ за чинним законодавством: значення за замовчуванням повторюють попередні цифри '
+                'калькулятора, їх підтверджує митний брокер (питання Q5).',
+    )
+
+    overlap_key_fields = ()  # одно правило на дату
+
+    class Meta(DateRangeModel.Meta):
+        verbose_name = 'Правило розмитнення'
+        verbose_name_plural = 'Правила розмитнення'
+        ordering = ['-valid_from']
+
+    def clean(self):
+        super().clean()
+        if self.age_coeff_min is not None and self.age_coeff_max is not None and self.age_coeff_min > self.age_coeff_max:
+            raise ValidationError({'age_coeff_max': 'Максимум не може бути меншим за мінімум.'})
+
+    def __str__(self):
+        mark = '✓ звірено' if self.confirmed_by_broker else 'не звірено'
+        return f'Правило розмитнення з {self.valid_from} ({mark})'
 
 
 class Calculation(models.Model):
