@@ -11,7 +11,7 @@ from django.test import override_settings
 from django.utils import timezone
 from PIL import Image as PILImage
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 
 from integrations.models import VinReport
@@ -683,6 +683,36 @@ class TestListingImageDelete(APITestCase):
         self.client = auth_client(self.other)
         r = self.client.delete(self._url(self.img1.pk))
         self.assertEqual(r.status_code, 403)
+
+
+class TestForeignListingImageViaOwnListing(APITestCase):
+    """23-D14: фото чужого объявления нельзя тронуть через pk СВОЕГО объявления (IDOR по img_id)."""
+
+    def setUp(self):
+        self.attacker = make_user('idor_attacker@img.com')
+        victim = make_user('idor_victim@img.com')
+        region = _make_region('idor-область')
+        city = _make_city(region, 'idor-місто')
+        self.own = _make_listing(self.attacker, region, city)
+        self.victim_listing = _make_listing(victim, region, city)
+        self.victim_img = LocalListingImage.objects.create(
+            listing=self.victim_listing, image='v.jpg', is_primary=False)
+        self.url = f'/api/v1/local/listings/{self.own.pk}/images/{self.victim_img.pk}/'
+        self.client = auth_client(self.attacker)
+
+    def test_delete_404_and_image_kept(self):
+        self.assertEqual(self.client.delete(self.url).status_code, 404)
+        self.assertTrue(LocalListingImage.objects.filter(pk=self.victim_img.pk).exists())
+
+    def test_patch_primary_404_and_flag_unchanged(self):
+        self.assertEqual(self.client.patch(self.url).status_code, 404)
+        self.victim_img.refresh_from_db()
+        self.assertFalse(self.victim_img.is_primary)
+
+    def test_anonymous_401(self):
+        anon = APIClient()
+        self.assertEqual(anon.delete(self.url).status_code, 401)
+        self.assertEqual(anon.patch(self.url).status_code, 401)
 
 
 class TestListingImageSetPrimary(APITestCase):

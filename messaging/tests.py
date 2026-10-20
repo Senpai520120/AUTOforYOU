@@ -142,11 +142,11 @@ class TestConversationDetailAPI(SetupMixin):
         r = self.client.get(f'/api/v1/messages/conversations/{self.conv.pk}/')
         self.assertEqual(r.status_code, 200)
 
-    def test_stranger_gets_403(self):
+    def test_stranger_gets_404(self):
         stranger = make_user('stranger2@test.com')
         self.auth(stranger)
         r = self.client.get(f'/api/v1/messages/conversations/{self.conv.pk}/')
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 404)
 
     def test_reading_marks_messages_as_read(self):
         # seller reads → buyer's message becomes read
@@ -173,7 +173,7 @@ class TestConversationDetailAPI(SetupMixin):
             {'text': 'spam'},
             format='json',
         )
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 404)
 
 
 class TestUnreadCountAPI(SetupMixin):

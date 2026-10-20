@@ -1,3 +1,5 @@
+import logging
+
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import permissions, status
@@ -19,6 +21,8 @@ from .providers import (
     get_vin_provider,
 )
 from .serializers import LotImportRequestSerializer
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema(
@@ -237,7 +241,8 @@ class LotImportView(APIView):
         try:
             vehicle, listing, created = import_lot(lot_data, seller=request.user)
         except ValueError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning('Імпорт лоту відхилено: %s', type(exc).__name__)
+            return Response({'error': 'Не вдалося імпортувати лот. Перевірте дані.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
             {

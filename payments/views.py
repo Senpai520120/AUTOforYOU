@@ -145,10 +145,10 @@ class LiqPayCallbackView(APIView):
         try:
             decoded = client.decode_callback(data, signature)
         except LiqPaySignatureError as exc:
-            logger.warning('LiqPay callback: неверная подпись — %s', exc)
-            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning('LiqPay callback: неверная подпись (%s): %s', type(exc).__name__, exc)
+            return Response({'error': 'Неверная подпись.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
-            logger.error('LiqPay callback decode error: %s', exc)
+            logger.error('LiqPay callback decode error (%s): %s', type(exc).__name__, exc)
             return Response({'error': 'Ошибка декодирования данных.'}, status=status.HTTP_400_BAD_REQUEST)
 
         order_id = decoded.get('order_id', '')

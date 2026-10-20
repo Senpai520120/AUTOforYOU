@@ -26,14 +26,6 @@ from .services import (
 from .services import handles_imports as _handles_imports
 
 
-def _can_access(user, conv: Conversation) -> bool:
-    is_participant = conv.participants.filter(pk=user.pk).exists()
-    is_admin_imported = (
-        _handles_imports(user) and conv.imported_listing_id is not None
-    )
-    return is_participant or is_admin_imported
-
-
 class StartConversationView(APIView):
     permission_classes = [IsAuthenticated, IsEmailVerified]
     throttle_classes = [ScopedRateThrottle]
@@ -90,15 +82,17 @@ class ConversationDetailView(APIView):
         return super().get_permissions()
 
     def _get(self, pk, user):
+        # Выборка только своих диалогов: чужой id неотличим от несуществующего (404)
+        access = Q(participants=user)
+        if _handles_imports(user):
+            access |= Q(imported_listing__isnull=False)
         conv = get_object_or_404(
-            Conversation.objects.prefetch_related(
+            Conversation.objects.filter(access).distinct().prefetch_related(
                 'participants', 'messages__sender',
                 'local_listing', 'imported_listing__vehicle',
             ),
             pk=pk,
         )
-        if not _can_access(user, conv):
-            return None, Response({'detail': 'Немає доступу.'}, status=status.HTTP_403_FORBIDDEN)
         return conv, None
 
     @extend_schema(responses=ConversationDetailSerializer)

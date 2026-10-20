@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
@@ -16,6 +17,12 @@ from .serializers import (
     SellerRatingSerializer,
 )
 from .services import cancel_deal, confirm_deal, create_review, propose_deal, seller_rating
+
+
+def _own_deals(user):
+    """Сделки, где пользователь продавец или покупатель. Посторонний получает 404, а не 400/403:
+    иначе перебором pk можно узнать, какие сделки существуют (задача 1.11)."""
+    return Deal.objects.filter(Q(seller=user) | Q(buyer=user))
 
 
 class DealListCreateView(APIView):
@@ -45,7 +52,7 @@ class DealConfirmView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
-        deal = get_object_or_404(Deal, pk=pk)
+        deal = get_object_or_404(_own_deals(request.user), pk=pk)
         try:
             deal = confirm_deal(deal, request.user)
         except ValueError as e:
@@ -57,7 +64,7 @@ class DealCancelView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
-        deal = get_object_or_404(Deal, pk=pk)
+        deal = get_object_or_404(_own_deals(request.user), pk=pk)
         try:
             deal = cancel_deal(deal, request.user)
         except ValueError as e:
@@ -69,7 +76,7 @@ class DealReviewView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
-        deal = get_object_or_404(Deal.objects.prefetch_related('review'), pk=pk)
+        deal = get_object_or_404(_own_deals(request.user).prefetch_related('review'), pk=pk)
         sr = ReviewCreateSerializer(data=request.data)
         sr.is_valid(raise_exception=True)
         try:

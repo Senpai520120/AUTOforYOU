@@ -65,6 +65,31 @@ class TelegramLinkApiTest(TestCase):
         self.assertTrue(TelegramLinkToken.objects.filter(user=self.user).exists())
 
 
+class TelegramUnlinkApiTest(TestCase):
+    """23-D91: DELETE telegram/link/ - только вошедший, только свою привязку."""
+    URL = '/api/v1/telegram/link/'
+
+    def test_anonymous_401(self):
+        self.assertEqual(APIClient().delete(self.URL).status_code, 401)
+
+    def test_not_linked_400(self):
+        user = User.objects.create_user(email='unlinked@test.com', password='pass')
+        client = APIClient()
+        client.force_authenticate(user)
+        self.assertEqual(client.delete(self.URL).status_code, 400)
+
+    def test_linked_200_resets_only_own_telegram_id(self):
+        user = User.objects.create_user(email='linked@test.com', password='pass', telegram_id=777001)
+        neighbour = User.objects.create_user(email='neighbour@test.com', password='pass', telegram_id=777002)
+        client = APIClient()
+        client.force_authenticate(user)
+        self.assertEqual(client.delete(self.URL).status_code, 200)
+        user.refresh_from_db()
+        neighbour.refresh_from_db()
+        self.assertIsNone(user.telegram_id)
+        self.assertEqual(neighbour.telegram_id, 777002)
+
+
 # ─── Рантайм бота: апдейт → webhook → диспетчер → хендлер ────────────────────
 #
 # Хендлеры прогоняются по настоящему пути: POST на webhook, Dispatcher aiogram,

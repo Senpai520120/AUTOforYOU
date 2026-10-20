@@ -13,7 +13,7 @@ from tests.factories import (
     make_user,
 )
 
-from .models import Deal
+from .models import Deal, Review
 from .services import (
     cancel_deal,
     confirm_deal,
@@ -291,6 +291,46 @@ class DealsAPITest(TestCase):
         resp = self.client.get('/api/v1/deals/')
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.data), 1)
+
+
+class DealsOutsiderAPITest(TestCase):
+    """23-D10 (13-S3): посторонний не меняет и не видит чужую сделку (общая матрица - tests/test_authz_matrix.py)."""
+
+    def setUp(self):
+        self.seller = make_user('d_seller@example.com')
+        self.buyer = make_user('d_buyer@example.com')
+        self.outsider = make_user('d_outsider@example.com')
+        self.listing = make_local_listing(self.seller)
+        _make_conversation(self.listing, self.buyer)
+        self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
+        self.client = auth_client(self.outsider)
+
+    def test_outsider_confirm_404_deal_and_listing_unchanged(self):
+        self.assertEqual(self.client.post(f'/api/v1/deals/{self.deal.pk}/confirm/').status_code, 404)
+        self.deal.refresh_from_db()
+        self.listing.refresh_from_db()
+        self.assertEqual(self.deal.status, Deal.Status.PROPOSED)
+        self.assertEqual(self.listing.status, LocalListing.Status.ACTIVE)
+
+    def test_outsider_cancel_404_deal_unchanged(self):
+        self.assertEqual(self.client.post(f'/api/v1/deals/{self.deal.pk}/cancel/').status_code, 404)
+        self.deal.refresh_from_db()
+        self.assertEqual(self.deal.status, Deal.Status.PROPOSED)
+
+    def test_outsider_review_404_no_review_created(self):
+        confirm_deal(self.deal, self.buyer)
+        resp = self.client.post(f'/api/v1/deals/{self.deal.pk}/review/', {'rating': 1, 'text': 'x'})
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(Review.objects.filter(deal=self.deal).exists())
+
+    def test_outsider_does_not_see_deal_in_list(self):
+        resp = self.client.get('/api/v1/deals/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, [])
+
+    def test_unknown_deal_404_same_as_foreign(self):
+        # Чужая и несуществующая сделки неразличимы: pk перебором не разведать.
+        self.assertEqual(self.client.post('/api/v1/deals/999999/confirm/').status_code, 404)
 
 
 class ListingBuyersAPITest(TestCase):

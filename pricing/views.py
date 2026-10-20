@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 
 from django.conf import settings
@@ -29,6 +30,8 @@ from .models import (
     UsLandRoute,
 )
 from .serializers import CalculateInputSerializer
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
 
@@ -279,7 +282,11 @@ class CalculateView(APIView):
                 )
 
         except Exception as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception('Помилка підготовки тарифів калькулятора: %s', type(exc).__name__)
+            return Response(
+                {'error': 'Не вдалося виконати розрахунок. Спробуйте пізніше.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         # Рассчитываем аукционный сбор (чистая функция калькулятора)
         fee_breakdown = calc_auction_fees(

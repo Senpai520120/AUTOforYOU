@@ -458,7 +458,7 @@ class TestLotImportEndpoint(TestCase):
         # в demo-режиме (demo=True, vin=None), сетевого запроса нет. Вью отвечает 400:
         # import_lot бросает ValueError('VIN обязателен для импорта лота'). Код выяснен прогоном.
         self.assertEqual(resp.status_code, 400)
-        self.assertEqual(resp.data, {'error': 'VIN обязателен для импорта лота'})
+        self.assertEqual(resp.data, {'error': 'Не вдалося імпортувати лот. Перевірте дані.'})  # без текста исключения (1.11)
 
 
 # ── Безопасность: auth + throttling ──────────────────────────────────────────

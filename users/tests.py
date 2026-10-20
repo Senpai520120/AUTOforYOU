@@ -63,6 +63,13 @@ class TestUserModel(APITestCase):
     def test_str_is_email(self):
         self.assertEqual(str(make_user('s@test.com')), 's@test.com')
 
+    def test_password_is_stored_hashed(self):
+        # Бриф §3, пункт 7: стандартное хеширование Django, пароль в БД не лежит открытым текстом.
+        user = make_user('hash@test.com')
+        stored = User.objects.values_list('password', flat=True).get(pk=user.pk)
+        self.assertNotIn(TEST_PASSWORD, stored)
+        self.assertRegex(stored, r'^(pbkdf2_sha256|argon2|bcrypt_sha256|scrypt)[$]')
+
     def test_dealer_application_str_contains_company_and_email(self):
         user = make_user('d@test.com')
         app = apply_for_dealer(user, _APPLY_DATA['company_name'], 'Іван', '+380991234567')
@@ -542,15 +549,15 @@ class TestImportedConversationsVisibility(TestCase):
 
     def test_buyer_cannot_open_foreign_imported_conversation(self):
         resp = auth_client(self.other).get(f'{CONVERSATIONS_URL}{self.conv.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_dealer_cannot_open_foreign_imported_conversation(self):
         resp = auth_client(self.dealer).get(f'{CONVERSATIONS_URL}{self.conv.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_is_staff_without_role_cannot_open(self):
         resp = auth_client(self.staff_only).get(f'{CONVERSATIONS_URL}{self.conv.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_broker_can_open(self):
         resp = auth_client(self.broker).get(f'{CONVERSATIONS_URL}{self.conv.pk}/')
@@ -809,7 +816,7 @@ class TestModeratorBoundaries(TestCase):
         with mock.patch('integrations.tasks.send_notification'):
             conv, _, _ = get_or_create_conversation(make_user(), 'imported', listing.pk, 'Hi')
         resp = auth_client(self.moderator).get(f'{CONVERSATIONS_URL}{conv.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class TestSellerTypeDealer(TestCase):
@@ -854,7 +861,7 @@ class TestBareAdminRoleGivesNothing(TestCase):
         with mock.patch('integrations.tasks.send_notification'):
             conv, _, _ = get_or_create_conversation(make_user(), 'imported', listing.pk, 'Hi')
         resp = auth_client(self.fake).get(f'{CONVERSATIONS_URL}{conv.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_not_notified_about_imported_conversation(self):
         from messaging.services import get_or_create_conversation
