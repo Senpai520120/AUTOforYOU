@@ -5,6 +5,8 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from users.display import public_display_name
+
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .services import SUBSTANTIVE_FIELDS
 
@@ -90,9 +92,7 @@ class LocalListingListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField())
     def get_owner_name(self, obj):
-        u = obj.owner
-        full = f'{u.first_name} {u.last_name}'.strip()
-        return full or u.email.split('@')[0]
+        return public_display_name(obj.owner)
 
     @extend_schema_field(serializers.BooleanField())
     def get_seller_has_badge(self, obj):
@@ -108,12 +108,19 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
     """
     seller_avg_rating = serializers.SerializerMethodField()
     seller_deal_count = serializers.SerializerMethodField()
+    is_owner = serializers.SerializerMethodField()
 
     class Meta(LocalListingListSerializer.Meta):
         fields = LocalListingListSerializer.Meta.fields + [
             'contact_phone', 'rejection_reason',
-            'seller_avg_rating', 'seller_deal_count',
+            'seller_avg_rating', 'seller_deal_count', 'is_owner',
         ]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_owner(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        return bool(user and user.is_authenticated and user.pk == obj.owner_id)
 
     @extend_schema_field(serializers.FloatField(allow_null=True))
     def get_seller_avg_rating(self, obj):

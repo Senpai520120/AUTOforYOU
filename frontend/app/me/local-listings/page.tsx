@@ -7,7 +7,7 @@ import { dealsApi } from '@/api/deals';
 import { LocalListing } from '@/lib/types';
 import PromoteModal from '@/components/local/PromoteModal';
 
-interface Buyer { id: number; email: string; first_name: string; last_name: string; }
+interface Buyer { id: number; display_name: string; }
 interface SoldModalState { listing: LocalListing; buyers: Buyer[]; loading: boolean; }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -124,8 +124,7 @@ export default function MyLocalListingsPage() {
                   disabled={proposingTo === b.id}
                   className="w-full flex items-center justify-between border border-slate-200 hover:bg-blue-50 rounded-lg px-4 py-2.5 text-sm text-left disabled:opacity-60"
                 >
-                  <span>{b.first_name ? `${b.first_name} ${b.last_name}`.trim() : b.email}</span>
-                  <span className="text-xs text-slate-400">{b.email}</span>
+                  <span>{b.display_name}</span>
                 </button>
               ))}
             </div>

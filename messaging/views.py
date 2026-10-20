@@ -1,5 +1,6 @@
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -60,6 +61,7 @@ class StartConversationView(APIView):
 class ConversationListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=ConversationListSerializer(many=True))
     def get(self, request):
         user = request.user
         if _handles_imports(user):
@@ -99,6 +101,7 @@ class ConversationDetailView(APIView):
             return None, Response({'detail': 'Немає доступу.'}, status=status.HTTP_403_FORBIDDEN)
         return conv, None
 
+    @extend_schema(responses=ConversationDetailSerializer)
     def get(self, request, pk):
         conv, err = self._get(pk, request.user)
         if err:

@@ -192,3 +192,42 @@ class TestUnreadCountAPI(SetupMixin):
     def test_anon_gets_401(self):
         r = self.client.get('/api/v1/messages/unread-count/')
         self.assertEqual(r.status_code, 401)
+
+
+class TestNoEmailLeak(SetupMixin):
+    """Задача 1.9 (06-S5): email и его локальная часть не уходят в ответы и уведомления."""
+
+    def setUp(self):
+        super().setUp()
+        self.nameless = make_user('leaky.nameless@test.com')
+
+    def _assert_clean(self, text):
+        for leak in ('leaky', 'nameless@', '@test.com'):
+            self.assertNotIn(leak, text)
+
+    def test_conversation_responses_have_no_email(self):
+        conv, _, _ = get_or_create_conversation(self.nameless, 'local', self.listing.pk, 'Привіт!')
+        self.auth(self.seller)
+        lst = self.client.get('/api/v1/messages/conversations/')
+        self.assertEqual(lst.status_code, 200)
+        self.assertEqual(set(lst.data[0]['other_participant']), {'id', 'display_name'})
+        self.assertEqual(lst.data[0]['other_participant']['display_name'], 'Користувач')
+        self._assert_clean(lst.content.decode())
+        det = self.client.get(f'/api/v1/messages/conversations/{conv.pk}/')
+        self.assertEqual(det.status_code, 200)
+        for p in det.data['participants']:
+            self.assertEqual(set(p), {'id', 'display_name'})
+        self.assertEqual(det.data['messages'][0]['sender_name'], 'Користувач')
+        self._assert_clean(det.content.decode())
+
+    def test_message_notification_has_no_email(self):
+        from unittest.mock import patch
+
+        from notifications.models import Notification
+        with patch('integrations.tasks.send_notification.delay') as tg:
+            get_or_create_conversation(self.nameless, 'local', self.listing.pk, 'Привіт!')
+        note = Notification.objects.get(user=self.seller, type=Notification.Type.NEW_MESSAGE)
+        self._assert_clean(note.title + note.text)
+        self.assertIn('Користувач', note.title)
+        tg.assert_called_once()
+        self._assert_clean(tg.call_args.args[1])

@@ -1075,3 +1075,39 @@ class TestCatalogQueryCount(APITestCase):
         self.assertEqual(resp.data['seller_deal_count'], 3)
         # SELLER_BADGE_THRESHOLD за замовчуванням 3
         self.assertTrue(resp.data['seller_has_badge'])
+
+
+class TestOwnerNameAndIsOwner(APITestCase):
+    """Задача 1.9 (05-S3, 10-S1): owner_name без email, is_owner только владельцу."""
+
+    def setUp(self):
+        self.region = _make_region('Імена область')
+        self.city = _make_city(self.region, 'Імена місто')
+        self.owner = make_user('hidden.owner@example.com')
+        self.listing = _make_listing(self.owner, self.region, self.city)
+        self.detail = f'/api/v1/local/listings/{self.listing.pk}/'
+
+    def test_nameless_owner_is_anonymous_in_list_and_detail(self):
+        lst = self.client.get('/api/v1/local/listings/')
+        self.assertEqual(lst.status_code, 200)
+        self.assertEqual(lst.data['results'][0]['owner_name'], 'Користувач')
+        det = self.client.get(self.detail)
+        self.assertEqual(det.data['owner_name'], 'Користувач')
+        self.assertNotIn('hidden.owner', det.content.decode())
+        self.assertNotIn('hidden.owner', lst.content.decode())
+
+    def test_named_owner_short_form(self):
+        self.owner.first_name, self.owner.last_name = 'Олена', 'Коваль'
+        self.owner.save()
+        lst = self.client.get('/api/v1/local/listings/')
+        self.assertEqual(lst.data['results'][0]['owner_name'], 'Олена К.')
+        self.assertEqual(self.client.get(self.detail).data['owner_name'], 'Олена К.')
+
+    def test_is_owner_true_only_for_owner(self):
+        self.assertIs(auth_client(self.owner).get(self.detail).data['is_owner'], True)
+
+    def test_is_owner_false_for_other_user(self):
+        self.assertIs(auth_client(make_user()).get(self.detail).data['is_owner'], False)
+
+    def test_is_owner_false_for_anonymous(self):
+        self.assertIs(self.client.get(self.detail).data['is_owner'], False)

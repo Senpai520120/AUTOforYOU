@@ -93,7 +93,7 @@ export default function MyDealsPage() {
               {deal.listing.make} {deal.listing.model} {deal.listing.year}
             </Link>
             <p className="text-xs text-slate-500 mt-0.5">
-              {isBuyer ? `Продавець: ${deal.seller.first_name || deal.seller.email}` : `Покупець: ${deal.buyer.first_name || deal.buyer.email}`}
+              {isBuyer ? `Продавець: ${deal.seller.display_name}` : `Покупець: ${deal.buyer.display_name}`}
             </p>
           </div>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>

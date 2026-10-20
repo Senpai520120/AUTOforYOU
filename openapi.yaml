@@ -871,7 +871,7 @@ paths:
           description: No response body
   /api/v1/deals/:
     get:
-      operationId: v1_deals_retrieve
+      operationId: v1_deals_list
       tags:
       - v1
       security:
@@ -879,7 +879,13 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deal'
+          description: ''
     post:
       operationId: v1_deals_create
       tags:
@@ -943,7 +949,7 @@ paths:
           description: No response body
   /api/v1/deals/listing-buyers/{listing_id}/:
     get:
-      operationId: v1_deals_listing_buyers_retrieve
+      operationId: v1_deals_listing_buyers_list
       description: Returns list of users who initiated conversations about a listing
         (for seller to choose buyer).
       parameters:
@@ -959,7 +965,13 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DealUser'
+          description: ''
   /api/v1/deals/seller-rating/{user_id}/:
     get:
       operationId: v1_deals_seller_rating_retrieve
@@ -1635,7 +1647,7 @@ paths:
           description: Тільки адміністратори
   /api/v1/messages/conversations/:
     get:
-      operationId: v1_messages_conversations_retrieve
+      operationId: v1_messages_conversations_list
       tags:
       - v1
       security:
@@ -1643,10 +1655,16 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversationList'
+          description: ''
   /api/v1/messages/conversations/{id}/:
     get:
-      operationId: v1_messages_conversations_retrieve_2
+      operationId: v1_messages_conversations_retrieve
       parameters:
       - in: path
         name: id
@@ -1660,7 +1678,11 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+          description: ''
     post:
       operationId: v1_messages_conversations_create
       parameters:
@@ -2844,6 +2866,73 @@ components:
       - telegram
       - viber
       type: string
+    ConversationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        subject_title:
+          type: string
+          readOnly: true
+        subject_url:
+          type: string
+          readOnly: true
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+          readOnly: true
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_message_at:
+          type: string
+          format: date-time
+      required:
+      - created_at
+      - id
+      - messages
+      - participants
+      - subject_title
+      - subject_url
+    ConversationList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        subject_title:
+          type: string
+          readOnly: true
+        subject_url:
+          type: string
+          readOnly: true
+        other_participant:
+          type: string
+          readOnly: true
+        last_message_text:
+          type: string
+          readOnly: true
+        last_message_at:
+          type: string
+          format: date-time
+        unread_count:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - last_message_text
+      - other_participant
+      - subject_title
+      - subject_url
+      - unread_count
     CustomsExciseFuelTypeEnum:
       enum:
       - petrol
@@ -2852,6 +2941,83 @@ components:
       - hybrid
       - phev
       type: string
+    Deal:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        listing:
+          allOf:
+          - $ref: '#/components/schemas/DealListing'
+          readOnly: true
+        seller:
+          allOf:
+          - $ref: '#/components/schemas/DealUser'
+          readOnly: true
+        buyer:
+          allOf:
+          - $ref: '#/components/schemas/DealUser'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/DealStatusEnum'
+          title: Статус
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Підтверджено о
+        review:
+          allOf:
+          - $ref: '#/components/schemas/Review'
+          readOnly: true
+      required:
+      - buyer
+      - created_at
+      - id
+      - listing
+      - review
+      - seller
+    DealListing:
+      type: object
+      properties:
+        id:
+          type: integer
+        make:
+          type: string
+        model:
+          type: string
+        year:
+          type: integer
+      required:
+      - id
+      - make
+      - model
+      - year
+    DealStatusEnum:
+      enum:
+      - proposed
+      - confirmed
+      - cancelled
+      type: string
+    DealUser:
+      type: object
+      description: 'Контрагент сделки: только id и публичное имя (без email и ФИО
+        целиком).'
+      properties:
+        id:
+          type: integer
+        display_name:
+          type: string
+          readOnly: true
+      required:
+      - display_name
+      - id
     EuPortEnum:
       enum:
       - klaipeda
@@ -3547,6 +3713,9 @@ components:
         seller_deal_count:
           type: integer
           readOnly: true
+        is_owner:
+          type: boolean
+          readOnly: true
       required:
       - body_type
       - city
@@ -3555,6 +3724,7 @@ components:
       - fuel_type
       - id
       - images
+      - is_owner
       - make
       - mileage_km
       - model
@@ -3872,6 +4042,9 @@ components:
         seller_deal_count:
           type: integer
           readOnly: true
+        is_owner:
+          type: boolean
+          readOnly: true
         expiry_warned:
           type: boolean
           title: Попередження надіслано
@@ -3883,6 +4056,7 @@ components:
       - fuel_type
       - id
       - images
+      - is_owner
       - make
       - mileage_km
       - model
@@ -4007,6 +4181,33 @@ components:
       - licensed
       - broker
       type: string
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        sender:
+          type: integer
+        sender_name:
+          type: string
+          readOnly: true
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - created_at
+      - id
+      - sender
+      - sender_name
+      - text
     NeededWhenEnum:
       enum:
       - asap
@@ -4244,6 +4445,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Vehicle'
+    Participant:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        display_name:
+          type: string
+          readOnly: true
+      required:
+      - display_name
+      - id
     PartnerStatusEnum:
       enum:
       - no_answer
@@ -4647,6 +4860,32 @@ components:
           title: Коментар
       required:
       - reason
+    Review:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+          title: Оцінка (1-5)
+        text:
+          type: string
+          title: Відгук
+        author_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author_name
+      - created_at
+      - id
+      - rating
     RoleEnum:
       enum:
       - buyer

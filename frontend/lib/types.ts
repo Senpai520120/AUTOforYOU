@@ -200,6 +200,8 @@ export interface LocalListing {
   status: LocalStatus;
   seller_type: LocalSellerType;
   owner_name: string;
+  /** true только для владельца (есть в детали объявления) */
+  is_owner?: boolean;
   contact_phone: string | null;
   rejection_reason: string | null;
   images: LocalListingImage[];
@@ -258,9 +260,7 @@ export interface LocalListingFilters {
 
 export interface MessageParticipant {
   id: number;
-  email: string;
-  first_name: string;
-  last_name: string;
+  display_name: string;
 }
 
 export interface ChatMessage {
@@ -373,9 +373,7 @@ export type DealStatus = 'proposed' | 'confirmed' | 'cancelled';
 
 export interface DealUser {
   id: number;
-  email: string;
-  first_name: string;
-  last_name: string;
+  display_name: string;
 }
 
 export interface DealListing {
@@ -389,7 +387,7 @@ export interface DealReview {
   id: number;
   rating: number;
   text: string;
-  author_email: string;
+  author_name: string;
   created_at: string;
 }
 

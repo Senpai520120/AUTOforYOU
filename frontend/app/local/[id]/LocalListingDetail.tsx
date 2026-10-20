@@ -1,7 +1,7 @@
 'use client';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LocalListing } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { localApi } from '@/api/local';
@@ -35,7 +35,18 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
 
   const images = listing.images.length > 0 ? listing.images : [{ id: 0, image: null, source_url: '', is_primary: true }];
   const mainImg = images[activeImg]?.image || images[activeImg]?.source_url || PLACEHOLDER_SVG;
-  const isOwner = user && listing.owner_name === (user.first_name && user.last_name ? `${user.first_name} ${user.last_name}`.trim() : user.email.split('@')[0]);
+  // SSR-HTML публичный и кэшируется (is_owner там всегда false), поэтому признак владельца
+  // берём из авторизованного запроса на клиенте.
+  const [ownerFlag, setOwnerFlag] = useState(false);
+  const isOwner = Boolean(user) && ownerFlag;
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    localApi.detail(listing.id)
+      .then(d => { if (!cancelled) setOwnerFlag(Boolean(d.is_owner)); })
+      .catch(() => { if (!cancelled) setOwnerFlag(false); });
+    return () => { cancelled = true; };
+  }, [user, listing.id]);
 
   const price = Number(listing.price).toLocaleString('uk-UA');
 

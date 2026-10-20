@@ -163,7 +163,7 @@ export default function MessagesPage() {
                   >
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-medium text-slate-900 text-sm truncate">
-                        {conv.other_participant?.first_name || conv.other_participant?.email?.split('@')[0] || 'Менеджер'}
+                        {conv.other_participant?.display_name || 'Менеджер'}
                       </span>
                       {conv.unread_count > 0 && (
                         <span className="bg-blue-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">

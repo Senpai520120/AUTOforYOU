@@ -37,7 +37,7 @@ test.describe('Кабінет buyer', () => {
 
   test('/me/messages: діалог із seller відкривається і показує повідомлення', async ({ page }) => {
     await page.goto('/me/messages');
-    const conv = page.getByRole('button', { name: /seller/ });
+    const conv = page.getByRole('button', { name: /Користувач/ });
     await expect(conv).toBeVisible();
     await conv.click();
 

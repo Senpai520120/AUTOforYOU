@@ -10,6 +10,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from users.display import public_display_name
+
 from .models import Conversation, Message
 
 User = get_user_model()
@@ -160,7 +162,7 @@ def _notify_recipients(sender, conversation: Conversation, message: Message) -> 
         subject_label = 'оголошення'
         conv_link = '/me/messages'
 
-    sender_label = sender.first_name or sender.email.split('@')[0]
+    sender_label = public_display_name(sender)
     preview = message.text[:80]
     tg_text = f'Нове повідомлення від {sender_label} по {subject_label}:\n«{preview}»'
     notif_title = f'Нове повідомлення від {sender_label}'

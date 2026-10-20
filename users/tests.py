@@ -863,10 +863,10 @@ class TestBareAdminRoleGivesNothing(TestCase):
             get_or_create_conversation(make_user(), 'imported', listing.pk, 'Hi')
         self.assertNotIn(self.fake.pk, [c.args[0] for c in task.delay.call_args_list])
 
-    def test_deals_listing_buyers_forbidden(self):
+    def test_deals_listing_buyers_hidden(self):
         listing = make_local_listing(make_user())
         resp = auth_client(self.fake).get(f'/api/v1/deals/listing-buyers/{listing.pk}/')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class TestRevokeBrokerReleasesConversations(TestCase):
@@ -1478,3 +1478,42 @@ class TestConsentRecordUserDeletion(TestCase):
         for r in records:
             self.assertIsNone(r.lead)
             self.assertEqual(r.lead_public_id, public_id)
+
+
+class PublicDisplayNameTest(TestCase):
+    """Задача 1.9: публичное имя никогда не производится от email или телефона."""
+
+    def _user(self, **kw):
+        from tests.factories import make_user
+        return make_user('secret.person@example.com', **kw)
+
+    def test_first_and_last_name(self):
+        from users.display import public_display_name
+        self.assertEqual(public_display_name(self._user(first_name='Олена', last_name='Коваль')), 'Олена К.')
+
+    def test_first_name_only(self):
+        from users.display import public_display_name
+        self.assertEqual(public_display_name(self._user(first_name='Олена')), 'Олена')
+
+    def test_full_name_in_first_name_field_is_trimmed(self):
+        from users.display import public_display_name
+        user = self._user(first_name='Іван Петренко Іванович', last_name='Сидоренко Інший')
+        self.assertEqual(public_display_name(user), 'Іван С.')
+        user.first_name, user.last_name = 'Іван Петренко', ''
+        self.assertEqual(public_display_name(user), 'Іван')
+
+    def test_empty_is_anonymous_not_email(self):
+        from users.display import public_display_name
+        self.assertEqual(public_display_name(self._user()), 'Користувач')
+
+    def test_last_name_only_is_anonymous(self):
+        from users.display import public_display_name
+        self.assertEqual(public_display_name(self._user(last_name='Коваль')), 'Користувач')
+
+    def test_deleted_user(self):
+        from types import SimpleNamespace
+
+        from users.display import public_display_name
+        gone = SimpleNamespace(first_name='Олена', last_name='Коваль', deleted_at=object())
+        self.assertEqual(public_display_name(gone), 'Користувач видалений')
+        self.assertEqual(public_display_name(None), 'Користувач видалений')
