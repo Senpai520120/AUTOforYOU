@@ -618,3 +618,33 @@ class LeadConsentLogTests(TestCase):
         self.assertEqual(ConsentRecord.objects.filter(lead=lead).count(), 2)
         import_module('users.migrations.0014_backfill_lead_consents').backfill(apps, None)
         self.assertEqual(ConsentRecord.objects.filter(lead=lead).count(), 2)  # идемпотентно
+
+
+class AnonymizeUserLeadsTests(TestCase):
+    """1.8: обезличивание заявок при удалении аккаунта - только свои, public_id и партнёрские поля на месте."""
+
+    def setUp(self):
+        s = SiteSettings.load()
+        s.partner_name = 'Партнер Тест'
+        s.save()
+        self.user = make_user('lead.owner@test.com')
+        self.other = make_user('lead.other@test.com')
+        data = {'name': 'Олег', 'phone': '0671234567', 'email': 'o@test.com', 'contact_method': 'telegram',
+                'contact_handle': '@oleg', 'comment': 'Передзвоніть', 'source': 'landing'}
+        self.lead = services.create_lead(user=self.user, data=data)
+        self.foreign = services.create_lead(user=self.other, data={**data, 'name': 'Чужий'})
+
+    def test_clears_contacts_keeps_public_id(self):
+        public_id = Lead.objects.get(pk=self.lead.pk).public_id
+        self.assertEqual(services.anonymize_user_leads(self.user), 1)
+        lead = Lead.objects.get(pk=self.lead.pk)
+        self.assertEqual((lead.name, lead.phone, lead.email, lead.contact_handle, lead.comment),
+                         ('Користувач видалений', '', '', '', ''))
+        self.assertIsNone(lead.user_id)
+        self.assertEqual(lead.public_id, public_id)
+        self.assertEqual(lead.partner_name, 'Партнер Тест')
+
+    def test_other_users_leads_untouched(self):
+        services.anonymize_user_leads(self.user)
+        foreign = Lead.objects.get(pk=self.foreign.pk)
+        self.assertEqual((foreign.name, foreign.user_id), ('Чужий', self.other.pk))

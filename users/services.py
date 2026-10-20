@@ -7,8 +7,13 @@
 - Email-уведомление при смене статуса (dev: console backend).
   # позже заменить на Telegram-уведомление (промт 11)
 """
+import logging
+import uuid
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from .consents import record_consents
@@ -93,7 +98,6 @@ def revoke_all_sessions(user):
     Все refresh дополнительно уходят в blacklist. Работает и для неактивного пользователя
     (бан, анонимизация 1.8). Версия на переданном объекте обновляется.
     """
-    from django.contrib.auth import get_user_model
     from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
     with transaction.atomic():
@@ -127,6 +131,168 @@ def unban_user(user):
     return True
 
 
+# ─── Удаление аккаунта и обезличивание (задача 1.8, Q3) ───────────────────────
+
+logger = logging.getLogger(__name__)
+
+
+class AccountDeletionError(Exception):
+    """Аккаунт нельзя поставить на удаление или обезличить (суперпользователь, уже удалён)."""
+
+
+def deletion_grace_days() -> int:
+    from site_settings.models import SiteSettings
+    return SiteSettings.load().account_deletion_grace_days
+
+
+def deletion_due_at(user, grace_days=None):
+    """Когда истекает период отмены (None - удаление не запрошено)."""
+    if user.deletion_scheduled_at is None:
+        return None
+    days = deletion_grace_days() if grace_days is None else grace_days
+    return user.deletion_scheduled_at + timedelta(days=days)
+
+
+def _hide_active_listings(user):
+    from local_listings.models import LocalListing
+    return LocalListing.objects.filter(
+        owner=user, status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+    ).update(status=LocalListing.Status.HIDDEN)
+
+
+def schedule_account_deletion(user):
+    """Запрос удаления: начало периода отмены, объявления сняты, все сессии отозваны, письмо.
+
+    Повторный запрос не сдвигает дату. Возвращает дату окончательного удаления.
+    """
+    if user.is_superuser:
+        raise AccountDeletionError('Акаунт суперкористувача видаляється вручну.')
+    newly = False
+    with transaction.atomic():
+        locked = get_user_model().objects.select_for_update().get(pk=user.pk)
+        if locked.deleted_at is not None:
+            raise AccountDeletionError('Акаунт уже видалено.')
+        if locked.deletion_scheduled_at is None:
+            locked.deletion_scheduled_at = timezone.now()
+            locked.save(update_fields=['deletion_scheduled_at'])
+            newly = True
+        user.deletion_scheduled_at = locked.deletion_scheduled_at
+        _hide_active_listings(locked)
+        revoke_all_sessions(user)
+    due = deletion_due_at(user)
+    if newly:
+        from .emails import send_account_deletion_scheduled_email
+        transaction.on_commit(lambda: send_account_deletion_scheduled_email(user, due))
+        logger.info('account deletion scheduled: user=%s', user.pk)
+    return due
+
+
+def cancel_account_deletion(user) -> bool:
+    """Отмена в период отмены. Снятые объявления остаются снятыми. False - отменять нечего."""
+    updated = get_user_model().objects.filter(
+        pk=user.pk, deletion_scheduled_at__isnull=False, deleted_at__isnull=True,
+    ).update(deletion_scheduled_at=None)
+    user.deletion_scheduled_at = None
+    if updated:
+        logger.info('account deletion cancelled: user=%s', user.pk)
+    return bool(updated)
+
+
+def _delete_files(names):
+    from django.core.files.storage import default_storage
+    for name in names:
+        try:
+            default_storage.delete(name)
+        except Exception as exc:  # файл уже удалён/хранилище недоступно - строку БД это не возвращает
+            logger.warning('anonymize: файл фото не удалён: %s', type(exc).__name__)
+
+
+def anonymize_user(user, *, due_before=None) -> bool:
+    """Обезличивание аккаунта: один сервис для Celery-задачи и админки (06-S11).
+
+    Строки, на которые ссылаются другие люди (сделки, отзывы, переписка, жалобы, платежи),
+    не удаляются - вторая сторона видит «Користувач видалений» (deleted_at, users/display.py).
+    ConsentRecord не удаляется: user обнуляется явным UPDATE в обход неизменяемого менеджера.
+    due_before (Celery-задача): обезличить, только если удаление всё ещё запрошено не позже этой
+    даты - иначе пользователь успел отменить его, пока задача шла по списку.
+    Возвращает False, если аккаунт уже обезличен или удаление отменено.
+    """
+    from favorites.models import Favorite
+    from leads.services import anonymize_user_leads
+    from local_listings.models import LocalListing, LocalListingImage
+    from notifications.models import Notification
+    from pricing.models import Calculation
+    from saved_searches.models import SavedSearch
+    from telegram_bot.models import TelegramLinkToken
+
+    from .emails import send_account_deleted_email
+    from .models import ConsentRecord, CustomUser, TrustedShop
+
+    with transaction.atomic():
+        locked = CustomUser.objects.select_for_update().get(pk=user.pk)
+        if locked.is_superuser:
+            raise AccountDeletionError('Акаунт суперкористувача видаляється вручну.')
+        if locked.deleted_at is not None:
+            return False
+        if due_before is not None and (
+            locked.deletion_scheduled_at is None or locked.deletion_scheduled_at > due_before
+        ):
+            return False
+        email = locked.email
+
+        anonymize_user_leads(locked)
+        TrustedShop.objects.filter(owner=locked).delete()
+        SavedSearch.objects.filter(user=locked).delete()
+        Favorite.objects.filter(user=locked).delete()
+        Notification.objects.filter(user=locked).delete()
+        TelegramLinkToken.objects.filter(user=locked).delete()
+        DealerApplication.objects.filter(user=locked).delete()
+
+        # Объявления - в архив (hidden до задачи 4.3, она переведёт их в deleted по owner.deleted_at).
+        # Фото удаляются целиком: на них бывают номера и дом.
+        images = LocalListingImage.objects.filter(listing__owner=locked)
+        files = [img.image.name for img in images if img.image]
+        images.delete()
+        LocalListing.objects.filter(owner=locked).update(
+            status=LocalListing.Status.HIDDEN, contact_phone='', description='', has_contact_in_text=False,
+            referrer='', entry_page_url='',  # источник визита (2.14): UTM без ПДн остаётся
+        )
+
+        Calculation.objects.filter(user=locked).update(user=None)
+        locked.watched_shipments.clear()
+        # Журнал согласий неизменяем для ConsentRecord.objects; запись остаётся доказательством.
+        models.QuerySet(model=ConsentRecord).filter(user=locked).update(user=None)
+
+        was_broker = locked.role == CustomUser.Role.BROKER
+        locked.groups.clear()
+        locked.user_permissions.clear()
+        # Случайный адрес: предсказуемый deleted-<pk>@… можно было занять регистрацией и сорвать
+        # обезличивание (unique email).
+        locked.email = f'deleted-{uuid.uuid4().hex}@deleted.invalid'
+        locked.first_name = locked.last_name = locked.phone = ''
+        locked.telegram_id = None
+        locked.first_touch_utm = {}
+        locked.first_touch_referrer = locked.first_touch_entry_url = ''
+        locked.role = CustomUser.Role.BUYER
+        locked.is_verified_dealer = False
+        locked.is_staff = False
+        locked.is_active = False
+        locked.is_email_verified = False
+        locked.last_login = None
+        locked.set_unusable_password()
+        locked.deleted_at = timezone.now()
+        locked.save()
+        if was_broker:  # как при снятии роли: импортные диалоги передаются другому брокеру/админу
+            _release_import_conversations(locked)
+        revoke_all_sessions(locked)
+
+        transaction.on_commit(lambda: _delete_files(files))
+        transaction.on_commit(lambda: send_account_deleted_email(email))
+    user.refresh_from_db()
+    logger.info('account anonymized: user=%s', user.pk)
+    return True
+
+
 # ─── Назначение ролей (только админка) ───────────────────────────────────────
 
 ROLE_GROUPS = {
@@ -138,7 +304,6 @@ ROLE_GROUPS = {
 
 def _audit(actor, user, action, role):
     # Точка расширения под журнал аудита (Н-8); пока - стандартный логгер.
-    import logging
     logging.getLogger('audit').info(
         'role %s: actor=%s user=%s role=%s',
         action, getattr(actor, 'pk', None), user.pk, role,

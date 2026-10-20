@@ -10,6 +10,8 @@ export interface CalcInputs {
   auction_location: string;
   us_port: string;
   eu_port: string;
+  // Ємність батареї, кВт·год (2.5): лише для electric/phev, рядок як у полі форми (напр. "75.5")
+  battery_capacity_kwh?: string;
 }
 
 export const pricingApi = {

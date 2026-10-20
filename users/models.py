@@ -67,6 +67,16 @@ class CustomUser(AbstractUser):
     # Версия сессий (1.7): claim `sv` в JWT. revoke_all_sessions увеличивает её, токены со старой
     # версией (и без claim, как версия 0) отклоняются сразу - и access, и refresh.
     session_version = models.PositiveIntegerField(default=0, verbose_name='Версія сесій')
+    # Удаление аккаунта (1.8, Q3): запрос ставит deletion_scheduled_at (начало периода отмены),
+    # по истечении периода anonymize_user ставит deleted_at. deleted_at отличает удалённого
+    # от забаненного и неактивного: по нему контрагенты видят «Користувач видалений».
+    deletion_scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Видалення заплановано')
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='Видалено (знеособлено)')
+    # Источник первого касания (2.14): пишется один раз при регистрации, дальше не меняется.
+    # Только для admin (право view_attribution); в API пользователю и другим не отдаётся.
+    first_touch_utm = models.JSONField('UTM першого візиту', default=dict, blank=True, editable=False)
+    first_touch_referrer = models.CharField('Реферер першого візиту', max_length=500, blank=True, editable=False)
+    first_touch_entry_url = models.CharField('Сторінка входу', max_length=500, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     USERNAME_FIELD = 'email'
@@ -75,6 +85,7 @@ class CustomUser(AbstractUser):
     class Meta:
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+        permissions = [('view_attribution', 'Може бачити джерело візиту (UTM, реферер)')]
 
     def __str__(self):
         return self.email

@@ -20,3 +20,5 @@ docs/
 tests/
 *.md
 openapi.yaml
+# Локальный SECRET_KEY разработчика (задача 7.2)
+.dev_secret_key

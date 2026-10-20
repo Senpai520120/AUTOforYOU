@@ -153,9 +153,20 @@ class LocalListingOwnerSerializer(LocalListingDetailSerializer):
         fields = LocalListingDetailSerializer.Meta.fields + ['expiry_warned']
 
 
+def _listing_source(raw) -> dict:
+    from core.attribution import clean_attribution
+    try:
+        data = clean_attribution(raw)
+    except Exception:
+        return {}
+    return {'utm': data['utm'], 'referrer': data['referrer'], 'entry_page_url': data['entry_page_url']}
+
+
 class LocalListingCreateSerializer(serializers.ModelSerializer):
     images = LocalListingImageSerializer(many=True, read_only=True)
     agreed_to_rules = serializers.BooleanField(write_only=True)
+    # Источник визита на момент подачи (2.14): только запись, мусор тихо отбрасывается.
+    attribution = serializers.JSONField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = LocalListing
@@ -166,7 +177,7 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
             'region', 'city',
             'description', 'status', 'seller_type', 'contact_phone',
             'images', 'created_at', 'updated_at',
-            'agreed_to_rules',
+            'agreed_to_rules', 'attribution',
         ]
         read_only_fields = ['id', 'status', 'created_at', 'updated_at', 'images']
 
@@ -208,6 +219,7 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         from .antispam import detect_contacts
 
         agreed = validated_data.pop('agreed_to_rules')
+        validated_data.update(_listing_source(validated_data.pop('attribution', None)))
         max_active = getattr(settings, 'LOCAL_LISTING_MAX_ACTIVE', 10)
         owner = self.context['request'].user
 

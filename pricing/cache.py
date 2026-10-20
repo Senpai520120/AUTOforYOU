@@ -38,6 +38,7 @@ KEYS = {
     'exchange': 'pricing:exchange_rates',
     'excise':   'pricing:customs_excise',
     'pension':  'pricing:pension_brackets',
+    'rules':    'pricing:customs_calc_rules',
 }
 
 
@@ -96,6 +97,22 @@ def get_customs_excise():
 def get_pension_brackets():
     from .models import PensionFundBracket
     return _load(KEYS['pension'], lambda: list(PensionFundBracket.objects.all()))
+
+
+def get_customs_rules():
+    from .models import CustomsCalcRule
+    return _load(KEYS['rules'], lambda: list(CustomsCalcRule.objects.all()))
+
+
+def get_catalog():
+    """Все справочники для чистого select_rates (pricing/calculator.py)."""
+    from .calculator import RateCatalog
+    return RateCatalog(
+        auction_fee_tiers=get_auction_fee_tiers(), auction_fixed_fees=get_auction_fixed_fees(),
+        us_land_routes=get_us_land_routes(), ocean_freight=get_ocean_freight(), eu_to_ua=get_eu_to_ua(),
+        exchange_rates=get_exchange_rates(), excise_rates=get_customs_excise(),
+        pension_brackets=get_pension_brackets(), customs_rules=get_customs_rules(),
+    )
 
 
 def invalidate(key_name: str):

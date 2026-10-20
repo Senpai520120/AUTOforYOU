@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import CookieBanner from '@/components/ui/CookieBanner';
 import AttributionCapture from '@/components/layout/AttributionCapture';
+import FlashMessage from '@/components/ui/FlashMessage';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AttributionCapture />
           <Header />
           <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
+            <FlashMessage />
             {children}
           </main>
           <Footer />

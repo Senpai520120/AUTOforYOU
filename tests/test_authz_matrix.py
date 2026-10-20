@@ -83,10 +83,6 @@ PUBLIC = {
     'vin-decode': 'публичная расшифровка VIN',
     'pricing-calculate': 'калькулятор',
     'pricing-rates': 'ставки: ждёт задачу 2.6 - по Q8 суммы должны видеть только staff/broker (см. PricingRatesAwaiting26)',
-    # OpenAPI-схема и документация (drf_spectacular): публичны явно
-    'schema': 'OpenAPI-схема (drf_spectacular)',
-    'swagger-ui': 'Swagger UI (drf_spectacular)',
-    'redoc': 'ReDoc (drf_spectacular)',
     'listing-list': 'каталог',
     'listing-detail': 'каталог',
     'local-tariffs': 'тарифы',
@@ -96,6 +92,7 @@ PUBLIC = {
     'seller-rating': 'публичный рейтинг, 404 без активных объявлений (06-S12)',
     'site-settings': 'публичные настройки сайта',
     'lead-create': 'заявка от гостя: капча, honeypot, лимит (2.1a)',
+    'monitoring-client-errors': 'отчёт об ошибке фронтенда: без сессии, только запись в мониторинг, лимит на IP (7.6)',
     # не session/JWT, а подпись/секрет
     'liqpay-callback': 'подпись LiqPay (SHA1), csrf_exempt',
     'telegram-webhook': 'секрет X-Telegram-Bot-Api-Secret-Token (plain View)',
@@ -143,7 +140,8 @@ def _vals(qs, *fields):
 
 def st_user(c):
     return list(CustomUser.objects.filter(pk=c.u['a'].pk).values_list(
-        'password', 'session_version', 'first_name', 'last_name', 'phone', 'telegram_id', 'role'))
+        'password', 'session_version', 'first_name', 'last_name', 'phone', 'telegram_id', 'role',
+        'deletion_scheduled_at', 'deleted_at', 'email'))
 
 
 def st_shops(c):
@@ -226,7 +224,17 @@ MATRIX: list[Case] = [
     Case('auth-profile', 'patch', other=200, state=st_user, payload={'first_name': 'Змінено'}),
     Case('auth-profile', 'put', other=200, state=st_user,
          payload={'first_name': 'Змінено', 'last_name': 'Тест', 'phone': '+380501112233'}),
-    # DELETE profile/ и me/export/ (1.8), cancel-deletion - ждут задачу 1.8 (эндпоинтов ещё нет)
+    Case('auth-profile', 'delete', owner_code=202, other=202, state=st_user, payload={'password': TEST_PASSWORD},
+         note='удаление ставится только своему аккаунту (пароль - свой)'),
+    Case('auth-profile-cancel-deletion', 'post', other=200, state=st_user,
+         note='отмена - только своего удаления'),
+    Case('me-export', 'get', other=200, forbid=lambda c: [c.u['a'].email, 'СТО Секрет', 'Іван'],
+         note='выгрузка только своих данных'),
+
+    # ---- OpenAPI и документация (7.2, 01-S15): только admin-роль, API_DOCS_PUBLIC=true открывает всем
+    Case('schema', 'get', owner='admin', other=403, roles={'staff': 403, 'broker': 403, 'admin': 200}),
+    Case('swagger-ui', 'get', owner='admin', other=403, roles={'staff': 403, 'admin': 200}),
+    Case('redoc', 'get', owner='admin', other=403, roles={'staff': 403, 'admin': 200}),
 
     # ---- личный кабинет (23-D6...D9) -------------------------------------------------
     Case('me-calculations', 'get', other=200, ids=_ids('calc')),
@@ -492,6 +500,9 @@ class AuthzMatrixTests(CleanCacheTestCase):
             'dealer': make_dealer('dealer@test.com'),
         }
         a, c_user = u['a'], u['c']
+        # Владельцу поставлено удаление: чужой cancel-deletion не должен его сбросить (1.8).
+        from django.utils import timezone
+        CustomUser.objects.filter(pk=a.pk).update(deletion_scheduled_at=timezone.now())
         ns = SimpleNamespace(u=u)
         ns.calc = Calculation.objects.create(
             user=a, inputs_snapshot={'make': 'Toyota'}, rates_snapshot={'usd_uah': '41.5'},

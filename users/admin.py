@@ -3,6 +3,8 @@ from django.contrib.auth.admin import UserAdmin
 
 from .models import ConsentRecord, CustomUser, DealerApplication, TrustedShop
 from .services import (
+    AccountDeletionError,
+    anonymize_user,
     approve_application,
     assign_role,
     ban_user,
@@ -35,17 +37,75 @@ def unban_users(modeladmin, request, queryset):
 unban_users.short_description = 'Розбанити вибраних користувачів'
 
 
+class DeletedFilter(admin.SimpleListFilter):
+    title = 'видалений'
+    parameter_name = 'deleted'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Видалений (знеособлено)'), ('scheduled', 'Видалення заплановано'), ('no', 'Ні'))
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(deleted_at__isnull=False)
+        if self.value() == 'scheduled':
+            return queryset.filter(deletion_scheduled_at__isnull=False, deleted_at__isnull=True)
+        if self.value() == 'no':
+            return queryset.filter(deleted_at__isnull=True)
+        return queryset
+
+
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
     list_display = ('email', 'role', 'is_verified_dealer', 'is_banned', 'is_email_verified', 'is_staff', 'created_at')
-    list_filter = ('role', 'is_verified_dealer', 'is_banned', 'is_email_verified', 'is_staff')
+    list_filter = ('role', 'is_verified_dealer', 'is_banned', 'is_email_verified', 'is_staff', DeletedFilter)
     search_fields = ('email', 'phone')
     ordering = ('-created_at',)
-    actions = [ban_users, unban_users, 'assign_broker', 'revoke_broker', 'assign_moderator', 'revoke_moderator']
+    actions = [
+        ban_users, unban_users, 'assign_broker', 'revoke_broker', 'assign_moderator', 'revoke_moderator',
+        'anonymize',
+    ]
     # role и is_verified_dealer меняются только actions/сервисом, не формой.
     # is_banned - только через actions/ban_user (отзыв сессий, скрытие объявлений).
-    readonly_fields = ('role', 'is_verified_dealer', 'is_banned')
+    readonly_fields = ('role', 'is_verified_dealer', 'is_banned', 'deletion_scheduled_at', 'deleted_at')
+
+    ATTRIBUTION_FIELDS = ('first_touch_utm', 'first_touch_referrer', 'first_touch_entry_url')
+
+    def _can_see_attribution(self, request):
+        user = request.user
+        # Только право: доступ можно отозвать и у admin-роли (группа «Адміністратори» получает его в миграции).
+        return bool(user.is_active and user.has_perm('users.view_attribution'))
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is not None and self._can_see_attribution(request):
+            # Источник визита (2.14): только чтение и только admin; модератор и брокер его не видят.
+            fieldsets = (*fieldsets, ('Джерело візиту', {'fields': self.ATTRIBUTION_FIELDS, 'classes': ('collapse',)}))
+        return fieldsets
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if self._can_see_attribution(request):
+            fields += [f for f in self.ATTRIBUTION_FIELDS if f not in fields]
+        return fields
+
+    def has_delete_permission(self, request, obj=None):
+        # Удаление каскадом стёрло бы сделки, переписку и отзывы второй стороны (06-S11):
+        # вместо него - действие «Анонімізувати» (тот же сервис, что у API).
+        return False
+
+    @admin.action(permissions=['change'], description='Анонімізувати (видалити акаунт)')
+    def anonymize(self, request, queryset):
+        if not request.user.is_superuser:
+            self.message_user(request, 'Анонімізує лише суперкористувач.', messages.ERROR)
+            return
+        done = skipped = 0
+        for user in queryset.exclude(pk=request.user.pk):
+            try:
+                done += anonymize_user(user)
+            except AccountDeletionError:
+                skipped += 1
+        self.message_user(request, f'Анонімізовано: {done}. Пропущено (суперкористувачі): {skipped}.', messages.WARNING)
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -66,7 +126,7 @@ class CustomUserAdmin(UserAdmin):
         ('Личные данные', {'fields': ('first_name', 'last_name', 'phone')}),
         ('Роль и статус', {'fields': ('role', 'is_verified_dealer', 'is_banned', 'is_email_verified')}),
         ('Права', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        ('Даты', {'fields': ('last_login',)}),
+        ('Даты', {'fields': ('last_login', 'deletion_scheduled_at', 'deleted_at')}),
     )
     @admin.action(permissions=['change'], description='Призначити брокером')
     def assign_broker(self, request, queryset):

@@ -151,7 +151,7 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 | чужое pending в избранном (23-D15) | **ждёт задачу 4.4** |
 | `vehicles/` (VIN wholesale в публичном списке, 23-D16) | публичный, **ждёт задачу 2.8** |
 | `pricing/rates/` (суммы только staff/broker, 23-D47) | публичный, **ждёт задачу 2.6** |
-| `auth/profile/` DELETE, `auth/me/export/`, `auth/profile/cancel-deletion/` | эндпоинтов нет, **ждёт задачу 1.8** |
+| `auth/profile/` DELETE, `auth/me/export/`, `auth/profile/cancel-deletion/` (1.8) | в матрице; подробно - `users.tests_account_data` |
 
 ### Таблица «требование брифа §3 -> тест» (пункты 1-36 из `docs/audit/21_SECURITY.md`)
 
@@ -178,8 +178,8 @@ Playwright запускается только из `frontend/` (см. [`TEST_CA
 | 19 | Нет утечек через тексты ошибок | `integrations.tests.*test_opendatabot_error_logged_masked` (ключ в логе); `str(exc)` клиенту: `pricing/views.py:282`, `integrations/views.py:240` теста нет | не назначено | пробел: кода-исправления нет, задачи нет (в отчёт 1.11) |
 | 20 | Нет утечек через sitemap | `frontend/e2e/ssr.spec.ts` (содержит каталог); отсутствие ПДн отдельным тестом не проверяется | 1.9 | частично |
 | 21 | Нет утечек через SSR-HTML | `frontend/e2e/pii-leaks.spec.ts` | 1.9 | покрыто (e2e) |
-| 22 | Удаление аккаунта | - | 1.8 | **ждёт задачу 1.8** |
-| 23 | Выгрузка своих данных | - | 1.8 | **ждёт задачу 1.8** |
+| 22 | Удаление аккаунта | `users.tests_account_data.AccountDeletionRequestTests`, `AnonymizeTests`, `AdminAnonymizeTests`, `leads.tests.AnonymizeUserLeadsTests`, `frontend/e2e/account-data.spec.ts` | 1.8 | покрыто |
+| 23 | Выгрузка своих данных | `users.tests_account_data.DataExportTests`, `frontend/e2e/account-data.spec.ts` | 1.8 | покрыто |
 | 24 | Политика конфиденциальности/cookie | `frontend/e2e/legal.spec.ts`, `cookie-banner.spec.ts`, `consent.spec.ts` | 1.14 | покрыто (e2e) |
 | 25 | Проверка типа файла | `tests.test_uploads.SanitizeImageTests`, `ValidateImageUploadTests` | 1.10 | покрыто |
 | 26 | Проверка размера | `SanitizeImageTests` (лимит из настроек), `local_listings.tests` (лимит фото) | 1.10 | покрыто |

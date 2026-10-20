@@ -15,8 +15,11 @@ class CalculateInputSerializer(serializers.Serializer):
     engine_cc = serializers.IntegerField(min_value=0, max_value=10000)
     fuel_type = serializers.ChoiceField(choices=['petrol', 'diesel', 'electric', 'hybrid', 'phev'])
     vehicle_year = serializers.IntegerField(min_value=1900, max_value=2100)
-    # Ёмкость батареи в кВт·ч — обязательно для EV/PHEV, для ДВС оставить 0
-    battery_capacity_kwh = serializers.IntegerField(min_value=0, max_value=200, default=0)
+    # Ёмкость батареи в кВт·ч (2.5, 02-Q3): обязательна и > 0 для electric/phev, для ДВС не нужна
+    battery_capacity_kwh = serializers.DecimalField(
+        max_digits=5, decimal_places=1, min_value=Decimal('0'), max_value=Decimal('300'),
+        required=False, allow_null=True,
+    )
     auction = serializers.ChoiceField(choices=['copart', 'iaai'], default='copart')
     # Тип участника аукциона (влияет на тиер buyer fee)
     member_type = serializers.ChoiceField(choices=['public', 'licensed', 'broker'], default='broker')
@@ -26,8 +29,17 @@ class CalculateInputSerializer(serializers.Serializer):
     us_port = serializers.CharField(max_length=50, default='houston')
     eu_port = serializers.ChoiceField(choices=['klaipeda', 'gdansk'], default='klaipeda')
     # Дата оформления таможни (YYYY-MM-DD). По ней берётся курс НБУ.
-    # Если не указана или курс на дату отсутствует — используется последний доступный курс.
+    # Если не указана - сегодня. Курс берётся последний не позже этой даты; курса «из будущего» нет (02-Q5).
     calculation_date = serializers.DateField(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs):
+        if attrs['fuel_type'] in ('electric', 'phev'):
+            kwh = attrs.get('battery_capacity_kwh')
+            if kwh is None or kwh <= 0:
+                raise serializers.ValidationError({'battery_capacity_kwh': 'Вкажіть ємність батареї (кВт·год).'})
+        else:
+            attrs['battery_capacity_kwh'] = None
+        return attrs
 
 
 class CalculationSerializer(serializers.ModelSerializer):

@@ -5,6 +5,7 @@ import { apiFetch } from '@/api/client';
 import Captcha from '@/components/ui/Captcha';
 import { AGE_18_LABEL, AGE_18_REQUIRED } from '@/lib/labels';
 import { apiErrorText, useAuthConfig, useCaptchaState } from '@/lib/captcha';
+import { getAttribution } from '@/lib/attribution';
 
 export default function RegisterPage() {
   const { config } = useAuthConfig();
@@ -30,9 +31,14 @@ export default function RegisterPage() {
     }
     setLoading(true); setError('');
     try {
+      // Джерело візиту (2.14) — лише з sessionStorage; порожнє не надсилається.
+      const attribution = getAttribution();
       await apiFetch('/api/v1/auth/register/', {
         method: 'POST',
-        body: JSON.stringify({ ...form, agreed_to_terms: true, confirmed_age_18: true, ...captcha.payload() }),
+        body: JSON.stringify({
+          ...form, agreed_to_terms: true, confirmed_age_18: true, ...captcha.payload(),
+          ...(Object.keys(attribution).length ? { attribution } : {}),
+        }),
       });
       setRegisteredEmail(form.email);
     } catch (err: unknown) {

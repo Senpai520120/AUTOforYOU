@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import RegexValidator
 from django.db import transaction
 from django.utils import timezone
 from django.utils.encoding import force_str
@@ -12,19 +13,37 @@ from .consents import record_consents
 from .models import ConsentDocument, ConsentMethod, CustomUser, DealerApplication, TrustedShop
 
 
+def _first_touch(raw) -> dict:
+    """Источник первого касания для CustomUser; ошибка очистки не мешает регистрации."""
+    from core.attribution import clean_attribution
+    try:
+        data = clean_attribution(raw)
+    except Exception:
+        return {}
+    return {
+        'first_touch_utm': data['utm'], 'first_touch_referrer': data['referrer'],
+        'first_touch_entry_url': data['entry_page_url'],
+    }
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, label='Підтвердження пароля')
     agreed_to_terms = serializers.BooleanField(write_only=True)
     # Подтверждение 18+ (Q-шаг 7): без него 400. Версия текста и дата - по механике Н-32.
     confirmed_age_18 = serializers.BooleanField(write_only=True)
+    # Источник визита из sessionStorage (2.14): любой JSON; мусор тихо отбрасывается в create.
+    attribution = serializers.JSONField(write_only=True, required=False, allow_null=True)
     # Роль при регистрации не принимается: поле role в запросе молча игнорируется
     # (DRF отбрасывает неизвестные ключи), пользователь всегда buyer.
     # dealer ставит только approve_application; broker/moderator/admin - админка.
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms', 'confirmed_age_18')
+        fields = (
+            'email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms',
+            'confirmed_age_18', 'attribution',
+        )
         # Уникальность email проверяет RegisterView (01-S11: дубль не раскрываем).
         extra_kwargs = {'email': {'validators': []}}
 
@@ -42,8 +61,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        source = _first_touch(validated_data.pop('attribution', None))
         with transaction.atomic():
-            user = CustomUser.objects.create_user(**validated_data)
+            user = CustomUser.objects.create_user(**validated_data, **source)
             user.agreed_to_terms_at = timezone.now()
             user.save(update_fields=['agreed_to_terms_at'])
             record_consents(
@@ -53,16 +73,23 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+UA_PHONE_VALIDATOR = RegexValidator(r'^\+380\d{9}$', 'Телефон у форматі +380XXXXXXXXX.')
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     is_admin_role = serializers.BooleanField(read_only=True)
+    # Дата окончательного удаления в период отмены (1.8): баннер «Акаунт буде видалено <дата>».
+    deletion_scheduled_for = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = (
             'id', 'email', 'first_name', 'last_name', 'phone', 'role',
             'is_verified_dealer', 'is_staff', 'is_admin_role', 'is_email_verified',
-            'created_at', 'telegram_id',
+            'created_at', 'telegram_id', 'deletion_scheduled_for',
         )
+        # Пустой телефон разрешён (DRF не запускает валидаторы на пустой строке), 01-S17.
+        extra_kwargs = {'phone': {'validators': [UA_PHONE_VALIDATOR]}}
         # role только для чтения: смена роли — не самообслуживание.
         # Без этого PATCH /auth/profile/ {"role": "admin"} проходил и открывал
         # B2B-доску и чужие переписки по импортным листингам.
@@ -75,6 +102,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'id', 'email', 'role', 'is_verified_dealer', 'is_staff',
             'is_admin_role', 'is_email_verified', 'created_at', 'telegram_id',
         )
+
+    def get_deletion_scheduled_for(self, obj) -> str | None:
+        from .services import deletion_due_at
+        due = deletion_due_at(obj)
+        return due.isoformat() if due else None
+
+
+class AccountDeleteSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True, max_length=128, trim_whitespace=False)
+
+    def validate_password(self, value):
+        if not self.context['request'].user.check_password(value):
+            raise serializers.ValidationError('Невірний пароль.')
+        return value
 
 
 class TrustedShopSerializer(serializers.ModelSerializer):

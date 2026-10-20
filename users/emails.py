@@ -9,6 +9,7 @@ from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
@@ -27,13 +28,13 @@ def build_verification_url(user):
     return f'{_site_url()}/verify-email?uid={uid}&token={token}'
 
 
-def _send(user, subject, template, context, kind):
+def _send(user, subject, template, context, kind, to=None):
     if not _site_url():
         logger.warning('SITE_URL не задан: письмо %s не отправлено', kind)
         return False
     body = render_to_string(template, context)
     try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to or user.email], fail_silently=False)
     except Exception as exc:  # SMTP недоступен - регистрацию не валим
         logger.error('Не удалось отправить письмо %s: %s', kind, type(exc).__name__)
         return False
@@ -74,3 +75,17 @@ def send_already_registered_email(user):
         {'login_url': f'{_site_url()}/login', 'reset_url': f'{_site_url()}/password-reset'},
         'already_registered',
     )
+
+
+def send_account_deletion_scheduled_email(user, due_at):
+    """Задача 1.8: письмо о запросе удаления со ссылкой на отмену (раздел «Мої дані»)."""
+    return _send(
+        user, 'AUTOforYOU: видалення акаунту заплановано', 'users/email/account_deletion_scheduled.txt',
+        {'due_date': timezone.localtime(due_at).strftime('%d.%m.%Y'), 'cancel_url': f'{_site_url()}/me/data'},
+        'account_deletion_scheduled',
+    )
+
+
+def send_account_deleted_email(email):
+    """Задача 1.8: письмо после обезличивания. Адрес передаётся отдельно - в аккаунте его уже нет."""
+    return _send(None, 'AUTOforYOU: акаунт видалено', 'users/email/account_deleted.txt', {}, 'account_deleted', to=email)

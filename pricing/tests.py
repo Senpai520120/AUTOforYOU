@@ -524,8 +524,8 @@ class TestIAAIPercentTier(SimpleTestCase):
 
 class TestAuctionFeeBoundary(CleanCacheTestCase):
     """
-    Выбор тира на границах диапазона через pricing.views._lookup_tier.
-    Тиры создаются в setUpTestData (не seed). Если _lookup_tier сравнивает
+    Выбор тира на границах диапазона через pricing.calculator.lookup_tier.
+    Тиры создаются в setUpTestData (не seed). Если lookup_tier сравнивает
     границу неверно (>= вместо >), соответствующий тест краснеет.
     """
 
@@ -547,8 +547,10 @@ class TestAuctionFeeBoundary(CleanCacheTestCase):
     def _lookup(self, bid):
         from datetime import date
 
-        from pricing.views import _lookup_tier
-        return _lookup_tier('copart', D(str(bid)), 'broker', 'secured', 'any', date.today())
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        return lookup_tier(pricing_cache.get_auction_fee_tiers(), 'copart', D(str(bid)), 'broker', 'secured', 'any',
+                           date.today())
 
     def test_bid_equal_min_selects_tier(self):
         """bid == bid_min -> попадает в этот тир (bid_min включительно)."""
@@ -621,8 +623,10 @@ class TestIAAITierBoundaryDB(CleanCacheTestCase):
     def _tier(self, bid):
         from datetime import date
 
-        from pricing.views import _lookup_tier
-        return _lookup_tier('iaai', D(str(bid)), 'broker', 'secured', 'any', date.today())
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        return lookup_tier(pricing_cache.get_auction_fee_tiers(), 'iaai', D(str(bid)), 'broker', 'secured', 'any',
+                           date.today())
 
     def test_bid_7499_is_8pct(self):
         tier = self._tier(7499)
@@ -639,10 +643,11 @@ class TestIAAITierBoundaryDB(CleanCacheTestCase):
     def test_bid_12000_calc_buyer_fee(self):
         from datetime import date
 
-        from pricing.views import _lookup_fixed_fees
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_fixed_fees
         today = date.today()
         tier = self._tier(12000)
-        fixed = _lookup_fixed_fees('iaai', 'any', today)
+        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'iaai', 'any', today)
         result = calc_auction_fees(D('12000'), tier, fixed)
         self.assertEqual(result.buyer_fee, D('1200.00'))
 
@@ -692,10 +697,13 @@ class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
 
         from django.db.models import Q
 
+        from pricing import cache as pricing_cache
         from pricing.calculator import (
             LandedCostInputs,
             build_rate_snapshot_from_db,
             calculate_landed_cost,
+            lookup_fixed_fees,
+            lookup_tier,
         )
         from pricing.models import (
             CustomsExciseRate,
@@ -705,13 +713,13 @@ class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
             PensionFundBracket,
             UsLandRoute,
         )
-        from pricing.views import _active_on, _lookup_fixed_fees, _lookup_tier
+        from pricing.views import _active_on
 
         today = date.today()
         bid = D('5000')
 
-        tier = _lookup_tier('copart', bid, 'broker', 'secured', 'salvage', today)
-        fixed = _lookup_fixed_fees('copart', 'salvage', today)
+        tier = lookup_tier(pricing_cache.get_auction_fee_tiers(), 'copart', bid, 'broker', 'secured', 'salvage', today)
+        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'copart', 'salvage', today)
         auction_fee = calc_auction_fees(bid, tier, fixed)
 
         us_land = _active_on(UsLandRoute.objects.filter(auction_location='general', us_port='houston'), today).first()
@@ -952,7 +960,7 @@ class TestFetchNbuRatesTask(CleanCacheTestCase):
 
 class TestNoStaleTiersAfterSeededClass(CleanCacheTestCase):
     """
-    Тарифов в БД нет → _lookup_tier возвращает None, а API расчёта отвечает
+    Тарифов в БД нет → lookup_tier возвращает None, а API расчёта отвечает
     «нет тарифов» (422), даже если кэш был «отравлен» объектами удалённых
     seed-строк (так выглядит состояние после класса с seed в setUpClass).
     """
@@ -977,12 +985,14 @@ class TestNoStaleTiersAfterSeededClass(CleanCacheTestCase):
 
         from rest_framework.test import APIClient
 
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
         from pricing.models import AuctionFeeTier
-        from pricing.views import _lookup_tier
 
         self.assertFalse(AuctionFeeTier.objects.exists())
         self.assertIsNone(
-            _lookup_tier('iaai', D('7500'), 'broker', 'secured', 'any', date.today())
+            lookup_tier(pricing_cache.get_auction_fee_tiers(), 'iaai', D('7500'), 'broker', 'secured', 'any',
+                        date.today())
         )
         resp = APIClient().post('/api/v1/pricing/calculate/', {
             'auction': 'iaai',

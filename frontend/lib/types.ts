@@ -13,6 +13,8 @@ export interface User {
   is_admin_role: boolean;
   created_at: string;
   telegram_id: number | null;
+  // Період скасування видалення (1.8): дата остаточного видалення або null.
+  deletion_scheduled_for: string | null;
 }
 
 export interface VehicleImage {
@@ -86,6 +88,11 @@ export interface CalcBreakdown {
 export interface CalcResult {
   calculation_id: number;
   is_estimate: boolean;
+  // Q5: правило розмитнення звірено з брокером; поки false — «Орієнтовний розрахунок».
+  rules_confirmed: boolean;
+  rates_validity_date: string;
+  rates_updated_on: string | null;
+  exchange_rate_date: string;
   warning: string;
   breakdown: CalcBreakdown;
 }

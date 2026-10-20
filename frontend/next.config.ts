@@ -9,6 +9,13 @@ const apiProtocol = apiUrl.protocol.replace(':', '') as 'http' | 'https';
 const apiHostname = apiUrl.hostname;
 const apiPort = apiUrl.port; // empty string when default (80/443)
 
+// NEXT_PUBLIC_IMAGE_HOSTS — хости через кому, задаються на етапі збірки. Широких шаблонів
+// (*.amazonaws.com, *.cloudfront.net) і хостів аукціонів за замовчуванням немає.
+const imageHosts = (process.env.NEXT_PUBLIC_IMAGE_HOSTS ?? '')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter((h) => /^[a-z0-9.-]+$/.test(h) && !h.startsWith('*'));
+
 const nextConfig: NextConfig = {
   async headers() {
     // Токен скидання пароля не має потрапляти в Referer при переході зі сторінки (задача 1.7).
@@ -33,13 +40,8 @@ const nextConfig: NextConfig = {
         ...(apiPort ? { port: apiPort } : {}),
         pathname: '/media/**',
       },
-      // AWS S3 / Cloudflare R2 (prod)
-      { protocol: 'https', hostname: '*.amazonaws.com' },
-      { protocol: 'https', hostname: '*.r2.cloudflarestorage.com' },
-      // Copart / IAAI CDN (source_url photos from lot import)
-      { protocol: 'https', hostname: '*.copart.com' },
-      { protocol: 'https', hostname: '*.iaai.com' },
-      { protocol: 'https', hostname: '*.cloudfront.net' },
+      // Хости сховища фото (R2/S3 custom domain), тільки https і конкретні хости (задача 7.2, 08-C8, 08-S10)
+      ...imageHosts.map((hostname) => ({ protocol: 'https' as const, hostname })),
     ],
   },
 };

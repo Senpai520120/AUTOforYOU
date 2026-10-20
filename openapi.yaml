@@ -103,6 +103,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCalculationList'
           description: ''
+  /api/v1/auth/me/export/:
+    get:
+      operationId: v1_auth_me_export_retrieve
+      description: Только данные самого пользователя; контрагенты - отображаемым именем.
+        Лимит data_export.
+      summary: Выгрузка всех моих данных (JSON-файл)
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: ''
+        '401':
+          description: No response body
+        '429':
+          description: No response body
   /api/v1/auth/me/shipments/:
     get:
       operationId: v1_auth_me_shipments_list
@@ -417,6 +439,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserProfile'
           description: ''
+    delete:
+      operationId: v1_auth_profile_destroy
+      description: 'Ставит аккаунт на удаление с периодом отмены (SiteSettings.account_deletion_grace_days):
+        объявления снимаются, все сессии отзываются, cookie удаляются. По истечении
+        периода данные обезличиваются задачей anonymize_due_accounts. Отмена - cancel-deletion/.'
+      summary: Запросить удаление аккаунта (подтверждение паролем)
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDeletionScheduled'
+          description: ''
+        '400':
+          description: No response body
+        '401':
+          description: No response body
+        '429':
+          description: No response body
+  /api/v1/auth/profile/cancel-deletion/:
+    post:
+      operationId: v1_auth_profile_cancel_deletion_create
+      description: 'Снятые объявления остаются снятыми: владелец публикует их заново
+        сам.'
+      summary: Отменить удаление аккаунта (в период отмены)
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+        '401':
+          description: No response body
   /api/v1/auth/register/:
     post:
       operationId: v1_auth_register_create
@@ -1721,6 +1787,29 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/monitoring/client-errors/:
+    post:
+      operationId: v1_monitoring_client_errors_create
+      description: 204 при валидных данных, даже если мониторинг выключен. Лимит client_errors
+        на IP, тело до 4 КБ.
+      summary: Отчёт об ошибке фронтенда
+      tags:
+      - monitoring
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientErrorRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '204':
+          description: No response body
+        '400':
+          description: No response body
+        '429':
+          description: No response body
   /api/v1/notifications/:
     get:
       operationId: v1_notifications_retrieve
@@ -2222,6 +2311,14 @@ paths:
           description: Некорректный VIN
 components:
   schemas:
+    AccountDeletionScheduled:
+      type: object
+      properties:
+        deletion_scheduled_for:
+          type: string
+          format: date-time
+      required:
+      - deletion_scheduled_for
     ActiveRatesResponse:
       type: object
       properties:
@@ -2678,10 +2775,10 @@ components:
           maximum: 2100
           minimum: 1900
         battery_capacity_kwh:
-          type: integer
-          maximum: 200
-          minimum: 0
-          default: 0
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,1})?$
+          nullable: true
         auction:
           allOf:
           - $ref: '#/components/schemas/AuctionEnum'
@@ -2885,6 +2982,32 @@ components:
       - region
       - region_name
       - slug
+    ClientErrorRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+        digest:
+          type: string
+          default: ''
+          maxLength: 100
+        path:
+          type: string
+          default: ''
+          maxLength: 300
+        component:
+          allOf:
+          - $ref: '#/components/schemas/ComponentEnum'
+          default: frontend
+      required:
+      - message
+    ComponentEnum:
+      enum:
+      - frontend
+      - frontend-ssr
+      type: string
     ConditionEnum:
       enum:
       - new
@@ -3598,6 +3721,9 @@ components:
         agreed_to_rules:
           type: boolean
           writeOnly: true
+        attribution:
+          writeOnly: true
+          nullable: true
       required:
       - agreed_to_rules
       - body_type
@@ -4677,6 +4803,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
     PaymentTypeEnum:
       enum:
@@ -4841,6 +4968,9 @@ components:
         confirmed_age_18:
           type: boolean
           writeOnly: true
+        attribution:
+          writeOnly: true
+          nullable: true
       required:
       - agreed_to_terms
       - confirmed_age_18
@@ -5276,6 +5406,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
         role:
           allOf:
@@ -5307,8 +5438,13 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        deletion_scheduled_for:
+          type: string
+          nullable: true
+          readOnly: true
       required:
       - created_at
+      - deletion_scheduled_for
       - email
       - id
       - is_admin_role
@@ -5331,6 +5467,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
     Vehicle:
       type: object
