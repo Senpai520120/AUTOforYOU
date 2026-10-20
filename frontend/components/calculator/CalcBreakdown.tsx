@@ -1,6 +1,7 @@
 import { CalcResult } from '@/lib/types';
 import DemoBanner from '@/components/ui/DemoBanner';
 import LeadForm from '@/components/leads/LeadForm';
+import { percentFromDecimal } from '@/lib/calc-errors';
 
 function Row({ label, usd, uah }: { label: string; usd?: string; uah?: string }) {
   return (
@@ -20,32 +21,35 @@ interface Props {
 
 export default function CalcBreakdown({ result, listingId, onNewCalculation }: Props) {
   const b = result.breakdown;
+  const r = result.applied_rates;
+  // Q5: м'яка позначка — поки є демо-ставки або правило не звірене з брокером.
+  const showEstimateNote = result.is_demo || !result.rules_confirmed;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 mt-2">
-      <DemoBanner />
-      <h3 className="font-bold text-lg text-slate-900 mb-4">Детализация стоимости «под ключ»</h3>
+    <div className="bg-white border border-slate-200 rounded-xl p-6 mt-2" data-testid="calc-result">
+      <DemoBanner show={result.is_demo} title={result.demo_banner.title} text={result.demo_banner.text} />
+      <h3 className="font-bold text-lg text-slate-900 mb-4">Деталізація вартості «під ключ»</h3>
       <table className="w-full">
         <thead>
           <tr className="text-xs text-slate-500 uppercase">
-            <th className="text-left pb-2">Статья</th>
+            <th className="text-left pb-2">Стаття</th>
             <th className="text-right pb-2">USD</th>
             <th className="text-right pb-2">UAH</th>
           </tr>
         </thead>
         <tbody>
-          <Row label="Цена аукциона" usd={b.auction_price_usd} />
-          <Row label="Аукционный сбор" usd={b.auction_fee_usd} />
-          <Row label="Логистика США" usd={b.us_land_usd} />
-          <Row label="Морской фрахт" usd={b.ocean_freight_usd} />
-          <Row label="Доставка ЕС → UA" usd={b.eu_to_ua_usd} />
+          <Row label="Ціна аукціону" usd={b.auction_price_usd} />
+          <Row label="Аукціонний збір" usd={b.auction_fee_usd} />
+          <Row label="Логістика США" usd={b.us_land_usd} />
+          <Row label="Морський фрахт" usd={b.ocean_freight_usd} />
+          <Row label="Доставка ЄС → UA" usd={b.eu_to_ua_usd} />
           <Row label={`Акциз (${b.excise_eur} EUR)`} uah={b.excise_uah} />
-          <Row label="Пошлина 10%" usd={b.duty_usd} uah={b.duty_uah} />
-          <Row label="НДС 20%" uah={b.vat_uah} />
-          <Row label="Пенсионный сбор" uah={b.pension_fund_uah} />
+          <Row label={`Мито ${percentFromDecimal(r?.duty_rate)}%`} usd={b.duty_usd} uah={b.duty_uah} />
+          <Row label={`ПДВ ${percentFromDecimal(r?.vat_rate)}%`} uah={b.vat_uah} />
+          <Row label={`Пенсійний збір ${percentFromDecimal(r?.pension_fund_rate)}%`} uah={b.pension_fund_uah} />
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-blue-800">
-            <td className="pt-3 font-bold text-blue-900 text-lg">ИТОГО</td>
+            <td className="pt-3 font-bold text-blue-900 text-lg">РАЗОМ</td>
             <td className="pt-3 text-right font-extrabold text-blue-900 text-lg font-mono">
               ${Number(b.total_usd).toLocaleString()}
             </td>
@@ -59,7 +63,7 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
         #{result.calculation_id} · {result.warning}
       </p>
       <p className="text-xs text-slate-500 mt-2" data-testid="calc-estimate-note">
-        {result.rules_confirmed ? 'Розрахунок орієнтовний.' : 'Орієнтовний розрахунок.'}
+        {showEstimateNote && result.estimate_note}
         {result.rates_updated_on && <> Ставки оновлено: {formatDate(result.rates_updated_on)}.</>}
         {result.exchange_rate_date && <> Курс НБУ на {formatDate(result.exchange_rate_date)}.</>}
       </p>

@@ -671,13 +671,17 @@ class TestCalculateInputSerializerDefaults(SimpleTestCase):
         from pricing.serializers import CalculateInputSerializer
         s = CalculateInputSerializer(data=self._valid_data())
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data['member_type'], 'broker')
+        self.assertNotIn('member_type', s.validated_data)  # 02-C11: дефолт - FORM_DEFAULTS во view
+        from pricing.views import FORM_DEFAULTS
+        self.assertEqual(FORM_DEFAULTS['member_type'], 'broker')
 
     def test_default_payment_type_is_secured(self):
         from pricing.serializers import CalculateInputSerializer
         s = CalculateInputSerializer(data=self._valid_data())
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data['payment_type'], 'secured')
+        self.assertNotIn('payment_type', s.validated_data)
+        from pricing.views import FORM_DEFAULTS
+        self.assertEqual(FORM_DEFAULTS['payment_type'], 'secured')
 
 
 class TestLandedCostE2ECopartBroker(CleanCacheTestCase):

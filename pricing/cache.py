@@ -39,6 +39,7 @@ KEYS = {
     'excise':   'pricing:customs_excise',
     'pension':  'pricing:pension_brackets',
     'rules':    'pricing:customs_calc_rules',
+    'settings': 'pricing:calculator_settings',
 }
 
 
@@ -102,6 +103,12 @@ def get_pension_brackets():
 def get_customs_rules():
     from .models import CustomsCalcRule
     return _load(KEYS['rules'], lambda: list(CustomsCalcRule.objects.all()))
+
+
+def get_calculator_settings():
+    """Тексты калькулятора (2.6); запись pk=1 создаёт data-миграция, load() - страховка."""
+    from .models import CalculatorSettings
+    return _load(KEYS['settings'], CalculatorSettings.load)
 
 
 def get_catalog():

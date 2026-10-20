@@ -558,3 +558,100 @@ def select_rates(catalog: RateCatalog, params: dict, on_date) -> SelectedRates:
     if not sel.pension_brackets:
         sel.missing.append('PensionFundBracket')
     return sel
+
+
+# ─── Справочники формы и демо-флаг (задача 2.6) ─────────────────────────────────
+
+def selection_is_demo(sel: SelectedRates) -> bool:
+    """Демо, если хотя бы одна применённая ставка не проверена владельцем или курс из сида (02-C2)."""
+    records = sel.applied + list(sel.pension_brackets)
+    if any(not getattr(r, 'is_verified', False) for r in records):
+        return True
+    return any(getattr(r, 'source', 'demo') == 'demo' for r in (sel.usd_to_uah, sel.usd_to_eur) if r)
+
+
+def applied_rates(rates: RateSnapshot, fuel_type: str) -> dict:
+    """Ставки для подписей разбивки («Мито 0%»), Decimal строкой - без округления float."""
+    data = {
+        'duty_rate': str(rates.duty_rate),
+        'vat_rate': str(rates.vat_rate),
+        'pension_fund_rate': str(rates.pension_fund_rate),
+    }
+    if fuel_type in EV_FUEL_TYPES:
+        data['ev_excise_eur_per_kwh'] = str(rates.ev_excise_eur_per_kwh)
+    else:
+        data['excise_eur_per_100cc'] = str(rates.excise_eur_per_100cc)
+    return data
+
+
+def _opt(value, labels=None) -> dict:
+    labels = labels or {}
+    return {'value': value, 'label': labels.get(value) or value.replace('_', ' ').capitalize()}
+
+
+def _uniq(values) -> list:
+    return sorted(set(values))
+
+
+def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: dict = None) -> dict:
+    """Справочники формы калькулятора без сумм (Q11): только значения из активных тарифов.
+
+    us_ports[].eu_ports - порты ЕС, куда из этого порта США есть фрахт и откуда есть доставка в UA;
+    auction_locations[].us_ports - порты США, куда есть сухопутный маршрут.
+    """
+    labels = labels or {}
+    tiers = [t for t in catalog.auction_fee_tiers if is_active(t, on_date)]
+    land = [r for r in catalog.us_land_routes if is_active(r, on_date)]
+    ocean = [r for r in catalog.ocean_freight if is_active(r, on_date)]
+    eu_ok = {r.eu_port for r in catalog.eu_to_ua if is_active(r, on_date)}
+    excise = [r for r in catalog.excise_rates if is_active(r, on_date)]
+
+    eu_by_us = {}
+    for r in ocean:
+        if r.eu_port in eu_ok:
+            eu_by_us.setdefault(r.us_port.lower(), set()).add(r.eu_port)
+    us_by_loc = {}
+    for r in land:
+        if r.us_port.lower() in eu_by_us:
+            us_by_loc.setdefault(r.auction_location.lower(), set()).add(r.us_port.lower())
+    us_ports = _uniq(p for ports in us_by_loc.values() for p in ports)
+
+    def choice(field_name):
+        values = _uniq(getattr(t, field_name) for t in tiers)
+        default = defaults.get(field_name)
+        if default not in values:
+            default = values[0] if values else None
+        return [_opt(v, labels.get(field_name)) for v in values], default
+
+    member_types, member_default = choice('member_type')
+    payment_types, payment_default = choice('payment_type')
+    title_types, title_default = choice('title_type')
+    options = {
+        'auctions': [_opt(v, labels.get('auction')) for v in _uniq(t.auction for t in tiers)],
+        'auction_locations': [{**_opt(loc), 'us_ports': sorted(ports)} for loc, ports in sorted(us_by_loc.items())],
+        'us_ports': [{**_opt(p), 'eu_ports': sorted(eu_by_us[p])} for p in us_ports],
+        'eu_ports': [_opt(p) for p in _uniq(e for p in us_ports for e in eu_by_us[p])],
+        'fuel_types': [{**_opt(v, labels.get('fuel_type')), 'requires_battery': v in EV_FUEL_TYPES}
+                       for v in _uniq(r.fuel_type for r in excise)],
+        'member_types': member_types,
+        'payment_types': payment_types,
+        'title_types': title_types,
+        'defaults': {'member_type': member_default, 'payment_type': payment_default, 'title_type': title_default},
+    }
+    has_rates = all(pick_exchange_rate(catalog.exchange_rates, 'USD', cur, on_date) for cur in ('UAH', 'EUR'))
+    options['is_configured'] = bool(
+        options['auctions'] and options['us_ports'] and options['fuel_types'] and has_rates
+        and pick_active(catalog.customs_rules, on_date)
+        and any(is_active(b, on_date) for b in catalog.pension_brackets)
+    )
+    return options
+
+
+def catalog_is_demo(catalog: RateCatalog, on_date) -> bool:
+    """/rates/: среди активных тарифов есть непроверенные или последний курс - из сида."""
+    groups = (catalog.auction_fee_tiers, catalog.auction_fixed_fees, catalog.us_land_routes, catalog.ocean_freight,
+              catalog.eu_to_ua, catalog.excise_rates, catalog.pension_brackets, catalog.customs_rules)
+    if any(not getattr(r, 'is_verified', False) for g in groups for r in g if is_active(r, on_date)):
+        return True
+    latest = [pick_exchange_rate(catalog.exchange_rates, 'USD', cur, on_date) for cur in ('UAH', 'EUR')]
+    return any(getattr(r, 'source', 'demo') == 'demo' for r in latest if r)

@@ -374,7 +374,7 @@ region, city, mileage_max, search (make/model/description), ordering (-created_a
 - **Robots**: Allow публичные страницы; Disallow кабинет/B2B/API/admin.
 - **404/Error**: кастомные `not-found.tsx`, `error.tsx`, `global-error.tsx` с кнопкой «Повторити».
 - **Скелетоны**: `Skeleton.tsx`, `loading.tsx` для каталога/карточки/кабинета — нет «мигания» при загрузке.
-- **DemoBanner**: `NEXT_PUBLIC_DEMO_MODE=false` выключает баннер когда тарифы реальные; флаг в `.env`.
+- **DemoBanner**: показывается по `is_demo` из API (2.6): пока среди тарифов есть непроверенные (`is_verified=False`) или курс `demo`. Флага сборки больше нет.
 - **Изображения**: `source_url` (лот-импорт) как fallback к `image`. SVG-плейсхолдер. `sizes`, `priority`.
 - **a11y**: `focus:ring`, `aria-*`, `role=alert`, семантические теги.
 

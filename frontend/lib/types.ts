@@ -94,7 +94,49 @@ export interface CalcResult {
   rates_updated_on: string | null;
   exchange_rate_date: string;
   warning: string;
+  // 2.6: демо — є неперевірена застосована ставка або курс із сиду; лише тоді показується демо-банер.
+  is_demo: boolean;
+  estimate_note: string;
+  demo_banner: DemoBannerTexts;
+  // Ставки рядком Decimal ("0.1000"), для підписів «Мито 10%».
+  applied_rates: {
+    duty_rate: string;
+    vat_rate: string;
+    pension_fund_rate: string;
+    excise_eur_per_100cc?: string;
+    ev_excise_eur_per_kwh?: string;
+  };
   breakdown: CalcBreakdown;
+}
+
+export interface DemoBannerTexts {
+  title: string;
+  text: string;
+}
+
+export interface CalcOption {
+  value: string;
+  label: string;
+}
+
+// GET /api/v1/pricing/rates/ (2.6, Q11): довідники форми з активних тарифів, без сум.
+export interface CalcOptions {
+  auctions: CalcOption[];
+  auction_locations: (CalcOption & { us_ports: string[] })[];
+  us_ports: (CalcOption & { eu_ports: string[] })[];
+  eu_ports: CalcOption[];
+  fuel_types: (CalcOption & { requires_battery: boolean })[];
+  member_types: CalcOption[];
+  payment_types: CalcOption[];
+  title_types: CalcOption[];
+  defaults: { member_type: string | null; payment_type: string | null; title_type: string | null };
+  is_configured: boolean;
+}
+
+export interface CalcRatesResponse {
+  options: CalcOptions;
+  is_demo: boolean;
+  demo_banner: DemoBannerTexts;
 }
 
 export interface TrackingEvent {

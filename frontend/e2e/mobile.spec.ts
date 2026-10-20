@@ -31,8 +31,8 @@ test.describe('Мобільний smoke @mobile', () => {
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
     await page.getByRole('button', { name: 'Розрахувати' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Детализация стоимости «под ключ»' })).toBeVisible();
-    const total = page.getByRole('row').filter({ hasText: 'ИТОГО' });
+    await expect(page.getByRole('heading', { name: 'Деталізація вартості «під ключ»' })).toBeVisible();
+    const total = page.getByRole('row').filter({ hasText: 'РАЗОМ' });
     await expect(total).toBeVisible();
     await expect(total).not.toContainText('—');
   });

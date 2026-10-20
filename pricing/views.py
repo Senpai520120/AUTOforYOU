@@ -3,24 +3,31 @@ from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from . import cache as pricing_cache
 from .calculator import (
     LandedCostInputs,
     MissingRate,
+    applied_rates,
+    build_form_options,
     build_rate_snapshot_from_db,
     calc_auction_fees,
     calculate_landed_cost,
+    catalog_is_demo,
     rate_snapshot_to_dict,
     select_rates,
+    selection_is_demo,
 )
+from .hooks import on_calculation_saved
 from .models import (
     AuctionFeeTier,
     AuctionFixedFee,
@@ -36,15 +43,30 @@ from .serializers import CalculateInputSerializer
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
+# Дефолты скрытых параметров тарифа - один источник (02-C11): и для расчёта, и для /rates/.
+FORM_DEFAULTS = {
+    'member_type': getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker'),
+    'payment_type': 'secured',
+    'title_type': 'salvage',
+}
+# Подписи значений, которые есть в choices моделей; порты и локации - данные, подпись из значения.
+FORM_LABELS = {
+    'auction': dict(AuctionFeeTier.Auction.choices),
+    'member_type': {'public': 'Приватна особа', 'licensed': 'Ліцензований дилер', 'broker': 'Брокер'},
+    'payment_type': {'secured': 'Забезпечена', 'unsecured': 'Незабезпечена'},
+    'title_type': {'clean': 'Чистий (clean)', 'salvage': 'Salvage / Rebuildable', 'any': 'Будь-який'},
+    'fuel_type': {'petrol': 'Бензин', 'diesel': 'Дизель', 'electric': 'Електро', 'hybrid': 'Гібрид',
+                  'phev': 'Гібрид (PHEV)'},
+}
+INTERNAL_ERROR = {'error': 'internal_error'}
 
 
-def _active_on(qs, on_date=None):
-    """Вспомогательный ORM-фильтр (используется в ActiveRatesView)."""
-    on_date = on_date or date.today()
-    return qs.filter(valid_from__lte=on_date).filter(
-        Q(valid_to__isnull=True) | Q(valid_to__gte=on_date)
-    )
+def _sees_full_grid(user) -> bool:
+    """Q11: полная тарифная сетка и технические имена тарифов - только админ (staff-роль) и broker.
+
+    Голый is_staff не годится: его получает и модератор, а граница модератора - никаких pricing.*.
+    """
+    return bool(user and user.is_authenticated and (user.is_superuser or user.is_broker or user.is_admin_role))
 
 
 @extend_schema(
@@ -62,7 +84,9 @@ def _active_on(qs, on_date=None):
     responses={
         201: OpenApiResponse(description='Расчёт выполнен, снимок сохранён'),
         400: OpenApiResponse(description='Ошибка валидации входных данных'),
-        422: OpenApiResponse(description='Отсутствуют активные тарифы в БД'),
+        422: OpenApiResponse(description='Нет активных тарифов: `not_configured` (+ `missing` для staff/broker)'),
+        429: OpenApiResponse(description='Превышен лимит расчётов (scope `calculator`)'),
+        500: OpenApiResponse(description='`{"error": "internal_error"}` без деталей'),
     },
     examples=[
         OpenApiExample(
@@ -103,31 +127,30 @@ def _active_on(qs, on_date=None):
 )
 class CalculateView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'calculator'
+
     def post(self, request):
         serializer = CalculateInputSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            return self._calculate(request, serializer.validated_data)
+        except Exception:
+            # 02-S1: текст исключения и тело запроса - только в лог (без ПДн), клиенту - код ошибки.
+            logger.exception('calculate failed')
+            return Response(INTERNAL_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        data = serializer.validated_data
+    def _calculate(self, request, data):
         calc_date = data.get('calculation_date') or date.today()
-        params = {
-            **data,
-            'member_type': data.get('member_type', DEFAULT_MEMBER_TYPE),
-            'payment_type': data.get('payment_type', 'secured'),
-            'title_type': data.get('title_type', 'salvage'),
-        }
+        params = {**data}
+        for key, value in FORM_DEFAULTS.items():
+            params[key] = data.get(key) or value
 
         # Подбор тарифов - чистая функция калькулятора (02-Q6); view только загружает каталог.
-        try:
-            selected = select_rates(pricing_cache.get_catalog(), params, calc_date)
-        except Exception as exc:
-            logger.exception('Помилка підготовки тарифів калькулятора: %s', type(exc).__name__)
-            return Response(
-                {'error': 'Не вдалося виконати розрахунок. Спробуйте пізніше.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        selected = select_rates(pricing_cache.get_catalog(), params, calc_date)
         if selected.missing:
-            return _missing_response(selected.missing)
+            return _missing_response(request, selected.missing)
 
         fee_breakdown = calc_auction_fees(bid=data['auction_price_usd'], tier=selected.tier,
                                           fixed_fees=selected.fixed_fees)
@@ -167,18 +190,15 @@ class CalculateView(APIView):
         try:
             result = calculate_landed_cost(inputs, rates, selected.pension_brackets, selected.rule)
         except MissingRate as exc:
-            return _missing_response([str(exc)])
-        except Exception as exc:  # например, правило с неизвестной базой, записанное в обход админки
-            logger.exception('Помилка розрахунку калькулятора: %s', type(exc).__name__)
-            return Response(
-                {'error': 'Не вдалося виконати розрахунок. Спробуйте пізніше.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            return _missing_response(request, [*map(str, exc.args)] or ['MissingRate'])
 
         breakdown = result.to_dict()
         rates_dict = rate_snapshot_to_dict(rates)
         updated_on = selected.rates_updated_on
         rates_dict['rates_updated_on'] = updated_on.isoformat() if updated_on else None
+        is_demo = selection_is_demo(selected)
+        rates_dict['is_demo'] = is_demo
+        texts = pricing_cache.get_calculator_settings()
 
         calc = Calculation.objects.create(
             user=request.user if request.user.is_authenticated else None,
@@ -189,32 +209,36 @@ class CalculateView(APIView):
             total_uah=result.total_uah,
             is_estimate=True,
         )
+        # Счётчик расчётов (шаг 13): только после фиксации транзакции и только на 201.
+        transaction.on_commit(lambda: on_calculation_saved(calc))
 
         return Response(
             {
                 'calculation_id': calc.pk,
                 'is_estimate': True,
+                # 2.6: демо - есть непроверенная применённая ставка или курс из сида; баннер только по нему.
+                'is_demo': is_demo,
                 # Q5: пока брокер не подтвердил правило - интерфейс показывает «орієнтовний розрахунок».
                 'rules_confirmed': bool(selected.rule.confirmed_by_broker),
                 'rates_validity_date': calc_date.isoformat(),
                 'rates_updated_on': updated_on.isoformat() if updated_on else None,
                 'exchange_rate_date': selected.usd_to_uah.date.isoformat(),
-                'warning': (
-                    'Розрахунок є орієнтовним. '
-                    'Ставки аукціонних зборів — baseline (звірити з тарифом брокера). '
-                    'Фінальний розрахунок підтверджує митний брокер.'
-                ),
+                'applied_rates': applied_rates(rates, data['fuel_type']),
+                'warning': texts.result_warning,
+                'estimate_note': texts.estimate_note,
+                'demo_banner': {'title': texts.demo_banner_title, 'text': texts.demo_banner_text},
                 'breakdown': breakdown,
             },
             status=status.HTTP_201_CREATED,
         )
 
 
-def _missing_response(missing):
-    return Response(
-        {'error': 'Отсутствуют активные тарифы в БД', 'missing': missing},
-        status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-    )
+def _missing_response(request, missing):
+    """422: гостю - без имён моделей и параметров тарифов (Q11), staff/broker - список недостающего."""
+    body = {'error': 'not_configured', 'missing_count': len(missing)}
+    if _sees_full_grid(request.user):
+        body['missing'] = missing
+    return Response(body, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
 def _inputs_snapshot(data) -> dict:
@@ -226,69 +250,92 @@ def _inputs_snapshot(data) -> dict:
     return {k: conv(v) for k, v in data.items()}
 
 
+_GRID_FIELDS = {
+    'auction_fee_tiers': drf_serializers.ListField(),
+    'auction_fixed_fees': drf_serializers.ListField(),
+    'us_land_routes': drf_serializers.ListField(),
+    'ocean_freight': drf_serializers.ListField(),
+    'eu_to_ua': drf_serializers.ListField(),
+    'exchange_rates': drf_serializers.ListField(),
+    'excise_rates': drf_serializers.ListField(),
+    'pension_brackets': drf_serializers.ListField(),
+}
+_PUBLIC_FIELDS = {
+    'options': drf_serializers.DictField(help_text='Справочники формы без сумм (auctions, us_ports, eu_ports, …)'),
+    'is_demo': drf_serializers.BooleanField(),
+    'demo_banner': drf_serializers.DictField(),
+}
+
+
 @extend_schema(
     tags=['pricing'],
-    summary='Активные тарифы',
-    description='Возвращает все тарифы, действующие на сегодняшний день.',
+    summary='Справочники калькулятора (и тарифы для staff/broker)',
+    description=(
+        'Всем: `options` (значения формы из активных тарифов, без сумм) и `is_demo` (Q11). '
+        'staff и broker дополнительно получают полную тарифную сетку на сегодня.'
+    ),
     responses={
-        200: inline_serializer(
-            name='ActiveRatesResponse',
-            fields={
-                'auction_fee_tiers': drf_serializers.ListField(),
-                'auction_fixed_fees': drf_serializers.ListField(),
-                'us_land_routes': drf_serializers.ListField(),
-                'ocean_freight': drf_serializers.ListField(),
-                'eu_to_ua': drf_serializers.ListField(),
-                'exchange_rates': drf_serializers.ListField(),
-                'excise_rates': drf_serializers.ListField(),
-                'pension_brackets': drf_serializers.ListField(),
-            },
-        )
+        200: OpenApiResponse(
+            response=inline_serializer(name='ActiveRatesResponse', fields={**_PUBLIC_FIELDS, **_GRID_FIELDS}),
+            description='Ключи сетки (auction_fee_tiers и др.) - только для staff и broker.',
+        ),
     },
 )
 class ActiveRatesView(APIView):
     permission_classes = [AllowAny]
-    # noinspection PyMethodMayBeStatic
+
     def get(self, request):
         today = date.today()
+        catalog = pricing_cache.get_catalog()
+        texts = pricing_cache.get_calculator_settings()
+        body = {
+            'options': build_form_options(catalog, today, FORM_DEFAULTS, FORM_LABELS),
+            'is_demo': catalog_is_demo(catalog, today),
+            'demo_banner': {'title': texts.demo_banner_title, 'text': texts.demo_banner_text},
+        }
+        if _sees_full_grid(request.user):
+            body.update(_full_grid(today))
+        return Response(body)
 
-        def active(qs):
-            return qs.filter(valid_from__lte=today).filter(
-                Q(valid_to__isnull=True) | Q(valid_to__gte=today)
+
+def _active_on(qs, on_date=None):
+    """ORM-фильтр «действует на дату»."""
+    on_date = on_date or date.today()
+    return qs.filter(valid_from__lte=on_date).filter(Q(valid_to__isnull=True) | Q(valid_to__gte=on_date))
+
+
+def _full_grid(today) -> dict:
+    def active(qs):
+        return _active_on(qs, today)
+
+    return {
+        'auction_fee_tiers': list(
+            active(AuctionFeeTier.objects.all()).values(
+                'id', 'auction', 'member_type', 'payment_type', 'title_type',
+                'bid_min', 'bid_max', 'fee_flat', 'fee_percent', 'is_verified',
             )
-
-        return Response({
-            'auction_fee_tiers': list(
-                active(AuctionFeeTier.objects.all()).values(
-                    'id', 'auction', 'member_type', 'payment_type', 'title_type',
-                    'bid_min', 'bid_max', 'fee_flat', 'fee_percent',
-                )
-            ),
-            'auction_fixed_fees': list(
-                active(AuctionFixedFee.objects.all()).values(
-                    'id', 'auction', 'fee_type', 'title_type', 'amount',
-                )
-            ),
-            'us_land_routes': list(
-                active(UsLandRoute.objects.all()).values('id', 'auction_location', 'us_port', 'cost_usd')
-            ),
-            'ocean_freight': list(
-                active(OceanFreightRate.objects.all()).values('id', 'us_port', 'eu_port', 'cost_usd')
-            ),
-            'eu_to_ua': list(
-                active(EuToUaDeliveryRate.objects.all()).values('id', 'eu_port', 'cost_usd')
-            ),
-            'exchange_rates': list(
-                ExchangeRate.objects.order_by('-date').values('from_currency', 'to_currency', 'rate', 'date')[:10]
-            ),
-            'excise_rates': list(
-                active(CustomsExciseRate.objects.all()).values(
-                    'id', 'fuel_type', 'eur_per_100cc', 'duty_rate', 'vat_rate'
-                )
-            ),
-            'pension_brackets': list(
-                active(PensionFundBracket.objects.all()).values(
-                    'id', 'min_value_uah', 'max_value_uah', 'rate'
-                )
-            ),
-        })
+        ),
+        'auction_fixed_fees': list(
+            active(AuctionFixedFee.objects.all()).values('id', 'auction', 'fee_type', 'title_type', 'amount',
+                                                         'is_verified')
+        ),
+        'us_land_routes': list(
+            active(UsLandRoute.objects.all()).values('id', 'auction_location', 'us_port', 'cost_usd', 'is_verified')
+        ),
+        'ocean_freight': list(
+            active(OceanFreightRate.objects.all()).values('id', 'us_port', 'eu_port', 'cost_usd', 'is_verified')
+        ),
+        'eu_to_ua': list(active(EuToUaDeliveryRate.objects.all()).values('id', 'eu_port', 'cost_usd', 'is_verified')),
+        'exchange_rates': list(
+            ExchangeRate.objects.order_by('-date').values('from_currency', 'to_currency', 'rate', 'date', 'source')[:10]
+        ),
+        'excise_rates': list(
+            active(CustomsExciseRate.objects.all()).values(
+                'id', 'fuel_type', 'eur_per_100cc', 'ev_excise_eur_per_kwh', 'duty_rate', 'vat_rate', 'is_verified'
+            )
+        ),
+        'pension_brackets': list(
+            active(PensionFundBracket.objects.all()).values('id', 'min_value_uah', 'max_value_uah', 'rate',
+                                                            'is_verified')
+        ),
+    }
