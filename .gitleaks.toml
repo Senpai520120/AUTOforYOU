@@ -22,6 +22,8 @@ regexes = [
   '''SECRET123''',
   # Фиктивный новый пароль в тестах смены пароля (tests/test_authz_matrix.py)
   '''N3w-Str0ng-Pass-77''',
+  # Фиктивный пароль в тестах регистрации и удаления аккаунта (tests/test_attribution.py, users/tests_account_data.py)
+  '''Strong-Pass-9182''',
   # Плейсхолдеры шаблонов .env*.example и документации: KEY=your_...
   '''(?i)api[_-]?key=your_[a-z0-9_]*''',
 ]
