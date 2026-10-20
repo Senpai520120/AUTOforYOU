@@ -24,6 +24,8 @@ class CalculateInputSerializer(serializers.Serializer):
     us_port = serializers.CharField(max_length=50, default='houston')
     # Порт ЕС - данные (02-C4): наличие маршрута проверяет select_rates (нет активного фрахта/доставки - 422).
     eu_port = serializers.CharField(max_length=20, default='klaipeda')
+    # Доставка по Украине (2.7): id из /rates/ ua_delivery_rates; не указано - «уточнюється менеджером».
+    ua_delivery_rate = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     # Дата оформления таможни (YYYY-MM-DD). По ней берётся курс НБУ.
     # Если не указана - сегодня. Курс берётся последний не позже этой даты; курса «из будущего» нет (02-Q5).
     calculation_date = serializers.DateField(required=False, allow_null=True, default=None)

@@ -83,6 +83,12 @@ export interface CalcBreakdown {
   total_usd: string;
   total_uah: string;
   is_estimate: boolean;
+  // 2.7: після розмитнення; null / pending — «уточнюється менеджером»
+  ua_delivery_usd: string | null;
+  ua_delivery_pending: boolean;
+  broker_services: { title: string; amount_usd: string }[];
+  broker_services_total_usd: string;
+  broker_services_pending: boolean;
 }
 
 export interface CalcResult {
@@ -133,8 +139,18 @@ export interface CalcOptions {
   is_configured: boolean;
 }
 
+// 2.7 (Q11): гостям — без сум; суми приходять у розрахунку.
+export interface UaDeliveryOption {
+  id: number;
+  destination: string;
+  eu_port: string | null;
+  quote_on_request: boolean;
+}
+
 export interface CalcRatesResponse {
   options: CalcOptions;
+  ua_delivery_rates: UaDeliveryOption[];
+  broker_service_fees: { id: number; title: string }[];
   is_demo: boolean;
   demo_banner: DemoBannerTexts;
 }

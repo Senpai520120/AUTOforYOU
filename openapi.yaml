@@ -2353,6 +2353,16 @@ components:
         pension_brackets:
           type: array
           items: {}
+        ua_delivery_rates:
+          type: array
+          items: {}
+          description: 'Гостям: id, destination, eu_port, quote_on_request (без сумм);
+            staff/broker - с cost_usd'
+        broker_service_fees:
+          type: array
+          items: {}
+          description: 'Гостям: id, title (без сумм и процентов); staff/broker - с
+            fee_mode, amount_usd, percent'
         options:
           type: object
           additionalProperties: {}
@@ -2365,6 +2375,7 @@ components:
       required:
       - auction_fee_tiers
       - auction_fixed_fees
+      - broker_service_fees
       - demo_banner
       - eu_to_ua
       - exchange_rates
@@ -2373,6 +2384,7 @@ components:
       - ocean_freight
       - options
       - pension_brackets
+      - ua_delivery_rates
       - us_land_routes
     ArrivalPortEuEnum:
       enum:
@@ -2823,6 +2835,10 @@ components:
           minLength: 1
           default: klaipeda
           maxLength: 20
+        ua_delivery_rate:
+          type: integer
+          minimum: 1
+          nullable: true
         calculation_date:
           type: string
           format: date

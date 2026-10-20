@@ -3,6 +3,17 @@ import DemoBanner from '@/components/ui/DemoBanner';
 import LeadForm from '@/components/leads/LeadForm';
 import { percentFromDecimal } from '@/lib/calc-errors';
 
+const PENDING = 'уточнюється менеджером';
+
+function PendingRow({ label }: { label: string }) {
+  return (
+    <tr className="border-b border-slate-100">
+      <td className="py-2 text-slate-700 text-sm">{label}</td>
+      <td colSpan={2} className="py-2 text-right text-sm text-slate-500 italic">{PENDING}</td>
+    </tr>
+  );
+}
+
 function Row({ label, usd, uah }: { label: string; usd?: string; uah?: string }) {
   return (
     <tr className="border-b border-slate-100">
@@ -46,6 +57,13 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
           <Row label={`Мито ${percentFromDecimal(r?.duty_rate)}%`} usd={b.duty_usd} uah={b.duty_uah} />
           <Row label={`ПДВ ${percentFromDecimal(r?.vat_rate)}%`} uah={b.vat_uah} />
           <Row label={`Пенсійний збір ${percentFromDecimal(r?.pension_fund_rate)}%`} uah={b.pension_fund_uah} />
+          {/* 2.7: після розмитнення; немає тарифу — «уточнюється менеджером», у підсумок не входить */}
+          {b.ua_delivery_pending || b.ua_delivery_usd == null
+            ? <PendingRow label="Доставка по Україні" />
+            : <Row label="Доставка по Україні" usd={b.ua_delivery_usd} />}
+          {b.broker_services_pending || !b.broker_services?.length
+            ? <PendingRow label="Послуги брокера" />
+            : b.broker_services.map(s => <Row key={s.title} label={s.title} usd={s.amount_usd} />)}
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-blue-800">
@@ -66,6 +84,7 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
         {showEstimateNote && result.estimate_note}
         {result.rates_updated_on && <> Ставки оновлено: {formatDate(result.rates_updated_on)}.</>}
         {result.exchange_rate_date && <> Курс НБУ на {formatDate(result.exchange_rate_date)}.</>}
+        {result.rates_validity_date && <> Тарифи на {formatDate(result.rates_validity_date)}.</>}
       </p>
       <div className="mt-6">
         {result.is_estimate && (

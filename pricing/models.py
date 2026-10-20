@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -179,6 +180,89 @@ class EuToUaDeliveryRate(DateRangeModel):
 
     def __str__(self):
         return f'{self.eu_port} → UA: ${self.cost_usd}'
+
+
+class UaDeliveryRate(DateRangeModel):
+    """Доставка по Украине до города/зоны (2.7, Q6): сумма или «уточнюйте» - тогда в расчёте «уточнюється менеджером»."""
+    destination = models.CharField('Місто або зона', max_length=100)
+    eu_port = models.CharField('Порт ЄС', max_length=20, blank=True,
+                               help_text='Порожньо - з будь-якого порту ЄС.')
+    cost_usd = models.DecimalField('Вартість ($)', max_digits=8, decimal_places=2, null=True, blank=True,
+                                   validators=[MinValueValidator(0)])
+    quote_on_request = models.BooleanField('Уточнюйте (ціна за запитом)', default=False)
+    sort_order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    overlap_key_fields = ('destination', 'eu_port')
+
+    class Meta(DateRangeModel.Meta):
+        verbose_name = 'Доставка по Україні'
+        verbose_name_plural = 'Доставка по Україні'
+        ordering = ['sort_order', 'destination']
+        constraints = [
+            *DateRangeModel.Meta.constraints,
+            models.CheckConstraint(
+                condition=(models.Q(quote_on_request=True) | models.Q(cost_usd__isnull=False))
+                & (models.Q(cost_usd__isnull=True) | models.Q(cost_usd__gte=0)),
+                name='pricing_uadeliveryrate_cost_or_quote',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.quote_on_request and self.cost_usd is None:
+            raise ValidationError({'cost_usd': 'Вкажіть вартість або позначте «Уточнюйте».'})
+
+    def __str__(self):
+        price = 'уточнюйте' if self.quote_on_request else f'${self.cost_usd}'
+        return f'{self.destination}{f" (з {self.eu_port})" if self.eu_port else ""}: {price}'
+
+
+class FeeMode(models.TextChoices):
+    """Режим услуги брокера (2.7, Q6): фиксированная сумма или процент от цены покупки на аукционе."""
+    FIXED = 'fixed', 'Фіксована сума'
+    PERCENT = 'percent', 'Відсоток від ціни на аукціоні'
+
+
+class BrokerServiceFee(DateRangeModel):
+    """Статья услуг брокера (2.7): «Послуги брокера», «Сертифікація», «Реєстрація»...
+
+    База процента всегда одна - цена покупки авто на аукционе (решение шага 14), не итог и не митна вартість.
+    """
+    title = models.CharField('Назва', max_length=100)
+    fee_mode = models.CharField('Режим', max_length=10, choices=FeeMode.choices, default=FeeMode.FIXED)
+    amount_usd = models.DecimalField('Сума ($)', max_digits=8, decimal_places=2, null=True, blank=True,
+                                     validators=[MinValueValidator(0)])
+    percent = models.DecimalField('Відсоток від ціни на аукціоні', max_digits=5, decimal_places=2,
+                                  null=True, blank=True, help_text='Наприклад, 2 = 2%.',
+                                  validators=[MinValueValidator(0), MaxValueValidator(100)])
+    sort_order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    overlap_key_fields = ('title',)
+
+    class Meta(DateRangeModel.Meta):
+        verbose_name = 'Послуга брокера'
+        verbose_name_plural = 'Послуги брокера'
+        ordering = ['sort_order', 'title']
+        constraints = [
+            *DateRangeModel.Meta.constraints,
+            models.CheckConstraint(
+                condition=(models.Q(fee_mode='fixed', amount_usd__isnull=False, amount_usd__gte=0, percent__isnull=True)
+                           | models.Q(fee_mode='percent', percent__isnull=False, percent__gte=0, percent__lte=100,
+                                    amount_usd__isnull=True)),
+                name='pricing_brokerservicefee_mode_fields',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.fee_mode == FeeMode.FIXED and (self.amount_usd is None or self.percent is not None):
+            raise ValidationError('Режим «Фіксована сума»: заповніть суму, відсоток залиште порожнім.')
+        if self.fee_mode == FeeMode.PERCENT and (self.percent is None or self.amount_usd is not None):
+            raise ValidationError('Режим «Відсоток»: заповніть відсоток, суму залиште порожньою.')
+
+    def __str__(self):
+        value = f'${self.amount_usd}' if self.fee_mode == FeeMode.FIXED else f'{self.percent}% від ціни аукціону'
+        return f'{self.title}: {value}'
 
 
 class RateSource(models.TextChoices):

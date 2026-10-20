@@ -9,7 +9,7 @@
 Сетки аукционных сборов — baseline (сверить с тарифом брокера).
 """
 from dataclasses import asdict, dataclass, field
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 
 ZERO = Decimal('0')
 TWO_PLACES = Decimal('0.01')
@@ -102,6 +102,9 @@ class RateSnapshot:
     rule: dict = field(default_factory=dict)
     # Дата расчёта для выбора брекета внутри calculate_landed_cost
     rates_on_date: object = None
+    # После растаможки (2.7): доставка по Украине (None = «уточнюється менеджером») и услуги брокера
+    ua_delivery_cost_usd: Decimal | None = None
+    broker_services: list = field(default_factory=list)  # [{'title': str, 'amount_usd': Decimal, ...}]
 
 
 # ─── Входные данные ───────────────────────────────────────────────────────────
@@ -145,9 +148,23 @@ class LandedCostBreakdown:
     total_usd: Decimal
     total_uah: Decimal
     is_estimate: bool = True
+    # 2.7: после растаможки, в таможенную стоимость не входят
+    ua_delivery_usd: Decimal | None = None
+    ua_delivery_pending: bool = True
+    broker_services: list = field(default_factory=list)  # [{'title': str, 'amount_usd': Decimal}]
+    broker_services_total_usd: Decimal = ZERO
+    broker_services_pending: bool = True
 
     def to_dict(self) -> dict:
-        return {k: str(v) if isinstance(v, Decimal) else v for k, v in asdict(self).items()}
+        def conv(v):
+            if isinstance(v, Decimal):
+                return str(v)
+            if isinstance(v, list):
+                return [conv(x) for x in v]
+            if isinstance(v, dict):
+                return {k: conv(x) for k, x in v.items()}
+            return v
+        return {k: conv(v) for k, v in asdict(self).items()}
 
 
 # ─── Возрастной коэффициент ───────────────────────────────────────────────────
@@ -224,7 +241,12 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
 
     # 6. Итого USD (аукцион + логистика + пошлина)
     total_logistic_usd = (price + auction_fee_total + _d(rates.us_land_cost_usd) + _d(rates.ocean_freight_usd) + _d(rates.eu_to_ua_cost_usd)).quantize(TWO_PLACES, ROUND_HALF_UP)
-    total_usd = (total_logistic_usd + duty_usd).quantize(TWO_PLACES, ROUND_HALF_UP)
+    # 2.7: доставка по Украине и услуги брокера - после растаможки, в таможенную базу не входят.
+    ua_delivery_usd = _d(rates.ua_delivery_cost_usd) if rates.ua_delivery_cost_usd is not None else None
+    broker_services = [{'title': x['title'], 'amount_usd': _d(x['amount_usd'])} for x in rates.broker_services]
+    broker_total = sum((x['amount_usd'] for x in broker_services), ZERO)
+    after_customs_usd = (ua_delivery_usd or ZERO) + broker_total
+    total_usd = (total_logistic_usd + duty_usd + after_customs_usd).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     # 7. Пенсионный сбор от общей стоимости авто в UAH
     # ПРОВЕРИТЬ по действующему законодательству Украины
@@ -248,7 +270,8 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
 
     # 8. Итого UAH
     customs_total_uah = excise_uah + duty_uah + vat_uah + pension_fund_uah
-    total_uah = (total_logistic_usd * _d(rates.usd_to_uah) + customs_total_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
+    total_uah = ((total_logistic_usd + after_customs_usd) * _d(rates.usd_to_uah)
+                 + customs_total_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     return LandedCostBreakdown(
         auction_price_usd=price,
@@ -272,6 +295,11 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
         total_usd=total_usd,
         total_uah=total_uah,
         is_estimate=True,
+        ua_delivery_usd=ua_delivery_usd,
+        ua_delivery_pending=ua_delivery_usd is None,
+        broker_services=broker_services,
+        broker_services_total_usd=broker_total,
+        broker_services_pending=not broker_services,
     )
 
 
@@ -353,6 +381,9 @@ def rate_snapshot_to_dict(rates: RateSnapshot) -> dict:
         'usd_to_eur_date': rates.usd_to_eur_date,
         'rule': rates.rule,
         'meta': rates.meta,
+        'ua_delivery_cost_usd': str(rates.ua_delivery_cost_usd) if rates.ua_delivery_cost_usd is not None else None,
+        'broker_services': [{k: str(v) if isinstance(v, Decimal) else v for k, v in x.items()}
+                            for x in rates.broker_services],
     }
 
 
@@ -478,6 +509,8 @@ class RateCatalog:
     excise_rates: list = field(default_factory=list)
     pension_brackets: list = field(default_factory=list)
     customs_rules: list = field(default_factory=list)
+    ua_delivery_rates: list = field(default_factory=list)
+    broker_service_fees: list = field(default_factory=list)
 
 
 @dataclass
@@ -493,11 +526,13 @@ class SelectedRates:
     rule: object = None
     pension_brackets: list = field(default_factory=list)
     missing: list = field(default_factory=list)
+    ua_delivery: object = None          # 2.7: None - не выбрано или нет тарифа (pending, не 422)
+    broker_fees: list = field(default_factory=list)
 
     @property
     def applied(self) -> list:
-        return [x for x in (self.tier, self.us_land, self.ocean, self.eu_to_ua, self.excise, self.rule) if x] \
-            + list(self.fixed_fees)
+        return [x for x in (self.tier, self.us_land, self.ocean, self.eu_to_ua, self.excise, self.rule,
+                            self.ua_delivery) if x] + list(self.fixed_fees) + list(self.broker_fees)
 
     @property
     def rates_updated_on(self):
@@ -536,6 +571,10 @@ def select_rates(catalog: RateCatalog, params: dict, on_date) -> SelectedRates:
     sel.excise = max(excise, key=lambda r: (r.engine_cc_min, r.valid_from, r.pk or 0)) if excise else None
     sel.rule = pick_active(catalog.customs_rules, on_date)
     sel.pension_brackets = [b for b in catalog.pension_brackets if is_active(b, on_date)]
+    # 2.7: необязательные - их отсутствие не 422, а «уточнюється менеджером».
+    sel.ua_delivery = pick_ua_delivery(catalog.ua_delivery_rates, params.get('ua_delivery_rate'), eu_port, on_date)
+    sel.broker_fees = sorted((f for f in catalog.broker_service_fees if is_active(f, on_date)),
+                             key=lambda f: (f.sort_order, f.pk or 0))
 
     if not sel.tier:
         sel.missing.append(f'AuctionFeeTier для {auction} / {member_type}/{payment_type}/{title_type} / ${bid}')
@@ -650,8 +689,59 @@ def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: di
 def catalog_is_demo(catalog: RateCatalog, on_date) -> bool:
     """/rates/: среди активных тарифов есть непроверенные или последний курс - из сида."""
     groups = (catalog.auction_fee_tiers, catalog.auction_fixed_fees, catalog.us_land_routes, catalog.ocean_freight,
-              catalog.eu_to_ua, catalog.excise_rates, catalog.pension_brackets, catalog.customs_rules)
+              catalog.eu_to_ua, catalog.excise_rates, catalog.pension_brackets, catalog.customs_rules,
+              catalog.ua_delivery_rates, catalog.broker_service_fees)
     if any(not getattr(r, 'is_verified', False) for g in groups for r in g if is_active(r, on_date)):
         return True
     latest = [pick_exchange_rate(catalog.exchange_rates, 'USD', cur, on_date) for cur in ('UAH', 'EUR')]
     return any(getattr(r, 'source', 'demo') == 'demo' for r in latest if r)
+
+
+# ─── Доставка по Украине и услуги брокера (задача 2.7) ──────────────────────────
+
+def ua_delivery_available(rate, eu_port, on_date) -> bool:
+    return is_active(rate, on_date) and (not rate.eu_port or rate.eu_port == eu_port)
+
+
+def pick_ua_delivery(rates, rate_id, eu_port, on_date):
+    """Выбранная посетителем ставка (по id), если она действует на дату и подходит к порту ЕС."""
+    if rate_id is None:
+        return None
+    for rate in rates:
+        if rate.pk == rate_id and ua_delivery_available(rate, eu_port, on_date):
+            return rate
+    return None
+
+
+def ua_delivery_cost(rate):
+    """Сумма доставки или None («уточнюється менеджером»)."""
+    if rate is None or rate.quote_on_request or rate.cost_usd is None:
+        return None
+    return _d(rate.cost_usd)
+
+
+def broker_services_for(fees, auction_price_usd) -> list:
+    """Суммы услуг брокера: fixed - сумма, percent - % от цены покупки на аукционе, вверх до цента (Q6, шаг 14)."""
+    base = _d(auction_price_usd)
+    result = []
+    for fee in fees:
+        if fee.fee_mode == 'percent':
+            amount = (base * _d(fee.percent) / Decimal('100')).quantize(TWO_PLACES, ROUND_CEILING)
+            result.append({'id': fee.pk, 'title': fee.title, 'fee_mode': 'percent', 'percent': _d(fee.percent),
+                           'base_usd': base, 'amount_usd': amount})
+        else:
+            result.append({'id': fee.pk, 'title': fee.title, 'fee_mode': 'fixed', 'amount_usd': _d(fee.amount_usd)})
+    return result
+
+
+def public_extra_options(catalog: RateCatalog, on_date) -> dict:
+    """/rates/ для гостей (Q11): города и названия услуг без сумм и процентов."""
+    rates = sorted((r for r in catalog.ua_delivery_rates if is_active(r, on_date)),
+                   key=lambda r: (r.sort_order, r.destination, r.pk or 0))
+    fees = sorted((f for f in catalog.broker_service_fees if is_active(f, on_date)),
+                  key=lambda f: (f.sort_order, f.pk or 0))
+    return {
+        'ua_delivery_rates': [{'id': r.pk, 'destination': r.destination, 'eu_port': r.eu_port or None,
+                               'quote_on_request': bool(r.quote_on_request or r.cost_usd is None)} for r in rates],
+        'broker_service_fees': [{'id': f.pk, 'title': f.title} for f in fees],
+    }

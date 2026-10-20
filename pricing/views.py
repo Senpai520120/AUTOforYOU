@@ -18,25 +18,30 @@ from .calculator import (
     LandedCostInputs,
     MissingRate,
     applied_rates,
+    broker_services_for,
     build_form_options,
     build_rate_snapshot_from_db,
     calc_auction_fees,
     calculate_landed_cost,
     catalog_is_demo,
+    public_extra_options,
     rate_snapshot_to_dict,
     select_rates,
     selection_is_demo,
+    ua_delivery_cost,
 )
 from .hooks import on_calculation_saved
 from .models import (
     AuctionFeeTier,
     AuctionFixedFee,
+    BrokerServiceFee,
     Calculation,
     CustomsExciseRate,
     EuToUaDeliveryRate,
     ExchangeRate,
     OceanFreightRate,
     PensionFundBracket,
+    UaDeliveryRate,
     UsLandRoute,
 )
 from .serializers import CalculateInputSerializer
@@ -149,6 +154,10 @@ class CalculateView(APIView):
 
         # Подбор тарифов - чистая функция калькулятора (02-Q6); view только загружает каталог.
         selected = select_rates(pricing_cache.get_catalog(), params, calc_date)
+        if data.get('ua_delivery_rate') is not None and selected.ua_delivery is None:
+            # 2.7: несуществующая, недействующая или не с этого порта ЕС ставка - ошибка поля, а не тихий pending.
+            return Response({'ua_delivery_rate': ['Доставка до цього міста зараз недоступна. Оберіть інше.']},
+                            status=status.HTTP_400_BAD_REQUEST)
         if selected.missing:
             return _missing_response(request, selected.missing)
 
@@ -177,8 +186,12 @@ class CalculateView(APIView):
                 'usd_to_eur_rate_id': selected.usd_to_eur.pk,
                 'excise_rate_id': selected.excise.pk,
                 'customs_calc_rule_id': selected.rule.pk,
+                'ua_delivery_rate_id': selected.ua_delivery.pk if selected.ua_delivery else None,
+                'broker_service_fee_ids': [f.pk for f in selected.broker_fees],
             },
         )
+        rates.ua_delivery_cost_usd = ua_delivery_cost(selected.ua_delivery)
+        rates.broker_services = broker_services_for(selected.broker_fees, data['auction_price_usd'])
         inputs = LandedCostInputs(
             auction_price_usd=data['auction_price_usd'],
             engine_cc=data['engine_cc'],
@@ -261,6 +274,10 @@ _GRID_FIELDS = {
     'pension_brackets': drf_serializers.ListField(),
 }
 _PUBLIC_FIELDS = {
+    'ua_delivery_rates': drf_serializers.ListField(
+        help_text='Гостям: id, destination, eu_port, quote_on_request (без сумм); staff/broker - с cost_usd'),
+    'broker_service_fees': drf_serializers.ListField(
+        help_text='Гостям: id, title (без сумм и процентов); staff/broker - с fee_mode, amount_usd, percent'),
     'options': drf_serializers.DictField(help_text='Справочники формы без сумм (auctions, us_ports, eu_ports, …)'),
     'is_demo': drf_serializers.BooleanField(),
     'demo_banner': drf_serializers.DictField(),
@@ -290,6 +307,8 @@ class ActiveRatesView(APIView):
         texts = pricing_cache.get_calculator_settings()
         body = {
             'options': build_form_options(catalog, today, FORM_DEFAULTS, FORM_LABELS),
+            # 2.7 (Q6, Q11): города и названия услуг без сумм; суммы - в расчёте и в сетке staff/broker.
+            **public_extra_options(catalog, today),
             'is_demo': catalog_is_demo(catalog, today),
             'demo_banner': {'title': texts.demo_banner_title, 'text': texts.demo_banner_text},
         }
@@ -337,5 +356,14 @@ def _full_grid(today) -> dict:
         'pension_brackets': list(
             active(PensionFundBracket.objects.all()).values('id', 'min_value_uah', 'max_value_uah', 'rate',
                                                             'is_verified')
+        ),
+        # 2.7: с суммами - вместо публичного списка без сумм
+        'ua_delivery_rates': list(
+            active(UaDeliveryRate.objects.all()).values('id', 'destination', 'eu_port', 'cost_usd',
+                                                        'quote_on_request', 'is_verified')
+        ),
+        'broker_service_fees': list(
+            active(BrokerServiceFee.objects.all()).values('id', 'title', 'fee_mode', 'amount_usd', 'percent',
+                                                          'is_verified')
         ),
     }

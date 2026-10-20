@@ -5,6 +5,7 @@ from . import cache as pricing_cache
 from .models import (
     AuctionFeeTier,
     AuctionFixedFee,
+    BrokerServiceFee,
     Calculation,
     CalculatorSettings,
     CustomsCalcRule,
@@ -13,11 +14,12 @@ from .models import (
     ExchangeRate,
     OceanFreightRate,
     PensionFundBracket,
+    UaDeliveryRate,
     UsLandRoute,
 )
 
 TARIFF_MODELS = (AuctionFeeTier, AuctionFixedFee, UsLandRoute, OceanFreightRate, EuToUaDeliveryRate,
-                 CustomsExciseRate, PensionFundBracket, CustomsCalcRule)
+                 CustomsExciseRate, PensionFundBracket, CustomsCalcRule, UaDeliveryRate, BrokerServiceFee)
 
 
 def unverified_active_count(today=None) -> int:
@@ -144,6 +146,42 @@ class CalculationAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return bool(request.user.is_superuser)  # снимок - история расчётов, удаляет только superuser
+
+
+class ActiveNowFilter(admin.SimpleListFilter):
+    """«Діють зараз» (2.7): valid_from <= сьогодні и valid_to пусто или >= сьогодні."""
+    title = 'Діють зараз'
+    parameter_name = 'active_now'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Так'), ('no', 'Ні'))
+
+    def queryset(self, request, queryset):
+        today = timezone.localdate()
+        active = queryset.filter(valid_from__lte=today).exclude(valid_to__lt=today)
+        if self.value() == 'yes':
+            return active
+        if self.value() == 'no':
+            return queryset.exclude(pk__in=active.values('pk'))
+        return queryset
+
+
+@admin.register(UaDeliveryRate)
+class UaDeliveryRateAdmin(TariffAdmin):
+    """Доставка по Україні (2.7, Q6): сума або «Уточнюйте»; заповнює власник."""
+    list_display = ('destination', 'eu_port', 'cost_usd', 'quote_on_request', 'sort_order',
+                    'valid_from', 'valid_to', 'is_verified')
+    list_filter = (ActiveNowFilter, 'quote_on_request')
+    ordering = ('sort_order', 'destination')
+
+
+@admin.register(BrokerServiceFee)
+class BrokerServiceFeeAdmin(TariffAdmin):
+    """Послуги брокера (2.7, Q6): фіксована сума (за замовчуванням) або % від ціни авто на аукціоні."""
+    list_display = ('title', 'fee_mode', 'amount_usd', 'percent', 'sort_order', 'valid_from', 'valid_to',
+                    'is_verified')
+    list_filter = (ActiveNowFilter, 'fee_mode')
+    ordering = ('sort_order', 'title')
 
 
 @admin.register(CalculatorSettings)

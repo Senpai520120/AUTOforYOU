@@ -13,6 +13,8 @@ export interface CalcInputs {
   member_type?: string;
   payment_type?: string;
   title_type?: string;
+  // Доставка по Україні (2.7): id з /rates/ ua_delivery_rates; без нього — «уточнюється менеджером»
+  ua_delivery_rate?: number;
   // Ємність батареї, кВт·год (2.5): лише для electric/phev, рядок як у полі форми (напр. "75.5")
   battery_capacity_kwh?: string;
 }

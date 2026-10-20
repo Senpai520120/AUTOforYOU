@@ -17,6 +17,7 @@ from pricing.admin import UsLandRouteAdmin
 from pricing.models import (
     AuctionFeeTier,
     AuctionFixedFee,
+    BrokerServiceFee,
     Calculation,
     CalculatorSettings,
     CustomsCalcRule,
@@ -25,6 +26,7 @@ from pricing.models import (
     ExchangeRate,
     OceanFreightRate,
     PensionFundBracket,
+    UaDeliveryRate,
     UsLandRoute,
 )
 from pricing.tasks import purge_anonymous_calculations
@@ -40,7 +42,7 @@ PAYLOAD = {
     'vehicle_year': 2018, 'auction_location': 'general', 'us_port': 'houston', 'eu_port': 'klaipeda',
 }
 TARIFFS = (AuctionFeeTier, AuctionFixedFee, UsLandRoute, OceanFreightRate, EuToUaDeliveryRate,
-           CustomsExciseRate, PensionFundBracket, CustomsCalcRule)
+           CustomsExciseRate, PensionFundBracket, CustomsCalcRule, UaDeliveryRate, BrokerServiceFee)
 GRID_KEYS = ('auction_fee_tiers', 'auction_fixed_fees', 'us_land_routes', 'ocean_freight', 'eu_to_ua',
              'exchange_rates', 'excise_rates', 'pension_brackets')
 
@@ -83,7 +85,7 @@ class RatesAccessTests(SeededCase):
         resp = client_for().get(RATES_URL)
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
-        self.assertEqual(set(body), {'options', 'is_demo', 'demo_banner'})
+        self.assertEqual(set(body), {'options', 'is_demo', 'demo_banner', 'ua_delivery_rates', 'broker_service_fees'})
         raw = json.dumps(body)
         for word in ('cost_usd', 'fee_flat', 'fee_percent', '"rate"', 'amount', 'duty_rate'):
             self.assertNotIn(word, raw)

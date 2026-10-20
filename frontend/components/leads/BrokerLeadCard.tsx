@@ -100,7 +100,7 @@ function Snapshot({ lead }: { lead: BrokerLeadDetail }) {
       {breakdown.length > 0 && (
         <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
           {breakdown.map(([k, v]) => (
-            <div key={k} className="contents"><dt className="text-slate-600 break-words">{k}</dt><dd className="text-right">{String(v)}</dd></div>
+            <div key={k} className="contents"><dt className="text-slate-600 break-words">{k}</dt><dd className="text-right">{formatValue(v)}</dd></div>
           ))}
         </dl>
       )}
@@ -286,4 +286,12 @@ export default function BrokerLeadCard({ id }: { id: number }) {
       </Section>
     </div>
   );
+}
+
+// Списки в breakdown (послуги брокера, 2.7) — «назва: сума» через кому, а не [object Object].
+function formatValue(v: unknown): string {
+  if (Array.isArray(v)) {
+    return v.map(x => (x && typeof x === 'object' ? Object.values(x as Record<string, unknown>).join(': ') : String(x))).join(', ') || '—';
+  }
+  return String(v);
 }

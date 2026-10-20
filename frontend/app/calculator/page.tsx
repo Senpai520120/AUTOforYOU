@@ -9,10 +9,11 @@ import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
 
 // Числові поля в стані форми — рядки: порожнє поле лишається порожнім (не 0), спрацьовує required.
-type CalcForm = Omit<CalcInputs, 'engine_cc' | 'vehicle_year' | 'battery_capacity_kwh'> & {
+type CalcForm = Omit<CalcInputs, 'engine_cc' | 'vehicle_year' | 'battery_capacity_kwh' | 'ua_delivery_rate'> & {
   engine_cc: string;
   vehicle_year: string;
   battery_capacity_kwh: string;
+  ua_delivery_rate: string;  // '' — не обрано
 };
 
 // Списків значень тут немає (09-C1): усі select'и будуються з GET /api/v1/pricing/rates/.
@@ -42,13 +43,15 @@ function initialForm(data: CalcRatesResponse, params: URLSearchParams): CalcForm
     member_type: o.defaults.member_type ?? pick(o.member_types, null),
     payment_type: o.defaults.payment_type ?? pick(o.payment_types, null),
     title_type: o.defaults.title_type ?? pick(o.title_types, null),
+    ua_delivery_rate: '',
   };
 }
 
 function toInputs(form: CalcForm, requiresBattery: boolean): CalcInputs {
-  const { battery_capacity_kwh, engine_cc, vehicle_year, ...rest } = form;
+  const { battery_capacity_kwh, engine_cc, vehicle_year, ua_delivery_rate, ...rest } = form;
   return {
     ...rest,
+    ...(ua_delivery_rate ? { ua_delivery_rate: Number(ua_delivery_rate) } : {}),
     engine_cc: Number(engine_cc),
     vehicle_year: Number(vehicle_year),
     ...(requiresBattery ? { battery_capacity_kwh } : {}),
@@ -96,6 +99,14 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
   const reachableUs = o.auction_locations.find(l => l.value === form.auction_location)?.us_ports ?? [];
   const fieldErrors = error?.fieldErrors ?? {};
 
+  // Місто доступне, якщо ставка з будь-якого порту ЄС або саме з обраного.
+  const cities = data.ua_delivery_rates.filter(c => !c.eu_port || c.eu_port === form.eu_port);
+  const cityOptions: CalcOption[] = [
+    { value: '', label: 'Не обрано — уточнити в менеджера' },
+    ...cities.map(c => ({ value: String(c.id), label: c.quote_on_request ? `${c.destination} (ціна за запитом)` : c.destination })),
+  ];
+  const cityValue = cities.some(c => String(c.id) === form.ua_delivery_rate) ? form.ua_delivery_rate : '';
+
   const changeUsPort = (value: string) => setForm(f => {
     const eu = o.us_ports.find(p => p.value === value)?.eu_ports ?? [];
     return { ...f, us_port: value, eu_port: eu.includes(f.eu_port) ? f.eu_port : (eu[0] ?? '') };
@@ -107,7 +118,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
     setError(null);
     setResult(null);
     try {
-      setResult(await pricingApi.calculate(toInputs(form, requiresBattery)));
+      setResult(await pricingApi.calculate(toInputs({ ...form, ua_delivery_rate: cityValue }, requiresBattery)));
     } catch (err: unknown) {
       setError(describeCalcError(err));
     } finally {
@@ -160,6 +171,8 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
             errors={fieldErrors} disabledValues={o.us_ports.map(p => p.value).filter(p => !reachableUs.includes(p))} />
           <Select id="eu_port" label="Порт ЄС" value={form.eu_port} options={o.eu_ports} onChange={v => set('eu_port', v)}
             errors={fieldErrors} disabledValues={o.eu_ports.map(p => p.value).filter(p => !reachableEu.includes(p))} />
+          <Select id="ua_delivery_rate" label="Доставка по Україні (місто)" value={cityValue} options={cityOptions}
+            onChange={v => set('ua_delivery_rate', v)} errors={fieldErrors} />
         </div>
 
         {/* 09-C5: параметри тарифу аукціону — видно, з якими значеннями рахується збір */}
