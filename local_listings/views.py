@@ -23,7 +23,6 @@ from rest_framework.views import APIView
 
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
-
 from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter

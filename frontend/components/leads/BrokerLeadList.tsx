@@ -76,7 +76,7 @@ export default function BrokerLeadList() {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Фільтр за статусом">
+      <div className="flex flex-wrap gap-2 mb-4 min-w-0" role="group" aria-label="Фільтр за статусом">
         <button type="button" onClick={() => setParams({ status: '' })} aria-pressed={!status}
           className={`px-3 py-1 rounded-full text-sm border ${!status ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-300'}`}>
           Усі
@@ -89,17 +89,17 @@ export default function BrokerLeadList() {
         ))}
       </div>
 
-      <form className="flex flex-wrap items-end gap-3 mb-6"
+      <form className="flex flex-wrap items-end gap-3 mb-6 min-w-0"
         onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); setParams({ utm_source: utmInput.trim() }); }}>
-        <label className="text-sm text-slate-700">
+        <label className="text-sm text-slate-700 w-full min-w-0 sm:w-auto">
           <span className="block mb-1">Ім’я або телефон</span>
           <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} maxLength={100}
-            className="border border-slate-300 rounded-lg px-3 py-1.5 w-full" />
+            className="border border-slate-300 rounded-lg px-3 py-1.5 w-full min-w-0" />
         </label>
-        <label className="text-sm text-slate-700">
+        <label className="text-sm text-slate-700 w-full min-w-0 sm:w-auto">
           <span className="block mb-1">Джерело (utm_source)</span>
           <input value={utmInput} onChange={(e) => setUtmInput(e.target.value)} maxLength={100}
-            className="border border-slate-300 rounded-lg px-3 py-1.5 w-full" />
+            className="border border-slate-300 rounded-lg px-3 py-1.5 w-full min-w-0" />
         </label>
         <label className="text-sm text-slate-700 flex items-center gap-2 pb-2">
           <input type="checkbox" checked={mine} onChange={(e) => setParams({ assigned_to: e.target.checked ? 'me' : '' })} />
@@ -127,7 +127,7 @@ export default function BrokerLeadList() {
           {data.results.map((lead) => (
             <li key={lead.id} data-testid="broker-lead-item">
               <Link href={`/broker/leads/${lead.id}`}
-                className="block bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-sm">
+                className="block min-w-0 break-words bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-sm">
                 <div className="flex flex-wrap justify-between items-start gap-2">
                   <div className="min-w-0">
                     <p className="font-mono font-bold text-slate-900">{lead.public_id}</p>
@@ -136,13 +136,13 @@ export default function BrokerLeadList() {
                   <LeadStatusBadge status={lead.status} label={lead.status_display} />
                 </div>
                 <p className="mt-2 font-semibold text-slate-900 break-words">{lead.name}</p>
-                <p className="text-sm text-slate-700">{lead.phone}</p>
+                <p className="text-sm text-slate-700 break-all">{lead.phone}</p>
                 {lead.car && <p className="text-sm text-slate-600 break-words">{lead.car}</p>}
                 <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
                   <div><dt className="inline text-slate-400">Джерело: </dt><dd data-testid="lead-utm-source" className="inline break-all">{lead.utm_source || 'пряме'}</dd></div>
                   <div><dt className="inline text-slate-400">Перша реакція: </dt><dd className="inline">{lead.first_response_at ? fmt(lead.first_response_at) : 'ще немає'}</dd></div>
                   <div><dt className="inline text-slate-400">Відповідальний: </dt><dd className="inline break-all">{lead.assigned_to ? lead.assigned_to.name : '—'}</dd></div>
-                  {lead.total_usd && <div><dt className="inline text-slate-400">Сума: </dt><dd className="inline">${Number(lead.total_usd).toLocaleString('uk-UA')}</dd></div>}
+                  {lead.total_usd && <div><dt className="inline text-slate-400">Сума: </dt><dd className="inline break-all">${Number(lead.total_usd).toLocaleString('uk-UA')}</dd></div>}
                 </dl>
               </Link>
             </li>

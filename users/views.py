@@ -1,9 +1,12 @@
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
-from django.db import IntegrityError, transaction
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.middleware.csrf import rotate_token
 from django.utils.decorators import method_decorator
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status
@@ -18,15 +21,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from integrations.captcha import captcha_public_config, require_captcha
-from django.contrib.auth import get_user_model
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
 
-from .authentication import enforce_csrf
 from . import lockout
+from .authentication import enforce_csrf
 from .cookies import clear_auth_cookies, set_auth_cookies
-
+from .emails import send_already_registered_email, send_verification_email
 from .models import CustomUser, DealerApplication, TrustedShop
+from .permissions import IsEmailVerified
 from .serializers import (
     DealerApplicationCreateSerializer,
     DealerApplicationSerializer,
@@ -34,8 +35,6 @@ from .serializers import (
     TrustedShopSerializer,
     UserProfileSerializer,
 )
-from .emails import send_already_registered_email, send_verification_email
-from .permissions import IsEmailVerified
 from .services import DuplicatePendingError, apply_for_dealer
 from .tokens import email_verification_token
 

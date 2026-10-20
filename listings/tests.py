@@ -9,8 +9,14 @@ from rest_framework.test import APITestCase
 
 from listings.models import Listing
 from tests.factories import (
-    make_admin_role, make_broker, make_dealer, make_listing, make_moderator,
-    make_staff, make_user, make_vehicle,
+    make_admin_role,
+    make_broker,
+    make_dealer,
+    make_listing,
+    make_moderator,
+    make_staff,
+    make_user,
+    make_vehicle,
 )
 from vehicles.models import Vehicle
 

@@ -10,7 +10,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase
 
 from tests.base import CleanCacheTestCase
 

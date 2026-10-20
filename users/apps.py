@@ -19,8 +19,8 @@ class UsersConfig(AppConfig):
 def check_lockout_cache(app_configs, **kwargs):
     """Без общего кэша (Redis) блокировка входа считается в каждом воркере отдельно."""
     from django.conf import settings
-    from django.core.cache.backends.locmem import LocMemCache
     from django.core.cache import caches
+    from django.core.cache.backends.locmem import LocMemCache
 
     if not settings.DEBUG and isinstance(caches['default'], LocMemCache):
         return [Warning(

@@ -14,6 +14,7 @@ from .services import (
     seller_rating,
 )
 
+
 def _make_conversation(listing, initiator):
     conv, _ = Conversation.objects.get_or_create(
         local_listing=listing,

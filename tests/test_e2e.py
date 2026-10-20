@@ -18,10 +18,10 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from payments.models import Payment
-from users.models import DealerApplication
-from users.services import apply_for_dealer, approve_application
 from tests.base import CleanCacheTestCase
 from tests.factories import auth_client, make_listing, make_staff, make_user, make_vehicle
+from users.models import DealerApplication
+from users.services import apply_for_dealer, approve_application
 
 User = get_user_model()
 

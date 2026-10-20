@@ -6,6 +6,9 @@ import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 import { expectNoRequest } from './helpers/network';
 import { captchaToken } from './helpers/captcha';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import ts from 'typescript';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -160,6 +163,22 @@ test.describe('Обхід 18+ (1.14)', () => {
 });
 
 test.describe('hasAnalyticsConsent і версія документів (1.14, без браузера)', () => {
+  // Playwright в CI (Node 20) не вміє імпортувати ESM-модуль lib/consent.ts, тому
+  // транспілюємо справжній вихідний файл у CommonJS і виконуємо його тут: тест
+  // перевіряє реальний код, а не копію логіки.
+  type ConsentModule = {
+    registerLegalVersion: (v: string | null | undefined, reconsent?: boolean) => void;
+    hasAnalyticsConsent: () => boolean;
+  };
+  const loadConsent = (): ConsentModule => {
+    const src = readFileSync(path.join(__dirname, '..', 'lib', 'consent.ts'), 'utf8');
+    const { outputText } = ts.transpileModule(src, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    });
+    const mod = { exports: {} as Record<string, unknown> };
+    new Function('module', 'exports', outputText)(mod, mod.exports);
+    return mod.exports as unknown as ConsentModule;
+  };
   // consent.ts не залежить від React: підставляємо мінімальний window з localStorage.
   const setup = (raw: string | null) => {
     const store = new Map<string, string>();
@@ -177,8 +196,8 @@ test.describe('hasAnalyticsConsent і версія документів (1.14, �
   };
   const json = (level: string, version: string | null) => JSON.stringify({ level, version, ts: null });
 
-  test('"all" діє, коли версія та сама або повторна згода не потрібна', async () => {
-    const c = await import('../lib/consent');
+  test('"all" діє, коли версія та сама або повторна згода не потрібна', () => {
+    const c = loadConsent();
     setup(json('all', 'v1'));
     c.registerLegalVersion('v2', false);
     expect(c.hasAnalyticsConsent()).toBe(true);
@@ -189,8 +208,8 @@ test.describe('hasAnalyticsConsent і версія документів (1.14, �
     expect(c.hasAnalyticsConsent()).toBe(true);
   });
 
-  test('"all" не діє, коли версія змінилась і потрібна повторна згода', async () => {
-    const c = await import('../lib/consent');
+  test('"all" не діє, коли версія змінилась і потрібна повторна згода', () => {
+    const c = loadConsent();
     setup(json('all', 'v1'));
     c.registerLegalVersion('v2', true);
     expect(c.hasAnalyticsConsent()).toBe(false);
@@ -199,8 +218,8 @@ test.describe('hasAnalyticsConsent і версія документів (1.14, �
     expect(c.hasAnalyticsConsent()).toBe(false);
   });
 
-  test('"necessary", порожнє й пошкоджене значення: false', async () => {
-    const c = await import('../lib/consent');
+  test('"necessary", порожнє й пошкоджене значення: false', () => {
+    const c = loadConsent();
     c.registerLegalVersion('v1', false);
     for (const raw of [json('necessary', 'v1'), null, '{broken']) {
       setup(raw);

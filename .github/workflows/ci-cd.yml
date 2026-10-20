@@ -184,6 +184,19 @@ jobs:
           # Сброс троттлинга (429 на логин/расчёт) — только на e2e-стеке.
           $DC exec -T redis redis-cli FLUSHALL
           $DC exec -T backend python manage.py e2e_seed
+          # Подвал кэширует публичные настройки на 300 с. «Wait for the site» выше
+          # отрисовал страницу до сида, и в кэше frontend остались пустые реквизиты.
+          # Пересоздаём контейнер frontend (кэш fetch лежит в его файловой системе
+          # и в памяти) и перезапускаем nginx, чтобы он взял новый адрес апстрима.
+          $DC up -d --force-recreate --no-deps frontend
+          $DC restart nginx
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://localhost/terms || true)
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 2
+          done
+          echo "frontend did not come back after restart" >&2
+          exit 1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

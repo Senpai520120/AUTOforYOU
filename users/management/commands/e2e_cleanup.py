@@ -9,7 +9,11 @@ from django.db import transaction
 from django.db.models import Q
 
 from users.management.commands.e2e_seed import (
-    E2E_CONTAINER_PREFIX, E2E_DOMAIN, E2E_PREFIX, E2E_VIN_PREFIX, require_e2e_allowed,
+    E2E_CONTAINER_PREFIX,
+    E2E_DOMAIN,
+    E2E_PREFIX,
+    E2E_VIN_PREFIX,
+    require_e2e_allowed,
 )
 
 
