@@ -25,6 +25,8 @@ from rest_framework.views import APIView
 from core.uploads import ImageUploadError, max_bytes_from_setting, sanitize_image
 from integrations.models import VinReport
 from integrations.providers import NHTSAVinDecodeProvider
+from metrics.models import MetricKey
+from metrics.services import record_metric
 from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter
@@ -140,6 +142,10 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return _base_queryset().filter(status=LocalListing.Status.ACTIVE)
+
+    def perform_create(self, serializer):
+        serializer.save()
+        record_metric(MetricKey.LISTING_SUBMITTED)
 
 
 @extend_schema_view(
@@ -385,6 +391,8 @@ class LocalListingContactView(APIView):
             pk=pk,
             status=LocalListing.Status.ACTIVE,
         )
+        if listing.contact_phone:
+            record_metric(MetricKey.PHONE_VIEW)
         return Response({'contact_phone': listing.contact_phone or None})
 
 

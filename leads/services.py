@@ -10,6 +10,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from metrics import services as metrics_services
+from metrics.models import MetricKey
 from site_settings.models import SiteSettings
 from users.consents import record_consents
 from users.models import ConsentDocument, ConsentMethod
@@ -74,8 +76,11 @@ def notify_journal(lead_id: int) -> None:
 
 
 def record_metric(event: str) -> None:
-    """Заглушка серверных счётчиков (8.7). Не падает, без ПДн."""
-    logger.info('metric event=%s', event)
+    """Серверные счётчики (8.7): 'lead_created' -> metrics.lead. Не падает, без ПДн."""
+    if event == 'lead_created':
+        metrics_services.record_metric(MetricKey.LEAD)
+    else:
+        logger.info('metric event=%s', event)
 
 
 def _after_commit(lead_id: int) -> None:

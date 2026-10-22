@@ -278,7 +278,7 @@
 - [ ] `CONTACT_VIEW_ALERT_THRESHOLD`, `CONTACT_VIEW_RETENTION_DAYS` (срок хранения журнала показов телефона и хэша IP — согласовать с юристом, раздел 6.1), `MODERATION_DIGEST_MINUTES`, `THROTTLE_REPORTS_RATE` — **[ВОЛНА-2]** задача 4.5.
 - [ ] `THROTTLE_ANON_RATE` (`60/hour`), `THROTTLE_USER_RATE` (`300/hour`), `THROTTLE_EXPENSIVE_RATE` (`10/hour`, VIN-отчёты и реестры), `THROTTLE_MESSAGES_RATE` (`30/hour`, старт диалогов), `THROTTLE_MESSAGES_REPLY_RATE` (ответы в час), `MESSAGES_PAGE_SIZE` — лимиты запросов; значения по умолчанию разумные, можно не трогать (сообщения — **[ВОЛНА-2]**, задача 4.7).
 - [ ] `THROTTLE_LISTING_CREATE_RATE`, `THROTTLE_LISTING_CREATE_DAILY_RATE`, `LOCAL_LISTING_DESCRIPTION_MAX` — **[ВОЛНА-2]** значения по умолчанию рабочие, подтвердить (задача 8.5).
-- [ ] `THROTTLE_LISTING_VIEW_RATE` (подтвердить), `LISTING_VIEW_BOT_UA_PATTERNS` (подстроки ботов, дополнить при необходимости) — **[ВОЛНА-2]** задача 8.8; `THROTTLE_METRICS_EVENT_RATE` — задача 8.7; `THROTTLE_CLIENT_ERRORS_RATE` — задача 7.6.
+- [ ] `THROTTLE_LISTING_VIEW_RATE` (подтвердить), `LISTING_VIEW_BOT_UA_PATTERNS` (подстроки ботов, дополнить при необходимости) — **[ВОЛНА-2]** задача 8.8; `THROTTLE_METRICS_EVENT_RATE` (по умолчанию `60/min` на IP, при росте трафика проверить; задача 8.7: просмотр счётчиков — админка → «Щоденні метрики», больше ничего не заполняется; подтверждение юристом строки «Збираємо лише загальні лічильники без персональних даних» — в раздел «Юридическое»); `THROTTLE_CLIENT_ERRORS_RATE` — задача 7.6.
 - [ ] `AUDIT_LOG_RETENTION_DAYS` — срок хранения журнала действий модераторов; значение определяет юрист (раздел 6.1, Q3.6), по умолчанию `0` = без ограничения (задача 1.13).
 - [ ] `AUCTION_DEFAULT_MEMBER_TYPE` — оставить `broker`.
 

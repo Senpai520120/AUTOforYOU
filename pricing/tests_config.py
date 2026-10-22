@@ -317,11 +317,13 @@ class HookTests(SeededCase):
             self.calc()
         hook.assert_not_called()
 
-    def test_stub_without_metrics_module(self):
+    def test_hook_swallows_metric_failure(self):
         from pricing.hooks import on_calculation_saved
-        with patch.dict('sys.modules', {'reports.metrics': None}):
-            on_calculation_saved(object())  # ImportError внутри - без падения
-        with patch.dict('sys.modules', {'reports.metrics': None}), self.captureOnCommitCallbacks(execute=True):
+        with patch('metrics.services.record_metric', side_effect=RuntimeError('x')), \
+                self.assertLogs('pricing.hooks', level='WARNING'):
+            on_calculation_saved(object())  # сбой записи счётчика - без падения
+        with patch('metrics.services.record_metric', side_effect=RuntimeError('x')), \
+                self.assertLogs('pricing.hooks', level='WARNING'), self.captureOnCommitCallbacks(execute=True):
             self.assertEqual(self.calc().status_code, 201)
 
 

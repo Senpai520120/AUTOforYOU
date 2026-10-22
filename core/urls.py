@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/v1/deals/', include('deals.urls')),
     path('api/v1/site-settings/', include('site_settings.urls')),
     path('api/v1/monitoring/', include('core.monitoring_urls')),
+    path('api/v1/metrics/', include('metrics.urls')),
     path('api/v1/telegram/', include('telegram_bot.urls')),
     path('api/v1/b2b/', include((b2b_urlpatterns, 'b2b'))),
     path('api/v1/dealers/', include((dealer_urlpatterns, 'dealers'))),

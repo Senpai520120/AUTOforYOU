@@ -9,6 +9,9 @@ from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 
+from metrics.models import MetricKey
+from metrics.services import record_metric
+
 from .consents import record_consents
 from .models import ConsentDocument, ConsentMethod, CustomUser, DealerApplication, TrustedShop
 
@@ -70,6 +73,7 @@ class RegisterSerializer(serializers.ModelSerializer):
                 user, [ConsentDocument.TERMS, ConsentDocument.PRIVACY, ConsentDocument.AGE_18],
                 ConsentMethod.REGISTER,
             )
+            record_metric(MetricKey.REGISTRATION)  # on_commit внутри: откат регистрации не считается
         return user
 
 

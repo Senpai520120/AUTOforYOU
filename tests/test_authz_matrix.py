@@ -93,6 +93,7 @@ PUBLIC = {
     'site-settings': 'публичные настройки сайта',
     'lead-create': 'заявка от гостя: капча, honeypot, лимит (2.1a)',
     'monitoring-client-errors': 'отчёт об ошибке фронтенда: без сессии, только запись в мониторинг, лимит на IP (7.6)',
+    'metrics-event': 'дневной счётчик без ПДн: whitelist двух ключей, без сессии, лимит (8.7)',
     # не session/JWT, а подпись/секрет
     'liqpay-callback': 'подпись LiqPay (SHA1), csrf_exempt',
     'telegram-webhook': 'секрет X-Telegram-Bot-Api-Secret-Token (plain View)',

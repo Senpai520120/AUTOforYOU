@@ -1787,6 +1787,35 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/metrics/event/:
+    post:
+      operationId: v1_metrics_event_create
+      description: Лише calculator_visit і mobile_bar_click. Без ПДн, IP і user-agent
+        не зберігаються. 204 без тіла.
+      summary: Клієнтська подія-лічильник
+      tags:
+      - metrics
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricEventRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MetricEventRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MetricEventRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '204':
+          description: No response body
+        '400':
+          description: No response body
+        '429':
+          description: No response body
   /api/v1/monitoring/client-errors/:
     post:
       operationId: v1_monitoring_client_errors_create
@@ -3210,6 +3239,11 @@ components:
       - hybrid
       - gas
       type: string
+    KeyEnum:
+      enum:
+      - calculator_visit
+      - mobile_bar_click
+      type: string
     LeadCreateRequest:
       type: object
       properties:
@@ -4390,6 +4424,14 @@ components:
       - sender
       - sender_name
       - text
+    MetricEventRequest:
+      type: object
+      description: 'Whitelist: только два клиентских ключа, лишние поля отклоняются.'
+      properties:
+        key:
+          $ref: '#/components/schemas/KeyEnum'
+      required:
+      - key
     NeededWhenEnum:
       enum:
       - asap

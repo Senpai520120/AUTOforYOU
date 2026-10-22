@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { pricingApi, CalcInputs } from '@/api/pricing';
 import { CalcOption, CalcRatesResponse, CalcResult } from '@/lib/types';
 import { CalcErrorView, describeCalcError } from '@/lib/calc-errors';
+import { trackCalculatorVisitOnce } from '@/lib/metrics';
 import CalcBreakdown from '@/components/calculator/CalcBreakdown';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
@@ -243,6 +244,7 @@ function CalculatorLoader() {
 }
 
 export default function CalculatorPage() {
+  useEffect(() => { trackCalculatorVisitOnce(); }, []);
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-slate-900 mb-2">Калькулятор вартості «під ключ»</h1>
