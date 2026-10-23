@@ -8,9 +8,25 @@ NHTSAVinDecodeProvider — реальный бесплатный декодер 
 AuctionHistoryProvider — заглушка BidFax/Carfax (платный, ключ не подключён).
 AuctionLotProvider — импорт лотов: ManualLotProvider (всегда), ApifyLotProvider (с токеном).
 """
+import logging
+import re
 from abc import ABC, abstractmethod
 from datetime import date
 from decimal import Decimal, InvalidOperation
+
+logger = logging.getLogger(__name__)
+
+# Общий текст ошибки для пользователя: ни ключей, ни URL, ни текста исключения.
+PROVIDER_ERROR_CODE = 'service_unavailable'
+PROVIDER_ERROR_MESSAGE = 'Сервіс тимчасово недоступний. Спробуйте пізніше.'
+REGISTRY_ERROR_MESSAGE = 'Сервіс реєстрів тимчасово недоступний. Спробуйте пізніше.'
+
+_SECRET_QS_RE = re.compile(r"(?i)(api[_-]?key|access_token|token|key)=[^&\s'\"]+")
+
+
+def _mask(text: str) -> str:
+    """Маскирует значения apikey=/token= в тексте (для логов)."""
+    return _SECRET_QS_RE.sub(lambda m: f'{m.group(1)}=***', text)
 
 # ─── VIN-провайдер ───────────────────────────────────────────────────────────
 
@@ -83,7 +99,13 @@ class NHTSAVinDecodeProvider:
             resp.raise_for_status()
             results = resp.json().get('Results', [{}])
         except Exception as exc:
-            return {'error': str(exc), 'demo': False, 'provider': 'nhtsa_vpic'}
+            logger.warning('NHTSA request failed: %s', _mask(str(exc)))
+            return {
+                'error': PROVIDER_ERROR_CODE,
+                'message': PROVIDER_ERROR_MESSAGE,
+                'demo': False,
+                'provider': 'nhtsa_vpic',
+            }
 
         r = results[0] if results else {}
 
@@ -206,14 +228,18 @@ class RealOpendatabotProvider(OpendatabotProvider):
             else:
                 return {'demo': True, 'provider': 'opendatabot', 'error': 'Ни VIN, ни номер не переданы.'}
 
+            # Ключ в query: передача заголовком в документации
+            # https://opendatabot.ua/doc не подтверждена. URL с ключом наружу не отдаём (см. _mask).
             resp = httpx.get(url, params={'apikey': self._api_key}, timeout=10.0)
             resp.raise_for_status()
             body = resp.json()
         except Exception as exc:
+            logger.warning('Opendatabot request failed: %s', _mask(str(exc)))
             return {
                 'demo': False,
                 'provider': 'opendatabot',
-                'error': str(exc),
+                'error': PROVIDER_ERROR_CODE,
+                'message': REGISTRY_ERROR_MESSAGE,
                 'vin': vin,
                 'plate': plate,
             }
@@ -363,7 +389,13 @@ class ApifyLotProvider(AuctionLotProvider):
                 return {'error': 'Apify актор вернул пустой результат', 'demo': False}
             return _normalize_lot({**items[0], 'provider': 'apify'})
         except Exception as exc:
-            return {'error': str(exc), 'demo': False, 'provider': 'apify'}
+            logger.warning('Apify request failed: %s', _mask(str(exc)))
+            return {
+                'error': PROVIDER_ERROR_CODE,
+                'message': PROVIDER_ERROR_MESSAGE,
+                'demo': False,
+                'provider': 'apify',
+            }
 
 
 def get_lot_provider() -> AuctionLotProvider:

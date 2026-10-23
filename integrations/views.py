@@ -1,3 +1,5 @@
+import logging
+
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import permissions, status
@@ -5,9 +7,12 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from users.permissions import IsAdminRole
+
 from .importer import import_lot
 from .models import RegistryReport, VinReport
 from .providers import (
+    REGISTRY_ERROR_MESSAGE,
     ManualLotProvider,
     NHTSAVinDecodeProvider,
     get_auction_history_provider,
@@ -16,6 +21,8 @@ from .providers import (
     get_vin_provider,
 )
 from .serializers import LotImportRequestSerializer
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema(
@@ -89,6 +96,7 @@ class VinReportView(APIView):
     },
 )
 class VinDecodeView(APIView):
+    permission_classes = [permissions.AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'expensive'
 
@@ -162,15 +170,22 @@ class RegistryReportView(APIView):
         # Cache lookup
         cached = None
         if vin_clean:
-            cached = RegistryReport.objects.filter(vin=vin_clean, provider=provider_name).first()
+            cached = RegistryReport.objects.filter(vin=vin_clean, provider=provider_name).exclude(payload__has_key='error').first()
         elif plate:
-            cached = RegistryReport.objects.filter(plate=plate, provider=provider_name).first()
+            cached = RegistryReport.objects.filter(plate=plate, provider=provider_name).exclude(payload__has_key='error').first()
 
         if cached:
             return Response({**cached.payload, 'cached': True, 'cache_id': cached.pk})
 
         # Fetch from provider
         data = get_opendatabot_provider().get_vehicle_info(vin=vin_clean, plate=plate)
+
+        if data.get('error'):
+            # Ошибку не кэшируем и не раздаём из кэша.
+            return Response(
+                {'error': data['error'], 'message': data.get('message', REGISTRY_ERROR_MESSAGE)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         RegistryReport.objects.create(
             vin=vin_clean,
@@ -204,7 +219,7 @@ class RegistryReportView(APIView):
     },
 )
 class LotImportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminRole]
 
     def post(self, request):
         ser = LotImportRequestSerializer(data=request.data)
@@ -226,7 +241,8 @@ class LotImportView(APIView):
         try:
             vehicle, listing, created = import_lot(lot_data, seller=request.user)
         except ValueError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning('Імпорт лоту відхилено: %s', type(exc).__name__)
+            return Response({'error': 'Не вдалося імпортувати лот. Перевірте дані.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
             {

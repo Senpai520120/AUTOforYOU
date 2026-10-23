@@ -11,7 +11,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Серверний рендер каталогів', () => {
+test.describe('Серверний рендер каталогів @smoke', () => {
   test.use({ javaScriptEnabled: false });
 
   test('каталог України віддає вміст без JavaScript', async ({ page }) => {
@@ -24,7 +24,7 @@ test.describe('Серверний рендер каталогів', () => {
     await expect(page.locator('.animate-pulse')).toHaveCount(0);
   });
 
-  test('каталог імпорту віддає вміст без JavaScript', async ({ page }) => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: каталог імпорту віддає вміст без JavaScript', async ({ page }) => {
     const resp = await page.goto('/listings');
     expect(resp?.status()).toBe(200);
 
@@ -49,7 +49,8 @@ test.describe('Серверний рендер каталогів', () => {
     // /ua раніше в sitemap не потрапляв, хоча це єдиний розділ з реальними
     // оголошеннями.
     expect(xml).toContain('/ua');
-    expect(xml).toContain('/listings');
+    // /listings заморожен флагом (2.8): в sitemap его нет.
+    expect(xml).not.toContain('/listings');
     expect(xml).toContain('/refund');
   });
 });

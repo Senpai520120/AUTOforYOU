@@ -1,18 +1,17 @@
 import type { Metadata } from 'next';
+import LegalPage, { EmailOrMissing } from '@/components/legal/LegalPage';
+import { getSiteSettings, supportContact } from '@/lib/site-settings';
 
 export const metadata: Metadata = {
   title: 'Умови використання | AUTOforYOU',
 };
 
-export default function TermsPage() {
-  return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <p className="text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-4 py-2 mb-8">
-        Шаблон — потребує перевірки юристом перед публікацією
-      </p>
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">Умови використання</h1>
+export const dynamic = 'force-dynamic';
 
-      <div className="prose prose-slate max-w-none space-y-6 text-slate-700">
+export default async function TermsPage() {
+  const s = await getSiteSettings(0);
+  return (
+    <LegalPage title="Умови використання" settings={s}>
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-2">1. Загальні положення</h2>
           <p>
@@ -29,6 +28,9 @@ export default function TermsPage() {
             AUTOforYOU — маркетплейс транспортних засобів з аукціонів США (Copart, IAAI) з доставкою
             в Україну. Ми надаємо інформацію про автомобілі, розраховуємо орієнтовну вартість
             розмитнення та допомагаємо з пошуком транспортних засобів.
+          </p>
+          <p>
+            Послугу пригону автомобіля надає партнер, а не AUTOforYOU.
           </p>
           <p className="text-sm text-slate-500">
             Усі розрахунки є орієнтовними (is_estimate: true) та не є офіційною консультацією.
@@ -77,14 +79,10 @@ export default function TermsPage() {
           <h2 className="text-xl font-semibold text-slate-800 mb-2">7. Контакти</h2>
           <p>
             З питань щодо цих Умов звертайтеся за адресою:{' '}
-            <span className="font-mono text-slate-600">[email@autoforyou.ua — заповнити]</span>
+            <EmailOrMissing email={supportContact(s)} />
           </p>
         </section>
 
-        <p className="text-xs text-slate-400 mt-10 border-t pt-4">
-          Останнє оновлення: [дата — заповнити]
-        </p>
-      </div>
-    </div>
+    </LegalPage>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
+import { safeNext } from '@/lib/safe-next';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getNotifications, markRead, markAllRead } from '@/api/notifications';
@@ -24,14 +25,10 @@ function timeAgo(iso: string) {
 }
 
 export default function NotificationsPage() {
-  const { user, loading } = useAuth();
+  const { user, loading } = useRequireAuth();
   const router = useRouter();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [busy, setBusy] = useState(true);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (!user) return;
@@ -43,7 +40,8 @@ export default function NotificationsPage() {
       await markRead(item.id).catch(() => {});
       setItems(prev => prev.map(n => n.id === item.id ? { ...n, is_read: true } : n));
     }
-    if (item.link) router.push(item.link);
+    // link приходить з даних; тільки шлях сайту, без open-redirect (10-S7, 08-S12).
+    if (item.link) router.push(safeNext(item.link, '/me/notifications'));
   };
 
   const handleMarkAll = async () => {

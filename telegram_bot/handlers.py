@@ -53,8 +53,12 @@ async def cmd_latest(message: Message) -> None:
     from asgiref.sync import sync_to_async
     from django.conf import settings
 
+    from core.modules import module_enabled
+
     @sync_to_async
     def _fetch():
+        if not module_enabled('lots'):
+            return []
         from listings.models import Listing
         qs = (
             Listing.objects

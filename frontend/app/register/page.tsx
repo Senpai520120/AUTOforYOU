@@ -1,12 +1,18 @@
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/api/client';
+import Captcha from '@/components/ui/Captcha';
+import { AGE_18_LABEL, AGE_18_REQUIRED } from '@/lib/labels';
+import { apiErrorText, useAuthConfig, useCaptchaState } from '@/lib/captcha';
+import { getAttribution } from '@/lib/attribution';
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const [form, setForm] = useState({ email: '', password: '', password2: '', role: 'buyer', first_name: '', phone: '' });
+  const { config } = useAuthConfig();
+  const captcha = useCaptchaState();
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  const [isAdult, setIsAdult] = useState(false);
+  const [form, setForm] = useState({ email: '', password: '', password2: '', first_name: '', phone: '' });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,21 +25,46 @@ export default function RegisterPage() {
       setError('Необхідно погодитися з Умовами та Політикою конфіденційності');
       return;
     }
+    if (!isAdult) {
+      setError(AGE_18_REQUIRED);
+      return;
+    }
     setLoading(true); setError('');
     try {
+      // Джерело візиту (2.14) — лише з sessionStorage; порожнє не надсилається.
+      const attribution = getAttribution();
       await apiFetch('/api/v1/auth/register/', {
         method: 'POST',
-        body: JSON.stringify({ ...form, agreed_to_terms: true }),
+        body: JSON.stringify({
+          ...form, agreed_to_terms: true, confirmed_age_18: true, ...captcha.payload(),
+          ...(Object.keys(attribution).length ? { attribution } : {}),
+        }),
       });
-      router.push('/login?registered=1');
+      setRegisteredEmail(form.email);
     } catch (err: unknown) {
-      const e2 = err as { data?: Record<string, string[]> };
-      const msgs = e2?.data ? Object.values(e2.data).flat().join('. ') : 'Помилка реєстрації';
-      setError(msgs);
+      setError(apiErrorText(err, 'Помилка реєстрації'));
     } finally {
       setLoading(false);
+      captcha.bump(); // токен одноразовий: новий після кожної відповіді сервера
     }
   };
+
+  if (registeredEmail) {
+    return (
+      <div className="max-w-md mx-auto mt-10">
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
+          <h1 className="text-2xl font-bold text-slate-900 mb-3">Перевірте пошту</h1>
+          <p className="text-slate-600 text-sm">
+            Якщо адреса <strong>{registeredEmail}</strong> доступна, ми надіслали на неї лист із
+            посиланням для підтвердження. Перейдіть за посиланням, щоб активувати всі функції.
+          </p>
+          <p className="mt-4 text-sm text-slate-500">
+            <Link href="/login" className="text-blue-600 hover:underline">Перейти до входу</Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto mt-10">
@@ -54,15 +85,6 @@ export default function RegisterPage() {
                 required={f.key !== 'first_name' && f.key !== 'phone'} />
             </div>
           ))}
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Роль</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
-              value={form.role} onChange={e => set('role', e.target.value)}>
-              <option value="buyer">Покупець</option>
-              <option value="dealer">Перекупник</option>
-            </select>
-          </div>
-
           <div className="flex items-start gap-3 pt-1">
             <input
               id="agreed_to_terms"
@@ -84,8 +106,25 @@ export default function RegisterPage() {
             </label>
           </div>
 
+          <div className="flex items-start gap-3">
+            <input
+              id="confirmed_age_18"
+              type="checkbox"
+              checked={isAdult}
+              onChange={e => setIsAdult(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-500 focus:ring-2 focus:ring-amber-400 cursor-pointer"
+              required
+            />
+            <label htmlFor="confirmed_age_18" className="text-sm text-slate-600 cursor-pointer leading-snug">
+              {AGE_18_LABEL}
+            </label>
+          </div>
+
+          <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
+            resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
+
           {error && <p className="text-red-600 text-sm">{error}</p>}
-          <button type="submit" disabled={loading}
+          <button type="submit" disabled={loading || !captcha.ready}
             className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400">
             {loading ? 'Реєстрація...' : 'Зареєструватися'}
           </button>

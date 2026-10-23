@@ -66,7 +66,8 @@ DATABASE_URL="" REDIS_URL="" TELEGRAM_BOT_TOKEN="" python manage.py test
 
 ### Маршрутизація nginx
 - `/static/` → Docker volume `static` (collectstatic output)
-- `/media/` → Docker volume `media` (user uploads)
+- `/media/` → Docker volume `media` (user uploads), `X-Content-Type-Options: nosniff`, не-картинки — `Content-Disposition: attachment`; `/media/tracking_photos/` — 404
+- `/protected-media/` → `internal`, Docker volume `private_media`; только через `X-Accel-Redirect` из Django после проверки прав (задача 1.10)
 - `/api/*`, `/admin/*` → `backend:8000` (Gunicorn)
 - `/` → `frontend:3000` (Next.js)
 
@@ -373,7 +374,7 @@ region, city, mileage_max, search (make/model/description), ordering (-created_a
 - **Robots**: Allow публичные страницы; Disallow кабинет/B2B/API/admin.
 - **404/Error**: кастомные `not-found.tsx`, `error.tsx`, `global-error.tsx` с кнопкой «Повторити».
 - **Скелетоны**: `Skeleton.tsx`, `loading.tsx` для каталога/карточки/кабинета — нет «мигания» при загрузке.
-- **DemoBanner**: `NEXT_PUBLIC_DEMO_MODE=false` выключает баннер когда тарифы реальные; флаг в `.env`.
+- **DemoBanner**: показывается по `is_demo` из API (2.6): пока среди тарифов есть непроверенные (`is_verified=False`) или курс `demo`. Флага сборки больше нет.
 - **Изображения**: `source_url` (лот-импорт) как fallback к `image`. SVG-плейсхолдер. `sizes`, `priority`.
 - **a11y**: `focus:ring`, `aria-*`, `role=alert`, семантические теги.
 
@@ -426,6 +427,7 @@ region, city, mileage_max, search (make/model/description), ordering (-created_a
 ## Инфраструктура (промт 7)
 - **БД**: `DATABASE_URL` не задан → SQLite (dev, без настройки). Задан → PostgreSQL (prod).
 - **Медиа/S3**: S3-переменные не заданы → `media/` локально (dev). Заданы → AWS S3 / Cloudflare R2.
+- **Загрузка изображений (задача 1.10)**: `core/uploads.py` — обычный модуль (`core` не в `INSTALLED_APPS`, в приложение не превращаем): `sanitize_image` (тип по содержимому, лимиты байт/пикселей, `exif_transpose`, пересохранение без EXIF/XMP/ICC, uuid-имя), поле `SanitizedImageField` (`LocalListingImage.image`, `VehicleImage.image`, `TrackingEvent.photo`; очистка в `FieldFile.save`, поэтому покрыты и `pre_save`, и прямой `instance.image.save()`), валидатор поля для админки, приватное хранилище `private_media_storage` (`PRIVATE_MEDIA_ROOT`, при S3 — префикс `private/` с подписанными URL). Management-команда `sanitize_existing_images` — в `vehicles/management/commands/`. Фото трекинга отдаёт только `GET /api/v1/shipments/<pk>/events/<event_id>/photo/` (watcher, admin-роль или право `shipments.view_trackingevent`).
 - **Пакеты**: `dj-database-url`, `django-storages[s3]`, `boto3` добавлены в requirements.txt.
 - **Документация**: `DEPLOY_NOTES.md` — пошаговая инструкция для продакшен-деплоя.
 

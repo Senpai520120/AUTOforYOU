@@ -10,7 +10,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase
+
+from tests.base import CleanCacheTestCase
 
 from .calculator import (
     AuctionFeeBreakdown,
@@ -520,27 +522,68 @@ class TestIAAIPercentTier(SimpleTestCase):
         self.assertEqual(result.total, D('1200.00') + D('95.00') + D('15.00') + D('75.00'))
 
 
-class TestAuctionFeeBoundary(SimpleTestCase):
-    """Проверка выбора тиера на границах диапазона."""
+class TestAuctionFeeBoundary(CleanCacheTestCase):
+    """
+    Выбор тира на границах диапазона через pricing.calculator.lookup_tier.
+    Тиры создаются в setUpTestData (не seed). Если lookup_tier сравнивает
+    границу неверно (>= вместо >), соответствующий тест краснеет.
+    """
 
-    def test_flat_fee_exact_bid_min(self):
-        """bid == bid_min → должен попасть в тиер."""
-        tier = _tier(fee_flat='335.00')
-        result = calc_auction_fees(D('2500'), tier, [])
-        self.assertEqual(result.buyer_fee, D('335.00'))
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import date
 
-    def test_flat_fee_exact_bid_max(self):
-        """bid == bid_max → должен попасть в тиер."""
-        tier = _tier(fee_flat='335.00')
-        result = calc_auction_fees(D('2999'), tier, [])
-        self.assertEqual(result.buyer_fee, D('335.00'))
+        from pricing.models import AuctionFeeTier
+        AuctionFeeTier.objects.all().delete()  # изоляция от возможных seed-строк
+        common = dict(
+            auction='copart', member_type='broker', payment_type='secured',
+            title_type='any', valid_from=date(2000, 1, 1),
+        )
+        cls.tier_low = AuctionFeeTier.objects.create(
+            bid_min=D('1000.00'), bid_max=D('1999.99'), fee_flat=D('100.00'), **common)
+        cls.tier_high = AuctionFeeTier.objects.create(
+            bid_min=D('2000.00'), bid_max=D('2999.99'), fee_flat=D('200.00'), **common)
 
-    def test_percent_fee_rounding(self):
-        """Проверяем округление ROUND_HALF_UP при %."""
-        tier = _tier(fee_percent='0.0600')
-        # 8333 * 0.06 = 499.98 → 499.98 (нет округления)
-        result = calc_auction_fees(D('8333'), tier, [])
-        self.assertEqual(result.buyer_fee, D('499.98'))
+    def _lookup(self, bid):
+        from datetime import date
+
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        return lookup_tier(pricing_cache.get_auction_fee_tiers(), 'copart', D(str(bid)), 'broker', 'secured', 'any',
+                           date.today())
+
+    def test_bid_equal_min_selects_tier(self):
+        """bid == bid_min -> попадает в этот тир (bid_min включительно)."""
+        self.assertEqual(self._lookup('2000.00'), self.tier_high)
+        self.assertEqual(self._lookup('1000.00'), self.tier_low)
+
+    def test_bid_equal_max_selects_tier(self):
+        """bid == bid_max -> всё ещё этот тир (bid_max включительно)."""
+        self.assertEqual(self._lookup('1999.99'), self.tier_low)
+        self.assertEqual(self._lookup('2999.99'), self.tier_high)
+
+    def test_bid_above_max_selects_next_tier(self):
+        """bid_max + 0.01 -> следующий тир; выше последнего тира тира нет."""
+        self.assertEqual(self._lookup('2000.00'), self.tier_high)
+        self.assertIsNone(self._lookup('3000.00'))
+
+    def test_bid_below_min_selects_previous_tier(self):
+        """bid_min - 0.01 -> предыдущий тир; ниже первого тира тира нет."""
+        self.assertEqual(self._lookup('1999.99'), self.tier_low)
+        self.assertIsNone(self._lookup('999.99'))
+
+    def test_selected_tier_fee_applied(self):
+        """Выбранный на границе тир реально определяет сбор."""
+        tier = self._lookup('1999.99')
+        self.assertEqual(calc_auction_fees(D('1999.99'), tier, []).buyer_fee, D('100.00'))
+        tier = self._lookup('2000.00')
+        self.assertEqual(calc_auction_fees(D('2000.00'), tier, []).buyer_fee, D('200.00'))
+
+    def test_percent_fee_round_half_up(self):
+        """1000.50 * 0.0100 = 10.005 -> 10.01 (HALF_EVEN дал бы 10.00)."""
+        tier = _tier(fee_percent='0.0100')
+        result = calc_auction_fees(D('1000.50'), tier, [])
+        self.assertEqual(result.buyer_fee, D('10.01'))
 
 
 class TestAuctionFeeBreakdownAllDecimal(SimpleTestCase):
@@ -567,22 +610,23 @@ class TestAuctionFeeNoFixedFees(SimpleTestCase):
         self.assertEqual(result.total, D('235.00'))
 
 
-class TestIAAITierBoundaryDB(TestCase):
+class TestIAAITierBoundaryDB(CleanCacheTestCase):
     """
     Границы IAAI-тиров из реальных seed-данных.
     $5000-$7499 → 8%;  $7500+ → 10%.
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpTestData(cls):
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
     def _tier(self, bid):
         from datetime import date
 
-        from pricing.views import _lookup_tier
-        return _lookup_tier('iaai', D(str(bid)), 'broker', 'secured', 'any', date.today())
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        return lookup_tier(pricing_cache.get_auction_fee_tiers(), 'iaai', D(str(bid)), 'broker', 'secured', 'any',
+                           date.today())
 
     def test_bid_7499_is_8pct(self):
         tier = self._tier(7499)
@@ -599,10 +643,11 @@ class TestIAAITierBoundaryDB(TestCase):
     def test_bid_12000_calc_buyer_fee(self):
         from datetime import date
 
-        from pricing.views import _lookup_fixed_fees
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_fixed_fees
         today = date.today()
         tier = self._tier(12000)
-        fixed = _lookup_fixed_fees('iaai', 'any', today)
+        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'iaai', 'any', today)
         result = calc_auction_fees(D('12000'), tier, fixed)
         self.assertEqual(result.buyer_fee, D('1200.00'))
 
@@ -626,16 +671,20 @@ class TestCalculateInputSerializerDefaults(SimpleTestCase):
         from pricing.serializers import CalculateInputSerializer
         s = CalculateInputSerializer(data=self._valid_data())
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data['member_type'], 'broker')
+        self.assertNotIn('member_type', s.validated_data)  # 02-C11: дефолт - FORM_DEFAULTS во view
+        from pricing.views import FORM_DEFAULTS
+        self.assertEqual(FORM_DEFAULTS['member_type'], 'broker')
 
     def test_default_payment_type_is_secured(self):
         from pricing.serializers import CalculateInputSerializer
         s = CalculateInputSerializer(data=self._valid_data())
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data['payment_type'], 'secured')
+        self.assertNotIn('payment_type', s.validated_data)
+        from pricing.views import FORM_DEFAULTS
+        self.assertEqual(FORM_DEFAULTS['payment_type'], 'secured')
 
 
-class TestLandedCostE2ECopartBroker(TestCase):
+class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
     """
     Интеграционный тест полной формулы «под ключ».
     Сценарий: Copart broker salvage secured $5000 petrol 2.0L 2018.
@@ -643,8 +692,7 @@ class TestLandedCostE2ECopartBroker(TestCase):
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpTestData(cls):
         call_command('seed_rates', verbosity=0)
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
@@ -653,10 +701,13 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
         from django.db.models import Q
 
+        from pricing import cache as pricing_cache
         from pricing.calculator import (
             LandedCostInputs,
             build_rate_snapshot_from_db,
             calculate_landed_cost,
+            lookup_fixed_fees,
+            lookup_tier,
         )
         from pricing.models import (
             CustomsExciseRate,
@@ -666,13 +717,13 @@ class TestLandedCostE2ECopartBroker(TestCase):
             PensionFundBracket,
             UsLandRoute,
         )
-        from pricing.views import _active_on, _lookup_fixed_fees, _lookup_tier
+        from pricing.views import _active_on
 
         today = date.today()
         bid = D('5000')
 
-        tier = _lookup_tier('copart', bid, 'broker', 'secured', 'salvage', today)
-        fixed = _lookup_fixed_fees('copart', 'salvage', today)
+        tier = lookup_tier(pricing_cache.get_auction_fee_tiers(), 'copart', bid, 'broker', 'secured', 'salvage', today)
+        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'copart', 'salvage', today)
         auction_fee = calc_auction_fees(bid, tier, fixed)
 
         us_land = _active_on(UsLandRoute.objects.filter(auction_location='general', us_port='houston'), today).first()
@@ -760,12 +811,8 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
 # ── Кэш справочников + инвалидация ───────────────────────────────────────────
 
-class TestPricingCacheInvalidation(TestCase):
+class TestPricingCacheInvalidation(CleanCacheTestCase):
     """Изменение ставки в БД → кэш сброшен → следующий запрос берёт новое значение."""
-
-    def setUp(self):
-        from django.core.cache import cache
-        cache.clear()
 
     def test_save_exchange_rate_invalidates_cache(self):
         from django.core.cache import cache
@@ -844,16 +891,12 @@ class TestPricingCacheInvalidation(TestCase):
 
 # ── Celery-задача: fetch_nbu_rates_task ───────────────────────────────────────
 
-class TestFetchNbuRatesTask(TestCase):
+class TestFetchNbuRatesTask(CleanCacheTestCase):
     """
     fetch_nbu_rates_task должна:
     1) Сохранить курсы в ExchangeRate (USD/UAH, EUR/UAH, USD/EUR).
     2) Сбросить кэш pricing:exchange_rates после записи.
     """
-
-    def setUp(self):
-        from django.core.cache import cache
-        cache.clear()
 
     def _nbu_side_effect(self, url, *args, **kwargs):
         """Возвращает фиктивный ответ НБУ в зависимости от valcode в URL."""
@@ -915,3 +958,56 @@ class TestFetchNbuRatesTask(TestCase):
         with patch('pricing.nbu.urlopen', side_effect=URLError('timeout')):
             with self.assertRaises((URLError, Retry)):
                 fetch_nbu_rates_task()
+
+
+# ── 23-D3: кэш тарифов не переживает класс с seed ────────────────────────────
+
+class TestNoStaleTiersAfterSeededClass(CleanCacheTestCase):
+    """
+    Тарифов в БД нет → lookup_tier возвращает None, а API расчёта отвечает
+    «нет тарифов» (422), даже если кэш был «отравлен» объектами удалённых
+    seed-строк (так выглядит состояние после класса с seed в setUpClass).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from datetime import date
+
+        from django.core.cache import cache
+
+        from pricing.cache import KEYS
+        # Имитируем хвост предыдущего класса: в кэше лежит живой на вид тир.
+        cache.set(KEYS['tiers'], [SimpleNamespace(
+            auction='iaai', member_type='broker', payment_type='secured',
+            title_type='any', bid_min=D('0'), bid_max=None,
+            valid_from=date(2000, 1, 1), valid_to=None,
+        )])
+        super().setUpClass()  # базовый класс обязан сбросить кэш
+
+    def test_no_stale_tiers_after_seeded_class(self):
+        from datetime import date
+
+        from rest_framework.test import APIClient
+
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        from pricing.models import AuctionFeeTier
+
+        self.assertFalse(AuctionFeeTier.objects.exists())
+        self.assertIsNone(
+            lookup_tier(pricing_cache.get_auction_fee_tiers(), 'iaai', D('7500'), 'broker', 'secured', 'any',
+                        date.today())
+        )
+        resp = APIClient().post('/api/v1/pricing/calculate/', {
+            'auction': 'iaai',
+            'auction_price_usd': '7500',
+            'engine_cc': 2000,
+            'fuel_type': 'petrol',
+            'vehicle_year': 2018,
+            'member_type': 'broker',
+            'payment_type': 'secured',
+            'title_type': 'salvage',
+            'us_port': 'houston',
+            'eu_port': 'klaipeda',
+        }, format='json')
+        self.assertEqual(resp.status_code, 422, getattr(resp, 'data', None))

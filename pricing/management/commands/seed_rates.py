@@ -14,6 +14,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 
 from pricing.models import (
+    CustomsCalcRule,
     CustomsExciseRate,
     EuToUaDeliveryRate,
     ExchangeRate,
@@ -76,11 +77,11 @@ class Command(BaseCommand):
         # --- Курсы валют ---
         ExchangeRate.objects.get_or_create(
             from_currency='USD', to_currency='UAH', date=today,
-            defaults=dict(rate=Decimal('41.50'))
+            defaults=dict(rate=Decimal('41.50'), source='demo')
         )
         ExchangeRate.objects.get_or_create(
             from_currency='USD', to_currency='EUR', date=today,
-            defaults=dict(rate=Decimal('0.92'))
+            defaults=dict(rate=Decimal('0.92'), source='demo')
         )
 
         # --- Ставки акциза ---
@@ -137,6 +138,10 @@ class Command(BaseCommand):
                 min_value_uah=min_v,
                 defaults=dict(max_value_uah=max_v, rate=rate, valid_from=today)
             )
+
+        # --- Правило растаможки (2.5, Q5): значения по умолчанию = прежние формулы, их подтверждает брокер ---
+        if not CustomsCalcRule.objects.exists():
+            CustomsCalcRule.objects.create(valid_from=date(2000, 1, 1))
 
         self.stdout.write(self.style.SUCCESS(
             'Тарифы созданы. Ставки акциза/пошлины/НДС — актуальны на янв–июнь 2026. '

@@ -28,6 +28,8 @@ COPY . .
 RUN mkdir -p /app/staticfiles /app/media
 
 # Make startup scripts executable
-RUN chmod +x /app/docker/entrypoint.sh /app/docker/bot_entrypoint.sh
+# \r снимаем на случай старых рабочих копий с CRLF (иначе shebang `#!/bin/bash\r` не находится)
+RUN sed -i 's/\r$//' /app/docker/*.sh \
+    && chmod +x /app/docker/entrypoint.sh /app/docker/bot_entrypoint.sh
 
 EXPOSE 8000

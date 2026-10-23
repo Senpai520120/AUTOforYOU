@@ -3,7 +3,7 @@ import uuid
 from datetime import timedelta
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from aiogram import Bot, Dispatcher
 from aiogram.methods import SendMessage
@@ -65,6 +65,31 @@ class TelegramLinkApiTest(TestCase):
         self.assertTrue(TelegramLinkToken.objects.filter(user=self.user).exists())
 
 
+class TelegramUnlinkApiTest(TestCase):
+    """23-D91: DELETE telegram/link/ - только вошедший, только свою привязку."""
+    URL = '/api/v1/telegram/link/'
+
+    def test_anonymous_401(self):
+        self.assertEqual(APIClient().delete(self.URL).status_code, 401)
+
+    def test_not_linked_400(self):
+        user = User.objects.create_user(email='unlinked@test.com', password='pass')
+        client = APIClient()
+        client.force_authenticate(user)
+        self.assertEqual(client.delete(self.URL).status_code, 400)
+
+    def test_linked_200_resets_only_own_telegram_id(self):
+        user = User.objects.create_user(email='linked@test.com', password='pass', telegram_id=777001)
+        neighbour = User.objects.create_user(email='neighbour@test.com', password='pass', telegram_id=777002)
+        client = APIClient()
+        client.force_authenticate(user)
+        self.assertEqual(client.delete(self.URL).status_code, 200)
+        user.refresh_from_db()
+        neighbour.refresh_from_db()
+        self.assertIsNone(user.telegram_id)
+        self.assertEqual(neighbour.telegram_id, 777002)
+
+
 # ─── Рантайм бота: апдейт → webhook → диспетчер → хендлер ────────────────────
 #
 # Хендлеры прогоняются по настоящему пути: POST на webhook, Dispatcher aiogram,
@@ -108,6 +133,8 @@ class BotRuntimeTestCase(TestCase):
 
         # В aiogram Update.event_type — @property поверх @lru_cache: разобранные
         # Update (а с ними Message.date — datetime с tzinfo из pydantic_core)
+        # Вторая страховка: основная очистка — в core.test_runner.IsolatedDiscoverRunner
+        # (teardown_test_environment), этот cleanup защищает и при запуске без него.
         # живут в кэше класса до конца процесса. При завершении интерпретатора
         # кэш освобождается после частичной выгрузки pydantic_core, и на сборке
         # Python в GitHub Actions это segfault (exit 139) уже после 'OK'.
@@ -196,6 +223,12 @@ class BotLatestTest(BotRuntimeTestCase):
         self.send('/latest')
 
         self.assertEqual(sorted(self._listing_ids()), sorted([in_stock.pk, in_transit.pk]))
+
+    def test_latest_hides_lots_when_lots_disabled(self):
+        self._listing('1HGCM82633A000201')
+        with self.settings(LOTS_ENABLED=False):
+            self.send('/latest')
+        self.assertEqual(self.replies(), ['Наразі немає активних оголошень.'])
 
     def test_button_links_to_listing_page(self):
         listing = self._listing('1HGCM82633A000005')
@@ -364,9 +397,12 @@ class SendNotificationTaskTest(TestCase):
         self.user.telegram_id = 123456789
         self.user.save()
 
-        with self.settings(TELEGRAM_BOT_TOKEN='fake-token'):
-            with patch('asyncio.run', return_value=True):
+        with self.settings(TELEGRAM_BOT_TOKEN='123456:ABCdef'):
+            with patch.object(Bot, 'send_message', new_callable=AsyncMock) as send:
                 result = send_notification(self.user.pk, 'Hello')
+        # Корутина реально ожидается (раньше asyncio.run был замокан и давал RuntimeWarning).
+        send.assert_awaited_once()
+        self.assertEqual(send.await_args.kwargs['chat_id'], 123456789)
         self.assertTrue(result['sent'])
 
 
@@ -513,3 +549,17 @@ class TelegramTokenDisabledInTestsTest(SimpleTestCase):
             settings.TELEGRAM_BOT_TOKEN, '',
             'В тестах TELEGRAM_BOT_TOKEN должен быть пустым — см. core/settings.py',
         )
+
+
+class PostListingToChannelLotsDisabledTest(TestCase):
+    def test_queued_task_does_not_publish_when_lots_disabled(self):
+        from listings.models import Listing
+        from telegram_bot.tasks import post_listing_to_channel
+        from tests.factories import make_listing, make_user, make_vehicle
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
+            listing = make_listing(make_vehicle(), make_user())
+        with self.settings(LOTS_ENABLED=False, TELEGRAM_BOT_TOKEN='fake', TELEGRAM_CHANNEL_ID='@ch'),                 patch('aiogram.Bot.__call__') as bot_call:
+            result = post_listing_to_channel(listing.pk)
+        self.assertEqual(result, {'posted': False, 'reason': 'lots disabled'})
+        bot_call.assert_not_called()
+        self.assertTrue(Listing.objects.filter(pk=listing.pk).exists())

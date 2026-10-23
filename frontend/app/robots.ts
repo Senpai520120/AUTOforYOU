@@ -6,8 +6,11 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
-      allow: ['/', '/listings', '/listings/', '/calculator'],
+      allow: ['/', '/calculator'],
       disallow: [
+        '/listings',   // каталог лотів заморожено (задача 2.8)
+        '/b2b',        // B2B-доска заморожена
+        '/dealers',    // заявки дилерів заморожено
         '/me/',        // личный кабинет
         '/b2b/',       // B2B-доска (только дилеры)
         '/dealers/',   // заявки дилеров

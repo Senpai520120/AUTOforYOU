@@ -26,3 +26,28 @@ def fetch_nbu_rates_task(self):
     pricing_cache.invalidate('exchange')
     logger.info('NBU rates updated: %s', ', '.join(updated) if updated else 'none')
     return updated
+
+
+@shared_task(name='pricing.tasks.purge_anonymous_calculations')
+def purge_anonymous_calculations():
+    """Удаляет анонимные расчёты старше ANON_CALCULATION_TTL_DAYS (02-S2).
+
+    Не трогает расчёты пользователей и те, на которые ссылается заявка (Lead) или объявление (Listing).
+    Счётчик расчётов (pricing.hooks, 8.7) пишется при создании и от таблицы Calculation не зависит:
+    очистка его не читает и не уменьшает.
+    """
+    from datetime import timedelta
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    from pricing.models import Calculation
+
+    cutoff = timezone.now() - timedelta(days=settings.ANON_CALCULATION_TTL_DAYS)
+    deleted, _ = (
+        Calculation.objects.filter(user__isnull=True, created_at__lt=cutoff)
+        .filter(leads__isnull=True, listings__isnull=True)
+        .delete()
+    )
+    logger.info('Anonymous calculations purged: %s', deleted)
+    return deleted

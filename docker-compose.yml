@@ -1,7 +1,15 @@
+# Ограничение логов контейнеров (задача 7.2, 12-S8): размер и число файлов, по времени json-file не чистит.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${LOG_MAX_SIZE:-10m}"
+    max-file: "${LOG_MAX_FILES:-5}"
+
 services:
 
   # ─── PostgreSQL database ─────────────────────────────────────────────────────
   db:
+    logging: *default-logging
     image: postgres:18-alpine
     ports:
       # Только на localhost — внешний доступ через SSH-туннель; снаружи не видно.
@@ -24,11 +32,13 @@ services:
 
   # ─── Redis (cache + Celery broker) ───────────────────────────────────────────
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     restart: unless-stopped
 
   # ─── Django backend (Gunicorn) ────────────────────────────────────────────────
   backend:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -41,6 +51,7 @@ services:
         condition: service_started
     volumes:
       - media:/app/media
+      - private_media:/app/private_media
       - static:/app/staticfiles
     # Gunicorn starts only after migrate+collectstatic finish; nginx waits for this.
     healthcheck:
@@ -53,6 +64,7 @@ services:
 
   # ─── Next.js frontend ─────────────────────────────────────────────────────────
   frontend:
+    logging: *default-logging
     build:
       context: ./frontend
       dockerfile: ../Dockerfile.frontend
@@ -60,6 +72,7 @@ services:
         # Baked into client-side JS at build time (browser uses nginx on port 80)
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost}
+        NEXT_PUBLIC_IMAGE_HOSTS: ${NEXT_PUBLIC_IMAGE_HOSTS:-}
     environment:
       NODE_ENV: production
       # Runtime env for Next.js SSR calls — uses Docker internal network
@@ -68,6 +81,7 @@ services:
 
   # ─── Telegram bot (disabled if TELEGRAM_BOT_TOKEN is not set) ────────────────
   bot:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -83,6 +97,7 @@ services:
 
   # ─── Celery worker ────────────────────────────────────────────────────────────
   celery_worker:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -100,6 +115,7 @@ services:
 
   # ─── Celery beat (scheduler) ──────────────────────────────────────────────────
   celery_beat:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -125,6 +141,7 @@ services:
 
   # ─── Nginx reverse proxy ──────────────────────────────────────────────────────
   nginx:
+    logging: *default-logging
     image: nginx:alpine
     ports:
       - "${NGINX_PORT:-80}:80"
@@ -132,6 +149,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static:/static:ro
       - media:/media:ro
+      # Приватные файлы (internal-location /protected-media/, задача 1.10).
+      - private_media:/private_media:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -143,3 +162,4 @@ volumes:
   postgres_data:
   static:
   media:
+  private_media:

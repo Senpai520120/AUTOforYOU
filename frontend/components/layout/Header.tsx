@@ -1,14 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getUnreadCount as getMsgUnread } from '@/api/messages';
 import { getUnreadCount as getNotifUnread } from '@/api/notifications';
 
 export default function Header() {
   const { user, logout } = useAuth();
-  const router = useRouter();
   const [msgUnread, setMsgUnread] = useState(0);
   const [notifUnread, setNotifUnread] = useState(0);
 
@@ -24,37 +22,28 @@ export default function Header() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [user]);
 
-  const handleLogout = () => {
-    logout();
-    router.push('/');
-  };
+  const handleLogout = () => { void logout(); };
 
   return (
     <header className="bg-blue-900 text-white shadow-md">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight shrink-0">
           <span className="text-amber-400">AUTO</span>
           <span>forYOU</span>
-          <span className="text-xs font-normal text-blue-300 ml-1">Перекупам UA</span>
+          <span className="text-xs font-normal text-blue-300 ml-1 hidden sm:inline">Перекупам UA</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-          <Link href="/listings" className="hover:text-amber-400 transition-colors">Пригін/аукціон</Link>
           <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
           <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
-          {/* Той самий признак, що й на бекенді (IsVerifiedDealerOrAdmin).
-              Раніше тут стояло user.role === 'admin' — користувач бачив
-              посилання на B2B-дошку, а у відповідь отримував 403. */}
-          {user && (user.is_verified_dealer || user.is_staff) ? (
-            <Link href="/b2b" className="hover:text-amber-400 transition-colors">B2B</Link>
-          ) : user ? (
-            <Link href="/dealers/apply" className="text-amber-300 hover:text-amber-400 transition-colors text-xs border border-amber-400/40 px-2 py-1 rounded">
-              B2B-доступ
-            </Link>
-          ) : null}
+          {/* role приходить із сервера й клієнтом не змінюється; реальний доступ перевіряє API (403).
+              На вузьких екранах пункт «Заявки» є в /me. */}
+          {user && (user.role === 'broker' || user.is_admin_role) && (
+            <Link href="/broker/leads" className="hover:text-amber-400 transition-colors">Заявки</Link>
+          )}
         </nav>
 
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm min-w-0">
           {user ? (
             <>
               {/* Notifications bell */}
@@ -79,12 +68,12 @@ export default function Header() {
                   </span>
                 )}
               </Link>
-              <Link href="/me" className="hover:text-amber-400 transition-colors">
+              <Link href="/me" className="hover:text-amber-400 transition-colors truncate min-w-0 max-w-[8rem] sm:max-w-[16rem]">
                 {user.email.split('@')[0]}
               </Link>
               <button
                 onClick={handleLogout}
-                className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors"
+                className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors shrink-0"
               >
                 Вийти
               </button>

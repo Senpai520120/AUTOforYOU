@@ -1,0 +1,10 @@
+{% extends "admin/index.html" %}
+{% block content %}
+{% if integrations_status_link %}
+<p id="integrations-status-link">
+  <a href="{% url 'admin:integrations_status' %}">Статус інтеграцій</a>
+  {% if integrations_attention %}<strong style="color:#ba2121"> - потрібна увага: є помилка конфігурації або свіжа помилка провайдера</strong>{% endif %}
+</p>
+{% endif %}
+{{ block.super }}
+{% endblock %}

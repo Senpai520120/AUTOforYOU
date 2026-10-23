@@ -2,6 +2,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
+import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import { isEmailNotVerified } from '@/lib/email-verify';
 import { Region, City, LocalListing, LocalListingImage } from '@/lib/types';
 import PhotoUploadBlock from './PhotoUploadBlock';
 
@@ -97,6 +99,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notVerified, setNotVerified] = useState(false);
 
   // photo upload: in edit mode listingId is known upfront; in create mode we get it after creation
   const [createdListingId, setCreatedListingId] = useState<number | null>(listingId ?? null);
@@ -138,6 +141,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
     e.preventDefault();
     setSubmitting(true);
     setErrors({});
+    setNotVerified(false);
     const payload = {
       make, model, year: Number(year), mileage_km: Number(mileageKm),
       engine_cc: engineCc ? Number(engineCc) : null,
@@ -165,6 +169,10 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         return;
       }
     } catch (err: unknown) {
+      if (isEmailNotVerified(err)) {
+        setNotVerified(true);
+        return;
+      }
       const apiError = err as { data?: Record<string, string[]> };
       if (apiError?.data) {
         const mapped: Record<string, string> = {};
@@ -225,6 +233,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           {vinError && <p className={errCls}>{vinError}</p>}
         </div>
       )}
+
+      {notVerified && <EmailNotVerified />}
 
       {errors._general && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700" role="alert">

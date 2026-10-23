@@ -25,6 +25,11 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
     """
     from django.conf import settings
 
+    from core.modules import module_enabled
+    if not module_enabled('lots'):
+        # Задача могла встать в очередь до выключения модуля.
+        return {'posted': False, 'reason': 'lots disabled'}
+
     token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
     if not token:
         logger.warning('post_listing_to_channel: TELEGRAM_BOT_TOKEN не задан, пропуск')

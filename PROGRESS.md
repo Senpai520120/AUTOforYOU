@@ -1,1339 +1,495 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ФАЗА 2 ✓ | C2C 1–7 ✓ ЗАВЕРШЕНО | Docker ✓ | Безкоштовна підготовка ✓ | 404-фікс ✓ | Compose EC2-ready ✓ | Черга: деплой на EC2/AWS
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, 7.6 ✓, 8.9 ✓, 2.14 ✓, 2.5 ✓, дальше 2.6 → 2.7 → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+
+> История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
 
 ---
 
-## Etap 0: Docker Compose EC2-ready + перенос даних (2026-07-23) — ЗАВЕРШЕНО
+## ⏸ ТОЧКА ОСТАНОВКИ (2026-10-20) — откуда продолжать
 
-### Що зроблено
-- **Дамп Windows-Postgres** (PG 18.3): `backups/win_dump.sql`, 180 KB, 56 таблиць, 5190 рядків.
-  Інструмент: `docker run postgres:18-alpine pg_dump` → stdout → файл.
-- **Сервіс db** розкоментовано та перенесено на `postgres:18-alpine` (відповідає версії Windows-PG).
-  Volume: `postgres_data:/var/lib/postgresql` (PG18 вимагає монтування без `/data`).
-- **Порт БД** прибрано назовні; залишено `127.0.0.1:5433:5432` — тільки для SSH-тунелю.
-- **depends_on** повернуто у всі 4 сервіси (backend, bot, celery_worker, celery_beat):
-  `db: service_healthy` + `redis: service_started`.
-- **DATABASE_URL** переключено на `db:5432` (Docker-мережа, НЕ host.docker.internal).
-- **COMPOSE_PROJECT_NAME=autoforyou** зафіксовано в `.env` та `.env.example`.
-- **NEXT_PUBLIC_SITE_URL** додано як build-arg у `Dockerfile.frontend`.
-- **`.gitignore`** виправлено (кінець файлу був пошкоджений — UTF-16 артефакти).
-- **`.env.example`** повністю переписано під шаблон для EC2-деплою.
-
-### Дані до/після переносу
-| Таблиця            | Windows (до) | Docker (після) |
-|--------------------|:------------:|:--------------:|
-| local_listings     | 0            | 0              |
-| regions            | 25           | 25             |
-| cities             | 310          | 310            |
-| users              | 6            | 6              |
-| vehicles           | 2            | 2              |
-| calculations       | 2            | 2              |
-| payments           | 0            | 0              |
-
-### Перевірка
-- `docker compose config` — валідний, db присутній, порт БД не назовні ✅
-- `docker compose ps` — всі 8 сервісів running/healthy ✅
-- `http://localhost` → HTTP 200 ✅
-- `http://localhost/api/v1/listings/` → 4 оголошення ✅
-- `manage.py migrate` — "No migrations to apply" (схема актуальна) ✅
-- Назовні відкрито тільки порт 80 (nginx) ✅
-
-### Стан після
-Windows-Postgres залишається незачепленою. Резервна копія: `backups/win_dump.sql`.
-Проект повністю переведено на Docker-Postgres. Готово до деплою на EC2.
+- 2026-10-19/20 локальный оркестратор сделал 12 задач (2.1a … 1.11) в ветке `finish-site` (PR #38 в `main`).
+- 2026-10-20 облачная сессия: ветка `task-1.8` (PR #39 → `finish-site`), по коммиту на задачу: 1.8, 7.2, 7.6, 8.9, 2.14, 2.5. Пакет из 5 задач (7.2 → 2.5) по поручению владельца закрыт, дальше — только по новому сообщению.
+- 2026-10-20 вторая облачная сессия: ветка `task-2.6` (PR → `finish-site`), задачи 2.6 и 2.7.
+- 8.7 выполнена (приложение `metrics`, `DailyMetric`, `record_metric`, `POST /api/v1/metrics/event/`, хуки calculation/registration/lead/listing_submitted/phone_view; e2e `metrics.spec.ts` 10 passed, calculator-спеки 32 passed; полный бэкенд 1795, падает только `test_entrypoint_refuses_debug_for_gunicorn` — локально на Windows, `entrypoint.sh` не менялся; `openapi.yaml` перегенерирован против PostgreSQL e2e-стека; хук расчёта — в `pricing/hooks.py` (2.6), не во views; `phone_view` у гостей добавит 4.5). **Следующая задача по критическому пути: 2.8** → 3.1 → … (ROADMAP.md, «Порядок выполнения»). Пакет из двух задач (2.6, 2.7) закрыт, дальше — только по новому сообщению.
+- Перед продолжением: проверить CI PR #39; локальные `.env` и `.env.e2e` — задать настоящий `SECRET_KEY` (с 7.2 заглушки из шаблонов не стартуют) и переменные из `.env.e2e.example` (`THROTTLE_*`, `PRIVATE_MEDIA_USE_X_ACCEL=true`); для Playwright экспортировать `E2E_PASSWORD`.
+- Решения владельца, накопленные за прогон, — в разделах задач ниже («Для владельца») и в `docs/LAUNCH_CHECKLIST.md`.
 
 ---
 
-## Фікс 404 на сторінці оголошення (2026-07-05) — ЗАВЕРШЕНО
+## Задача 3.1: каркас адаптеров и страница статуса интеграций (2026-10-23, локальный оркестратор) — ЗАВЕРШЕНО
 
-### Причина
-Next.js SSR при серверному рендері запитує бекенд напряму по Docker-мережі (`http://backend:8000/...`).
-Django відхиляв ці запити з помилкою `DisallowedHost` (HTTP 400) — бо `backend` не був у `ALLOWED_HOSTS`.
-Браузерні запити через nginx давали 200 (nginx проставляв `Host: localhost`), тому API-тести в браузері виглядали ОК.
-Next.js SSR отримував 400, повертав `null`, викликав `notFound()` → сторінка показувала 404.
+- `integrations/base.py`: `is_placeholder`, `resolve_mode` (auto/real/demo/off), `ProviderStatus`, `BaseProvider` (`wrap_response` всегда отдаёт `configured`/`demo`, в off и real без ключа данных нет; `call` ловит только `RETRYABLE_EXCEPTIONS`, `ExternalNetworkBlocked` не глотает), `mask_secrets` (отрезает query URL, `apikey=`, значения секретных настроек), `record_success`/`record_error`, `http_timeout()`. Хелпера из 1.1 для переиспользования не было (в `providers.py` свой `_mask`, файл не тронут) - `mask_secrets` написан здесь, 3.2 переведёт `_mask` на него.
+- `integrations/registry.py`: `register_provider(...)` (дубль -> `ImproperlyConfigured`), 8 базовых ключей, статус по `settings` без сети и БД; сбой статус-функции не ломает страницу. Остальные (captcha, monitoring, storage, analytics, pixel_*) регистрируют свои задачи.
+- Модель `IntegrationHealth` (миграция 0003; причина - админу нужны время последнего успеха/ошибки, из `settings` не вычислить). В админке только чтение.
+- `/admin/integrations/status/` (право `integrations.view_integrationhealth`: staff без права - 403, обычный пользователь и аноним - 302 на вход); ссылка на главной админки с пометкой «потрібна увага» (real без ключа или ошибка за 24 ч). Подключено через обёртку `admin.site.get_urls`/`admin.site.index` в `integrations/admin.py` (`core/urls.py` не менялся).
+- System checks: `integrations.E001` (опечатка в `*_MODE`), `W001` (real без ключа), `W002` (demo при `DEBUG=False`).
+- Настройки: 8 `*_MODE`, `INTEGRATIONS_HTTP_TIMEOUT`, `CARVERTICAL_API_KEY` (в блоке `_TESTING` обнулены). `.env.example`: ключи LiqPay/Opendatabot/Apify пустые (03-C1), добавлены `*_MODE=auto`; в `.env.docker.example` добавлены `*_MODE`.
+- Тесты: 43 новых в `integrations/tests.py` (всего 157 в приложении). Мутации (шесть): плейсхолдер-regex, перехват `ExternalNetworkBlocked`, маскировка секретов, права add/страницы, условия W001/W002, правило auto - каждая роняла тест, откат выполнен.
+- Playwright `frontend/e2e/integrations-status.spec.ts`: обход (buyer -> вход в админку) активен, успех - `test.fixme`: `e2e_seed` не создаёт суперпользователя (staff@e2e.test без прав). Запуск e2e не выполнялся.
+- Ревью безопасности: критичного нет. Исправлено: `mask_secrets` теперь режет токен Telegram в пути, пароль в DSN, заголовки (`Authorization`, `X-API-Key`, `api-key=`), JSON-поля `api_key/token/secret/password`, пароли из `DATABASES`; ссылка на статус в индексе админки покрыта тестом на право; `INTEGRATIONS_HTTP_TIMEOUT` при мусоре или <=0 откатывается на 10; в статусе LiqPay/Telegram пометка «режим ще не застосовується кодом (задачі 3.2–3.4)»; плейсхолдеры `test/dummy/placeholder/none/null/todo` (префикс `sandbox_` не трогали). Не сделано: перевод `providers._mask` на `mask_secrets` - в 3.2.
+- Не сделано (по границам задачи): перевод провайдеров на адаптеры - 3.2–3.4; `openapi.yaml` не меняется (API не затронут).
+- Проверки (оркестратор, после правок ревью): бэкенд SQLite 1935 (падает только `test_entrypoint_refuses_debug_for_gunicorn`, Windows); e2e полный набор на чистом стеке 301: 278 passed, 23 skipped, 8 упавших из-за 429 зелёные после FLUSHALL и повтора; миграция 0003 и `check` на PostgreSQL e2e-стека OK.
 
-### Фікс
-- `.env`: `ALLOWED_HOSTS=localhost,127.0.0.1,backend` (додано `backend`)
-- `.env.docker.example`: те саме (щоб при наступному деплої не повторилось)
-- `docker compose up -d --no-deps backend` — перезапущено контейнер з новим env (дані НЕ зачеплені)
+### Для владельца
+- Успешный e2e админа стоит под `fixme`, пока в `e2e_seed` нет суперпользователя.
+- Нужно решение: в `e2e_seed` добавить суперпользователя `admin@e2e.test` (файл вне раздела «Файлы» 3.1), после чего снять `fixme`.
+- Прод: `*_MODE` оставить `auto`; после запуска открыть админку -> «Статус інтеграцій» и выполнить `manage.py check` (без `integrations.W00*`). Подробности - `docs/LAUNCH_CHECKLIST.md` п. 2.5.
 
-### Перевірка після фіксу
-- `fetch('http://backend:8000/api/v1/local/listings/1/')` з frontend-контейнера → **HTTP 200** ✅
-- Оголошення id=1 (active, make=weqw, city=Лубни) відкривається ✅
-- Всі 7 сервісів Docker-стеку running/healthy ✅
+## Задача 2.8: заморозка модулей и закрытие создания (2026-10-23, локальный оркестратор) — ЗАВЕРШЕНО
 
-### Стан бази даних
-- LocalListing: 1 (active) — дані власника збережені, нічого не видалялось
-- Регіони: 25, Міст: 96 (до дозасіву seed_regions з новим переліком ~310 міст)
-- Наступний крок: `docker compose exec backend python manage.py seed_regions` — дозасіяти міста
+- Флаги `LOTS_ENABLED`, `B2B_ENABLED`, `DEALERS_ENABLED`, `SHIPMENTS_ENABLED`, `LEGACY_CARS_API_ENABLED` (из env, по умолчанию false; в тестах модули true). Чтение — `core/modules.py::module_enabled`. `core/middleware.py::ModuleFlagMiddleware` (список `FROZEN_ROUTES`, 404 любому методу и пользователю, включая staff; `/vehicles/<vin>/decode|report|registry/` не заморожены). 6.7 добавляет `C2CFlagMiddleware` в тот же файл. `cars.urls` подключаются в `core/urls.py` только при `LEGACY_CARS_API_ENABLED`; `cars/` не менялся.
+- Избранное по лотам при `LOTS_ENABLED=false` — 404, в списке скрыто; сигнал `telegram_bot/signals.py` — ранний выход (5.2 обязана сохранить); `import_lot`, `upload_lot_photos` — `CommandError`. `site-settings` отдаёт четыре флага (не из кэша).
+- 04-S1: `POST /listings/create/` — `IsBrokerOrAdmin`; чужой `calculation` — 400 (admin может любой); дубль vehicle+channel — 400; `is_express_buyout` только admin (закрывает пункт ревью 1.2b про express/Telegram). 04-S2/13-S5: `vehicles` видны по `Exists(Listing)` (аноним/buyer/broker/moderator — retail; дилер + wholesale при B2B; admin — всё). 04-Q1/Q8: `ListingFilterSerializer` (400 на max_price и choices), и для B2B-доски. Wholesale не отдаётся и при `B2B_ENABLED=false`.
+- Фронт: ссылки на замороженные модули убраны, `notFound()` через `requireModule` в layout `listings`, `b2b`, `dealers`, `me/shipments`; sitemap без лотов; robots с `Disallow`; главная без блока лотов. E2E: `module-flags.spec.ts`; старые спеки переведены/`test.fixme`.
+- Ревью безопасности (`security-reviewer`): критичного нет; 5 «важно» исправлены с тестами и мутациями: `/latest` бота и `post_listing_to_channel` молчат при `LOTS_ENABLED=false`; `POST /messages/start/` с лотом — 404 при выключенном модуле и для чужого wholesale; `POST /leads/` с `listing_id` при выключенных лотах — та же ошибка поля; брокер не может создать retail на машину с wholesale-объявлением (400, иначе VIN раскрывался бы через `vehicles`); тест полноты `FROZEN_ROUTES` сверяет явный список из 13 путей. Не исправлено (желательно): `UniqueConstraint(vehicle, channel)` (сейчас дубль ловит `exists()`, гонка возможна) и wholesale в избранном при `B2B_ENABLED=false` — при разморозке (04-S5).
+- `/me/shipments`: страница даёт экран 404 с `noindex`, но HTTP 200 — `app/me/loading.tsx` начинает стрим раньше вложенного layout (документация Next, streaming.md «The HTTP contract»). Данные закрыты: `/api/v1/auth/me/shipments/` → 404. Спека проверяет именно это.
+- `frontend/e2e/test-1.spec.ts:36`: ассерт ссылки «Пригін/аукціон» → `/listings` заменён на «ссылки нет» (цель задачи — убрать ссылку; файл не переименован).
+- Проверки: бэкенд SQLite 1876 (падает только `test_entrypoint_refuses_debug_for_gunicorn`, Windows); `tsc`, `lint` (0 ошибок), `build` OK; e2e полный набор на чистом стеке с флагами false — 298, после повтора упавших из-за 429 падал только `/me/shipments` (исправлено выше, перепрогон спеки); `openapi.yaml` перегенерирован против PostgreSQL (ушли `/api/calculate/`, `/api/list/`). `git diff -- cars/` пуст.
 
-### Наступний крок
-Деплой на Railway + перенесення даних SQLite→Postgres (якщо є локальна SQLite-база з dev-даними).
+### Для владельца
+- Создание лота (`POST /listings/create/`, модуль заморожен): сделано broker + admin по основному разделу задачи, `is_express_buyout` — только admin; ревью 1.2b предлагало только admin. Если нужно строго admin — правка одной строки в `listings/views.py`.
+- `app/me/leads/page.tsx:68` — ссылка «Переглянути лот» на `/listings/…` (такие заявки создаются только со страницы лота, сейчас закрытой); убрать при 2.9 или раньше по решению.
+- Прод `.env`: `LOTS_ENABLED`, `B2B_ENABLED`, `DEALERS_ENABLED`, `SHIPMENTS_ENABLED`, `LEGACY_CARS_API_ENABLED` = false (см. `docs/LAUNCH_CHECKLIST.md`).
 
----
+## Задача 2.7: доставка по Украине и услуги брокера в расчёте (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-## Безкоштовна підготовка до запуску (2026-07-05) — ЗАВЕРШЕНО
+- Модели (миграция 0009, только создание таблиц): `UaDeliveryRate` (город/зона, `eu_port` пусто = с любого порта, `cost_usd` или `quote_on_request`, `sort_order`) и `BrokerServiceFee` (`title`, `FeeMode` `fixed` по умолчанию / `percent`, `amount_usd` или `percent` 0…100, `sort_order`). `CheckConstraint`: сумма или «уточнюйте»; режим соответствует полям; суммы ≥ 0. Обе — `DateRangeModel`, участвуют в `is_verified`/демо из 2.6. Админка: даты, фильтр «Діють зараз», порядок по `sort_order`, action «Позначити перевіреними». Кэш и сигналы.
+- Калькулятор (чистые функции, без БД): `pick_ua_delivery`, `ua_delivery_cost`, `broker_services_for` (процент — только от цены покупки на аукционе, `ROUND_CEILING` до цента), `public_extra_options`. Доставка и услуги прибавляются к `total_usd` и (× курс) к `total_uah` **после** растаможки, таможенная база не меняется. В разбивке: `ua_delivery_usd`, `ua_delivery_pending`, `broker_services`, `broker_services_total_usd`, `broker_services_pending`. Нет тарифа / «уточнюйте» / город не выбран — pending, не 422.
+- API: `ua_delivery_rate` (id) в `POST /calculate/`; несуществующая, недействующая или с другого порта ЄС — 400 на поле (одинаковый текст). `rates_snapshot`: `ua_delivery_cost_usd`, `broker_services` (режим, процент, база, сумма), id в `meta`. `/rates/`: гостям `ua_delivery_rates` (id, город, порт, «ціна за запитом») и `broker_service_fees` (id, название) без сумм (Q11); broker/admin — с суммами.
+- Фронт: select «Доставка по Україні (місто)» из `/rates/` (первый пункт «Не обрано — уточнити в менеджера», город фильтруется по порту ЄС), строки «Доставка по Україні» и каждой услуги или «уточнюється менеджером», даты «Курс НБУ на …» и «Тарифи на …». Карточка заявки брокера (`BrokerLeadCard`) показывает список услуг текстом, а не `[object Object]`.
+- Сид: реальных сумм нет, таблицы по умолчанию пусты. Для e2e — демо-строки `[E2E] Київ` ($300), `[E2E] Ужгород` (за запитом), `[E2E] Послуги брокера` ($500) только в `e2e_seed` (неперевірені), `e2e_cleanup` их удаляет.
+- Проверки: бэкенд SQLite 1751 OK (skipped=2) — полный прогон до правок по ревью; после них `pricing`, `users`, `tests` перепрогнаны; PostgreSQL 16 (pricing, users, tests.test_e2e) OK; ruff, `tsc`, `lint` (0 ошибок), `build` OK; `openapi.yaml` перегенерирован против PostgreSQL. Мутационная проверка: 9 мутаций — 8 поймано сразу, выжившая (`quote_on_request` при заполненной сумме) закрыта новым тестом; ограничение модели с `gte` пропускало NULL — поймано тестом, исправлено. E2E (chromium, тот же локальный стек, не docker compose): `calculator-ua-delivery.spec.ts` (новый) + `calculator-config`, `catalog`, `calculator-ev`, `lead` — 62 passed.
+- Ревью безопасности (субагент по `security-reviewer`): критичного и важного нет; желательные исправлены: валидаторы и ограничения сумм/процента, `[object Object]` в карточке брокера, очистка e2e-строк. Не исправлено: при двух услугах с одинаковым названием React предупредит о дубле ключа (в разбивке нет id).
 
-### A1 — Регіони
-- [x] seed_regions розширено: 25 областей + місто Київ, ~300+ міст (більші та середні)
-- [x] Виправлено помилку: Рівне перенесено до Рівненської обл. (раніше помилково у Волинській)
-- [x] Ідемпотентно: повторний запуск не плодить дублів (get_or_create)
-- [!] Неповний КАТОТТГ: для повного переліку потрібен офіційний CSV Мінцифри
-
-### A2 — SECRET_KEY
-- [x] На проді (DEBUG=False) без SECRET_KEY в env → ImproperlyConfigured (зрозуміла помилка)
-- [x] Для dev — залишено insecure-fallback (локальна розробка не сломана)
-- [x] .env.example оновлено: команда генерації SECRET_KEY
-
-### A3 — DEBUG/ALLOWED_HOSTS
-- [x] DEBUG з env, дефолт false (прод безпечний за замовчуванням)
-- [x] ALLOWED_HOSTS=[] без env на проді → Django DisallowedHost (зрозуміла помилка, не мовчання)
-- [x] Локальний запуск (DEBUG=true) — не сломано
-
-### A4 — Email
-- [x] Dev: console backend (листи у консоль, SMTP не потрібен)
-- [x] Прод: EMAIL_HOST/PORT/TLS/USER/PASSWORD читаються з env — вписати SMTP-провайдер
-- [x] .env.example і .env.docker.example оновлено з коментарем «вписати SMTP-провайдер на проді»
-
-### A5 — Swagger
-- [x] Додано @extend_schema_field до SerializerMethodField у local_listings/serializers.py: get_owner_name (CharField), get_seller_has_badge (BooleanField), get_seller_avg_rating (FloatField), get_seller_deal_count (IntegerField)
-- [x] Додано @extend_schema_field у listings/serializers.py: get_is_express_active (BooleanField)
-- [x] Додано @extend_schema_field у shipments/serializers.py: get_vehicle_count (IntegerField), get_next_statuses (ListField)
-- [x] ENUM_NAME_OVERRIDES розширено: LocalListingFuelTypeEnum, CustomsExciseFuelTypeEnum, LocalListingStatusEnum, DealStatusEnum, PromotionTariffTypeEnum, ReportStatusEnum, PaymentStatusEnum, DealerApplicationStatusEnum, NotificationTypeEnum, UserRoleEnum
-- [x] ENUM_GENERATE_CHOICE_DESCRIPTION=False додано до SPECTACULAR_SETTINGS
-- [!] Залишилось 5 попереджень (не критично, не помилки):
-  - 1x fuel_type collision (FuelType94dEnum) — складно вирішити через нетривіальні хеші drf-spectacular
-  - 3x status collision (Status4ef/StatusC94/Status7fcEnum) — аналогічно, потребує @extend_schema на views
-  - 1x operationId collision на /api/v1/messages/conversations/ — потребує рефакторингу URL або @extend_schema(operation_id=...)
-  - Всі warnings не є помилками, схема генерується успішно
-
-### A6 — Тести та Telegram-бот
-- [x] 365 тестів — OK (DATABASE_URL="" REDIS_URL="" TELEGRAM_BOT_TOKEN="" python manage.py test)
-- [!] Примітка для тестів: .env для Docker містить DATABASE_URL та REDIS_URL з docker-hostname. Для локального запуску тестів треба скидати через env: DATABASE_URL="" REDIS_URL="" TELEGRAM_BOT_TOKEN="" python manage.py test
-- [x] Telegram-бот налаштовано: токен задано в .env (TELEGRAM_BOT_TOKEN)
-- [x] Канал знайдено і доступний: @AUTO_F_Y (канал AUTO_FOR_YOU)
-- [x] Бот: @AUTO_F_Y_bot (AUTO_FOR_YOU), ID 8785926220
-- [x] Webhook очищено (deleteWebhook: ok — старих вебхуків не було)
-- [x] Бот готовий до polling: python manage.py run_bot
-- [x] В Docker — окремий сервіс `bot` у docker-compose.yml (вже є)
+### Для владельца
+- Админка → «Доставка по Україні»: города/зоны, цена или «Уточнюйте», даты; «Послуги брокера»: статьи, режим «Фіксована сума» или «Відсоток від ціни на аукціоні», значения подтверждает брокер (Q6). Пока таблицы пусты, в расчёте «уточнюється менеджером». После проверки — «Позначити перевіреними».
 
 ---
 
-## C2C-промт 1 — Місцеві оголошення (завершено 2026-07-01)
+## Задача 2.6: калькулятор — справочники из API, демо по данным, честные ошибки (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-### Backend
-- [x] Новий Django-додаток `local_listings` (Region, City, LocalListing, LocalListingImage)
-- [x] 25 областей + 96 міст, management-команда `seed_regions` (# неповний КАТОТТГ)
-- [x] DRF-ендпоінти: CRUD /api/v1/local/listings/, /vin-prefill/<vin>/, /regions/, /cities/
-- [x] Ліміт активних оголошень: LOCAL_LISTING_MAX_ACTIVE (env, дефолт 10)
-- [x] contact_phone відсутній у публічному списку (захист — C2C-промт 6)
-- [x] Фільтри: make, model, year range, price range, fuel, transmission, body_type, region, city, mileage_max, search, ordering
-- [x] Індекси БД: status, make, year, price, region, fuel_type
-- [x] VIN-prefill: GET /api/v1/local/vin-prefill/<vin>/ — NHTSA vPIC (бесплатно, без ключа), кеш VinReport
-- [x] Статуси: draft/active (C2C-1), pending/rejected/expired/sold/hidden (заглушки — C2C-2/5)
-- [x] 18 нових тестів, **217 тестів всього — OK**
+- Модели (миграции 0007 — схема, 0008 — данные; данные не удаляются): `is_verified` («Перевірено власником», default `False`) у всех тарифов через `DateRangeModel` (и у `CustomsCalcRule`), `ExchangeRate.source` (`RateSource`: `nbu`/`manual`/`demo`; сид пишет `demo`, `pricing/nbu.py` — `nbu`), у `eu_port` фрахта и доставки ЄС→UA сняты choices (02-C4). `CalculatorSettings` (pk=1): предупреждение под результатом, заголовок и текст демо-баннера, пометка «Орієнтовний розрахунок» — на украинском, правятся в админке, кэш `pricing:calculator_settings` с инвалидацией сигналом.
+- `pricing/calculator.py` (чистые функции): `build_form_options` (аукционы, локации → порты США, порты США → порты ЕС только при наличии фрахта **и** доставки, топливо с `requires_battery`, member/payment/title с дефолтами, `is_configured`), `selection_is_demo`, `catalog_is_demo`, `applied_rates`.
+- `GET /rates/` (Q11): всем `options`, `is_demo`, `demo_banner` без сумм; полная сетка — только broker и admin-роль/superuser (не голый `is_staff`: его получает модератор, находка ревью). `POST /calculate/`: scope `calculator` (`THROTTLE_CALCULATOR_RATE`, 30/hour), любая ошибка → `logger.exception('calculate failed')` + `{'error':'internal_error'}` 500, 422 — `{'error':'not_configured','missing_count'}` (+ `missing` для broker/admin), в ответе `is_demo`, `applied_rates`, `warning`/`estimate_note`/`demo_banner` из настроек; `is_demo` и в `rates_snapshot`. Дефолты member/payment/title — один источник `FORM_DEFAULTS` во view (02-C11). `eu_port` — `CharField`, неизвестный порт → 422. Удалён `ActiveRatesSerializer`.
+- Очистка (02-S2): `purge_anonymous_calculations` (beat 03:45) удаляет анонимные расчёты старше `ANON_CALCULATION_TTL_DAYS` (30), кроме связанных с `Lead`/`Listing`. Хук `pricing/hooks.py::on_calculation_saved` через `transaction.on_commit` только на 201; с 8.7 пишет `metrics.record_metric('calculation')`.
+- Админка: `is_verified` в списке (редактируется), фильтр, action «Позначити перевіреними» (право change, сброс кэша), `messages.info` «Неперевірених діючих тарифів: N»; курс — колонка и фильтр «Джерело»; «Налаштування калькулятора».
+- Фронт: форма строится из `/rates/` (литералов `<option>` нет), скелетон, «Калькулятор ще не налаштовано» при пустых справочниках, порт ЄС фильтруется по порту США, поле батареи по `requires_battery`, параметры тарифа аукциона в раскрывающемся блоке (09-C5). `DemoBanner` — пропсы `show/title/text`, `NEXT_PUBLIC_DEMO_MODE` удалён из кода. Подписи «Мито N%», «ПДВ N%», «Пенсійний збір N%» из `applied_rates` (проценты из Decimal-строки без `parseFloat`), разбивка на украинском. `lib/calc-errors.ts`: 400 — под полями, 422 — «не налаштовано» (список недостающего человеческим языком только для broker/admin), 429, 500/сеть — общее. Со страницы лота в калькулятор уходят только `engine_cc`, `fuel_type`, `year`, `auction`, `listing` — цена пустая с подсказкой (09-Q3); при прямом входе остаётся прежний пример (10000/2000/2020).
+- Проверки: бэкенд SQLite 1726 OK (skipped=2); PostgreSQL 16 (pricing, tests, leads) 928 OK; ruff чисто; `tsc`, `lint` (0 ошибок, новых предупреждений нет), `build` OK; `openapi.yaml` перегенерирован против PostgreSQL. Мутационная проверка: 11 мутаций бэкенда и 1 фронта (баннер всегда виден) — все пойманы. E2E (chromium): `calculator-config.spec.ts` (новый), `catalog.spec.ts`, `calculator-ev.spec.ts` — 30 passed; `lead`, `lead-journal`, `attribution`, `auth-cookie`, `home` — 63 passed. **Не в docker compose**: стек Django `runserver` + `next start` + Node-прокси вместо nginx, PostgreSQL; браузер — headless_shell 1194 под именем 1228 (в облаке нет нужной версии). Тест «лот → калькулятор» проверяет страницу калькулятора по query-ссылке, сама кнопка на лоте — только `tsc`.
+- Ревью безопасности (инструкция `security-reviewer`, субагент): критичного нет; «важно» — модератор (`is_staff`) видел сетку и `missing` → исправлено, тест модератора добавлен; «желательно» исправлены: action с `permissions=['change']`, `has_add_permission` настроек через `super()`.
+- Не сделано / для владельца:
+  - 04-C2 (общий справочник портов с `shipments`) не делался — модуль вне задачи.
+  - Ревью (желательно): `POST /calculate/` отдаёт гостю разбивку и `applied_rates` — перебором маршрутов можно восстановить цены (ограничено 30/час). Q11 касается только `/rates/`; **владельцу**: подтвердить, что разбивка гостю допустима.
+  - Ревью (желательно, вне задачи): `leads/serializers.py` позволяет привязать к своей заявке чужой анонимный `Calculation` по id — стоит закрыть в задаче по заявкам.
+  - Курсы, внесённые до 2.6, получили `source=manual`; если это тестовые — пометить `demo` или удалить (LAUNCH_CHECKLIST 4.1).
+  - Подпись «Тестові тарифи» в футере и на главной остаётся (задача 6.4).
 
-### Frontend
-- [x] `/ua` — Каталог Україна: список з фільтрами (панель критеріїв), карточки, пусте стан
-- [x] `/local/new` — форма подачі (авторизований): VIN-поле + кнопка «Заповнити за VIN», виладушки область→місто
-- [x] `/local/[id]` — деталь: галерея, характеристики, кнопка «Показати телефон» (заглушка — C2C-6)
-- [x] `/local/[id]/edit` — редагування свого оголошення
-- [x] Header: навігація розділена «Пригін/аукціон» (існуючий) / «Каталог Україна» (новий)
-- [x] api/local.ts, types.ts, компоненти LocalListingCard/Filters/Form
-- [x] **22 Next.js роути, 0 TS-помилок, npm run build OK**
-
-### Архітектурне рішення
-- `LocalListing` — окремий Django-додаток, НЕ розширення `listings.Listing`
-- Існуючий імпортний каталог (Listing + Vehicle) не зачеплений
+### Для владельца
+- Админка → все тарифы: проверить значения и отметить «Перевірено власником» (action «Позначити перевіреними»); после этого и курса НБУ демо-баннер исчезнет сам.
+- Админка → «Налаштування калькулятора»: тексты предупреждения, баннера и пометки.
+- `.env`: `THROTTLE_CALCULATOR_RATE`, `ANON_CALCULATION_TTL_DAYS`; `NEXT_PUBLIC_DEMO_MODE` больше не нужен.
 
 ---
 
-## C2C-промт 2 — Модерація місцевих оголошень (завершено 2026-07-01)
+## Задача 2.5: корректность расчёта — подбор тарифов, периоды, курс, EV/PHEV, правило растаможки (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-### Backend
-- [x] Нові поля `LocalListing`: `rejection_reason`, `moderated_by` FK, `moderated_at`, `agreed_to_rules` (bool), `agreed_to_rules_at`
-- [x] Міграція `0002_moderation_fields`
-- [x] `local_listings/services.py`: `approve_listing()` → active + email + Telegram; `reject_listing()` → rejected + причина + сповіщення
-- [x] Серіалізатор: новий запис → `status=pending`; `agreed_to_rules=True` — обов'язково; `rejection_reason` прихований від чужих
-- [x] Ремодерація: суттєва правка `active` → `pending`; будь-яка правка `rejected` → `pending`; суттєві поля: `{make, model, year, price, description}`
-- [x] `GET /api/v1/local/my-listings/` — усі оголошення власника (всі статуси, пагінація)
-- [x] `PendingLocalListingProxy` — окрема секція «Черга модерації» в Django Admin
-- [x] Дії адміна: «Одобрити» (bulk, без форми) та «Відхилити з причиною» (intermediate TemplateResponse + POST confirm)
-- [x] Email + Telegram сповіщення власнику через `integrations.tasks.send_notification`
-- [x] **233 тести всього — OK**
-
-### Frontend
-- [x] `/me/local-listings` — «Мої оголошення»: статус-бейджі (active/pending/rejected/hidden/sold/expired/draft)
-- [x] Причина відхилення: виводиться власнику у вигляді червоного блоку
-- [x] Кнопки дій залежно від статусу: «Редагувати і надіслати знову» (rejected), «Редагувати» (active/pending/hidden), «Видалити»
-- [x] Форма `/local/new`: чекбокс «Погоджуюсь з правилами» (required), після submit → екран «На модерації» замість redirect
-- [x] `/me` — додано пункт «Мої оголошення» у меню кабінету
-- [x] **23 Next.js роути, 0 TS-помилок, npm run build OK**
-
-### Архітектурне рішення
-- Proxy-модель `PendingLocalListingProxy` → окрема адмін-секція без дублювання реєстрації моделі
-- `TemplateResponse` + POST `confirm` — intermediate форма для причини відхилення (без окремого view)
-- `agreed_to_rules_at = timezone.now()` — патерн з промту 13 (`agreed_to_terms_at`)
+- `pricing/calculator.py` (без Django/ORM): `RateCatalog`, `SelectedRates`, `select_rates` (тарифы, фиксированные сборы, маршруты, курс, акциз, правило, брекеты; не найденное — `missing`, формат 422 прежний), `lookup_tier`/`lookup_fixed_fees` (вместо `_lookup_*` из view; тесты переведены), `pick_exchange_rate` (максимальная дата `<=` даты расчёта, «из будущего» — 422, 02-Q5), `pick_pension_bracket`. При пересечении периодов побеждает самый поздний `valid_from`, затем больший `pk` (02-Q4). `calculate_landed_cost(inputs, rates, pension_brackets, rule)`: брекет и база пенсионного сбора по правилу (02-Q2), `customs_value_includes_eu_to_ua` (02-Q7), возрастной коэффициент из правила (02-C6). `CalculateView` — только каталог из кэша → `select_rates` → расчёт → снимок (02-Q6).
+- Модели: `DateRangeModel.clean()` (`valid_to >= valid_from`, пересечения периодов по ключу модели) и `CheckConstraint` на всех тарифах; `CustomsCalcRule` (`PensionBase`, базы, флаг доставки ЄС→UA, коэффициенты, `confirmed_by_broker`/`confirmed_at`, `note` «ПЕРЕВІРИТИ…»). Миграции: 0005 (модель + проверка существующих данных перед constraint — при нарушении миграция останавливается со списком id, данные не меняются), 0006 (правило по умолчанию, `valid_from=2000-01-01`, а не дата миграции — иначе расчёты на прошлые даты стали бы 422). Кэш и сигналы для правила, `seed_rates` создаёт правило.
+- API: `battery_capacity_kwh` — Decimal 0…300, обязателен и > 0 для electric/phev (400 на поле), для ДВС обнуляется; EV без `ev_excise_eur_per_kwh` → 422. Ответ: `rules_confirmed`, `exchange_rate_date` (фактическая дата курса), `rates_validity_date`, `rates_updated_on` (максимум `valid_from` применённых ставок); снимок: даты курсов, правило, `rates_updated_on`; `inputs_snapshot`: Decimal строкой, даты ISO, `None` как `None` (02-Q9). Ошибка расчёта — JSON 500 без деталей. Админка: «Правило розмитнення» (отметку «Звірено з брокером» ставит только admin-роль), снимок `Calculation` только для просмотра, удаляет только суперпользователь (02-S4). `__str__` тира без `float` (02-Q15).
+- Фронт: PHEV в списке, поле «Ємність батареї (кВт·год)» (видно и обязательно только для electric/phev), числовые поля формы — строки (пустое не уходит как `0`, баг из 0.3), под итогом «Орієнтовний розрахунок» (или «Розрахунок орієнтовний» после подтверждения), «Ставки оновлено: <дата>», «Курс НБУ на <дата>».
+- Проверки: бэкенд SQLite 1689 OK (skipped=2); PostgreSQL (pricing, tests) 656 OK; суммы `tests/test_e2e.py` на сид-тарифах не изменились; `openapi.yaml` перегенерирован против PostgreSQL; ruff, tsc, lint (0 ошибок), build OK. Мутационная проверка: 28 мутаций бэкенда — поймано 27 (одна избыточная ветка `isoformat` удалена), мутация фронта (возврат `Number(e.target.value)`) — e2e красный. E2E `calculator-ev.spec.ts` 6/6 и `lead.spec.ts` (заявка после расчёта) — 40 passed с setup-проектом (локальный стек). Ревью `security-reviewer`: критичного и важного нет; желательные 1–4 исправлены (JSON 500 на ошибку расчёта, тест соответствия `PensionBase` константам, `age_coeff_min <= max`, удаление снимка и «Звірено» — только админ).
+- Не сделано / для 2.6 и владельца:
+  - Ревью (желательно): `calculate_landed_cost` дописывает выбранную ставку брекета в переданный снимок (`rates.pension_fund_rate`, `meta`) — вреда нет (снимок создаётся на запрос), но это не строго «чистая функция»; страница калькулятора показывает ответ 422 как JSON с именами моделей — это честные ошибки задачи 2.6.
+  - 02-Q14 (диапазон `calculation_date` — настройка) не сделан: сериализатор принимает любую дату, курс «из будущего» не берётся. Отдельной модели прожиточного минимума нет: пороги — данные брекетов с датами (LAUNCH_CHECKLIST 4.1).
+  - **Владельцу (Q5)**: значения правила по умолчанию повторяют прежние формулы (брекет по «ціна аукціону × курс», база — «повна вартість до збору», митна вартість без доставки ЄС→UA, коэффициент 1…15 без зсуву) — подтвердить с брокером и поставить «Звірено з брокером»; у ставок акциза EV/PHEV должна быть ставка за кВт·ч. Кто из брокеров даёт письменное подтверждение формул — вопрос из файла задачи остаётся.
 
 ---
 
-## C2C-промт 3 — Повідомлення (завершено 2026-07-02)
+## Задача 2.14: источник визита first-touch у регистрации и объявления (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-### Backend
-- [x] `messaging` Django-додаток: Conversation + Message моделі
-- [x] Один діалог на пару (ініціатор, оголошення) — UniqueConstraint
-- [x] Місцеве: покупець ↔ автор; імпортне: покупець ↔ перший адмін (всі адміни бачать)
-- [x] Заборона писати самому собі по своєму оголошенню
-- [x] `mark_as_read` при відкритті діалогу
-- [x] `unread_count_for_user` для бейджа
-- [x] Сповіщення через `send_notification.delay` при кожному новому повідомленні
-- [x] Anti-spam throttle scope `messages` 30/год + заглушка фільтра посилань (`# C2C-промт 6`)
-- [x] 5 ендпоінтів: start, list, detail, post, unread-count
-- [x] ConversationAdmin + MessageInline в Django Admin
-- [x] **23 тести всього для messaging — OK; 256 тестів по всьому проекту — OK**
-
-### Frontend
-- [x] `api/messages.ts`: getConversations, getConversation, sendMessage, startConversation, getUnreadCount
-- [x] `lib/types.ts`: ConversationSummary, ConversationDetail, ChatMessage, MessageParticipant
-- [x] `app/me/messages/` — split-pane месенджер: список діалогів + тред + поле вводу
-- [x] Polling 15 с на активний тред, polling 30 с на бейдж (без WebSocket)
-- [x] `WriteSellerButton.tsx` — модальне вікно для першого повідомлення → redirect до треду
-- [x] «Написати продавцю» на сторінці місцевого оголошення (не власник, active)
-- [x] «Написати менеджеру» на сторінці імпортного оголошення
-- [x] Бейдж непрочитаних у Header (іконка чату з лічильником)
-- [x] «Повідомлення» у меню кабінету `/me`
-- [x] **24 Next.js роути, 0 TS-помилок, npm run build OK**
+- `core/attribution.py: clean_attribution` — одна функция на заявку (2.1, `leads.validators` её реэкспортирует), регистрацию и объявление: UTM по whitelist и шаблону, реферер — только `http(s)://host[:port]` (без пути, query, fragment и логина/пароля), страница — только путь своего сайта; управляющие символы (`\x00` и т.п., на PostgreSQL давали бы 500) → пусто; никогда не бросает.
+- Поля (`editable=False`): `CustomUser.first_touch_utm/referrer/entry_url` (миграция users 0018 + право `users.view_attribution`, data-часть выдаёт его группе «Адміністратори»), `LocalListing.utm/referrer/entry_page_url` (миграция local_listings 0008). Пишутся только при регистрации и создании объявления (`attribution` — write-only JSON, мусор/`null` тихо отбрасываются), PATCH профиля и редактирование объявления их не меняют.
+- Админка: блок «Джерело візиту» только для чтения и только с правом (суперпользователь, «Адміністратори»); модератор (в т.ч. «Черга модерації») и брокер не видят. Выгрузка «Мої дані» содержит свой источник; обезличивание очищает `first_touch_*` и `referrer`/`entry_page_url` объявлений (UTM без ПДн остаётся).
+- Фронт: `register/page.tsx` отправляет `attribution` из `lib/attribution.ts`, пустой — не отправляется. Форму объявления подключает 4.2.
+- Проверки: бэкенд SQLite 1647 OK (skipped=2); PostgreSQL (tests, users, local_listings, leads) 1206 OK, в т.ч. NUL-тест; `openapi.yaml` перегенерирован против PostgreSQL; ruff, tsc, lint (0 ошибок), build OK. Мутационная проверка: 21 мутация, поймано 20; выжила одна избыточная (`write_only` у `attribution` в объявлении — ответ создания и так его не содержит). E2E `attribution.spec.ts` 3/3 + `register-flow` 2/2 (локальный стек): UTM с калькулятора → тело регистрации → sessionStorage, не cookie → своя выгрузка; мусор в sessionStorage не мешает; без UTM поле не уходит. Ревью `security-reviewer`: критичного нет; 3 «важно» исправлены (NUL → 500 на PostgreSQL; `attribution: null` → 400; тест модератора/брокера без кодов ответа) и 2 «желательно» (логин/пароль в реферере; доступ admin-роли только через право).
+- Для владельца: право «Може бачити джерело візиту» — только нужным людям; юрист — подтвердить хранение в `sessionStorage` без согласия на cookie (строка в политике есть с 1.12). В задаче упоминается `GET /auth/me/` — такого маршрута нет, проверен `GET /auth/profile/`.
 
 ---
 
-## C2C-промт 4 — Обране + центр сповіщень + збережені пошуки (завершено 2026-07-02)
+## Задача 8.9: учёт упавших Celery-задач (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-### Backend
-- [x] `notifications` app: Notification(user, type, title, text, link, is_read, created_at) — 5 типів
-- [x] `notifications/services.py`: `create_notification()`, `unread_count()`
-- [x] 3 ендпоінти: GET /api/v1/notifications/, POST mark-read, GET unread-count
-- [x] `favorites` app: Favorite(user, local_listing nullable, imported_listing nullable) + UniqueConstraint
-- [x] GET/POST/DELETE /api/v1/favorites/ + GET /api/v1/favorites/status/
-- [x] `saved_searches` app: SavedSearch(user, name, filters JSON, notify, last_notified_at)
-- [x] CRUD /api/v1/saved-searches/ + <id>/
-- [x] Celery task `check_saved_searches` щодня о 10:00: нові оголошення → Notification + send_notification. Ідемпотентно через last_notified_at
-- [x] messaging/services.py → також створює NEW_MESSAGE Notification для отримувача
-- [x] local_listings/services.py → approve/reject також створює LISTING_APPROVED/REJECTED Notification
-- [x] **28 нових тестів; 284 тести всього — OK**
-
-### Frontend
-- [x] `api/notifications.ts`, `api/favorites.ts`, `api/saved-searches.ts`
-- [x] `app/me/notifications/` — центр сповіщень (list, mark-read, mark-all, icons per type)
-- [x] `app/me/favorites/` — список обраного з кнопкою «Прибрати»
-- [x] `app/me/saved-searches/` — список збережених пошуків, toggle notify, delete, «Відкрити пошук»
-- [x] `HeartButton.tsx` — серце на картках/деталях (local + imported), polling статусу
-- [x] `SaveSearchButton.tsx` — «Зберегти пошук» на /ua (видно тільки при активних фільтрах)
-- [x] Header: колокольчик сповіщень + бейдж (polling 30с) поряд з іконкою чату
-- [x] **27 Next.js роутів, 0 TS-помилок, npm run build OK**
-
-### Допущення (C2C-4)
-- Saved searches перевіряються щодня о 10:00 Kyiv time (Celery beat, EAGER у dev/тестах)
-- Сповіщення зберігаються останні 50 (лімітовано в API); архівація/пагінація — майбутня ітерація
-- HeartButton для авторизованих: не-авторизований → redirect to /login
+- Приложение `task_ledger`: модель `FailedTask` (миграция 0001, только создание таблицы; индекс `task_name, failed_at`), обработчик `task_failure` (подключается в `AppConfig.ready`): запись (имя, id, повторы, класс ошибки, ошибка после `scrub`, аргументы в безопасном виде, очередь) и `capture_message('Celery task failed: …')` с `extra` без аргументов и текста ошибки. Обработчик ничего не бросает: ошибки записи, мониторинга и даже странного `sender` только логируются (без аргументов).
+- `sanitize.safe_repr`: int/bool/float/None как есть; короткая строка без пробелов (id, код заявки) — после `scrub`; длинная (>`FAILED_TASK_ARG_MAX_LEN`, 64) или с пробелами (тексты писем и сообщений, имена) — только `<str:длина>`; словари, списки, объекты — `<dict:3>`.
+- `core/tasks.py: ResilientTask` (`autoretry_for` OSError/ConnectionError, backoff + jitter, `max_retries`/`acks_late` из `RESILIENT_TASK_MAX_RETRIES` (3) / `RESILIENT_TASK_ACKS_LATE` (true) — в файле задачи имена `CELERY_TASK_*`, но с префиксом `CELERY_` Celery применил бы их ко всем задачам, см. ревью). Подключён к `check_saved_searches`; четыре задачи со своими повторами не менялись, их окончательные неудачи тоже попадают в журнал. Ежедневная чистка `purge_failed_tasks` (04:10, `FAILED_TASK_RETENTION_DAYS`, 90). Админка «Невдалі завдання»: только просмотр, только admin-роль (модератор и брокер — 403), в списке нет аргументов.
+- Проверки: бэкенд SQLite 1629 OK (skipped=2); PostgreSQL (task_ledger, tests) 550 OK; `openapi.yaml` не изменился; ruff чисто. Мутационная проверка: 24 мутации, все пойманы. Ловушка eager-режима: вложенные eager-повторы Celery 5 не эмулируют воркер, поэтому повторы проверены по частям (последняя попытка → одна запись; промежуточная → `retry`, записи нет). Ревью `security-reviewer`: **1 «критично» исправлено** (глобальный `task_acks_late` через префикс `CELERY_`), 2 «важно» (тексты сообщений в аргументах; тест админки без проверки значений) и 2 «желательно» (защита всего обработчика, тест без мока мониторинга) исправлены.
+- Для владельца: раз в неделю смотреть «Невдалі завдання» в админке; подтвердить `RESILIENT_TASK_ACKS_LATE=true` (при падении воркера задача повторится — возможен дубль алерта сохранённого поиска) и срок хранения 90 дней. Действие «повторить» — задача 9.35.
 
 ---
 
-## C2C-Extra — Фото LocalListing (завершено 2026-07-02)
+## Задача 7.6: мониторинг ошибок (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-### Backend
-- [x] `POST /api/v1/local/listings/<pk>/images/` — завантаження одного/кількох фото (multipart)
-- [x] `DELETE /api/v1/local/listings/<pk>/images/<img_id>/` — видалення; авто-просування наступного в головне
-- [x] `PATCH /api/v1/local/listings/<pk>/images/<img_id>/` — призначити головним (знімає з решти)
-- [x] Валідація: jpg/png/webp, ≤8 МБ, ≤15 фото; env-overridable (`LOCAL_LISTING_MAX_PHOTOS`, `LOCAL_LISTING_PHOTO_MAX_SIZE_MB`)
-- [x] Перше фото авто-primary якщо жодного немає
-- [x] Тільки власник або адмін; чужий → 403
-- [x] 14 нових тестів (upload/delete/set-primary/limit/type/403); **298 тестів всього — OK**
-
-### Frontend
-- [x] `api/client.ts`: `apiUpload()` — multipart POST без Content-Type header (дозволяє браузеру встановити boundary)
-- [x] `api/local.ts`: `uploadImages()`, `deleteImage()`, `setPrimaryImage()`
-- [x] `PhotoUploadBlock.tsx` — блок для edit mode: сітка превью, hover-кнопки «Гол.» / «✕», авто-рефреш
-- [x] `CreateModePhotoPicker` (inline в LocalListingForm) — буферує файли до submit, превью з blob URL
-- [x] `LocalListingForm.tsx` — edit mode: `<PhotoUploadBlock>` з існуючими фото; create mode: `<CreateModePhotoPicker>`, фото завантажуються після create
-- [x] **27 Next.js роутів, 0 TS-помилок, npm run build OK**
+- `core/monitoring.py` (адаптер, протокол Sentry: sentry.io или GlitchTip): `init_monitoring(component)` — пустой `SENTRY_DSN` → выключен без импорта SDK, невалидный → предупреждение без DSN, повтор — no-op, в тестах `.env`-DSN игнорируется; `send_default_pii=False`, без локальных переменных и тела запроса, интеграции Django/Celery/logging (ERROR — события, WARNING — крошки). `before_send` (и `before_send_transaction`): `scrub` для сообщений, исключений, контекста кадров, extra/tags/contexts, крошек, спанов; без cookies/data/env, заголовков Authorization/Cookie/X-CSRFToken/Referer/XFF, query везде (в т.ч. repr `WSGIRequest` из django.request), `user` — только `id`. `capture_message` — no-op при выключенном.
+- Инициализация: web — `core/wsgi.py`/`asgi.py` после `get_wsgi_application()` (не в settings: команды и тесты не поднимают SDK); Celery — сигналы `worker_process_init`, `beat_init` (`core/celery.py`); бот — `run_bot`. `sentry-sdk[django,celery]==2.70.0`.
+- `POST /api/v1/monitoring/client-errors/`: AllowAny, без аутентификации и CSRF, throttle `client_errors` (`THROTTLE_CLIENT_ERRORS_RATE`, 20/hour на IP), тело до 4 КБ (заголовок и поток), сериализатор (message ≤500, digest, path без query, component); `frontend-ssr` принимается только изнутри сети (без X-Forwarded-For). Ответ 204 и при выключенном мониторинге. `manage.py monitoring_test`. `core` добавлен в `INSTALLED_APPS` только ради команды (моделей нет).
+- Фронт: `lib/reportError.ts` (fetch keepalive, без cookie, стека и query), `error.tsx` (отчёт, `Link` «На головну»), `global-error.tsx` (отчёт, inline-стили вместо недоступного `globals.css`), `instrumentation.ts` `onRequestError` → `INTERNAL_API_URL` (таймаут 3 с). DSN в бандле нет (проверено grep по `.next/static`).
+- Проверки: бэкенд SQLite 1607 OK (skipped=2); PostgreSQL (tests, core, telegram_bot) 581 OK; `openapi.yaml` перегенерирован против PostgreSQL (+ client-errors); ruff, tsc, lint (0 ошибок), build OK. **Живая проверка**: локальный приёмник Sentry-envelope + настоящий SDK — 3 события (log.error, logger.exception, capture_message) дошли, в них нет email, телефонов, токенов, паролей из аргументов, `user` пуст. Настоящий sentry.io/GlitchTip не подключался (нет аккаунта). Мутационная проверка: 32 мутации, все пойманы. E2E `error-monitoring.spec.ts`: отчёт со страницы сайта → 204, мусор → 400, GET → 405, поток → 429 (локальный стек); сценарий «ошибка рендера → error.tsx шлёт отчёт» — `test.fixme` → 7.6b (в e2e-стеке нет способа вызвать ошибку рендера без тестовой страницы). Ревью `security-reviewer`: критичного нет; 2 «важно» исправлены (query через repr запроса в extra/крошках; транзакции мимо фильтра), желательные 3, 5, 6, 8 исправлены.
+- Для владельца:
+  - Создать проект в sentry.io (бесплатно) или GlitchTip, `SENTRY_DSN` в `.env`, затем `docker compose exec backend python manage.py monitoring_test`; включить алерты и Data Scrubber в проекте.
+  - Реестра статусов интеграций (3.1) ещё нет — статус мониторинга в админке появится с ним.
+  - Остаточный риск (ревью, желательно): все SSR-отчёты Next идут с одного IP контейнера и делят лимит 20/час; общего дневного потолка событий нет — квоту Sentry можно выжечь ротацией IP. Решить при 7.5 (отдельный лимит/секрет для SSR, лимит в самом Sentry).
 
 ---
 
-## C2C-промт 5 — Lifecycle + платне просування (завершено 2026-07-02)
+## Задача 7.2: прод-настройки Django, хранилища, логи без ПДн (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-### Backend
-- [x] `LocalListing`: `expires_at` (created_at + 30 дн., `LOCAL_LISTING_EXPIRY_DAYS`), `expiry_warned`, `promoted_until`, `bumped_at`
-- [x] `PromotionTariff(code, name, type[renew/bump/top], price, currency, duration_days)` — редагується в адмінці
-- [x] Data migration: 4 seed-тарифи (заглушки ціни; підігнати перед продом)
-- [x] Celery beat: `warn_expiring_listings` (за 3 дні, один раз) о 9:15 + `expire_listings` (авто-зняття) о 9:20
-- [x] `Payment`: +`local_listing` FK, +`tariff` FK, +`LOCAL_LISTING_PROMOTE` purpose
-- [x] `POST /api/v1/local/listings/<pk>/promote/` → Payment + LiqPay checkout (тільки власник)
-- [x] `GET /api/v1/local/tariffs/` — список активних тарифів
-- [x] LiqPay callback: застосовує ефект тарифу (renew→extends expires_at, top→promoted_until, bump→bumped_at); idempotent
-- [x] Сортування /ua: TOP (promoted_until > now) → bumped_at → created_at; фільтри не зламані
-- [x] 16 нових тестів; **314 тестів всього — OK**
-
-### Frontend
-- [x] `types.ts`: `expires_at`, `expiry_warned`, `promoted_until`, `bumped_at`, `PromotionTariff`, `PromoteCheckout`
-- [x] `api/local.ts`: `tariffs()`, `promote()`
-- [x] `LocalListingCard`: ТОП-бейдж (золота рамка + мітка «ТОП»)
-- [x] `PromoteModal`: вибір тарифу → redirect на LiqPay checkout; **sandbox-попередження** жирним
-- [x] `/me/local-listings`: термін дії, ⚠️ за 3 дні, кнопки «Продовжити» (expired/expiring) / «Підняти» / «ТОП»
-- [x] **27 Next.js роутів, 0 TS-помилок, npm run build OK**
-
-### Архітектурне рішення
-- Тарифи в БД (не хардкод) — ціни змінюються без деплою
-- `_apply_local_listing_promote()` у `payments/views.py` — логіка callback у одному місці
-- Idempotency: повторний COMPLETED-колбек ігнорується (Payment вже COMPLETED)
-- **SANDBOX**: `LIQPAY_SANDBOX=true` за замовчуванням. LiqPay не достукається до localhost — повноцінний тест тільки на публічному URL
+- `core/secret_key.py`: фиксированного ключа больше нет. При `DEBUG=true` без ключа он создаётся один раз в `.dev_secret_key` (0600, в `.gitignore`/`.dockerignore`; каталог только для чтения — ключ в памяти с предупреждением), в тестах — случайный. При `DEBUG=false` пустой, короче 50 символов или с маркерами заглушек (`REPLACE`, `local-docker-dev`, `django-insecure`, `not-for-production`, `e2e-only`, `your-`) — `ImproperlyConfigured`. `DEBUG=true` с публичным хостом в `ALLOWED_HOSTS`, `SITE_URL`, `CSRF_TRUSTED_ORIGINS` или `CORS_ALLOWED_ORIGINS` — ошибка старта (обход `ALLOW_DEBUG_ON_PUBLIC_HOST=true`); `docker/entrypoint.sh` не запускает gunicorn с `DEBUG=true`. Пустой `ALLOWED_HOSTS` при `DEBUG=false` — ошибка старта (01-Q9). Celery eager — флаг `CELERY_EAGER` (01-C13).
+- `core/storage_settings.py: build_storage_settings` → `STORAGES` (01-C1): медиа в S3/R2, статика локальная, `MEDIA_ROOT` всегда; `MEDIA_URL` — `S3_CUSTOM_DOMAIN`, для R2 без домена — подписанные URL storage, шаблон amazonaws только для AWS (12-C6). Приватные фото трекинга: подпись всегда (без CDN-домена), отдельный bucket `PRIVATE_S3_BUCKET_NAME`, предупреждение при CDN-домене без него.
+- `core/logging_filters.py`: `scrub` (email, телефоны UA/международные и `%2B`, секреты в query/JSON, Cookie/Authorization/Bearer, голые JWT, имена в JSON) и `PiiScrubFilter` (форматирует запись, маскирует и traceback), `RequestPathFilter` (django.request/django.server без query и без объекта запроса). `LOGGING`: stdout, `LOG_LEVEL`, фильтры на handler'е; Celery не перехватывает корневой логгер. gunicorn access-лог `%(U)s` без query и IP; nginx `log_format main_anon` (`$uri`, IP с обнулённым октетом); compose `x-logging` (`LOG_MAX_SIZE`, `LOG_MAX_FILES`) у всех сервисов. `integrations/tasks.py` без `telegram_id` в логе. Дефолты `SITE_URL=http://localhost`, `DEFAULT_FROM_EMAIL=noreply@localhost` (+ предупреждение на проде). `flushexpiredtokens` в расписании уже был (1.7), покрыт тестом.
+- Попутно: Swagger/Redoc/схема только admin-роли (`API_DOCS_PUBLIC`, 01-S15, строки в матрице 1.11); `next/image` — только хост медиа бэкенда и `NEXT_PUBLIC_IMAGE_HOSTS` (build-arg), без `*.amazonaws.com`, `*.cloudfront.net`, хостов аукционов (08-C8, 08-S10).
+- Тесты: `tests/test_prod_settings.py` (38; старт Django в subprocess, хранилища без сети, фильтры, entrypoint) — у `core` уже есть модуль `core/tests.py`, поэтому не `core/tests/`. `check --deploy` (23-D106) — `skip` до 7.1. E2E `image-hosts.spec.ts`: обход (чужие хосты → 400) зелёный; успех — `test.fixme` → 7.5: в e2e-стеке медиа на localhost, а Next 16 запрещает оптимизатору локальные IP независимо от списка (так было и до задачи).
+- Проверки: бэкенд SQLite 1582 OK (skipped=2); PostgreSQL (tests, core, integrations, users) 945 OK; `openapi.yaml` не изменился; ruff чисто; tsc/lint/build OK; `nginx -t` в `nginx:alpine` OK и формат лога проверен запросом (`127.0.0.0`, путь без query); `docker compose config` — logging у всех сервисов. Мутационная проверка: 28 мутаций, все пойманы. S3/R2 вживую не проверены (нет бакета; MinIO в облаке не поднимал). Ревью `security-reviewer`: критичного нет; 4 «важно» исправлены (обход проверки DEBUG через Host: localhost; Cookie/sessionid/JWT мимо `scrub`; Celery перехватывал root-логгер без фильтра; приватные файлы в публичном bucket), 3 «желательно» исправлены (маркеры e2e-ключа, `%2B`-телефон и имена в JSON, тест `RequestPathFilter`); `error_log` nginx с IP — описан в LAUNCH_CHECKLIST.
+- Для владельца:
+  - **Локальный `.env` (docker) со старым ключом `local-docker-dev-…-REPLACE…` больше не стартует** — задать сгенерированный `SECRET_KEY`; то же для `.env.e2e` (в шаблоне ключ теперь пустой, CI генерирует свой).
+  - При S3/R2 с публичным доменом — задать `PRIVATE_S3_BUCKET_NAME` (отдельный бакет без публичного доступа) и `NEXT_PUBLIC_IMAGE_HOSTS`. Если фото лотов не переносятся (`LOT_PHOTO_ALLOWED_HOSTS` пуст), их CDN-хосты нужно внести в `NEXT_PUBLIC_IMAGE_HOSTS`, иначе фото лотов в каталоге не покажутся.
+  - Swagger `/api/docs/` теперь только для админа; открыть всем — `API_DOCS_PUBLIC=true`.
 
 ---
 
-## C2C-промт 6 — Захист контактів + антиспам + скарги + баны (завершено 2026-07-03)
+## Задача 1.8: профиль, выгрузка данных, удаление аккаунта с обезличиванием (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
-### Backend
-- [x] `CustomUser`: `is_banned` + `is_email_verified` (мітка; повноцінна email-верифікація — окремо)
-- [x] `LocalListing`: `has_contact_in_text` (BooleanField, db_index) — прапор антиспаму
-- [x] `local_listings/antispam.py`: `detect_contacts(text)` — детект телефону, URL, месенджерів
-  - **Що вважається контактом**: `+380...` / `0XX-XXX-XX-XX`, `http(s)://`, `www.`, `.com/.ua/.net` TLD, `telegram/viber/whatsapp + @username/link`
-  - **НЕ спрацьовує** на: рік (4 цифри), пробіг (ціле без телефонного формату), ціну, об'єм двигуна
-- [x] Режим антиспаму: `ANTISPAM_MODE=soft` (дефолт env) — прапор без блокування; `hard` — ValidationError; `off` — вимкнено
-- [x] Оголошення з контактом у тексті → `has_contact_in_text=True` (лишається pending на модерацію)
-- [x] Повідомлення з контактом → попередження в відповіді (`warning` ключ), повідомлення надсилається
-- [x] `GET /api/v1/local/listings/<id>/contact/` — телефон тільки авторизованому (rate-limit 20/год, scope `contact`)
-- [x] `contact_phone` ЗАВЖДИ `null` у публічному detail та list (тільки через /contact/)
-- [x] `reports` app: `Report(reporter, listing?, reported_user?, reason, comment, status[new|reviewed|dismissed])`
-- [x] `POST /api/v1/reports/` — авторизований; один активний звіт на (reporter, об'єкт)
-- [x] Django Admin: черга скарг — дії «Сховати оголошення», «Забанити користувача», «Відхилити»
-- [x] Ban: `is_banned=True` + `is_active=False` + активні оголошення → `hidden`; забанений не може увійти
-- [x] Users Admin: `ban_users` / `unban_users` bulk actions
-- [x] Throttle scope `contact`: 20/год (env `THROTTLE_CONTACT_RATE`)
-- [x] **334 тести всього — OK**
-
-### Frontend
-- [x] `api/local.ts`: `getContact(id)` — GET /contact/ ендпоінт
-- [x] `api/reports.ts`: `reportsApi.create()`
-- [x] `lib/types.ts`: `ReportReason`, `ReportPayload`
-- [x] `LocalListingDetail.tsx`: «Показати телефон» → клік → GET /contact/ (авторизованому показує номер; анониму → /login)
-- [x] `ReportButton.tsx` — модальне вікно з вибором причини і коментарем; z'являється для не-власників
-- [x] **0 TS-помилок, npm run build OK**
-
-### Архітектурне рішення
-- Контакт НЕ повертається в жодному серіалізаторі (list/detail/owner) — тільки через окремий /contact/ ендпоінт
-- Rate-limit на /contact/ захищає від масового витягу телефонів скриптом
-- Антиспам «м'який»: підозріле оголошення не блокується, а іде на модерацію з прапором `has_contact_in_text` — рішення за адміном
-- Бан реалізований через Django's `is_active=False` (JWT автоматично відхиляє неактивних)
+- Модель: `CustomUser.deletion_scheduled_at`, `deleted_at` (миграция users 0017, только добавление полей).
+- API: `DELETE /auth/profile/` `{password}` → 202 `deletion_scheduled_for` (неверный/пустой пароль 400, суперпользователь 400, лимит `password_reset`); сразу снимаются активные и pending объявления (`hidden`), `revoke_all_sessions`, cookie очищены, письмо «Видалення акаунту заплановано» со ссылкой на `/me/data`. `POST /auth/profile/cancel-deletion/` (объявления остаются снятыми). `GET /auth/me/export/` — JSON-вложение `autoforyou-data-<дата>.json`, throttle `data_export` (`THROTTLE_DATA_EXPORT_RATE`, 5/day), `no-store`. В профиле поле `deletion_scheduled_for`; телефон только `+380XXXXXXXXX` (пустой разрешён).
+- `users/services.py: anonymize_user` (один сервис для Celery и админки): email → случайный `deleted-<uuid>@deleted.invalid`, имя/фамилия/телефон/Telegram стёрты, роль buyer, без staff/групп, неактивен, пароль непригоден, `deleted_at`; удалены партнёры, сохранённые поиски, избранное, уведомления, токены Telegram, заявки дилера; объявления → `hidden` без телефона, описания и фото (файлы удаляются после коммита); расчёты и контейнеры отвязаны; импортные диалоги бывшего брокера переданы другому брокеру/админу; `ConsentRecord` не удаляются, `user` обнуляется явным UPDATE в обход неизменяемого менеджера. Сделки, отзывы, переписка, жалобы, платежи остаются — вторая сторона видит «Користувач видалений». `leads/services.py: anonymize_user_leads` — имя «Користувач видалений», телефон/email/ник/комментарий стёрты, `user=None`; `public_id`, партнёрские поля, атрибуция, журналы, UTM остаются. Письмо «Акаунт видалено» на старый адрес (ошибка SMTP не мешает).
+- Celery beat `users.tasks.anonymize_due_accounts` (03:45): период — `SiteSettings.account_deletion_grace_days`; под блокировкой строки повторно проверяется, что удаление не отменено.
+- `users/export.py: build_user_export` — разделы profile, consents, trusted_shops, dealer_applications, calculations, watched_shipments, leads, local_listings, imported_listings, favorites, saved_searches, notifications, conversations, deals, reviews_written/received, reports_filed, payments; контрагенты — только `public_display_name`, без `liqpay_raw` и служебных полей брокера.
+- Админка пользователей: удаление запрещено (`has_delete_permission=False`, каскад 06-S11 невозможен), действие «Анонімізувати» (только суперпользователь, себя и других суперпользователей пропускает), фильтр «видалений».
+- Фронт: `/me/profile` (правка имени, фамилии, телефона, ошибки полей), `/me/data` («Завантажити мої дані» через blob; удаление с паролем и «Я розумію, що це незворотно»; «Скасувати видалення»), баннер «Акаунт буде видалено <дата>» и пункты «Профіль», «Мої дані» в `/me`, одноразовое сообщение на главной после удаления. Ссылка в `privacy` §6 уже была (1.12).
+- Проверки: бэкенд SQLite 1528 OK (skipped=1); PostgreSQL 16 — users, leads, tests, deals, messaging, local_listings, site_settings: 1206 OK; ruff чисто; `tsc`, `lint` (0 ошибок; 1 новое предупреждение `set-state-in-effect` в `FlashMessage`, как у соседних компонентов), `build` OK; `openapi.yaml` перегенерирован против PostgreSQL. Мутационная проверка: 31 мутация бэкенда и 1 мутация фронта (баннер) — все пойманы. E2E `account-data.spec.ts` 5/5 (chromium) — **не в docker compose**: в облаке собрать образы нельзя (прокси с собственным CA), прогон шёл на локальном стеке (runserver + `next start` + Node-прокси вместо nginx, PostgreSQL); прочие e2e-спеки не перепрогонялись. Ревью безопасности (инструкция `security-reviewer` через general-purpose агента): критичного нет; 2 «важно» исправлены (гонка отмены с задачей; занятие подменного email регистрацией срывало обезличивание) и 3 «желательно» (проверка суперпользователя под блокировкой, осмысленный тест матрицы cancel-deletion, тест пропуска второго суперпользователя).
+- Для владельца:
+  - Удаление сделок/платежей по сроку хранения не сделано: `data_retention_years` пуст до ответа бухгалтера, удаление затрагивает историю второй стороны (LAUNCH_CHECKLIST). Тогда — management-команда с dry-run.
+  - Дата удаления считается от текущего `account_deletion_grace_days`: уменьшение периода в админке сдвинет уже запланированные удаления раньше даты из письма. Оставить так или фиксировать срок при запросе?
+  - После обезличивания остаются (решение юриста/1.12): тексты сообщений удалённого, его отзывы и жалобы, заметки брокера в истории заявки, уведомления у других с display-именем, уже отправленные сообщения журнала в группе партнёра, `django_admin_log` с прежним email, объявления-лоты `listings.Listing` брокера (не снимаются). `ConsentRecord` после отвязки ни к кому не привязан — согласовать с юристом.
+  - Суперпользователь удаляется только вручную (API и админка отказывают). В выгрузку попадает `review_notes` заявки дилера (пользователь и так видит его в статусе заявки).
 
 ---
 
-## C2C-промт 7 — Угоди + відгуки + рейтинги + юридичні доповнення (завершено 2026-07-03)
+## Задача 1.11: общий набор тестов авторизации (2026-10-20) — ЗАВЕРШЕНО
 
-### Backend
-- [x] `deals` Django-додаток: `Deal(listing FK, seller FK, buyer FK, status[proposed|confirmed|cancelled], confirmed_at)`
-- [x] UniqueConstraint `(listing, buyer)` — один запит покупця на одне оголошення
-- [x] `Review(deal OneToOne, author FK, target FK, rating 1-5, text)` — тільки після підтвердженої угоди; `clean()`: автор = покупець по угоді
-- [x] `deals/services.py`:
-  - `propose_deal(listing, seller, buyer_id)` — перевірка власника, покупець має бути учасником діалогу, без дублів; нотифікація `deal_proposed`
-  - `confirm_deal(deal, buyer)` — тільки покупець, перехід у `confirmed`, оголошення → `sold`; нотифікація `deal_confirmed`
-  - `cancel_deal(deal, user)` — будь-яка сторона, лише з `proposed`; нотифікація `deal_cancelled`
-  - `create_review(deal, author, rating, text)` — тільки покупець, угода `confirmed`, один відгук; нотифікація `review_received`
-  - `seller_rating(seller_id)` → `{confirmed_deal_count, review_count, avg_rating, has_badge, badge_threshold}`
-- [x] 6 ендпоінтів `/api/v1/deals/`: list+create, confirm, cancel, review, seller-rating, listing-buyers
-- [x] `notifications/models.py`: 4 нові типи — `deal_proposed`, `deal_confirmed`, `deal_cancelled`, `review_received`
-- [x] `SELLER_BADGE_THRESHOLD = 3` (env, дефолт 3) — бейдж «✓ Перевірений продавець» після ≥3 підтверджених угод
-- [x] `LocalListingListSerializer`: `seller_has_badge` (SerializerMethodField)
-- [x] `LocalListingDetailSerializer`: `seller_avg_rating`, `seller_deal_count` (SerializerMethodFields)
-- [x] Міграція `deals/0001_initial`, `notifications/0002_deal_types`
-- [x] **31 новий тест; 365 тестів всього — OK**
-
-### Frontend
-- [x] `api/deals.ts`: list, propose, confirm, cancel, review, sellerRating, listingBuyers
-- [x] `lib/types.ts`: `DealStatus`, `DealUser`, `DealListing`, `DealReview`, `Deal`, `ReviewPayload`, `SellerRating`; нові типи нотифікацій
-- [x] `app/me/deals/page.tsx` — «Угоди та відгуки»: угоди як покупець (confirm/cancel/зірковий відгук) + як продавець (cancel). `DealCard` з умовними кнопками
-- [x] `app/me/local-listings/page.tsx`: «✅ Позначити проданим» (active) → модальне вікно → вибір покупця з діалогів → `propose_deal`
-- [x] `app/local/[id]/LocalListingDetail.tsx`: бейдж «✓ Перевірений продавець» + зірки + рейтинг продавця в синій панелі
-- [x] `app/rules/page.tsx` — Правила розміщення: 8 розділів, бурштинове попередження «Шаблон — потребує перевірки юристом», C2C-застереження (платформа — посередник, не сторона угоди)
-- [x] `components/layout/Footer.tsx`: посилання `/rules` між /terms і /privacy
-- [x] `components/local/LocalListingForm.tsx`: checkbox «Погоджуюсь з правилами» → справжнє посилання `/rules`
-- [x] `app/me/page.tsx`: «🤝 Угоди та відгуки» в меню кабінету
-- [x] **0 TS-помилок, npm run build OK**
-
-### Архітектурне рішення
-- Anti-nakrutka: відгук прив'язаний до `Deal` OneToOne + `buyer_id == author.pk` → неможливо залишити відгук самому собі або без реальної угоди
-- Бейдж `seller_has_badge` — обчислюється в серіалізаторі через SQL COUNT (≥threshold confirmed deals) без кешу — актуально в реальному часі
-- Бейдж `SELLER_BADGE_THRESHOLD` — env-переопределяємо без деплою
-- Всі юридичні тексти `robots: {index: false}` і позначені «Шаблон — потребує перевірки юристом»
-- C2C-застереження: «Платформа є посередником, а не стороною угоди» — у `/rules` розділ 6 та `/terms`
+- `tests/test_authz_matrix.py`: матрица по всем API-эндпоинтам (аноним 401, чужой, владелец, роли, cookie без CSRF → 403 с положительным контролем; изоляция списков; снимок состояния после 403/404), тест полноты по `get_resolver()` (ловит новый view, пропущенный метод и безымянный маршрут под `api/`), `AdminRolesTests`, `InfraExposureTests`, `ErrorTextsNotLeakedTests`. ~350 тестов за ~10 с; мутационная проверка в нескольких приложениях.
+- Исправлено по находкам: сделки (confirm/cancel/review) и диалоги — посторонний получает 404 вместо 400/403; общий текст ошибки вместо `str(exc)` в `pricing`, `integrations`, `payments` (LiqPay); миграция `users/0016` — права «Модератори»/«Адміністратори» на очередь модерации (`PendingLocalListingProxy`, без delete).
+- `frontend/e2e/authz.spec.ts` 23/23; `docs/BACKEND_TESTS.md` — раздел «Безопасность, бриф §3» (36 пунктов, часть «ждёт задачу N»). Бэкенд 1471 тест (после обновления 5 ожиданий 403→404 в `users/tests.py` зелёный), Postgres-прогон матрицы зелёный. Ревью `security-reviewer`: 4 «важно» + 4 «желательно» исправлены.
+- Для владельца: модератор через API может править и удалять чужое объявление (в админке delete нет) — оставить так? `pricing-rates` публичен (ждёт 2.6, Q8), сумма платежа от клиента (ждёт 4.1), создание `Listing` любым вошедшим (ждёт 2.8).
 
 ---
 
-## Дальше (C2C-черга)
+## Задача 1.10: безопасные загрузки (2026-10-20, Opus) — ЗАВЕРШЕНО
 
-| # | Промт | Що робити |
-|---|-------|-----------|
-| ~~C2C-3~~ | ~~Повідомлення~~ | ~~Non-realtime чат~~ ✓ |
-| ~~C2C-4~~ | ~~Обране + сповіщення~~ | ✓ |
-| ~~C2C-5~~ | ~~Lifecycle + просування~~ | ✓ (SANDBOX) |
-| ~~C2C-6~~ | ~~Захист контактів + антиспам~~ | ✓ |
-| ~~C2C-7~~ | ~~Рейтинги/відгуки + юридичні доповнення~~ | ✓ ЗАВЕРШЕНО |
-
-**C2C-блок 1–7 повністю завершено. Далі — деплой на Railway.**
+- `core/uploads.py`: тип по содержимому (Pillow, `formats=`), лимиты байт (до чтения) и пикселей (`UPLOAD_IMAGE_MAX_PIXELS` 25M, `MAX_IMAGE_PIXELS` при импорте), поворот по EXIF, пересохранение без EXIF/GPS/ICC/XMP/PNG-текста, имя `uuid.ext`. `SanitizedImageField` на фото C2C, авто и трекинга (очистка в `FieldFile.save`: API, админка, `advance_status`, `upload_lot_photos`, `e2e_seed`). Миграции `local_listings/0007`, `vehicles/0004`, `shipments/0002` — только смена класса поля.
+- Загрузка фото C2C: throttle `THROTTLE_UPLOADS_RATE` (30/час), всё или ничего, файлы удаляются при откате.
+- `upload_lot_photos`: allowlist `LOT_PHOTO_ALLOWED_HOSTS`, только https, проверка IP после резолва (private/loopback/link-local/CGNAT/reserved), до 3 редиректов, общий дедлайн 30 с, обрыв потока по лимиту. Остаточный риск: DNS-rebinding между проверкой и соединением (ограничен allowlist и https).
+- Фото трекинга — приватное хранилище `PRIVATE_MEDIA_ROOT` (S3: `private/`, подписанные ссылки `PRIVATE_MEDIA_URL_EXPIRE` 300 с), отдача только `GET /api/v1/shipments/<pk>/events/<id>/photo/` (watcher, admin-роль, `view_trackingevent`) через `FileResponse` или `X-Accel-Redirect`. nginx: `nosniff`, `attachment` для не-картинок, `/media/tracking_photos/` 404, internal `/protected-media/`, том `private_media`.
+- Команда `sanitize_existing_images` (по умолчанию план; `--apply`, `--delete-invalid`), перенос старых фото трекинга в приватное хранилище.
+- Проверки: бэкенд 1110 OK, Postgres 591 OK, e2e `uploads`+`cabinet` 16 passed (X-Accel на реальном файле). Ревью `security-reviewer`: 1 «важно» + 6 «желательно» исправлены.
+- Для владельца: заполнить `LOT_PHOTO_ALLOWED_HOSTS` (не `*.amazonaws.com`/`*.cloudfront.net`), на сервере запустить `sanitize_existing_images` (сначала без флагов) и включить `PRIVATE_MEDIA_USE_X_ACCEL`; в локальном `.env.e2e` — `PRIVATE_MEDIA_USE_X_ACCEL=true`, `THROTTLE_UPLOADS_RATE`. Хардкод «15» и «до 8 МБ» в `PhotoUploadBlock` — задача 4.2.
 
 ---
 
-## Промт 15 — Docker Compose: повний стек (завершено 2026-07-03)
+## Задача 1.9: ПДн в сериализаторах (2026-10-20) — ЗАВЕРШЕНО
 
-### Що створено
-- [x] `Dockerfile.backend` — multi-stage (python:3.12-slim): builder → runtime; gunicorn 26.0.0
-- [x] `Dockerfile.frontend` — multi-stage (node:20-alpine): deps → builder → runtime; `npm start`
-- [x] `.dockerignore` — виключає venv, __pycache__, .env, media, db.sqlite3, frontend/ з бекенд-контексту
-- [x] `frontend/.dockerignore` — виключає node_modules, .next, .env.local з фронтенд-контексту
-- [x] `docker-compose.yml` — 7 сервісів: db, redis, backend, frontend, bot, celery_worker, celery_beat, nginx
-- [x] `nginx/nginx.conf` — reverse proxy: `/api`, `/admin` → backend:8000; `/static/`, `/media/` → volumes; `/` → frontend:3000. Місце для SSL (коментар)
-- [x] `docker/entrypoint.sh` — backend startup: migrate → collectstatic → gunicorn
-- [x] `docker/bot_entrypoint.sh` — перевіряє TELEGRAM_BOT_TOKEN; без токену → exit 0 (без restart-loop)
-- [x] `.env.docker.example` — робочі дефолти (сайт піднімається без ручного редагування)
-- [x] `core/settings.py`: додано `STATIC_ROOT` + виправлено `STATIC_URL='/static/'`
-- [x] SSR-fix: `INTERNAL_API_URL` в 3 серверних компонентах (`local/[id]/page.tsx`, `listings/[id]/page.tsx`, `sitemap.ts`) — SSR-запити через Docker-мережу `http://backend:8000`
-- [x] `requirements.txt`: `gunicorn==26.0.0`
-
-### Перевірка (результат)
-- [x] `docker compose build` — обидва образи зібрані без помилок
-- [x] `docker compose up -d` — 7 сервісів запущені
-- [x] `http://localhost/` → **200** (фронтенд через nginx) ✅
-- [x] `http://localhost/api/v1/local/listings/` → **200** (DRF API) ✅
-- [x] `http://localhost/admin/` → **302** (Django admin → login) ✅
-- [x] Bot: exit 0 без TELEGRAM_BOT_TOKEN (не перезапускається) ✅
-- [x] Звичайна розробка (runserver / npm run dev) — не зачеплена ✅
-
-### Архітектурне рішення
-- `NEXT_PUBLIC_API_URL=http://localhost` — бекується у клієнтський JS (браузер → nginx → backend)
-- `INTERNAL_API_URL=http://backend:8000` — runtime env для SSR (Next.js сервер → backend напряму по Docker-мережі)
-- Бот: `restart: on-failure` — не перезапускується при exit 0; при крашу (exit non-0) — перезапускується
-- Спільні Docker-volumes: `static` і `media` між backend і nginx
+- `users/display.py::public_display_name` — «Ім'я П.» (первое слово имени + инициал первого слова фамилии), «Користувач» при пустом имени, «Користувач видалений» по `deleted_at` (появится в 1.8). Email и его локальная часть контрагентам не отдаются.
+- `deals`: `DealUserSerializer` `{id, display_name}`, `ReviewSerializer.author_name`, `listing-buyers` — владелец или admin-роль, остальным 404 (как несуществующий id); `SellerRatingView` 404 без активных объявлений; тексты уведомлений через хелпер. `messaging`: `ParticipantSerializer` `{id, display_name}`, `sender_name` и Telegram-подписи через хелпер. `local_listings`: `owner_name` через хелпер, поле `is_owner` (на фронте берётся авторизованным запросом из браузера — SSR-кэш 60 с без пользовательских данных).
+- Фронт: типы и страницы `/me/deals`, `/me/local-listings`, `/me/messages` без email. `@extend_schema` для `listing-buyers`, `/deals/`, `conversations`; openapi через Postgres.
+- Проверки: бэкенд 1024 OK; e2e `pii-leaks.spec.ts` (новый) и полный chromium-прогон зелёные. Ревью `security-reviewer`: критичного и важного нет, 5 «желательно» сделаны.
+- Для владельца: нужен ли брокеру доступ к `listing-buyers` (сейчас нет). В 1.8 проставлять `deleted_at` при обезличивании.
 
 ---
 
-## Фікс 502 Bad Gateway (2026-07-04)
+## Задача 1.7: сброс и смена пароля, выход со всех устройств, бан (2026-10-20) — ЗАВЕРШЕНО
 
-### Причина 502
-nginx стартував одразу після запуску контейнера backend — але gunicorn слухає порт 8000
-лише ПІСЛЯ того, як відпрацюють `migrate` + `collectstatic`. На свіжій БД це займає 20-60 секунд.
-Поки gunicorn не піднявся, nginx повертав `502 Bad Gateway` на всі запити.
-
-Друга проблема: `celery_worker` і `celery_beat` використовували `memory://` брокер замість Redis,
-бо Django-налаштування обирають `memory://` при `DEBUG=true` (налаштування `core/settings.py`).
-
-### Що виправлено (`docker-compose.yml`)
-- [x] Додано `healthcheck` до сервісу `backend` — Python socket-перевірка порту 8000:
-  `python -c "import socket; s=socket.create_connection(('localhost',8000),2); s.close()"`
-- [x] `nginx` тепер залежить від `backend: condition: service_healthy` — стартує лише після
-  того, як gunicorn реально слухає порт (не просто "контейнер запущений")
-- [x] `celery_worker` і `celery_beat` отримали `environment: DEBUG=false` — примусово
-  використовують Redis-брокер (`redis://redis:6379/0`) незалежно від `.env`
-
-### Перевірка після фіксу
-- [x] `docker compose down && docker compose up -d` — nginx чекає `backend: Healthy` перед стартом ✅
-- [x] `http://localhost/` → **200** ✅
-- [x] `http://localhost/admin/` → **302** ✅
-- [x] `http://localhost/api/v1/local/listings/` → **200** ✅
-- [x] `celery_worker` → `Connected to redis://redis:6379/0` ✅
+- API: `password-reset/` (throttle → honeypot и капча → без обращения к БД, письмо и поиск пользователя — в Celery-задаче; ответ всегда 200 одним текстом), `password-reset/confirm/` (uid + токен Django, `validate_password`), `password-change/` (текущий пароль, throttle), `token/logout-all/`.
+- Сессии: `CustomUser.session_version` (миграция users 0015) + claim `sv` во всех токенах (`users/jwt.py`: `VersionedRefreshToken`, свои `TokenObtainPairSerializer`/`TokenRefreshSerializer`); `revoke_all_sessions` под `select_for_update` увеличивает версию и кладёт refresh в blacklist; `CookieJWTAuthentication` и refresh сверяют `sv` (токены без `sv` = версия 0). После смены пароля текущему устройству выдаются новые токены.
+- Бан: `ban_user`/`unban_user` (отзыв сессий; суперпользователь не банится), в том числе из `reports/admin.py`; `is_banned` в админке только чтение, деактивация `is_active` отзывает сессии. Beat `users.tasks.flush_expired_tokens` (03:30).
+- Фронт: «Забули пароль?», `/password-reset`, `/password-reset/confirm` (токен убирается из адреса, `Referrer-Policy: no-referrer`), `/me/security`, `logoutAll`. E2E-стек: Mailpit для писем.
+- Проверки: бэкенд 996 OK; e2e `password`, `auth-cookie`, `register`, `private-pages` 57 passed. Ревью `security-reviewer`: 3 «важно» + 4 «желательно» исправлены.
+- Для владельца: SMTP и `SITE_URL` (LAUNCH_CHECKLIST 2.4); локальный `.env.e2e` — добавить `THROTTLE_PASSWORD_RESET_RATE=2000/hour` (есть в `.env.e2e.example`); токены, выданные до деплоя 1.7, действуют до первого отзыва сессий.
 
 ---
 
-## Дальше (очередь задач до продакшена)
+## Задача 1.1: утечки секретов (2026-10-20) — ЗАВЕРШЕНО (код), действия владельца — ниже
 
-| # | Блокер | Что делать |
-|---|--------|------------|
-| 1 | ~~Ставки растаможки~~ | ✅ Снят — акциз/мито/НДС/ПФ актуальны на янв–июнь 2026 |
-| 2 | ~~Тарифы Copart/IAAI~~ | Baseline готов (seed_auction_fees, 50 тиров). ⚠ Калибровать под реальный тариф брокера |
-| 3 | **Тарифы фрахта** | UsLandRoute, OceanFreight, EuToUa — реальные котировки от брокера |
-| 4 | ~~Живой курс НБУ~~ | ✅ Снят — `fetch_nbu_rates --date YYYYMMDD` обновляет ExchangeRate из bank.gov.ua |
-| 5 | **Платные API для истории** | Carfax/BidFax (история ДТП и торгов) — договоры. ~~Opendatabot~~ — ✅ реализован |
-| 6 | ~~**Верификация дилеров**~~ | ✅ Снят — DealerApplication + apply/approve/reject + B2B гейтинг |
-| 7 | ~~Платёжный шлюз~~ | ✅ Снят — LiqPay sandbox готов; для продакшена: LIQPAY_SANDBOX=false + реальные ключи |
-| 8 | **Прожиточный минимум 2026** | Проверить `LIVING_WAGE_UAH` в `seed_rates.py` на дату деплоя |
-| 9 | ~~**S3 + PostgreSQL**~~ | ✅ Снят — dj-database-url + django-storages, включаются env-переменными |
-| 10 | **Apify-токен** | Подключить реальный актор Copart/IAAI для `ApifyLotProvider` |
-| 11 | ~~**Безопасность**~~ | ✅ Снят — промт 8: throttling, JWT blacklist, security headers |
-| 12 | ~~**Кэш и производительность**~~ | ✅ Снят — промт 9: Redis/кэш тарифов, индексы, N+1 |
-| 13 | ~~**Celery — фоновые задачи**~~ | ✅ Снят — промт 10: Celery+beat, fetch_nbu_rates_task (daily, cache invalidate), import_lot_task, send_notification stub |
-| 14 | ~~**Telegram-уведомления**~~ | ✅ Снят — промт 11: telegram_bot, deep-link привязка, send_notification, автопостинг |
-| 15 | ~~**Фронтенд: продакшн-полировка, SEO**~~ | ✅ Снят — промт 12: SEO, OG-карточки, sitemap, 404/error, скелетоны, DemoBanner-флаг |
-| 16 | ~~**Юридические страницы**~~ | ✅ Снят — промт 13: /terms, /privacy, /cookies + cookie-баннер + consent |
-| 17 | ~~**QA E2E-тесты**~~ | ✅ Снят — промт 14: 38 E2E-тестов + Playwright + PRODUCTION_ROADMAP.md |
-| ~~18~~ | ~~**DevOps: Docker Compose**~~ | ✅ Знятий — docker-compose.yml, Dockerfile.backend/frontend, nginx, entrypoint. Сайт на http://localhost |
-| **19** | **Деплой на Railway** | Переиспользує Dockerfile'и. railway.toml + env → push → prod |
+- `integrations/providers.py`: Opendatabot, NHTSA, Apify при ошибке отдают общий текст и `error='service_unavailable'`, детали — в лог с маской `apikey=***`. `integrations/views.py`: ошибка провайдера → 503 без сохранения `RegistryReport`; кэш не отдаёт старые записи с `error` (`.exclude(payload__has_key='error')`).
+- Ручная команда `purge_registry_errors` (по умолчанию dry-run, удаление только с `--confirm`) вместо data-миграции: необратимое удаление — решение владельца.
+- `.gitleaks.toml` (allowlist только для тестовых фиктивных значений, docs и `*.example` сканируются), `.pre-commit-config.yaml` (gitleaks v8.21.2), CI-job `secrets-scan` (`gitleaks dir . --redact`). `.gitignore`: `.env.*` кроме `*.example`, `.claude/settings.local.json`, дампы `*.sql`/`*.dump`, ключи `*.pem`/`*.key`/`id_rsa*`; `.dockerignore`: `.claude/`. `LOGGING`: `httpx`/`httpcore` на WARNING. README — установка pre-commit.
+- Проверки: бэкенд 945 OK; тесты на настоящий `httpx.HTTPStatusError` с ключом в URL. Ревью `security-reviewer`: 3 «важно» + 3 «желательно» исправлены. Gitleaks локально не запускался (нет образа) — проверить `pre-commit run --all-files` и первый прогон CI.
+- Владелец: токен Telegram-бота был в истории публичного репозитория (`.claude/settings.local.json`, коммит a47169c; историю по Q1 не чистим). Владелец сообщил 2026-10-19, что токены перевыпущены — убедиться, что отозван именно токен бота AUTO_F_Y. Перевыпустить `OPENDATABOT_API_KEY`, если ключ работал в бою; `pre-commit install`; запустить `purge_registry_errors` (dry-run, затем `--confirm`); закрепить образ gitleaks по digest в CI.
 
 ---
 
-## Промт 14 — QA E2E-тесты (завершено 2026-06-24)
+## Задача 2.15: журнал заявок для партнёра, квалификация, атрибуция, CSV, воронка (2026-10-20) — ЗАВЕРШЕНО
 
-### Backend E2E (tests/test_e2e.py — 38 тестов)
-- [x] **Auth chain**: регистрация (с consent) → JWT → профиль → agreed_to_terms_at записан
-- [x] Без токена → 401; неверный пароль → 401; без consent → 400
-- [x] **Калькулятор API**: POST /api/v1/pricing/calculate/ → 201 → все поля breakdown; total_usd = сумма компонентов; is_estimate=true; known auction_fee=$504; customs_value=$6800; сохраняется в Calculation
-- [x] **LiqPay checkout**: создаёт Payment(pending), возвращает checkout_url; duplicate order_id → 400; без auth → 401
-- [x] **LiqPay callback валидный**: статус → completed, listing → in_stock
-- [x] **LiqPay callback невалидная подпись**: 400, статус остаётся pending, listing не трогается
-- [x] **LiqPay идемпотентность**: двойной callback → payment не задваивается, listing = in_stock ровно один раз
-- [x] **B2B гейтинг**: anon → 401/403; buyer → 403 /b2b/board/ и 404 wholesale detail; dealer → 200; admin → 200; каталог anon — wholesale не виден
-- [x] **Dealer flow**: apply → 403 перед одобрением → approve → is_verified_dealer=True → 200 на B2B
-- [x] **Throttle**: ScopedRateThrottle deny → 429; anon → 401 (не throttle)
-- [x] `LiqPayClient.from_settings()` исправлен: читает из Django settings (override_settings работает в тестах)
-
-### Frontend E2E (Playwright)
-- [x] `@playwright/test` установлен как devDependency
-- [x] `playwright.config.ts` — baseURL localhost:3000, chromium
-- [x] `e2e/catalog.spec.ts`: каталог загружается; demo-banner; калькулятор form; 404-страница
-- [x] `e2e/register.spec.ts`: чекбокс consent есть, required, ссылки /terms /privacy; footer-ссылки
-- [x] `package.json`: scripts `test:e2e`, `test:e2e:ui`
-
-### Документация
-- [x] `docs/PRODUCTION_ROADMAP.md` — простым языком для владельца:
-  - Таблица «что проверяется автоматически»
-  - Пошаговая инструкция ручной проверки LiqPay sandbox (ключи, ngrok, тестовая карта 4242...)
-  - Финальный чеклист «GO LIVE» (12 пунктов)
-  - Что дальше: промт 15 (DevOps)
-
-### Итог
-- [x] 199 backend-тестов OK (`python manage.py test`)
-- [x] 38 новых E2E-тестов
-- [x] TypeScript 0 ошибок (`npx tsc --noEmit`)
+- `Lead`: квалификация (`qualification`, четыре `q_*`), окно атрибуции `attribution_until` (`add_months`, последний день месяца), `journal_message_id`/`journal_sent_at`/`journal_sending_at`. Новые модели: `LeadJournalSettings` (порог 3 из 4, 8000 USD, 12 мес., `journal_retry_minutes`; меняет только superuser), `LeadPartnerStatusChange` и `LeadExportLog` — только добавление (`AppendOnlyQuerySet`, запрет save/delete). Миграции leads 0006–0008.
+- Журнал в группу партнёра (`LEAD_JOURNAL_CHAT_ID`): белый список (AFY-ID, авто только из лота/расчёта, бюджет, город, время UTC), в свободных полях телефон/@ник/email → «не вказано»; `send_journal_task` с `self.retry` без ПДн, beat-задача `resend_journal` (каждые 5 мин, пакет 50, до 7 дней); отправка вне транзакции с меткой `journal_sending_at`, без дублей.
+- API брокера: `POST /broker/leads/{id}/qualification/`, `GET /broker/leads/export.csv` (фильтры статус/период, потоковый, `csv_safe` с `lstrip`, throttle `lead_export` общий с админкой, аудит без поискового запроса). Админка: колонки/фильтры квалификации и статуса партнёра, CSV, воронка `/admin/leads/lead/funnel/` (право `view_funnel` у «Адміністратори»); правки через сервисы с проверкой владельца (брокер не меняет чужую заявку и в админке).
+- Фронт: блок «Кваліфікація» в `BrokerLeadCard`, «Завантажити CSV» в `BrokerLeadList`. E2E `lead-journal.spec.ts` 3/3, `broker`+`lead` 41/41.
+- Проверки: бэкенд 936 OK, ruff чисто. Ревью `security-reviewer`: 3 «важно» + 5 «желательно» исправлены. Квалификация и статус партнёра — POST (в задаче PATCH), как соседние эндпоинты 2.4.
+- Для владельца: подтвердить пороги (3 из 4, 8000 USD, 12 мес.) с партнёром и договором; заполнить `LEAD_JOURNAL_CHAT_ID`; юрист — срок хранения `LeadExportLog` и окно атрибуции. В 1.8 не обезличивать `public_id`, `partner_name`, `journal_message_id`, `partner_status`, журналы и `attribution_until`.
 
 ---
 
-## Промт 13 — Юридические страницы (завершено 2026-06-24)
+## Задача 1.14: журнал согласий, версия документов, 18+, настройки cookie (2026-10-20) — ЗАВЕРШЕНО
 
-### Бэкенд
-- [x] `CustomUser.agreed_to_terms_at` (DateTimeField, null=True, blank=True) + миграция 0006
-- [x] `RegisterSerializer`: новое поле `agreed_to_terms` (bool, write_only); валидация — 400 если False/отсутствует; при success `agreed_to_terms_at = timezone.now()`
-- [x] Тесты (4): без поля → 400; False → 400; True → 201; `agreed_to_terms_at` устанавливается
-
-### Frontend — страницы
-- [x] `/terms` — «Умови використання» (шаблон, 7 разделов, предупреждение «перевірки юристом»)
-- [x] `/privacy` — «Політика конфіденційності» (шаблон, 8 разделов, ЛЗПД ссылка)
-- [x] `/cookies` — «Політика щодо файлів cookie» (шаблон, таблица cookie, 4 раздела)
-- [x] Все три: `robots: { index: false }`, начинаются с янтарного баннера «Шаблон — потребує перевірки юристом»
-
-### Frontend — cookie-баннер
-- [x] `CookieBanner.tsx` — клиентский компонент; показывается при первом визите
-- [x] Две кнопки: «Лише необхідні» и «Прийняти всі» → запись в `localStorage('cookie_consent')`
-- [x] После выбора баннер скрывается; при повторном визите — не появляется
-- [x] Добавлен в `app/layout.tsx` (работает на всех страницах)
-
-### Frontend — Footer
-- [x] Добавлены ссылки: «Умови використання», «Конфіденційність», «Cookie» с `<Link>` (Next.js)
-- [x] `<nav aria-label="Юридичні документи">` для семантики
-
-### Frontend — форма регистрации
-- [x] Чекбокс «Погоджуюсь з Умовами використання та Політикою конфіденційності» (required)
-- [x] Ссылки /terms и /privacy открываются в новой вкладке (`target="_blank"`)
-- [x] Фронтенд-валидация: кнопка submit недоступна только по HTML required; сообщение об ошибке на уровне JS
-- [x] `agreed_to_terms: true` включается в тело запроса к API
-
-### Build
-- [x] `npx tsc --noEmit` — 0 ошибок
-- [x] `python manage.py test` — 161 тест OK
+- `ConsentRecord` (`users/models.py`, миграции users 0013–0014): тип документа (terms, privacy, dealer_processing, lead_processing, age_18, partner_transfer), способ, версия из `SiteSettings`, `partner_name`, `lead_public_id`; без IP, user-agent и текста чекбокса. Неизменяемость: `save()` повторно, `obj.delete()`, `QuerySet.update/bulk_update/delete` бросают `ImmutableError`; `SET_NULL` при удалении пользователя/заявки работает. Админка только чтение, только admin-роль.
+- `users/consents.py::record_consents` в одной транзакции с регистрацией (terms, privacy, age_18), заявкой дилера (dealer_processing, age_18) и `create_lead` (lead_processing, partner_transfer). Поле 1.6 `is_adult` переименовано в `confirmed_age_18`; 18+ проверяется сервером. Миграция 0014 переносит согласия существующих заявок (идемпотентна).
+- Фронт: `cookie_consent` — JSON `{level, version, ts}` (старые строки читаются), повторный запрос при новой версии и `reconsent_required`, `hasAnalyticsConsent()` false до повторного согласия; ссылка «Налаштування cookie» в футере; чекбокс 18+ на заявке дилера.
+- `GET /api/v1/site-settings/` без DRF-throttle (кэш 5 мин, без ПДн; баннер запрашивает его на каждой странице). E2E-стек: лимиты nginx и DRF подняты только в `docker-compose.e2e.yml`/`.env.e2e.example` (боевые не менялись); `broker.spec.ts` и `auth-cookie.spec.ts` не зависят от порядка прогона.
+- Проверки: бэкенд 888 OK, `consent.spec.ts` 19/19, связанные спеки зелёные на чистом стеке. Ревью `security-reviewer`: 4 «важно» + 4 «желательно» исправлены.
+- Для владельца: юрист — формулировка и порог 18+, срок хранения журнала; заполнить `legal_docs_version` до запуска; выгрузка `ConsentRecord` — в задаче 1.8. `broker.spec.ts` требует чистого e2e-стека.
 
 ---
 
-## Промт 12 — Frontend SEO + продакшн-полировка (завершено 2026-06-24)
+## Задача 2.4: кабинет брокера (2026-10-20) — ЗАВЕРШЕНО
 
-### SEO — мета и шеринг
-- [x] `layout.tsx`: `metadataBase`, title template `%s | AUTOforYOU`, OpenGraph defaults, Twitter card
-- [x] `listings/[id]/page.tsx` → Server Component: `generateMetadata` с OG-тегами
-  (og:title, og:description, og:image = фото авто, og:url canonical)
-  → красивая превью-карточка при шеринге ссылки в Telegram
-- [x] Metadata на всех страницах: каталог, главная, калькулятор, кабинет, login, register
-- [x] Slug URL листингов: `/listings/42-toyota-camry-2020` (parseInt-совместим с `/listings/42`)
-- [x] Canonical URL на базе `NEXT_PUBLIC_SITE_URL`
-
-### Sitemap и robots
-- [x] `app/sitemap.ts` — динамический: статические маршруты + активные листинги с бэкенда (revalidate 1h)
-- [x] `app/robots.ts` — Allow `/`, `/listings`, `/calculator`; Disallow `/me/`, `/b2b/`, `/admin/`, `/api/`
-
-### Состояния загрузки и ошибок
-- [x] `app/not-found.tsx` — кастомная 404 с брендингом и ссылкой на каталог
-- [x] `app/error.tsx` + `app/global-error.tsx` — «Щось пішло не так» + кнопка «Повторити»
-- [x] `components/ui/Skeleton.tsx` + `ListingCardSkeleton` + `ListingsGridSkeleton`
-- [x] `app/listings/loading.tsx`, `app/listings/[id]/loading.tsx`, `app/me/loading.tsx`
-- [x] ListingsGrid: скелетон вместо спиннера; кнопка «Спробувати ще раз» при ошибке API
-- [x] Пустое состояние с иконкой 🚗 и подсказкой «Спробуйте змінити фільтри»
-
-### Изображения и производительность
-- [x] ListingCard + ListingDetail: `image || source_url` с SVG-плейсхолдером (нет эмодзи в alt)
-- [x] `next.config.ts`: паттерны для AWS S3, Cloudflare R2, Copart/IAAI CDN, CloudFront
-- [x] `VehicleImage.source_url` добавлен в TypeScript-типы
-- [x] `sizes`, `priority` на главном фото; `fill` + `object-cover` на всех карточках
-
-### DemoBanner
-- [x] `NEXT_PUBLIC_DEMO_MODE=false` скрывает баннер на проде (реальные тарифы)
-- [x] По умолчанию включён (`=true`). `is_estimate` в ответе API остаётся всегда.
-
-### Доступность и адаптив
-- [x] `focus:ring` на всех интерактивных элементах (кнопки, ссылки, тумбнейлы)
-- [x] `aria-label`, `role=alert`, `role=group`, `<nav aria-label>`, `<article>` в ListingCard
-- [x] `aria-hidden` на декоративных иконках; SVG-плейсхолдер вместо эмодзи
-- [x] Пагинация в `<nav>`, семантические заголовки `<h1>`/`<h2>`
-
-### Build
-- [x] `npm run build` — 16 роутов, 0 ошибок TypeScript
-- [x] `python manage.py test` — 157 тестов OK
+- API `/api/v1/broker/leads/` (`leads/broker_urls.py`): список (фильтры `status`, `source`, `assigned_to=me`, `utm_source`, `search` по имени/телефону, `ordering`, пагинация 20, `new_count`), карточка `<id>/`, `<id>/status/`, `<id>/take/`, `<id>/partner-status/`. Доступ `IsBrokerOrAdmin`: аноним 401, buyer/dealer/moderator (даже staff) 403.
+- Сервис: `take_lead` (select_for_update, чужая 409, повтор идемпотентен), `broker_change_status` (переход из `new` назначает брокера), `set_partner_status` (журнал `partner: old → new`), `_check_owner` — чужую взятую заявку меняет только назначенный брокер или admin-роль (решение при реализации, записано в файле задачи; можно ослабить). `force` через API недоступен.
+- Сериализаторы: в списке минимум полей; `assigned_to`/`history[].changed_by` — `{id, name, email?}`, email только себе и admin-роли.
+- Фронт: `/broker/leads`, `/broker/leads/[id]` (`BrokerLeadList`, `BrokerLeadCard`, `LeadStatusBadge`, `AccessDenied`), поиск не попадает в URL; ссылка «Заявки» в шапке (десктоп) и в `/me` по роли (косметика, доступ решает API). Telegram-кнопка и in-app ссылка ведут в кабинет.
+- Проверки: бэкенд 860 OK, `tests_broker.py` 43; `broker.spec.ts` 16 passed (chromium, mobile-chrome, mobile-safari), XSS-нагрузки из `e2e_seed` выводятся текстом; openapi через Postgres. Ревью `security-reviewer`: 2 «важно» + 4 «желательно» исправлены.
+- Для владельца: назначить роль broker сотрудникам; nginx — не логировать query `/api/v1/broker/` (LAUNCH_CHECKLIST); `e2e_cleanup` не удаляет `[E2E]`-заявки; DELETE заявки брокером даёт 405 (тесты DELETE — в 1.11).
 
 ---
 
-## Промт 11 — Telegram-бот (завершено 2026-06-24)
+## Задача 2.3: форма заявки и `/me/leads` (2026-10-20) — ЗАВЕРШЕНО
 
-### App telegram_bot
-- [x] `aiogram==3.29.0` добавлен в requirements.txt
-- [x] Django-приложение `telegram_bot` (отдельный процесс, включается `TELEGRAM_BOT_TOKEN`)
-
-### Привязка аккаунта (deep-link)
-- [x] `CustomUser.telegram_id` (BigIntegerField, nullable, unique) + миграция 0005
-- [x] `TelegramLinkToken(token UUID, user FK, expires_at, used)` + миграция 0001
-- [x] `GET /api/v1/telegram/link-token/` — JWT-защищённый, генерирует токен и deep-link (30 мин)
-- [x] `/start link_<uuid>` → записывает `telegram_id`, помечает токен `used=True`
-- [x] Просроченный / уже использованный → вежливый отказ
-
-### Middleware
-- [x] `UserBindingMiddleware`: по `telegram_id` → Django User в `data['telegram_user']` + `is_linked`
-
-### Команды бота (v1)
-- [x] `/start` (с deeplink и без)
-- [x] `/help`
-- [x] `/latest` — 3–5 свежих retail-листингов (in_stock/in_transit) с фото/ценой/ссылкой
-
-### Уведомления
-- [x] `integrations.tasks.send_notification` реализован через `aiogram Bot.send_message`
-- [x] Без токена / не привязан → `{sent: False}` (no-op)
-- [x] Поддержка inline-кнопок (параметр `buttons=[{text, url}]`)
-
-### Автопостинг в канал
-- [x] `telegram_bot.tasks.post_listing_to_channel` (Celery-задача)
-- [x] Retail-листинг → `TELEGRAM_CHANNEL_ID`; `is_express_buyout` → `TELEGRAM_B2B_CHANNEL_ID`
-- [x] Throttling: пауза 3 с между постами, ретрай на `TelegramRetryAfter`
-- [x] Сигнал `post_save(Listing, created=True)` → `.delay()` задачи
-
-### Webhook (прод)
-- [x] `POST /api/v1/telegram/webhook/` с проверкой `X-Telegram-Bot-Api-Secret-Token`
-- [x] `python manage.py set_webhook <url>` — установить webhook; `--delete` — удалить
-- [x] В dev — polling (`python manage.py run_bot`)
-
-### Management commands
-- [x] `python manage.py run_bot` — polling; без токена — понятное сообщение, сайт не ломается
-- [x] `python manage.py set_webhook <url>` — установить/удалить webhook для прод
-
-### Тесты (20 новых, 157 всего)
-- [x] `TelegramLinkToken`: valid / expired / used
-- [x] Link-token API: 401 без auth, 200 с токеном
-- [x] Link flow: токен помечается used, telegram_id записывается
-- [x] `send_notification`: нет токена → no-op; не привязан → no-op; привязан → отправка (мок)
-- [x] `post_listing_to_channel`: нет токена / листинг не найден / нет channel_id → no-op
-- [x] Сигнал: retail → delay() вызван; wholesale+express → delay() вызван; обычный wholesale → нет; update → нет
+- `LeadForm` после расчёта (`CalcBreakdown`) и на странице лота (`ListingDetail`): капча, honeypot, предзаполнение из профиля, блок «Ще» (бюджет, «Коли потрібне авто», город), ошибки 400 под полями, общие тексты на 429/503/500/сеть. Экран успеха `LeadSuccess` с кодом AFY. `/me/leads` — список своих заявок, пустое состояние, гость → `/login`; пункт «Мої заявки» в `MeDashboard`.
+- Атрибуция `lib/attribution.ts` + `AttributionCapture` в `app/layout.tsx`: только `sessionStorage`, UTM по белому списку и шаблону `[\p{L}\p{N}_.-]{1,100}` (то же на бэкенде в `clean_attribution`), реферер до origin, пути без query.
+- Текст согласия партнёру — один источник: публичный `site-settings` отдаёт `partner_consent_text` из `PARTNER_CONSENT_TEMPLATE`, тот же текст сохраняется в заявку. При лоте `vehicle_label` формируется на сервере. `e2e_seed` заполняет `partner_name`.
+- Проверки: `lead.spec.ts` + `legal.spec.ts` 42 passed (1 старый fixme), tsc/build чисто, бэкенд 817 OK (skipped=1). Ревью `security-reviewer`: 3 «важно» (2 ложно-зелёных e2e, расхождение текста согласия) + 4 «желательно» исправлены.
+- Для владельца: ссылка «Як працює пригон?» (Н-30) появится со страницами доверия (2.13); настоящая Turnstile-капча с боевыми ключами не проверялась; `npm run lint` — 3 старые ошибки вне задачи.
 
 ---
 
-## Промт 2 — Сетки аукционных сборов Copart/IAAI (завершено 2026-06-20)
+## Задача 2.2: уведомление брокеру о заявке (2026-10-20) — ЗАВЕРШЕНО
 
-### Модели
-- [x] `AuctionFeeTier` v2: auction/member_type/payment_type/title_type/bid_min/bid_max/fee_flat/fee_percent
-  + `clean()` validation: ровно одно из fee_flat/fee_percent
-- [x] `AuctionFixedFee`: auction/fee_type(gate|environmental|virtual_bid)/title_type/amount
-- [x] Миграция 0004: DeleteModel старой + CreateModel обеих новых
-
-### Калькулятор
-- [x] `AuctionFeeBreakdown` dataclass (buyer_fee/gate/environmental/virtual_bid/total)
-- [x] `calc_auction_fees(bid, tier, fixed_fees)` — чистая функция в calculator.py
-- [x] `RateSnapshot.auction_fee: AuctionFeeBreakdown` (замена старого AuctionFeeRateSnapshot)
-- [x] `LandedCostBreakdown`: auction_fee_usd (total) + 4 sub-компонента
-- [x] `_lookup_tier()`: точный title_type → fallback 'any'
-- [x] `_lookup_fixed_fees()`: gate по title_type + env + virtual_bid
-
-### Seed
-- [x] `seed_auction_fees`: 50 тиров Copart/IAAI + 7 фиксированных сборов
-  - Copart public/salvage/secured: 11 flat тиров $0-$499→$75 .. $5000+→10%
-  - Copart licensed+broker/secured: flat $100 min + 6%; unsecured: 8%
-  - IAAI licensed+broker/secured: flat до $4999 + 8%/$7500+10%
-  - Fixed: gate clean $79/salvage $95, env $10, vb $99 (Copart); gate $95, env $15, vb $75 (IAAI)
-  - Все строки: `# baseline — сверить с офиц. сеткой и тарифом брокера`
-- [x] `seed_rates.py`: удалены старые тиры, ссылка на `seed_auction_fees`
-
-### Админка
-- [x] `AuctionFeeTierAdmin`: list_filter по auction/member_type/payment_type/title_type
-- [x] `AuctionFixedFeeAdmin`: list_filter по auction/fee_type/title_type
-
-### Тесты (14 новых в промте 2)
-- [x] Copart public $3200 salvage → buyer_fee=385, gate=95, env=10, vb=99, total=589
-- [x] Copart licensed $8000 → 6% = 480
-- [x] Copart public $7500 $5000+ тир → 10% = 750
-- [x] IAAI licensed $12000 → 8% = 960 + fixed fees
-- [x] Граничные значения bid_min / bid_max / округление %
-- [x] Нет фиксированных сборов → gate/env/vb = 0
-- [x] Все поля AuctionFeeBreakdown — Decimal
+- `notify_new_lead` → Celery-задача `leads.tasks.notify_broker_new_lead` (после коммита). Отправка через общий `telegram_bot/sender.py`; chat_id из админки «Налаштування сповіщень про заявки» (singleton, только числовой id) или `TELEGRAM_BROKER_CHAT_ID`; шаблон в админке, все значения `html.escape`, запрет `.`/`[`/`!`/`:` в плейсхолдерах, длина в UTF-16 (лимит 4096), кнопка «Відкрити заявку» только при https `SITE_URL`.
+- Статусы доставки на `Lead`: `pending`/`sending`/`sent`/`skipped_not_configured`/`failed`; атомарный захват отправки (без дублей), повтор `self.retry` без объекта исключения (ПДн не уходят в backend). In-app уведомление `new_lead` активным брокерам, один раз на заявку (`broker_in_app_sent`).
+- Админка: статус и время отправки, фильтр, действие «Надіслати брокеру повторно» (право `change`), предупреждение при ненастроенном Telegram. Настройки меняет только superuser.
+- Миграции: leads 0003–0005, notifications 0003. Тесты `leads/tests_notify.py` (34), всего 814 OK (skipped=1). Ревью `security-reviewer`: 3 «важно» + 6 «желательно» исправлены.
+- Для владельца: `TELEGRAM_BOT_TOKEN`, chat_id брокера/группы (бот в группе с правом писать), `SITE_URL=https://…`; выдать роль `broker` сотрудникам. Резервного email нет (Н-28) — не открывать заявки, пока доставка не проверена.
 
 ---
 
-## Промт 3 — Landed-cost E2E + фиксы ревью (завершено 2026-06-20)
+## Задача 2.1b: API заявки (2026-10-20) — ЗАВЕРШЕНО
 
-### Fix 1 — IAAI тир 10% для ставок ≥$7500
-- [x] Исправлен `TestIAAIPercentTier`: $12000 теперь тестируется с fee_percent=0.1000 → $1200 (было 0.0800→$960)
-- [x] Добавлен тест IAAI 8% тир: $6000 → buyer_fee=$480
-- [x] Добавлен `TestIAAITierBoundaryDB` (Django TestCase с реальной БД):
-  - $7499 → tier.fee_percent == 0.0800
-  - $7500 → tier.fee_percent == 0.1000
-  - $12000 calc → buyer_fee=$1200
-
-### Fix 2 — AUCTION_DEFAULT_MEMBER_TYPE в settings
-- [x] `AUCTION_DEFAULT_MEMBER_TYPE = 'broker'` добавлен в `core/settings.py` (env-переопределяем)
-- [x] `pricing/views.py`: `DEFAULT_MEMBER_TYPE = getattr(settings, 'AUCTION_DEFAULT_MEMBER_TYPE', 'broker')`
-- [x] `TestCalculateInputSerializerDefaults`: дефолты member_type='broker', payment_type='secured'
-
-### E2E интеграционный тест
-- [x] `TestLandedCostE2ECopartBroker` — полный сценарий Copart broker/salvage/secured $5000 petrol 2.0L 2018:
-  - auction_fee_buyer=$300 (6%), total auction_fee=$504 (buyer+gate$95+env$10+vb$99)
-  - customs_value_usd=$6800, duty_usd=$680
-  - excise_eur=800 (5.0 EUR/100cc × 20 × age_coeff=8)
-  - total_usd=$8334 (все 6 компонентов)
-  - total_uah > total_usd×rate (акциз+НДС+пенсионный сверху)
-  - is_estimate=True, rates_date непустой
-- [x] Все тесты зелёные: 58 тестов OK
+- `POST /api/v1/leads/` (AllowAny) и `GET /api/v1/leads/mine/` (IsAuthenticated, пагинация 20, без ПДн и снимка, `spam` показывается как `rejected`). Порядок: тело-объект (иначе 400) → throttle `lead` (`THROTTLE_LEAD_RATE`) → honeypot `website` (правдоподобный 201 без записи) → 503 при пустом `partner_name` → капча `require_captcha(point='lead')` → поля → `create_lead`.
+- Сериализатор: обязательные `consent` и `partner_consent`, нормализация телефона, тихая атрибуция, чужой/несуществующий расчёт и недоступный wholesale-лот дают одинаковый 400, сверка `source` с объектом, запрет управляющих символов. Ответ 201: `public_id`, `status`, `created_at` (без `id` и ПДн).
+- `openapi.yaml` перегенерирован против Postgres (только добавления). `ENUM_NAME_OVERRIDES` для `LeadStatusEnum`, `LeadSourceEnum`, `SourceEnum`. `THROTTLE_LEAD_RATE` в `.env*.example`, пункты в `LAUNCH_CHECKLIST.md`.
+- Тесты `leads/tests_api.py`: 201/400/401/403 CSRF/429 (без мока)/503, honeypot, порядок проверок, пагинация `mine/`, мутационная проверка. Ревью `security-reviewer`: 2 «важно» + 4 «желательно» исправлены. Всего 780 тестов OK (skipped=1).
+- Решения владельца: (1) гостевой расчёт может приложить любой, кто знает его id (видны только суммы, без ПДн; закрыть — привязать к сессии/токену калькулятора); (2) ставка 5/час на IP считает и неудачные попытки — CGNAT и опечатки упрутся в 429; (3) принимать ли заявку на проданный лот (сейчас принимается); (4) referrer хранится без пути (задача говорила «хост и путь»).
 
 ---
 
-## Промт 9 — Кэш и производительность (завершено 2026-06-23)
+## Задача 2.1a: приложение `leads` — модели, статусы, сервис, админка (2026-10-20) — ЗАВЕРШЕНО
 
-### Кэш-бэкенд
-- [x] `django-redis==5.4.0` добавлен в requirements.txt
-- [x] `CACHES`: `REDIS_URL` задан → django-redis; не задан → LocMemCache (dev без Redis)
-- [x] `.env.example`: `REDIS_URL` плейсхолдером с объяснением
-
-### Кэширование тарифных справочников (с инвалидацией)
-- [x] `pricing/cache.py`: 8 геттеров (AuctionFeeTier, AuctionFixedFee, UsLandRoute, OceanFreight, EuToUa, ExchangeRate, CustomsExcise, PensionBracket) — TTL 24ч
-- [x] `pricing/signals.py`: `post_save` + `post_delete` на все 8 моделей → `cache.delete(key)`
-- [x] `pricing/apps.py`: `ready()` регистрирует сигналы
-- [x] `pricing/views.py`: `CalculateView` использует in-memory фильтрацию по кэшу — 0 запросов к БД на cache hit (было 8+)
-- [x] Инвалидация мгновенная: правка ставки в админке → следующий расчёт сразу использует новую
-
-### DB-индексы
-- [x] `Listing`: индексы на `status`, `channel`, составной `(channel, status)`, `price` → миграция 0005
-- [x] `Vehicle`: индекс на `fuel_type` → миграция 0003 (VIN уже уникальный = индекс)
-
-### Устранение N+1
-- [x] `ShipmentListSerializer.get_vehicle_count`: заменён `obj.vehicles.count()` (N DB-хитов) → prefetch cache (`len` из `_prefetched_objects_cache`)
-- [x] Листинги: `select_related('vehicle','seller') + prefetch_related('vehicle__images')` уже было — подтверждено тестом
-- [x] **Доказательство**: `assertNumQueries(3)` для каталога — 3 запроса для любого числа листингов (COUNT + JOIN + prefetch_images), не растёт при 5 или 15 объектах
-
-### Тесты (10 новых, 133 всего)
-- [x] Кэш тарифов: save → invalidate; delete → invalidate; переcчитывает из БД с новым значением
-- [x] `TestListingListQueryCount`: 5 листингов = 3 запроса; 15 листингов = 3 запроса (N+1 отсутствует)
+- Модели `Lead`, `LeadStatusChange`, `LeadCounter`; TextChoices на уровне модуля (`LeadStatus` с `spam`, `PartnerStatus`, `LeadSource` calculator/listing/landing, `ContactMethod`, `NeededWhen`). `public_id` вида `AFY-ГГГГ-NNNN` (счётчик по году, `select_for_update`). CheckConstraint на `status`, `source`, `budget_usd >= 0`. Миграции 0001–0002 (0002 — права: «Брокери» и «Адміністратори» получают view/change заявок, без delete; модераторам ничего).
+- `leads/validators.py`: `normalize_ua_phone` (E.164, 0 после 380 запрещён), `clean_attribution` (4 ключа UTM, URL без query/fragment, referrer только `scheme://netloc`).
+- `leads/services.py`: `create_lead` (снимок расчёта, `partner_name` из `SiteSettings`, `PartnerNotConfigured` для 503 в 2.1b, чужой `Calculation` → `ValueError`), `change_status` + `ALLOWED_TRANSITIONS`, `first_response_at`, хуки `notify_new_lead`/`record_metric` через `on_commit` в try/except (лог только `lead_id`).
+- `LeadAdmin`: «Джерело», фильтры, поиск, ПДн read-only, `assigned_to` только broker/admin, проверка перехода в `clean()`, чекбокс «Перевідкрити» (superuser/admin-роль, в журнал `force:`), добавление закрыто, удаление только superuser.
+- Ревью `security-reviewer`: 6 «важно» + 4 «желательно» исправлены. Тесты: 731 OK (skipped=1 — параллельный `public_id` на SQLite, проверяется на Postgres в CI).
+- Для владельца: подтвердить статус `spam`; текст согласия партнёру (`PARTNER_CONSENT_TEMPLATE` в `services.py`) — на юридическую вычитку; `leads.services.record_metric('lead_created')` с 8.7 пишет в `metrics` (ключ `lead`); согласие хранится на заявке до 1.14.
 
 ---
 
-## Промт 8 — Безопасность (завершено 2026-06-23)
+## Задача 1.12: настройки сайта и юридические документы (2026-10-14) — ЗАВЕРШЕНО
 
-### Throttling (защита платных API)
-- [x] DRF `AnonRateThrottle` (60/hr) + `UserRateThrottle` (300/hr) — дефолты, env-overridable
-- [x] `ScopedRateThrottle` scope `expensive` (10/hr) на `/registry/` и `/decode/`
-- [x] `/vehicles/<vin>/registry/` — только `IsAuthenticated` (Opendatabot платный)
-- [x] Кэш RegistryReport проверяется ДО внешнего вызова (подтверждено в views.py)
-- [x] Тесты: анон → 401/403; throttle deny → 429
-
-### CORS / ALLOWED_HOSTS
-- [x] `CORS_ALLOW_ALL_ORIGINS = DEBUG` (dev только)
-- [x] `CORS_ALLOWED_ORIGINS` env-overridable: `CORS_ALLOWED_ORIGINS=https://yourdomain.com,...`
-- [x] `ALLOWED_HOSTS` из env; при DEBUG=True → `['*']`; prod без env → `[]`
-
-### JWT
-- [x] Access: 15 мин (было 1 час), Refresh: 7 дней (было 30)
-- [x] `rest_framework_simplejwt.token_blacklist` добавлен в INSTALLED_APPS + миграция
-- [x] `BLACKLIST_AFTER_ROTATION = True`
-- [x] `POST /api/v1/auth/token/logout/` — кладёт refresh в blacklist
-- [x] Тест: отозванный refresh → 401 при попытке обновить access
-
-### Security-заголовки (только при DEBUG=False)
-- [x] `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS=31536000`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`
-- [x] `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_PROXY_SSL_HEADER`
-- [x] `X_FRAME_OPTIONS = 'DENY'`, `SECURE_CONTENT_TYPE_NOSNIFF`
-- [x] В dev (DEBUG=True) — все выключены, localhost работает по HTTP
-
-### Аудит
-- [x] `python manage.py check --deploy` — 0 ошибок, 13 warnings (2 безопасности: SECRET_KEY и ALLOWED_HOSTS — оба устраняются env-переменными перед продом)
-- [x] `.gitignore` проверен: `.env`, `*.sqlite3`, `backups/`, `*.log` не в git. В git только `.env.example`
-- [x] LiqPay callback: подпись SHA1 проверяется в `decode_callback()`. Идемпотентный guard добавлен — повторный COMPLETED-колбэк пропускается, листинг не разблокируется дважды
-
-### Тесты (10 новых, 127 всего)
-- [x] Анон на registry → 401; auth → 200
-- [x] ScopedRateThrottle deny → 429 (registry и decode)
-- [x] Logout → ok; blacklisted refresh → 401 на /token/refresh/; logout без auth → 401; logout без refresh → 400
+- Приложение `site_settings`: singleton `SiteSettings` (реквизиты владельца ПДн, контакты, `partner_name`/`partner_legal_name`, сроки, версия документов), админка без добавления/удаления, публичный `GET /api/v1/site-settings/` (белый список, кэш с инвалидацией в `signals.py`). Миграции 0001–0002.
+- Фронт: `getSiteSettings()`, `LegalPage`, пять юр. страниц на нём (`force-dynamic`), переписанная политика, серверный подвал с реквизитами и дисклеймером партнёра. `e2e_seed` заполняет настройки.
+- Ревью безопасности: исправлены сброс кэша вне веб-процесса, проверка прав в `changelist_view`, тесты границ модератора/брокера (`users/tests.py`), фильтр ссылки Telegram в подвале. Критичных не было.
+- Тесты: полный прогон 682 OK до правок ревью, затем `site_settings users` 217 OK; мутации проверены.
+- Не сделано: `openapi.yaml` (нужен Postgres); e2e «пустые настройки» — `test.fixme` (нужен e2e-переключатель настроек).
+- Политика ссылается на `/me/data` и удаление аккаунта (1.8), заявку (2.1) — пункт в LAUNCH_CHECKLIST.
+- Факт 1 сессия при оценке 2.
 
 ---
 
-## Промт 7 — PostgreSQL + S3 + разделение настроек (завершено 2026-06-22)
+## Перепланирование 2.1 (2026-10-14)
 
-### Безопасность данных
-- [x] git push (4 коммита отправлены на GitHub до начала работы)
-- [x] Резервная копия БД: `backups/db_20260622.sqlite3` + `backups/data_20260622.json`
-- [x] `.gitignore` дополнен: `backups/`, `*.env` — никогда не попадут в git
-
-### Настройки через env (core/settings.py переписан)
-- [x] `SECRET_KEY` — из env; старый insecure-ключ остаётся только если ключ не задан (dev fallback)
-- [x] `DEBUG` — `False` по умолчанию; для dev: `DEBUG=true` в `.env`
-- [x] `ALLOWED_HOSTS` — из env; при `DEBUG=true` → `['*']`
-- [x] `CORS_ALLOW_ALL_ORIGINS` — только при `DEBUG=True` (prod: явный список)
-
-### База данных (dj-database-url)
-- [x] `DATABASE_URL` не задан → SQLite (dev, без настройки, локальная разработка не сломана)
-- [x] `DATABASE_URL=postgres://...` → PostgreSQL (любой провайдер: Railway, Heroku, VPS)
-- [x] `conn_max_age=600` — connection pooling для Postgres
-
-### S3-хранилище (django-storages + boto3)
-- [x] S3-переменные (`S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) не заданы → `media/` локально
-- [x] S3-переменные заданы → `DEFAULT_FILE_STORAGE = S3Boto3Storage`
-- [x] `S3_ENDPOINT_URL` — поддержка Cloudflare R2 / MinIO (S3-совместимые)
-- [x] `AWS_DEFAULT_ACL = 'private'` + подписанные URL
-
-### Management command upload_lot_photos
-- [x] Скачивает фото из `VehicleImage.source_url` → сохраняет в хранилище (S3 или media/)
-- [x] `--dry-run` — показать список без скачивания
-- [x] `--limit N` — обработать первые N фото
-
-### requirements.txt
-- [x] `dj-database-url==2.3.0`
-- [x] `django-storages[s3]==1.14.4`
-- [x] `boto3==1.38.38`
-
-### .env.example
-- [x] Полный шаблон: SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_URL, S3_*, LiqPay, интеграции, Email
-
-### DEPLOY_NOTES.md
-- [x] Пошаговая инструкция простым языком (без жаргона): бэкап, Postgres, S3, откат
-
-### Тесты
-- [x] 119 тестов зелёные на SQLite (без DATABASE_URL и S3-переменных)
-- [x] `python manage.py check` — 0 ошибок
+- Решение владельца: 1.12 (SiteSettings, `partner_name`) выполняется перед 2.1; 2.1 разделена на 2.1a (модели, сервис, админка) и 2.1b (API, антиспам, openapi); выгрузка и обезличивание заявок перенесены в 1.8. Порядок ВОЛНЫ-1: … 1.6 → 1.12 → 2.1a → 2.1b → 2.2 → 2.3 → 2.4 → 1.14 → … Зависимости проверены скриптом: 56 позиций, нарушений нет.
 
 ---
 
-## Промт 6 — Импорт лотов аукционов (завершено 2026-06-22)
+## Задача 1.6: подтверждение email, Turnstile + honeypot (2026-10-14) — ЗАВЕРШЕНО
 
-### AuctionLotProvider (за интерфейсом)
-- [x] ABC `AuctionLotProvider.fetch_lot(lot_url_or_data)` → нормализованный dict лота
-- [x] `_normalize_lot()` — приведение полей: VIN→upper, auction/fuel_type → choices, final_bid→Decimal
-- [x] `ManualLotProvider` — нормализует переданный dict, без внешних зависимостей, рабочий MVP
-- [x] `ApifyLotProvider` — заглушка под Apify-актор; без APIFY_TOKEN → demo=True, не падает
-- [x] Фабрика `get_lot_provider()` — читает `APIFY_TOKEN` из settings
-- [x] `APIFY_TOKEN` в settings.py (env) + плейсхолдер в .env.example
-
-### Маппинг лот → доменные модели (integrations/importer.py)
-- [x] `import_lot(lot_data, seller)` — возвращает `(Vehicle, Listing, created)`
-- [x] `Vehicle.update_or_create(vin=...)` — идемпотентно, upsert
-- [x] `VehicleImage.get_or_create(vehicle, source_url)` — URL фото, is_primary для первого
-- [x] `vehicles.VehicleImage`: добавлен `source_url` CharField, `image` стал nullable (миграция 0002)
-- [x] `# фото в S3 — промт 7` — пометки в коде
-- [x] `Listing.get_or_create(vehicle, status=in_transit)` — retail, цена из final_bid
-- [x] Повторный импорт того же VIN: Vehicle обновляется, Listing — обновляется цена, дублей нет
-
-### Эндпоинт + команда
-- [x] POST /api/v1/lots/import/ (IsAdminUser)
-- [x] `LotImportRequestSerializer`: source=manual/apify, lot_data или lot_url
-- [x] Возвращает 201 при создании, 200 при обновлении, 400 при ошибке провайдера/VIN
-- [x] Management command `import_lot` — `--json`, `--file`, `--source apify --url`, `--seller-email`
-- [x] ⚠ Импорт по расписанию — Celery (промт 10)
-
-### Тесты (22 новых, 119 всего)
-- [x] ManualLotProvider: valid → нормализованный dict, missing VIN → error, short VIN → error, not dict → error
-- [x] ManualLotProvider: vin uppercased, unknown auction → 'other', photos preserved
-- [x] ApifyLotProvider: без токена → demo=True, не бросает
-- [x] import_lot: создаёт Vehicle/Listing, сохраняет photo URLs, первое фото is_primary=True
-- [x] import_lot: повтор → 1 Vehicle, 1 Listing, created=False
-- [x] import_lot: error в lot_data → ValueError
-- [x] POST /api/v1/lots/import/: admin→201, non-admin→403, unauth→401, bad VIN→400, repeat→200
-- [x] POST с apify без токена: не 500
-
-### Следующий шаг (промт 7)
-PostgreSQL + разделение настроек + S3 (перекладывание фото)
+- Бэкенд: `users/tokens.py` (токен с `is_email_verified` и email, TTL `EMAIL_VERIFY_TTL_HOURS`), `users/emails.py` + шаблоны, `verify-email/`, `verify-email/resend/` (scope `verify_resend`), `auth/config/` (без секретов, `no-store`), `IsEmailVerified` на `POST /local/listings/`, начале диалога/сообщении, `dealers/apply/` (403 `email_not_verified`), data-миграция `0012_grandfather_email_verified`, 18+ (`is_adult`), одинаковый 201 на дубль email (01-S11), `users.E001/W002/E002` (system check капчи).
+- `integrations/captcha.py`: Turnstile / honeypot (всегда) / off, `require_captcha(request, data, point=…)`; вход — капча после `CAPTCHA_LOGIN_AFTER_FAILURES` неудач (порядок: блокировка → капча → попытка). Honeypot `form_token` одноразовый (nonce, IP, TTL 1 ч).
+- Фронт: `Captcha.tsx` (`resetKey`, `expired-callback`, сообщение о провале скрипта), «Перевірте пошту», `/verify-email`, баннер в `/me`, обработка 403 на формах.
+- Ревью безопасности: исправлены тайминг-различие занятого email, многоразовый form_token, тестовые ключи Cloudflare на проде (E002), `assertRaises(Exception)`. Оставлено на 1.7: сброс пароля должен ставить `is_email_verified=True` и отзывать сессии (захват аккаунта до регистрации владельцем); желательное — проверка `hostname` в siteverify, пороги капчи по IP (password spraying), `Referrer-Policy` на `/verify-email`, имя honeypot-поля `website`.
+- e2e: в стеке нет Mailpit — сценарии «письмо → ссылка» и «повторная ссылка» `test.fixme` (verify-captcha.spec.ts:70,72); нужна задача на mail-catcher в `docker-compose.e2e.yml`. Блокировка ставится на (MAX+1)-й попытке, капча проверяется раньше — спека login-limit шлёт её с токеном. auth-cookie.spec.ts:247 флейкает из-за общего аккаунта buyer и nginx `limit_req` (счётчик в памяти nginx, FLUSHALL не сбрасывает).
+- Для 1.12: Turnstile (Cloudflare) обрабатывает IP посетителя. Для этапа 7: `challenges.cloudflare.com` в `script-src` и `frame-src`.
+- `openapi.yaml` НЕ перегенерирован (нужен Postgres) — сделать отдельно.
+- Факт 1 сессия при оценке 2.
 
 ---
 
-## Промт 5 — Opendatabot: реальный реестр авто UA (завершено 2026-06-22)
+## Задача 1.5: защита входа от перебора (2026-10-14) — ЗАВЕРШЕНО
 
-### Закрытые пробелы гейтинга (ревью промта 4)
-- [x] B2B board 403 неверифицированным — уже был закрыт (IsVerifiedDealerOrAdmin + тест)
-- [x] GET /api/v1/listings/<id>/ wholesale → 404 для неверифицированных (queryset фильтр уже был)
-- [x] Добавлен тест `TestWholesaleListingDetailGating` (5 кейсов): anon/buyer→404, dealer/admin→200, retail→доступен всем
-
-### RegistryReport (кэш UA реестров)
-- [x] Модель `RegistryReport`: vin (nullable), plate (nullable), provider, payload (JSONField), demo, created_at
-- [x] Миграция 0002_registryreport
-- [x] `RegistryReportAdmin` в admin.py
-
-### RealOpendatabotProvider
-- [x] Реализован `RealOpendatabotProvider(OpendatabotProvider)` — httpx-клиент
-- [x] Без ключа (`OPENDATABOT_API_KEY=''`) → demo=True, no 500, понятный fallback
-- [x] С ключом → GET `_ODB_VIN_URL` или `_ODB_NUMBER_URL` (см. комментарий: сверить с актуальной документацией Opendatabot)
-- [x] Парсинг ответа: vin, plate, brand, model, year, color, fuel, engine_volume, stolen, restrictions, owners, odometer, raw
-- [x] Ошибка HTTP → dict с `error`, не исключение, не 500
-- [x] Фабрика `get_opendatabot_provider()` — возвращает `RealOpendatabotProvider` (с ключом или без)
-- [x] `StubOpendatabotProvider` сохранён для совместимости с legacy `/report/`
-
-### Эндпоинт
-- [x] GET /api/v1/vehicles/<vin>/registry/ → отчёт через RealOpendatabotProvider + кэш RegistryReport
-- [x] `?plate=` — поиск по госномеру (vin в пути = `_`)
-- [x] Кэш: повторный запрос по тому же VIN/номеру — из БД, без HTTP-запроса
-- [x] OPENDATABOT_API_KEY в settings.py (env) + плейсхолдер в .env.example
-
-### Тесты (20 новых, 97 всего)
-- [x] Без ключа → demo=True, не падает (VIN и plate)
-- [x] С ключом (замокан httpx): успешный VIN → парсинг всех полей
-- [x] С ключом: plate-запрос → plate в ответе
-- [x] HTTP-ошибка → dict с error, без исключения
-- [x] VIN в запросе приводится к UPPER
-- [x] Повторный запрос по VIN → провайдер вызван 1 раз (кэш)
-- [x] Второй запрос → cached=True
-- [x] Невалидный VIN (< 17 символов) → 400
-- [x] `_` без ?plate= → 400
-- [x] ?plate=AA1234BB → провайдер вызван с plate, vin=None
-- [x] Сохранение в RegistryReport после первого запроса
+- `users/lockout.py`: счётчик неудач и блокировка по sha256(email) в `django.cache` (`failure_count`, `is_locked`, `register_failure`, `reset`); в лог — хэш (12 симв.) и IP.
+- `CookieTokenObtainView`: порядок throttle `login` → блокировка (429 + `Retry-After` + `retry_after` в теле) → пароль. 401 содержит `captcha_required` (порог `CAPTCHA_LOGIN_AFTER_FAILURES`=3). **Ждёт 1.6:** проверка капчи до пароля (`captcha_failed`) и её тесты.
+- Scoped throttle `login`/`register`/`refresh`; `NUM_PROXIES` из `.env`; nginx: `X-Forwarded-For $remote_addr`, `limit_req` (20 r/min, burst 10 — мягче 10 r/min из задачи, чтобы не ронять e2e с одного IP) на `token/`, `register/`, `admin/login/`, `server_tokens off`.
+- Админка: `LockoutAdminAuthenticationForm` (тот же счётчик, 01-S16). Предупреждение `users.W001` про LocMemCache вне DEBUG.
+- Фронт: `login()` различает 429 («Забагато спроб. Спробуйте через N хв.»), 400/401, 5xx/сеть. Playwright: `login-limit.spec.ts`.
+- Ревью безопасности: исправлены NFKC-обход в админке, HMAC вместо голого sha256, гонка (попытка занимается до проверки пароля), мёртвая проверка LocMemCache. Принято как есть: блокировка чужого аккаунта (в LAUNCH_CHECKLIST), 403/CSRF на входе показывается как «Сервіс тимчасово недоступний».
+- Тесты: `users/tests_lockout.py` (19), мутации проверены.
 
 ---
 
-## Промт 4 — Верификация дилеров (завершено 2026-06-20)
+## Задача 1.4: фронтенд на cookie-аутентификации (2026-10-14) — ЗАВЕРШЕНО
 
-### Модель и сервис
-- [x] `DealerApplication`: user/company_name/full_name/contact_phone/documents/status(pending|approved|rejected)/reviewed_by/review_notes/created_at/reviewed_at
-- [x] `users/services.py`: `apply_for_dealer` (DuplicatePendingError на pending), `approve_application` (is_verified_dealer=True+role=dealer+email), `reject_application` (review_notes+email)
-- [x] Email-уведомление: `EMAIL_BACKEND=console` в dev, env-переопределяемо; пометка «позже Telegram (промт 11)»
-
-### API
-- [x] POST /api/v1/dealers/apply/ — создаёт pending; 409 при наличии pending
-- [x] GET /api/v1/dealers/application/ — статус собственной заявки (404 если нет)
-- [x] `dealer_urlpatterns` в `users/urls.py`, подключены в `core/urls.py` под `/api/v1/dealers/`
-
-### Админка
-- [x] `DealerApplicationAdmin`: list_filter по status, actions «Одобрить» / «Отклонить»
-- [x] При одобрении: `approve_application` → is_verified_dealer=True, role=dealer, email
-- [x] При отклонении: `reject_application` → review_notes сохраняются
-
-### B2B гейтинг
-- [x] `IsVerifiedDealerOrAdmin` (listings/permissions.py) — DRF permission, перепроверен
-- [x] /api/v1/b2b/board/ → 403 для неверифицированных, 401 для неавторизованных
-- [x] `ListingListView`: verified dealers видят wholesale + retail; остальные только retail
-
-### Frontend
-- [x] `/dealers/apply` — форма заявки (company_name, full_name, contact_phone, documents)
-- [x] `api/dealers.ts` — API клиент (apply, getApplication)
-- [x] `lib/types.ts` — тип `DealerApplication`
-- [x] B2B-страница: CTA «Подати заявку на B2B» → /dealers/apply для неверифицированных
-- [x] Header: меню «B2B» для дилеров/admin; «B2B-доступ» (CTA) для авторизованных без верификации
-
-### Тесты (19 новых)
-- [x] Сервис: create pending, DuplicatePendingError, allow after rejection, approve→is_verified_dealer, reviewed_by/at, reject saves notes
-- [x] API: 201 apply, 409 duplicate, 401 unauth, 400 missing fields, 404 no application, 200 status
-- [x] B2B гейтинг: 401 unauth, 403 regular user, 200 verified dealer, 200 admin
-- [x] Wholesale фильтр: anon/buyer не видит wholesale, dealer видит; 77 тестов OK
-
-### Следующий шаг (промт 6)
-Импорт лотов с аукционов, наполнение каталога «в пути»
+- `api/client.ts`: `credentials:'include'`, без `Authorization`; `Content-Type` только с телом (08-Q16); `X-CSRFToken` на POST/PUT/PATCH/DELETE и upload (`lib/csrf.ts`, при отсутствии cookie — `GET /auth/csrf/`). Refresh — single-flight в вкладке + `navigator.locks` между вкладками; «эпоха» сессии: 401 на запрос, ушедший до refresh, просто повторяется. Refresh 401 → один повтор → событие `auth:expired`; 429/5xx на refresh из сессии не выкидывают. 401 не редиректит, кидается `ApiError` со `status`.
+- Метка сессии `has_session=1` (не httpOnly, без токена; `users/cookies.py`, `AUTH_COOKIE_HINT_NAME`): без неё фронт не зовёт profile/refresh — гость не тратит анонимный лимит (найдено ревью). Бэкенд ставит её вместе с refresh и удаляет в `clear_auth_cookies`.
+- `lib/auth-context.tsx`: профиль по cookie, `login` → `POST token/` (400/401 → «Невірний email або пароль»), `logout` → `POST token/logout/` и полный переход на `/` только при 200/400, иначе сообщение «Не вдалося вийти» (ревью: при сбое сети cookie остаются). Одноразовая очистка старых `localStorage.access/refresh`. Удалены `Tokens`, `tokens`, `refreshToken`.
+- `lib/use-require-auth.ts` + `lib/safe-next.ts`: 15 страниц (`app/me/**`, `b2b`, `local/new`, `local/[id]/edit`, `dealers/apply`) — один хук, `/login?next=<путь>`; `next` и ссылка уведомления — только путь сайта (не `//`, `/\`, без управляющих символов). `/login` в `Suspense`.
+- `lib/server-api.ts::serverGetAuthed` — только cookie `access` (значение проверяется `^[\w.-]+$`), `cache:'no-store'`. Используется на `/me` (`app/me/page.tsx` — серверная обёртка с `force-dynamic` и меткой `data-ssr-auth`, кабинет — `MeDashboard.tsx`). После refresh клиент делает `router.refresh()`. **Следующий шаг — 2.9: B2B-лот на `serverGetAuthed`.**
+- Бэкенд: `AUTH_TOKENS_IN_BODY=False`; `CSRF_COOKIE_SECURE = AUTH_COOKIE_SECURE` в прод-блоке + `ImproperlyConfigured` при `SECURE_SSL_REDIRECT` без `AUTH_COOKIE_SECURE`. Тесты: `test_token_body_has_no_tokens`, метка сессии; Bearer-тесты берут токен через `RefreshToken.for_user`.
+- Тексты 11-S5: `/cookies` (таблица `access`/`refresh`/`has_session`/`csrftoken`/`cookie_consent`), `consent.ts`, `CookieBanner`, комментарии `WholesaleHint`, `server-api`.
+- E2E: `auth.setup.ts` сохраняет cookie в storageState, `fixtures.api` берёт Bearer из cookie `access`; `auth.spec.ts`, `private-pages.spec.ts` (`?next=` и внешний `next` — из fixme в тесты) переписаны; новый `auth-cookie.spec.ts` (23-P8, 23-P3, 23-P4, 09-Q7, 08-S7, 11-S5, сбой выхода, утечка SSR, очистка старых токенов). 23-P4 сделан без отдельного стека с `JWT_ACCESS_MINUTES=1`: удаление cookie `access` = то, что делает браузер по Max-Age, время шапки — `page.clock`.
+- `.env.e2e.example`: `AUTH_COOKIE_SECURE=false` (стенд по HTTP), `THROTTLE_ANON_RATE=2000/hour` — весь набор Playwright с одного IP выбирал 60/hour к мобильным проектам.
+- Вне раздела «Файлы» (неизбежно для зелёного Playwright и ревью): `e2e/auth.setup.ts`, `fixtures.ts`, `auth.spec.ts`, `private-pages.spec.ts`, `auth-cookie-api.spec.ts` (комментарий), `users/cookies.py`, `users/views.py` (описание OpenAPI), `tests/test_e2e.py`, `.env.e2e.example`, `app/local/[id]/edit`, `app/dealers/apply`, `app/me/notifications` (safeNext).
+- Проверки: backend 563 OK (+ users 138 OK после правок ревью); tsc и build чистые (`/me` — ƒ dynamic); eslint — новых ошибок нет (3 старые в `e2e/fixtures.ts`). **Весь Playwright: 127 passed / 4 skipped (fixme) / 0 failed.** Мутации Django: `AUTH_TOKENS_IN_BODY=True` и имя метки — красные. E2E-мутации отдельно не гонялись (пересборка образа); роль мутации сыграли прогоны на промежуточных сборках: без метки сессии — 429 и 13 красных, с гонкой в 23-P4 — красный.
+- Ревью безопасности: «критично» — нет; три «важно» (лимит гостя, ложный выход при сбое, старые токены в localStorage) и желательные (обходы `next`, утечка SSR, защита флага Secure) исправлены.
+- Серверный редирект `/me` без JS — решение владельца (2026-10-14): задача 6.2, `proxy.ts` по наличию cookie `has_session`, права проверяет API. Fixme в `private-pages.spec.ts` ссылается на 6.2. Тест на ссылку уведомления через `safeNext` — нет засева уведомлений, проверено только кодом.
 
 ---
 
-## Фаза 3 — Реальные источники данных (завершено 2026-06-20)
+## Задача 1.3: JWT в httpOnly-cookie + CSRF, бэкенд (2026-10-13) — ЗАВЕРШЕНО
 
-### VIN-декод NHTSA vPIC
-- [x] `NHTSAVinDecodeProvider` в `integrations/providers.py` — httpx, без ключа
-- [x] Поля NHTSA → Vehicle: Make/Model/ModelYear/DisplacementCC/FuelTypePrimary/BodyClass
-- [x] Кэш в VinReport(provider='nhtsa_vpic', demo=False)
-- [x] GET /api/v1/vehicles/<vin>/decode/ — реальные данные из NHTSA
-- [x] StubVinProvider (история ДТП) не тронут — остаётся на /report/
-
-### Платёжный шлюз LiqPay
-- [x] `payments` app: модель Payment (order_id, amount, currency, status, listing FK, purpose)
-- [x] `LiqPayClient`: create_checkout (URL + form_data) + decode_callback (проверка подписи SHA1)
-- [x] POST /api/v1/payments/liqpay/checkout/ (auth required) → checkout_url
-- [x] POST /api/v1/payments/liqpay/callback/ (csrf_exempt, signature check) → pending→completed/failed
-- [x] unlock_listing() при completed — разблокирует листинг
-- [x] Env: LIQPAY_PUBLIC_KEY, LIQPAY_PRIVATE_KEY, LIQPAY_SANDBOX=true (dev default)
-- [x] .env.example с плейсхолдерами
-- [x] Примечание: официальный SDK (liqpay/sdk-python) Python 2 only; протокол реализован напрямую
-
-### Возрастной коэффициент — потолок 15
-- [x] `calc_age_coeff()`: `min(15, max(1, год_расчёта − год_выпуска))`
-- [x] Тест: авто 20 лет (2006→2026) → коэффициент = 15 (не 20)
-- [x] 3 новых теста: cap boundary, exactly 15, below cap
-
-### Курс НБУ (бесплатно, без ключа)
-- [x] Management command `fetch_nbu_rates [--date YYYYMMDD]`
-- [x] Источник: bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=USD/EUR&date=YYYYMMDD
-- [x] USD/UAH + EUR/UAH → кросс-курс USD/EUR
-- [x] Upserts в ExchangeRate с date-specific записями
-- [x] Calculator view: ExchangeRate по calc_date (fallback к latest)
-- [x] Добавлен опциональный `calculation_date` в CalculateInputSerializer
-- [x] В ответе калькулятора: `exchange_rate_date` — дата использованного курса
+- `users/authentication.py::CookieJWTAuthentication` — сначала Bearer (плохой → 401, как раньше), потом cookie `access`: CSRF на небезопасных методах, мусорная/протухшая cookie и забаненный пользователь → аноним (09-Q7). OpenAPI: `jwtAuth` ИЛИ `cookieAuth`.
+- `users/cookies.py` — единое место флагов: `access` Path=/, `refresh` Path=/api/v1/auth/, HttpOnly, SameSite и Secure из `.env`. Views: login ставит cookie и меняет csrftoken; refresh/logout берут refresh из тела (без CSRF — переходный фронт) или из cookie (с CSRF); logout `AllowAny`, чужой refresh не отзывает (01-S13), нейтральные тексты; `GET /auth/csrf/`.
+- Настройки: `CSRF_TRUSTED_ORIGINS`, `AUTH_COOKIE_*`, `JWT_ACCESS_MINUTES`/`JWT_REFRESH_DAYS`, `UPDATE_LAST_LOGIN`, `AUTH_TOKENS_IN_BODY=True` (выключить в 1.4). Шаблоны `.env.example`, `.env.docker.example`.
+- Ревью безопасности: «критично» — нет; «важно» исправлено: login/refresh/logout принимают только JSON (login-CSRF через HTML-форму), `CORS_ALLOW_CREDENTIALS = not CORS_ALLOW_ALL_ORIGINS`. Желательное тоже: refresh удалённого пользователя 500 → 401, ротация csrftoken при входе, `AUTH_COOKIE_SAMESITE` только Lax/Strict.
+- Тесты: 34 новых в `users/tests.py`; `test_logout_requires_auth` заменён на `test_logout_without_access_still_revokes` — контракт изменён задачей (logout `AllowAny`). Мутации (12 шт.) все красные. Backend 561 OK, tsc и build чистые, `openapi.yaml` перегенерирован против Postgres (ошибок генерации 130, было 131).
+- **Не сделано:** живой прогон `frontend/e2e/auth-cookie-api.spec.ts` (2 теста, `--list` ок) — нужен e2e-стек, а это остановка dev-стека (только с «да» владельца).
+- **Для 1.4 (переходный режим, найдено ревью):** «Вийти» на фронте только чистит localStorage — cookie живут (refresh 7 дней) и 15 минут любой POST фронта без Bearer получает 403 CSRF. В 1.4 «Вийти» должен вызывать `POST /api/v1/auth/token/logout/`.
 
 ---
 
-## Пост-Фаза 2 — Реальные ставки растаможки (завершено 2026-06-18)
+## Задача 1.2b: is_staff → права по ролям (2026-10-13) — ЗАВЕРШЕНО
 
-### Ставки растаможки Украины, актуальны на янв–июнь 2026
-- [x] Акциз ДВС: бензин ≤3000 cc = 50 EUR/л, >3000 cc = 100 EUR/л; дизель ≤3500 cc = 75, >3500 cc = 150
-- [x] Акциз EV/PHEV: 1 EUR × ёмкость батареи кВт·ч (фиксированная ставка)
-- [x] Пошлина: EV/PHEV = 0%; все ДВС из США = 10% (льгота EUR.1 не применяется для US-origin)
-- [x] НДС 20% для всех авто, включая EV (льгота EV отменена с 01.01.2026)
-- [x] PHEV добавлен как отдельный тип топлива (как EV; уточнить у брокера)
-- [x] Hybrid (HEV) = как бензин (уточнить у брокера)
-- [x] Пенсионный сбор: пороги 165×/290× прожиточного минимума (3028 грн — ПРОВЕРИТЬ)
-- [x] age_coefficient = max(1, год − год_выпуска) — вынесен в calc_age_coeff() с комментарием брокера
-- [x] Миграция 0003_excise_rate_real_values: удалены age_bracket поля, добавлены engine_cc_min/max, ev_excise_eur_per_kwh
-- [x] 25 тестов зелёные (добавлены: petrol 2000cc/8y, diesel 2000cc/7y, EV 60кВт, US-origin duty, PHEV, age_coeff)
-- [x] В ответе калькулятора добавлен rates_validity_date
-- [x] Swagger-пример обновлён, warning обновлён
+- `can_view_wholesale` (`is_verified_dealer` или `is_admin_role`) для B2B-доски и wholesale в списке/деталях; `shipments._visible_to` — admin видит все, остальные (в т.ч. broker) только свои (`watchers`); `LotImportView` — `IsAdminRole`. Профиль отдаёт read-only `is_admin_role`; фронт (`/b2b`, шапка) проверяет его вместо `is_staff`.
+- Тесты 403/404 для broker и moderator по каждой точке; мутации (вернуть `is_staff`) красные. Тесты `shipments`, полагавшиеся на голый `is_staff`, переписаны под `make_admin_role`.
+- Перечень остальных `is_staff`: `users/*`, `messaging/services.py:31`, `deals`, `local_listings/admin.py` — все безопасны (роль/суперпользователь), без изменений.
+- Проверки: backend 526 OK, build и tsc чистые, весь Playwright 105 passed / 7 skipped / 0 failed. `openapi.yaml` — только `is_admin_role`.
+- **Ревью безопасности (находки вне задачи, записаны в файлы задач 2.8 (п.1–2) и 4.7 (п.3) с пометкой «найдено ревью 1.2b»):** (1) `vehicles/views.py:12-25` — `VehicleListView/DetailView` AllowAny с `fields='__all__'`: VIN и лоты оптовых машин видны анониму в обход wholesale; (2) `listings/views.py:85` + `serializers.py:34-44` — `ListingCreateView` для любого вошедшего: IDOR по `vehicle`/`calculation`, `channel=wholesale`, `is_express_buyout` уходит в Telegram-канал; (3) `messaging/services.py:66` — диалог по wholesale-объявлению раскрывает его существование. Права модератора на «Черга модерації» перенесены в 4.5b.
 
 ---
 
-## ФАЗА 1 — Backend (завершена)
+## Задача 1.2: Роли и права по умолчанию (2026-10-13) — ЗАВЕРШЕНО
 
-### ШАГ 0 — Подготовка
-- [x] Прочитан весь существующий код (settings, models, views, admin, urls)
-- [x] Установлен djangorestframework-simplejwt 5.5.1
-- [x] Созданы CLAUDE.md, ARCHITECTURE.md, PROGRESS.md
-- [x] Удалена старая db.sqlite3 (чистая миграция)
-
-### ШАГ 1 — CustomUser + JWT
-- [x] App `users`: CustomUser(email, role: buyer/dealer/admin, is_verified_dealer, phone)
-- [x] JWT через SimpleJWT: /api/v1/auth/register/, /token/, /token/refresh/, /profile/
-- [x] Кастомная UserAdmin с fieldsets
-- [x] AUTH_USER_MODEL = 'users.CustomUser'
-
-### ШАГ 2 — Vehicle
-- [x] App `vehicles`: Vehicle(vin, make, model, year, engine_cc, fuel_type, mileage_km, damage_type, source_auction, lot_number)
-- [x] VehicleImage с полем is_primary
-- [x] GET /api/v1/vehicles/, /api/v1/vehicles/<id>/
-
-### ШАГ 3 — Тарифные справочники
-- [x] AuctionFeeTier, UsLandRoute, OceanFreightRate, EuToUaDeliveryRate
-- [x] ExchangeRate (USD/UAH, USD/EUR)
-- [x] CustomsExciseRate (акциз × коэфф. возраста; пошлина 10%; НДС 20%)
-- [x] PensionFundBracket (прогрессивная шкала)
-- [x] Все модели редактируемы в Admin с valid_from/valid_to
-- [x] management command `seed_rates`
-
-### ШАГ 4 — Сервис калькулятора
-- [x] `pricing/calculator.py`: чистая функция без обращений к БД
-- [x] Все деньги — Decimal, никакого float
-- [x] RateSnapshot — неизменяемый снимок ставок
-- [x] Флаг is_estimate=True на каждом результате
-- [x] 12 юнит-тестов (SimpleTestCase), все зелёные
-
-### ШАГ 5 — Calculation + эндпоинт
-- [x] Модель Calculation: inputs_snapshot, rates_snapshot, breakdown (JSON), total_usd, total_uah
-- [x] POST /api/v1/pricing/calculate/
-- [x] GET /api/v1/pricing/rates/
-
-### ШАГ 6 — Listing + каталог
-- [x] Модель Listing: FK Vehicle, seller, price, channel (retail/wholesale), status, is_express_buyout
-- [x] GET /api/v1/listings/ (фильтры: status, fuel_type, max_price, search)
-- [x] GET /api/v1/listings/<id>/
-- [x] POST /api/v1/listings/create/
-
-### ШАГ 7 — Swagger / OpenAPI
-- [x] drf-spectacular, схема на /api/schema/, UI на /api/docs/
-- [x] ENUM_NAME_OVERRIDES для статусов
-- [x] 21 задокументированный эндпоинт
+- `Role.BROKER`/`MODERATOR`, хелперы, `users/permissions.py`; регистрация игнорирует `role` (201, `buyer`; тесты для admin/dealer/broker/moderator). Миграции: `users/0009` (choices), `0010` (группы «Брокери»/«Модератори»/«Адміністратори», с reverse), `local_listings/0006` (право `moderate_locallisting`).
+- Модерация — `has_perm` вместо `is_staff`; 05-Q22 (`seller_type=dealer` только верифицированным); импортные диалоги (06-S9) — только broker/admin.
+- `DEFAULT_PERMISSION_CLASSES=IsAuthenticated`, явный `AllowAny`, `cars/` через `core/urls.py` (`git diff cars/` пуст). Тест-аудит `core/tests.py`.
+- Админка: `status` заявки дилера только через actions (atomic), действия назначения/снятия ролей (идемпотентны). Журнал аудита (Н-8) — пока logger `audit`.
+- Фронт: `/b2b` по `is_staff` (09-S2), типы и метки ролей, нет выбора роли в регистрации. `e2e_seed` + учётки `broker`, `fakeadmin`; `roles.spec.ts`.
+- Ревью безопасности: `is_admin_role` = superuser или (`role=admin` и `is_staff`), миграция `users/0011` снимает самозваный admin; `revoke_role` убирает брокера из импортных диалогов; actions ролей только для superuser; модератору закрыты поля объявления (`status`, `promoted_until`…) в форме админки. Тесты: 503 OK (дважды), Playwright 103+ passed; `roles.spec` нашёл баг: вечный спиннер на `/b2b` без доступа — исправлен.
+- **Ждёт решения владельца:** модератор/брокер получают `is_staff=True` и проходят проверки `is_staff` в `listings/permissions.py`, `listings/views.py`, `shipments/views.py`, `integrations/views.py` (LotImportView): видят B2B и контейнеры, могут запускать импорт лотов. Вне файлов задачи. Также: права на прокси «Черга модерації» (прокси объявлен в admin.py) и редактирование `is_staff`/`groups` в форме пользователя (сейчас только у superuser).
+- Не сделано: проверка границ модератора на `SiteSettings` и `Lead` (моделей нет — 1.12, 2.1). `is_staff` остался в `listings/permissions.py`, `listings/views.py`, `shipments/views.py` (вне «Файлов» задачи).
 
 ---
 
-## ФАЗА 2 — Backend A1-A4 + Frontend B1-B5 (завершена)
+## Задача 0.6b: боевой .env отделён от e2e-стека (2026-10-13) — ЗАВЕРШЕНО
 
-### A1 — Shipments (контейнеры)
-- [x] App `shipments`: Shipment (container_no, vessel, 7 статусов, M2M vehicles + watchers)
-- [x] State machine: VALID_TRANSITIONS dict, метод advance_status() создаёт TrackingEvent
-- [x] TrackingEvent (статус, нотатка, фото)
-- [x] ShipmentAdmin: inline события, автосоздание события при смене статуса, превью фото
-- [x] GET /api/v1/shipments/, GET /api/v1/shipments/<id>/
-- [x] GET /api/v1/auth/me/shipments/ (только наблюдаемые текущим юзером)
-
-### A2 — Особистий кабінет (cabinet)
-- [x] TrustedShop (owner, name, type: сервіс/маляр/запчастини/інше, contacts, rating 1-5, notes)
-- [x] CRUD /api/v1/auth/me/trusted-shops/ + /me/trusted-shops/<id>/
-- [x] GET /api/v1/auth/me/calculations/ (история расчётов авторизованного юзера)
-- [x] GET /api/v1/auth/profile/ (профиль с ролью и is_verified_dealer)
-
-### A3 — B2B-доска
-- [x] Листинги: is_wholesale property (channel == 'wholesale'), is_express_buyout (bool + срок)
-- [x] GET /api/v1/b2b/board/ — только wholesale, только верифицированным дилерам/админам
-- [x] IsVerifiedDealerOrAdmin permission class
-- [x] Сортировка: срочный выкуп первым (-is_express_buyout)
-
-### A4 — VIN-интеграции (заглушки)
-- [x] App `integrations`: ABC-провайдеры VinProvider, AuctionHistoryProvider, OpendatabotProvider
-- [x] StubVinProvider: демо-данные Toyota Camry, флаг demo=True
-- [x] VinReport — кэш в БД (unique_together: vin + provider)
-- [x] GET /api/v1/vehicles/<vin>/report/ — проверяет кэш, агрегирует от провайдеров
-
-### B1 — Next.js scaffold
-- [x] Next.js 16 App Router, TypeScript, Tailwind CSS
-- [x] `lib/types.ts` — все интерфейсы (User, Vehicle, Listing, Calculation, Shipment, TrustedShop...)
-- [x] `lib/auth-context.tsx` — AuthProvider, useAuth(), localStorage JWT, auto-refresh
-- [x] `api/client.ts` — apiFetch с инжектом Bearer, retry на 401, редирект на /login
-- [x] `api/listings.ts`, `api/pricing.ts`, `api/me.ts`
-- [x] Header (навигация, B2B только для дилеров), Footer (⚠ предупреждение о тестовых тарифах)
-- [x] DemoBanner — обязательный компонент на всех страницах с ценами
-
-### B2 — Каталог объявлений
-- [x] `/listings` — каталог с фильтрами (статус, тип топлива, макс. цена, поиск)
-- [x] ListingCard (фото, бейдж статуса, бейдж срочного выкупа, объём/пробег/топливо, цена)
-- [x] ListingFilters (URL params, Suspense)
-- [x] `/listings/[id]` — детальная страница, галерея фото, спецификации, ссылка на калькулятор
-
-### B3 — Калькулятор
-- [x] `/calculator` — форма (аукцион, цена, объём, топливо, год, порты)
-- [x] DemoBanner обязателен (⚠ Тестові тарифи — розрахунок демонстраційний)
-- [x] CalcBreakdown — таблица разбивки USD + UAH по каждой статье
-- [x] Prefill из URL params (?price=&engine_cc=&fuel_type=&year=) при переходе из листинга
-- [x] Suspense-обёртка для useSearchParams (фикс build-ошибки)
-
-### B4 — Особистий кабінет (frontend)
-- [x] `/me` — дашборд: аватар-инициал, email, роль, бейдж "✓ Верифіковано"
-- [x] `/me/calculations` — история расчётов (дата, total_usd, total_uah, разбивка)
-- [x] `/me/trusted-shops` — полный CRUD партнёров (СТО, маляры, запчасти)
-- [x] `/me/shipments` — наблюдаемые контейнеры, прогресс-бар 7 шагов
-
-### B5 — B2B-доска (frontend)
-- [x] `/b2b` — гейтинг по роли (is_verified_dealer || role === 'admin')
-- [x] Экран "Доступ обмежено" для не-дилеров
-- [x] Срочный выкуп — отдельная секция с ⚡ выше обычных лотов
+- `docker-compose.e2e.yml`: `env_file: !override [.env.e2e]` (required) у `backend`, `bot`, `celery_worker`, `celery_beat`; у `db` порт наружу снят (`!reset []`), чтобы e2e-стек не конфликтовал с dev-стеком на 5433. `.env.e2e.example` — без ключей (провайдеры пустые, `E2E_SEED_ALLOWED=true`, `E2E_PASSWORD` — заглушка). `.env.e2e` в `.gitignore`.
+- Запуск: `docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml …`. `--env-file` нужен, чтобы подстановка `${VAR}` тоже шла не из боевого `.env`.
+- Проверка через `docker compose config`: у четырёх сервисов `TELEGRAM_BOT_TOKEN` пуст при непустом токене в боевом `.env`. Мутация без `!override`: в `backend` 38 переменных вместо 37 (подмешивается ключ только из боевого `.env`) — проверка ловит. Без `.env.e2e` Compose падает с «couldn't find env file … .env.e2e».
+- CI, джоба `e2e`: `.env.e2e` из шаблона + случайные значения, переменная `DC` со всеми флагами во всех командах, шаг с фиктивным боевым `.env` и проверкой, что токена нет в контейнерах, `FLUSHALL` перед `e2e_seed`.
+- Документы: `docs/TEST_CASES.md` (запуск, нет `.env.e2e`, ловушка 429 и `FLUSHALL`, проверка изоляции), ссылка в `docs/BACKEND_TESTS.md`.
+- Тесты: backend 442 OK (код не менялся). **Живой e2e-прогон (владелец разрешил остановить dev-стек, 2026-10-13):** стек с override поднялся; `TELEGRAM_BOT_TOKEN` пуст в `backend` и `celery_worker` при непустом токене в боевом `.env` (`bot` в e2e-стеке не стартует — без токена выходит), `E2E_SEED_ALLOWED=true`. Два прогона подряд, перед каждым `FLUSHALL` + `e2e_seed`: 98 passed, 7 skipped, 0 failed, без 429 (1,3 мин). Затем e2e-стек удалён с томами, dev-стек поднят обратно (данные не трогались). CI-джоба локально не запускалась.
+- Замечание: `RuntimeWarning: coroutine 'send_notification.<locals>._send' was never awaited` при прогоне тестов — не ошибка, разбор вписан в `docs/tasks/2.2`.
+- **CLAUDE.md обновлён** по «да» владельца (приложения, правила тестов и e2e, ловушки, ссылка на BRIEF §5). RuntimeWarning про `send_notification._send` передан в `docs/tasks/2.2`.
 
 ---
 
-## Конфигурация / инфраструктура
-- [x] `frontend/.env.local`: NEXT_PUBLIC_API_URL=http://localhost:8000
-- [x] `frontend/next.config.ts`: remotePatterns для localhost:8000/media/**
-- [x] `requirements.txt`: все зависимости зафиксированы
-- [x] Production build: `npm run build` — 12 роутов, 0 ошибок
+## Задача 0.6a: Тестовые фабрики, дубли, документы (2026-10-13) — ЗАВЕРШЕНО (0.6b впереди)
+
+- `tests/factories.py` (`make_user` — по умолчанию подтверждённый, `verified=False` — нет; `make_dealer`, `make_staff`, `auth_client`, `make_region_city`, `make_local_listing`, `make_vehicle`, `make_listing`) и `tests/test_factories.py` (3 теста). Без `factory_boy`. Локальных `_make_user`/`_auth_client` не осталось; две тонкие обёртки с особой сигнатурой: `_make_listing` в `local_listings/tests.py`, `make_listing` в `tests/test_favorites…`.
+- Переведены: deals, listings, local_listings, reports, shipments, users, integrations, messaging, `tests/test_e2e.py`, `tests/test_favorites…`.
+- Удалённые дубли (удалённый → покрывающий):
+  - `test_register_without_consent_blocked` → `users.TestRegistrationConsent.test_register_without_consent_returns_400`;
+  - `TestB2BGatingE2E` (8): anon/buyer/dealer/admin на b2b → `users.TestB2BGating`; wholesale-деталь buyer 404, retail, dealer → `listings.TestWholesaleListingDetailGating`; анонимный каталог → `users.TestWholesaleCatalogFilter.test_anonymous_sees_only_retail`;
+  - `test_duplicate_application_rejected_with_409` → `users.TestDealerApplyAPI.test_duplicate_pending_returns_409`;
+  - `TestRegistryThrottleE2E` (3) → `integrations.TestExpensiveEndpointThrottle.test_registry_throttle_deny_returns_429`, `TestRegistryRequiresAuth` (401 теперь ровно 401, у провайдера `assert_called_once`).
+- Тесты: было 448, стало 442 (−13 дублей, +3 фабрики, +4 теста `users.TestUserModel` — прямые проверки менеджера и `__str__`, чтобы не упало покрытие `users/models.py`). Полный прогон до добавления 4 тестов: 438 OK; после — `users` 47 OK.
+- Coverage: было TOTAL 8071/578 = 93%, стало 7969/582 = 93%. Единственное падение в продуктовом коде — `users/models.py` (95% → 90%: `create_superuser`, `__str__`); закрыто тестами `TestUserModel`, теперь 99%. Остальные продуктовые файлы без изменений.
+- Документы: `docs/BACKEND_TESTS.md`, `docs/TEST_CASES.md` исправлены по 13-Q19/13-C3, числа фактические, добавлены разделы про фабрики, seed, изоляцию, E2E. Docstring `tests/test_e2e.py` исправлен.
+- Не сделано (0.6b): правка CLAUDE.md, `docker-compose.e2e.yml`, `.env.e2e.example`, CI, шаг `FLUSHALL`, раздел про e2e-override в документах.
+- **CLAUDE.md — ждёт решения владельца.** Текст предложения — в `docs/tasks/0.6-test-factories-docs.md`, раздел «Что добавить в CLAUDE.md». Файл не менялся.
+- Playwright, `npm run build`, `tsc` не запускались: фронт и бэкенд-код не менялись.
 
 ---
 
-## Допущения (бизнес-дефолты)
-1. **Таможенная стоимость**: auction_price + us_land + ocean_freight (без EU→UA)
-2. **Курс валют**: ExchangeRate для даты оформления; fallback — последняя запись
-3. **Пенсионный сбор**: применяется при каждом расчёте (считаем первой регистрацией)
-4. **Акциз для электро**: 1 EUR × кВт·ч (ставки из БД) — ⚠ ПРОВЕРИТЬ по законодательству
-5. **Ставки акциза в seed_rates**: актуальны янв–июнь 2026 — проверить у брокера на дату деплоя
-6. **Пенсионный сбор в seed_rates**: 3% / 4% / 5% по шкале — ⚠ ПРОВЕРИТЬ
-7. **VIN-декод**: NHTSA vPIC — реальные технические данные (demo=false). История ДТП — заглушка.
-8. **SQLite в dev**: PostgreSQL — продакшн
-9. **LiqPay**: sandbox=true по умолчанию в dev. Для продакшена: LIQPAY_SANDBOX=false.
+## Разбор плана: порядок, план Б, e2e-окружение (2026-10-13) — docs
 
-## Известные ограничения
-- Swagger: одно предупреждение об enum-коллизии (CarStatusEnum), 0 ошибок
-- Ставки — плейсхолдеры, все расчёты помечены is_estimate=true и DemoBanner
-- VIN-репорт — демо-данные, demo=true в ответе и в кэше
+- ROADMAP: заявки поднялись: 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 2.1 → 2.2 → 2.3 → 2.4 → 1.12 → 1.14 → 2.15, остальной этап 1, 7.2, 7.6, 8.9 — после, до деплоя. Зависимости проверены скриптом, нарушений нет.
+- Метка [МИНИМУМ] (план Б БП §9): 35 позиций, 61 сессия (с 2.8, 1.8, 1.11 — решение владельца 2026-10-13; было 32 / 55). Колонка «Факт» (0.1–0.5 — по 1 сессии), пункт о ней в `/next`.
+- 0.6: добавлено отделение боевого `.env` от e2e-стека и сброс троттлинга (было в 7.3), оценка 1 → 2. 2.5: баг пустых `engine_cc`/`vehicle_year` → 0 (`frontend/app/calculator/page.tsx:65,80`).
 
 ---
 
-## URL-карта (итог, 21 эндпоинт)
+## Задача 0.5: Базовые Playwright-сценарии (2026-10-13) — ЗАВЕРШЕНО
 
-```
-# Auth
-POST /api/v1/auth/register/
-POST /api/v1/auth/token/
-POST /api/v1/auth/token/refresh/
-GET  /api/v1/auth/profile/
-
-# Cabinet
-GET  /api/v1/auth/me/calculations/
-GET  /api/v1/auth/me/shipments/
-GET  /api/v1/auth/me/trusted-shops/
-POST /api/v1/auth/me/trusted-shops/
-GET  /api/v1/auth/me/trusted-shops/<id>/
-PUT  /api/v1/auth/me/trusted-shops/<id>/
-DEL  /api/v1/auth/me/trusted-shops/<id>/
-
-# Vehicles
-GET  /api/v1/vehicles/
-GET  /api/v1/vehicles/<id>/
-GET  /api/v1/vehicles/<vin>/report/
-
-# Pricing
-POST /api/v1/pricing/calculate/
-GET  /api/v1/pricing/rates/
-
-# Listings
-GET  /api/v1/listings/
-GET  /api/v1/listings/<id>/
-POST /api/v1/listings/create/
-
-# B2B (верифіковані дилери)
-GET  /api/v1/b2b/board/
-
-# Shipments
-GET  /api/v1/shipments/
-GET  /api/v1/shipments/<id>/
-
-# Docs
-GET  /api/schema/
-GET  /api/docs/
-
-# Legacy
-GET  /api/calculate/
-GET  /api/list/
-```
+- Новые спеки: `auth` (23-P1, P3), `private-pages` (P2), `cabinet` (P5), `register-flow` (P6), `cookie-banner` (P7), `mobile` (`@mobile`). Код фронта и бэкенда не менялся, `e2e_seed` не менялся.
+- 6 `test.fixme` с ID и задачей: 08-S2, 08-S7 (два), 10-S7 → 1.4; 08-Q6 → 6.2; 08-Q4 → 6.1. Список — в `docs/TEST_CASES.md`. 23-P4 не входит (08-Q1 → 1.4).
+- Результат (чистый e2e-стек, `E2E_PASSWORD` случайный): 6 спеков — 50 passed / 7 skipped (fixme; мобильный запускается в двух проектах), 36 с; полный прогон — 98 passed / 7 skipped, 76 с. Django: 448 тестов OK.
+- Мутации (код откачен): без `router.push('/me')` в логине — красные «вірний пароль» и «Вийти»; без редиректа в `me/page.tsx` — красный `/me → /login`; без сохранения выбора в `CookieBanner` — красные 4 теста cookie. Тест «невірний пароль» мутацией входа не затрагивается (так и задумано).
+- **Ловушка:** на одном стеке много прогонов подряд упираются в троттлинг (429) на логин и расчёт: на мобильных падали «вхід» и «розрахунок». После `redis-cli FLUSHALL` или на свежем стеке (CI) всё зелёное.
+- Для 23-P6 после задачи 1.6 сценарий обновить (18+, Turnstile, «Перевірте пошту»).
+- Docker: у `backend`/`celery`/`bot` в `docker-compose.yml` `env_file: .env`, то есть e2e-стек без override возьмёт боевой `.env` с токенами. Для локального прогона использован override с `!override` на отдельный env-файл вне репозитория.
 
 ---
 
-## Frontend роути (12)
+## Задача 0.4: Инфраструктура e2e (2026-10-13) — ЗАВЕРШЕНО
 
-```
-/               — головна (hero + 3 фічі)
-/listings       — каталог з фільтрами
-/listings/[id]  — деталі + галерея
-/calculator     — калькулятор «під ключ»
-/login          — вхід
-/register       — реєстрація
-/me             — кабінет
-/me/calculations — історія розрахунків
-/me/trusted-shops — партнери (CRUD)
-/me/shipments   — контейнери + прогрес-бар
-/b2b            — B2B-дошка (тільки дилери)
-/_not-found     — 404
-```
+- Команды `users`: `e2e_seed` (только при `E2E_SEED_ALLOWED=true`, пароль из `E2E_PASSWORD`, идемпотентна) и `e2e_cleanup` (только `@e2e.test` и `[E2E]`). 5 новых тестов в `users/tests_e2e_seed.py`.
+- Playwright: проекты `setup`, `chromium`, `firefox` (`@smoke`), `mobile-chrome`, `mobile-safari` (`@mobile`); белый список хоста `E2E_BASE_URL` (обход — `E2E_ALLOW_REMOTE=1`); `auth.setup.ts`, `fixtures.ts`, `auth-smoke.spec.ts`; storageState в `frontend/e2e/.auth/` (в .gitignore).
+- CI: джоба `e2e` — seed, три браузера, cleanup `if: always()`. `.dockerignore`: добавлено `!frontend/e2e/fixtures/` (решение владельца), чтобы сид видел фото.
+- Маркер `[E2E]` для `LocalListing` лежит в `description` (поля заголовка у модели нет).
+- Схема БД не менялась.
 
 ---
 
-## Bug: UnicodeDecodeError при подключении к БД (2026-07-07) — ДИАГНОСТИКА ЗАВЕРШЕНА
+## Задача 0.3: Фальшиво-зелёные тесты (2026-10-12) — ЗАВЕРШЕНО
 
-### Причина (двойная)
+- Исправлены 13-Q1…Q9 и 13-Q10 (часть). Новый хелпер `frontend/e2e/helpers/network.ts` (`expectNoRequest`). В `local_listings/tests.py` оба ассерта сужены до 401. Остальные правки — в `pricing`, `deals`, `tests/`.
+- В `negative.spec.ts` у «порожня форма» `valueMissing` проверяется только у цены.
+- **Находка (код не менялся):** `frontend/app/calculator/page.tsx:65,80` превращает пустые `engine_cc` и `vehicle_year` в 0 через `Number(...)`, `required` не срабатывает. Нужна отдельная задача.
+- **Не подтверждено мутацией:** отдельно «только `required`» и «только страничная проверка» у регистрации.
 
-1. **.env — UTF-8 BOM + битые комментарии на кириллице**
-   Файл начинался с BOM `\xef\xbb\xbf` и содержал Cyrillic-комментарии в двойной/некорректной кодировке.
-   `load_dotenv(..., encoding='utf-8')` падал, не дойдя до KEY=VALUE строк.
-   **ИСПРАВЛЕНО**: файл перезаписан как чистый UTF-8 без BOM, все комментарии — латиница/English.
-
-2. **Windows PostgreSQL 16.14 — Russian locale (CP1251 error messages)**
-   После чистки .env выяснилось, что реальная ошибка — **password authentication failed for user "autoforyou"**,
-   но Windows Postgres отдаёт сообщение об ошибке в кодировке CP1251 (Russian locale, `lc_messages`).
-   psycopg2 пытается декодировать его как UTF-8, падает на байте `0xc2` в позиции 83 — это
-   первый байт кириллицы "В" (из слова "ВАЖНО") в CP1251, за которым идёт `0xc0` (не валидный
-   UTF-8 continuation byte).
-   Настоящая ошибка сервера (декодирована вручную): `FATAL: пользователь "autoforyou" не прошёл проверку подлинности (по паролю)`.
-
-### Статус подключения
-
-**DB НЕ OK** — auth failure. psycopg2 не может подключиться.
-
-### Что нужно сделать владельцу в pgAdmin
-
-**Шаг A — Проверить пользователя и пароль:**
-1. pgAdmin → Login/Group Roles → найти `autoforyou`
-2. Properties → Definition → Password: убедиться, что пароль = `autopass123`
-   Если не совпадает — изменить или обновить `POSTGRES_PASSWORD` + `DATABASE_URL` в `.env`
-3. Если пользователя нет — создать: `CREATE USER autoforyou WITH PASSWORD 'autopass123';`
-
-**Шаг B — Проверить базу данных:**
-1. Databases → найти `db_autoforyou`
-2. Если нет — создать: `CREATE DATABASE db_autoforyou OWNER autoforyou ENCODING 'UTF8';`
-3. Если есть — убедиться, что owner = `autoforyou` или у него CONNECT privilege
-
-**Шаг C (опционально, устранить CP1251 навсегда):**
-В `postgresql.conf` добавить/изменить:
-```
-lc_messages = 'en_US.UTF-8'
-```
-Или если нет en_US.UTF-8 locale: `lc_messages = 'C'`
-Затем перезапустить PostgreSQL сервис на Windows.
-
-**Шаг D — После исправления перезапустить backend:**
-```
-docker compose up -d --force-recreate backend
-docker compose exec backend python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('DB OK')"
-```
+| Тест | Мутация | Красный |
+|---|---|---|
+| регистрация «без згоди» | снят `required` и страничная проверка | да |
+| калькулятор: 5 негативных тестов | `noValidate` на форме | да, все |
+| `test_phone_not_in_list_response`, `TestContactEndpoint.test_phone_not_in_list` | `contact_phone` в сериализаторе списка | да, оба |
+| `TestAuctionFeeBoundary` | `_lookup_tier`: `>=` -> `>` | да (`bid_max`, `below_min`, `selected_tier_fee_applied`) |
+| `test_percent_fee_round_half_up` | `ROUND_HALF_UP` -> `ROUND_HALF_EVEN` | да |
+| `test_task_does_not_duplicate_on_rerun` | ранний `return` в `check_saved_searches` | да |
 
 ---
 
-## Перенос БД на Windows-Postgres — ЗАВЕРШЕНО (2026-07-07)
+## Задача 0.2: Изоляция тестов от внешнего мира (2026-10-12) — ЗАВЕРШЕНО
 
-### Финальные параметры подключения к БД
-
-| Параметр     | Значение                            |
-|--------------|-------------------------------------|
-| Host         | host.docker.internal (из Docker)    |
-| Host (DBeaver/pgAdmin) | localhost                  |
-| Port         | 5432                                |
-| Database     | **autoforyou**                      |
-| User         | **postgres**                        |
-| Password     | autopass123                         |
-| Engine       | PostgreSQL 18 (Windows)             |
-
-### Что было путаницей
-
-- `.env` ссылался на `db_autoforyou` — такой базы НЕ существует
-- Пользователь `autoforyou` — НЕ существует в Windows-Postgres
-- Реальная база с 56 таблицами: **autoforyou**, доступная через суперпользователя `postgres`
-- Passwords хранились верно (`autopass123`), но у несуществующего пользователя
-
-### Что сделано
-
-1. Диагностика: перебор комбинаций user/db — найдена база `autoforyou` (56 таблиц), user=postgres
-2. `.env` обновлён: `DATABASE_URL=postgresql://postgres:autopass123@host.docker.internal:5432/autoforyou`
-3. `seed_regions` — засіяно 25 областей + 310 міст
-4. `docker compose up -d` — весь стек запущен, все контейнеры Up
-
-### Статус
-
-- **DB OK** — подключение работает
-- Миграций не применяли (0 unapplied) — все 56 таблиц уже были в базе
-- listings: 0 (данных пользователей нет, БД чистая)
-- regions: 25 (засіяно seed_regions)
-- http://localhost → 200 OK
-- http://localhost/api/v1/listings/ → 200 OK
-
-### Креды для DBeaver / pgAdmin
-
-```
-Host:     localhost
-Port:     5432
-Database: autoforyou
-User:     postgres
-Password: autopass123
-```
+- `core/settings.py`: один флаг `_TESTING`; блок изоляции в конце — обнуление ключей OpenDataBot/Apify/LiqPay/SMTP/Telegram/Turnstile, locmem-почта, `LocMemCache`, eager-Celery с `memory://` даже при заданном `REDIS_URL`; `TEST_RUNNER`.
+- `core/test_runner.py`: `IsolatedDiscoverRunner` — сетевой предохранитель (localhost и хост БД разрешены) и очистка кэша `Update.event_type` aiogram.
+- `tests/base.py`: `CleanCacheTestCase`; на нём три класса с seed тарифов (seed в `setUpTestData`) и два класса кэша pricing. Тест 23-D3 в `pricing/tests.py`.
+- Тесты 13-S9 переписаны на моки: VIN-отчёт и registry -> 200, Apify без токена -> 400 `{'error': 'VIN обязателен для импорта лота'}`. Колбэк LiqPay в `local_listings` подписан ключом из `override_settings`.
+- Новые страховочные тесты: `tests/test_environment.py`.
 
 ---
 
-## QA — Полное тестирование (2026-07-07) — ЗАВЕРШЕНО
+## Задача 0.1: Воспроизводимая локальная среда (2026-10-12) — ЗАВЕРШЕНО
 
-### Итог: 22 PASS, 2 FAIL → исправлено → **299 тестов зелёные**
-
-| Блок | Статус |
-|------|--------|
-| Инфраструктура (Docker, DB, nginx) | PASS |
-| Автотесты backend (299 тестов) | PASS (было 17 ошибок → исправлено) |
-| Frontend build (0 TS-ошибок, 29 страниц) | PASS |
-| Auth (регистрация/логин/refresh/logout/бан) | PASS |
-| Калькулятор (is_estimate, breakdown) | PASS |
-| Listings create/search (сигнал не крашит) | PASS |
-| Messenger, Favorites, B2B gating | PASS |
-| Local listings, регионы | PASS |
-| Все 23 фронт-роута → 200 | PASS |
-| Безопасность (SECRET_KEY не в git, JWT, throttle) | PASS |
-| Media файлы (volume nginx) | PASS |
-| Telegram binding /me/telegram | PASS |
-
-### Критические баги — исправлено
-
-**БАГ 1 — Listing creation → 500** (`telegram_bot/tasks.py`)
-Сигнал `post_listing_to_channel` не перехватывал `TelegramBadRequest` при `SITE_URL=http://localhost`.
-Исправление: добавлен `except Exception` с `logger.warning` вместо краша. Теперь ошибка
-Telegram логируется, листинг создаётся успешно.
-
-**БАГ 2 — Калькулятор → "Відсутні активні тарифи"** (`docker/entrypoint.sh`)
-Тарифы не сидировались при fresh deploy.
-Исправление: `entrypoint.sh` теперь вызывает `seed_regions`, `seed_rates`, `seed_auction_fees`
-автоматически при каждом старте (команды идемпотентны).
-
-### Не тестируется без ключей/публичного URL
-- LiqPay webhook (нужен публичный HTTPS-адрес)
-- VIN decode (нужен `APIFY_TOKEN`)
-- Реальный автопост в Telegram (нужен `SITE_URL` с валидным HTTPS)
-- Email-верификация (нужен SMTP)
+- `.gitattributes`: LF для `*.sh`, `docker/*`, `Dockerfile*`, `nginx/*.conf` (12-Q14). Индекс уже был с LF, CRLF был только в рабочих копиях `docker/entrypoint.sh`, `deploy.sh`, `Dockerfile` — пересозданы через checkout.
+- `Dockerfile.backend`: `sed -i 's/\r$//'` перед `chmod`. CI (джоба `backend`): шаг «Shell scripts use LF».
+- `scripts/test-backend.ps1` / `.sh`: тесты через `.venv` с пустыми `DATABASE_URL`/`REDIS_URL`. В PowerShell `$env:X=''` удаляет переменную, поэтому `.ps1` запускает Python через `ProcessStartInfo`.
+- Удалён локальный `venv/` (12-Q8). README и `docs/BACKEND_TESTS.md` обновлены.
+- Проверки: Django 433 теста OK (283 с); `npm run build` и `tsc --noEmit` без ошибок; `pip check` чисто; `git ls-files --eol '*.sh'` везде `i/lf w/lf`.
+- Docker на Windows: `down` + `up -d --build` → `backend` и `db` `(healthy)`, `http://localhost` и `/api/v1/listings/` отвечают 200.
+- **Первый локальный Playwright: 33 passed, 0 failed, 0 skipped (17,5 с).**

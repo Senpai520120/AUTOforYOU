@@ -1,13 +1,8 @@
 from decimal import Decimal
 
-from django.utils import timezone
 from rest_framework import serializers
 
-from .models import (
-    AuctionFeeTier,
-    Calculation,
-    ExchangeRate,
-)
+from .models import Calculation
 
 
 class CalculateInputSerializer(serializers.Serializer):
@@ -15,19 +10,34 @@ class CalculateInputSerializer(serializers.Serializer):
     engine_cc = serializers.IntegerField(min_value=0, max_value=10000)
     fuel_type = serializers.ChoiceField(choices=['petrol', 'diesel', 'electric', 'hybrid', 'phev'])
     vehicle_year = serializers.IntegerField(min_value=1900, max_value=2100)
-    # Ёмкость батареи в кВт·ч — обязательно для EV/PHEV, для ДВС оставить 0
-    battery_capacity_kwh = serializers.IntegerField(min_value=0, max_value=200, default=0)
+    # Ёмкость батареи в кВт·ч (2.5, 02-Q3): обязательна и > 0 для electric/phev, для ДВС не нужна
+    battery_capacity_kwh = serializers.DecimalField(
+        max_digits=5, decimal_places=1, min_value=Decimal('0'), max_value=Decimal('300'),
+        required=False, allow_null=True,
+    )
     auction = serializers.ChoiceField(choices=['copart', 'iaai'], default='copart')
-    # Тип участника аукциона (влияет на тиер buyer fee)
-    member_type = serializers.ChoiceField(choices=['public', 'licensed', 'broker'], default='broker')
-    payment_type = serializers.ChoiceField(choices=['secured', 'unsecured'], default='secured')
-    title_type = serializers.ChoiceField(choices=['clean', 'salvage', 'any'], default='salvage')
+    # Тип участника / оплаты / титула (тиер buyer fee). Не передано - дефолт из pricing.views.FORM_DEFAULTS (02-C11).
+    member_type = serializers.ChoiceField(choices=['public', 'licensed', 'broker'], required=False)
+    payment_type = serializers.ChoiceField(choices=['secured', 'unsecured'], required=False)
+    title_type = serializers.ChoiceField(choices=['clean', 'salvage', 'any'], required=False)
     auction_location = serializers.CharField(max_length=100, default='general')
     us_port = serializers.CharField(max_length=50, default='houston')
-    eu_port = serializers.ChoiceField(choices=['klaipeda', 'gdansk'], default='klaipeda')
+    # Порт ЕС - данные (02-C4): наличие маршрута проверяет select_rates (нет активного фрахта/доставки - 422).
+    eu_port = serializers.CharField(max_length=20, default='klaipeda')
+    # Доставка по Украине (2.7): id из /rates/ ua_delivery_rates; не указано - «уточнюється менеджером».
+    ua_delivery_rate = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     # Дата оформления таможни (YYYY-MM-DD). По ней берётся курс НБУ.
-    # Если не указана или курс на дату отсутствует — используется последний доступный курс.
+    # Если не указана - сегодня. Курс берётся последний не позже этой даты; курса «из будущего» нет (02-Q5).
     calculation_date = serializers.DateField(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs):
+        if attrs['fuel_type'] in ('electric', 'phev'):
+            kwh = attrs.get('battery_capacity_kwh')
+            if kwh is None or kwh <= 0:
+                raise serializers.ValidationError({'battery_capacity_kwh': 'Вкажіть ємність батареї (кВт·год).'})
+        else:
+            attrs['battery_capacity_kwh'] = None
+        return attrs
 
 
 class CalculationSerializer(serializers.ModelSerializer):
@@ -36,27 +46,3 @@ class CalculationSerializer(serializers.ModelSerializer):
         fields = ('id', 'user', 'inputs_snapshot', 'rates_snapshot', 'breakdown',
                   'total_usd', 'total_uah', 'is_estimate', 'created_at')
         read_only_fields = fields
-
-
-class ActiveRatesSerializer(serializers.Serializer):
-    """Возвращает текущие активные тарифы для информации."""
-
-    def to_representation(self, instance):
-        today = timezone.now().date()
-
-        def active(qs):
-            return qs.filter(valid_from__lte=today).filter(
-                models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=today)
-            )
-
-        from django.db import models
-        return {
-            'auction_fees': list(
-                active(AuctionFeeTier.objects.all()).values(
-                    'auction', 'min_price_usd', 'max_price_usd', 'fee_fixed_usd', 'fee_pct'
-                )
-            ),
-            'exchange_rates': list(
-                ExchangeRate.objects.order_by('-date').values('from_currency', 'to_currency', 'rate', 'date')[:10]
-            ),
-        }

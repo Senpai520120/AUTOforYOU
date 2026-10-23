@@ -1,4 +1,7 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
+
+from users.display import public_display_name
 
 from .models import Deal, Review
 
@@ -11,18 +14,25 @@ class DealListingSerializer(serializers.Serializer):
 
 
 class DealUserSerializer(serializers.Serializer):
+    """Контрагент сделки: только id и публичное имя (без email и ФИО целиком)."""
     id = serializers.IntegerField()
-    email = serializers.EmailField()
-    first_name = serializers.CharField()
-    last_name = serializers.CharField()
+    display_name = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.CharField())
+    def get_display_name(self, obj):
+        return public_display_name(obj)
 
 
 class ReviewSerializer(serializers.ModelSerializer):
-    author_email = serializers.EmailField(source='author.email', read_only=True)
+    author_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Review
-        fields = ['id', 'rating', 'text', 'author_email', 'created_at']
+        fields = ['id', 'rating', 'text', 'author_name', 'created_at']
+
+    @extend_schema_field(serializers.CharField())
+    def get_author_name(self, obj):
+        return public_display_name(obj.author)
 
 
 class DealSerializer(serializers.ModelSerializer):

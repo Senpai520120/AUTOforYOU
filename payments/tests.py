@@ -64,3 +64,21 @@ class TestCheckoutValidation(APITestCase):
     def test_missing_amount_rejected(self):
         resp = self.client.post(CHECKOUT_URL, {'order_id': 'ord-2'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class TestCallbackErrorTexts(APITestCase):
+    """Клиенту (LiqPay/атакующему) не уходит текст исключения, тип и детали - в лог."""
+
+    def test_bad_signature_has_generic_text(self):
+        from unittest import mock
+
+        from .views import LiqPayClient, LiqPaySignatureError
+
+        secret = 'SECRET-INTERNAL-DETAIL'
+        with mock.patch.object(LiqPayClient, 'decode_callback', side_effect=LiqPaySignatureError(secret)):
+            with self.assertLogs('payments.views', level='WARNING') as logs:
+                resp = self.client.post(
+                    '/api/v1/payments/liqpay/callback/', {'data': 'x', 'signature': 'y'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn(secret, resp.content.decode())
+        self.assertIn('LiqPaySignatureError', logs.output[0])

@@ -29,6 +29,8 @@ class Command(BaseCommand):
             )
             return
 
+        from core.monitoring import init_monitoring
+        init_monitoring('bot')  # мониторинг ошибок (7.6); пустой SENTRY_DSN - выключен
         self.stdout.write(self.style.SUCCESS('🤖 Запуск Telegram-бота (polling)...'))
         asyncio.run(self._run(token))
 

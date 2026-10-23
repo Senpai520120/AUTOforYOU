@@ -33,7 +33,8 @@ test.describe('Шапка сайту', () => {
   test('навігація веде на три основні розділи', async ({ page }) => {
     const nav = page.getByRole('banner');
 
-    await expect(nav.getByRole('link', { name: 'Пригін/аукціон' })).toHaveAttribute('href', '/listings');
+    // 2.8: каталог лотів заморожено (LOTS_ENABLED=false), посилання в шапці немає.
+    await expect(nav.getByRole('link', { name: 'Пригін/аукціон' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'Каталог Україна' })).toHaveAttribute('href', '/ua');
     await expect(nav.getByRole('link', { name: 'Калькулятор' })).toHaveAttribute('href', '/calculator');
   });

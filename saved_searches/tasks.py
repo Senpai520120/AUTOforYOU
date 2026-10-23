@@ -2,10 +2,13 @@ import logging
 
 from celery import shared_task
 
+from core.tasks import ResilientTask
+
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name='saved_searches.tasks.check_saved_searches')
+# ResilientTask (8.9): повторы при сетевых ошибках, окончательная неудача - в FailedTask и мониторинг.
+@shared_task(name='saved_searches.tasks.check_saved_searches', base=ResilientTask)
 def check_saved_searches():
     """
     Daily task: for each SavedSearch with notify=True, find LocalListings created

@@ -1,10 +1,13 @@
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+
+from users.permissions import IsEmailVerified
 
 from .models import Conversation
 from .serializers import (
@@ -15,23 +18,17 @@ from .serializers import (
     StartConversationSerializer,
 )
 from .services import (
+    ListingUnavailable,
     get_or_create_conversation,
     mark_as_read,
     send_message_to_conversation,
     unread_count_for_user,
 )
-
-
-def _can_access(user, conv: Conversation) -> bool:
-    is_participant = conv.participants.filter(pk=user.pk).exists()
-    is_admin_imported = (
-        getattr(user, 'is_staff', False) and conv.imported_listing_id is not None
-    )
-    return is_participant or is_admin_imported
+from .services import handles_imports as _handles_imports
 
 
 class StartConversationView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'messages'
 
@@ -45,6 +42,8 @@ class StartConversationView(APIView):
                 listing_id=sr.validated_data['listing_id'],
                 first_text=sr.validated_data['text'],
             )
+        except ListingUnavailable as e:
+            return Response({'detail': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -57,9 +56,10 @@ class StartConversationView(APIView):
 class ConversationListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=ConversationListSerializer(many=True))
     def get(self, request):
         user = request.user
-        if getattr(user, 'is_staff', False):
+        if _handles_imports(user):
             qs = Conversation.objects.filter(
                 Q(participants=user) | Q(imported_listing__isnull=False)
             ).distinct()
@@ -78,18 +78,27 @@ class ConversationListView(APIView):
 class ConversationDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        # Читать переписку можно и без подтверждения, писать - нет.
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsEmailVerified()]
+        return super().get_permissions()
+
     def _get(self, pk, user):
+        # Выборка только своих диалогов: чужой id неотличим от несуществующего (404)
+        access = Q(participants=user)
+        if _handles_imports(user):
+            access |= Q(imported_listing__isnull=False)
         conv = get_object_or_404(
-            Conversation.objects.prefetch_related(
+            Conversation.objects.filter(access).distinct().prefetch_related(
                 'participants', 'messages__sender',
                 'local_listing', 'imported_listing__vehicle',
             ),
             pk=pk,
         )
-        if not _can_access(user, conv):
-            return None, Response({'detail': 'Немає доступу.'}, status=status.HTTP_403_FORBIDDEN)
         return conv, None
 
+    @extend_schema(responses=ConversationDetailSerializer)
     def get(self, request, pk):
         conv, err = self._get(pk, request.user)
         if err:

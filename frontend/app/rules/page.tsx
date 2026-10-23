@@ -1,21 +1,18 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import LegalPage, { EmailOrMissing } from '@/components/legal/LegalPage';
+import { getSiteSettings, supportContact } from '@/lib/site-settings';
 
 export const metadata: Metadata = {
   title: 'Правила розміщення оголошень | AUTOforYOU',
 };
 
-export default function RulesPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function RulesPage() {
+  const s = await getSiteSettings(0);
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <div className="bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-4 py-3 mb-8 text-sm">
-        <strong>⚠ Шаблон — потребує перевірки юристом перед публікацією.</strong>{' '}
-        Вписати реальні реквізити, перевірити відповідність чинному законодавству України.
-      </div>
-
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">Правила розміщення оголошень</h1>
-
-      <div className="prose prose-slate max-w-none space-y-8 text-slate-700">
+    <LegalPage title="Правила розміщення оголошень" settings={s}>
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-3">1. Загальні положення</h2>
           <p>
@@ -105,11 +102,9 @@ export default function RulesPage() {
           </p>
         </section>
 
-        <p className="text-xs text-slate-400 mt-8 border-t border-slate-100 pt-4">
-          Версія: шаблон 2026 р. Потребує перевірки та затвердження юристом.
-          <br />Реквізити платформи: [вписати юридичну назву, ЄДРПОУ, адресу, контакти]
-        </p>
-      </div>
-    </div>
+      <p className="text-xs text-slate-500">
+        Контакти: <EmailOrMissing email={supportContact(s)} />
+      </p>
+    </LegalPage>
   );
 }

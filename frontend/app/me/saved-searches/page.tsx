@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
 import { getSavedSearches, deleteSavedSearch, patchSavedSearch } from '@/api/saved-searches';
 import type { SavedSearch } from '@/lib/types';
@@ -21,14 +20,9 @@ function filtersLabel(filters: Record<string, string>) {
 }
 
 export default function SavedSearchesPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [items, setItems] = useState<SavedSearch[]>([]);
   const [busy, setBusy] = useState(true);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (!user) return;

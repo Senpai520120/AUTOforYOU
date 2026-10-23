@@ -2,6 +2,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from users.display import public_display_name
+
 from .models import Deal, Review
 
 
@@ -54,7 +56,7 @@ def propose_deal(listing, seller, buyer_id: int) -> Deal:
         buyer_id,
         'deal_proposed',
         'Пропозиція угоди',
-        f'Продавець {seller.email} пропонує підтвердити угоду за оголошенням '
+        f'Продавець {public_display_name(seller)} пропонує підтвердити угоду за оголошенням '
         f'{listing.make} {listing.model} {listing.year}.',
         '/me/deals',
     )

@@ -1,11 +1,19 @@
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from local_listings.models import City, LocalListing, Region
+from local_listings.models import LocalListing
 from messaging.models import Conversation
+from tests.factories import (
+    auth_client,
+    make_admin_role,
+    make_broker,
+    make_local_listing,
+    make_moderator,
+    make_staff,
+    make_user,
+)
 
-from .models import Deal
+from .models import Deal, Review
 from .services import (
     cancel_deal,
     confirm_deal,
@@ -13,40 +21,6 @@ from .services import (
     propose_deal,
     seller_rating,
 )
-
-User = get_user_model()
-
-
-def _make_user(email, **kwargs):
-    return User.objects.create_user(
-        email=email,
-        password='testpassword123',
-        **kwargs,
-    )
-
-
-def _make_listing(owner, status=LocalListing.Status.ACTIVE):
-    region, _ = Region.objects.get_or_create(name='Тестова область', slug='test-region')
-    city, _ = City.objects.get_or_create(
-        region=region,
-        name='Тестове місто',
-        defaults={'slug': 'test-city'},
-    )
-    return LocalListing.objects.create(
-        owner=owner,
-        make='Toyota',
-        model='Camry',
-        year=2020,
-        mileage_km=50000,
-        fuel_type='petrol',
-        transmission='auto',
-        body_type='sedan',
-        price=15000,
-        currency='USD',
-        region=region,
-        city=city,
-        status=status,
-    )
 
 
 def _make_conversation(listing, initiator):
@@ -60,9 +34,9 @@ def _make_conversation(listing, initiator):
 class ProposeDealServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
 
     def test_propose_deal_success(self):
@@ -73,31 +47,31 @@ class ProposeDealServiceTest(TestCase):
         self.assertEqual(deal.listing, self.listing)
 
     def test_propose_deal_only_owner_can_propose(self):
-        other = _make_user('other@example.com')
-        with self.assertRaises(ValueError, msg='Тільки власник оголошення може запропонувати угоду.'):
+        other = make_user('other@example.com')
+        with self.assertRaisesMessage(ValueError, 'Тільки власник оголошення може запропонувати угоду.'):
             propose_deal(self.listing, other, self.buyer.pk)
 
     def test_propose_deal_no_self_deal(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesMessage(ValueError, 'Продавець і покупець не можуть бути однією особою.'):
             propose_deal(self.listing, self.seller, self.seller.pk)
 
     def test_propose_deal_buyer_must_have_conversation(self):
-        stranger = _make_user('stranger@example.com')
-        with self.assertRaises(ValueError, msg='Покупець не писав по цьому оголошенню.'):
+        stranger = make_user('stranger@example.com')
+        with self.assertRaisesMessage(ValueError, 'Покупець не писав по цьому оголошенню.'):
             propose_deal(self.listing, self.seller, stranger.pk)
 
     def test_propose_deal_no_duplicates(self):
         propose_deal(self.listing, self.seller, self.buyer.pk)
-        with self.assertRaises(ValueError, msg='Угода з цим покупцем вже існує'):
+        with self.assertRaisesMessage(ValueError, 'Угода з цим покупцем вже існує'):
             propose_deal(self.listing, self.seller, self.buyer.pk)
 
 
 class ConfirmDealServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
         self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
 
@@ -124,9 +98,9 @@ class ConfirmDealServiceTest(TestCase):
 class CancelDealServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
         self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
 
@@ -139,7 +113,7 @@ class CancelDealServiceTest(TestCase):
         self.assertEqual(deal.status, Deal.Status.CANCELLED)
 
     def test_outsider_cannot_cancel(self):
-        outsider = _make_user('outsider@example.com')
+        outsider = make_user('outsider@example.com')
         with self.assertRaises(ValueError):
             cancel_deal(self.deal, outsider)
 
@@ -153,9 +127,9 @@ class CancelDealServiceTest(TestCase):
 class CreateReviewServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
         self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
         self.deal = confirm_deal(self.deal, self.buyer)
@@ -172,9 +146,9 @@ class CreateReviewServiceTest(TestCase):
             create_review(self.deal, self.seller, 4)
 
     def test_cannot_review_non_confirmed_deal(self):
-        seller2 = _make_user('seller2@example.com')
-        buyer2 = _make_user('buyer2@example.com')
-        listing2 = _make_listing(seller2)
+        seller2 = make_user('seller2@example.com')
+        buyer2 = make_user('buyer2@example.com')
+        listing2 = make_local_listing(seller2)
         _make_conversation(listing2, buyer2)
         deal2 = propose_deal(listing2, seller2, buyer2.pk)
         # deal2 is still PROPOSED
@@ -193,11 +167,11 @@ class CreateReviewServiceTest(TestCase):
 class SellerRatingServiceTest(TestCase):
 
     def setUp(self):
-        self.seller = _make_user('seller@example.com')
+        self.seller = make_user('seller@example.com')
 
     def _make_confirmed_deal_with_review(self, buyer_email, rating):
-        buyer = _make_user(buyer_email)
-        listing = _make_listing(self.seller)
+        buyer = make_user(buyer_email)
+        listing = make_local_listing(self.seller)
         _make_conversation(listing, buyer)
         deal = propose_deal(listing, self.seller, buyer.pk)
         deal = confirm_deal(deal, buyer)
@@ -237,15 +211,13 @@ class DealsAPITest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.seller = _make_user('seller@example.com')
-        self.buyer = _make_user('buyer@example.com')
-        self.listing = _make_listing(self.seller)
+        self.seller = make_user('seller@example.com')
+        self.buyer = make_user('buyer@example.com')
+        self.listing = make_local_listing(self.seller)
         _make_conversation(self.listing, self.buyer)
 
     def _auth(self, user):
-        from rest_framework_simplejwt.tokens import RefreshToken
-        token = RefreshToken.for_user(user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        self.client = auth_client(user)
 
     def test_get_my_deals_empty(self):
         self._auth(self.seller)
@@ -268,7 +240,7 @@ class DealsAPITest(TestCase):
 
     def test_propose_deal_no_conversation_fails(self):
         self._auth(self.seller)
-        stranger = _make_user('stranger@example.com')
+        stranger = make_user('stranger@example.com')
         resp = self.client.post('/api/v1/deals/', {
             'listing_id': self.listing.pk,
             'buyer_id': stranger.pk,
@@ -319,3 +291,161 @@ class DealsAPITest(TestCase):
         resp = self.client.get('/api/v1/deals/')
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.data), 1)
+
+
+class DealsOutsiderAPITest(TestCase):
+    """23-D10 (13-S3): посторонний не меняет и не видит чужую сделку (общая матрица - tests/test_authz_matrix.py)."""
+
+    def setUp(self):
+        self.seller = make_user('d_seller@example.com')
+        self.buyer = make_user('d_buyer@example.com')
+        self.outsider = make_user('d_outsider@example.com')
+        self.listing = make_local_listing(self.seller)
+        _make_conversation(self.listing, self.buyer)
+        self.deal = propose_deal(self.listing, self.seller, self.buyer.pk)
+        self.client = auth_client(self.outsider)
+
+    def test_outsider_confirm_404_deal_and_listing_unchanged(self):
+        self.assertEqual(self.client.post(f'/api/v1/deals/{self.deal.pk}/confirm/').status_code, 404)
+        self.deal.refresh_from_db()
+        self.listing.refresh_from_db()
+        self.assertEqual(self.deal.status, Deal.Status.PROPOSED)
+        self.assertEqual(self.listing.status, LocalListing.Status.ACTIVE)
+
+    def test_outsider_cancel_404_deal_unchanged(self):
+        self.assertEqual(self.client.post(f'/api/v1/deals/{self.deal.pk}/cancel/').status_code, 404)
+        self.deal.refresh_from_db()
+        self.assertEqual(self.deal.status, Deal.Status.PROPOSED)
+
+    def test_outsider_review_404_no_review_created(self):
+        confirm_deal(self.deal, self.buyer)
+        resp = self.client.post(f'/api/v1/deals/{self.deal.pk}/review/', {'rating': 1, 'text': 'x'})
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(Review.objects.filter(deal=self.deal).exists())
+
+    def test_outsider_does_not_see_deal_in_list(self):
+        resp = self.client.get('/api/v1/deals/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, [])
+
+    def test_unknown_deal_404_same_as_foreign(self):
+        # Чужая и несуществующая сделки неразличимы: pk перебором не разведать.
+        self.assertEqual(self.client.post('/api/v1/deals/999999/confirm/').status_code, 404)
+
+
+class ListingBuyersAPITest(TestCase):
+    """Задача 1.9 (13-S1): покупатели объявления без ПДн."""
+
+    def setUp(self):
+        self.owner = make_user('owner@example.com')
+        self.buyer = make_user('leaky.buyer@example.com', first_name='Іван', last_name='Петренко')
+        self.nameless = make_user('nameless.person@example.com')
+        self.listing = make_local_listing(self.owner)
+        _make_conversation(self.listing, self.buyer)
+        _make_conversation(self.listing, self.nameless)
+        self.url = f'/api/v1/deals/listing-buyers/{self.listing.pk}/'
+
+    def test_anonymous_401(self):
+        self.assertEqual(APIClient().get(self.url).status_code, 401)
+
+    def test_stranger_404(self):
+        self.assertEqual(auth_client(make_user()).get(self.url).status_code, 404)
+
+    def test_buyer_404(self):
+        self.assertEqual(auth_client(self.buyer).get(self.url).status_code, 404)
+
+    def test_staff_without_admin_role_404(self):
+        self.assertEqual(auth_client(make_staff()).get(self.url).status_code, 404)
+
+    def test_broker_404(self):
+        self.assertEqual(auth_client(make_broker()).get(self.url).status_code, 404)
+
+    def test_moderator_404(self):
+        self.assertEqual(auth_client(make_moderator()).get(self.url).status_code, 404)
+
+    def test_admin_role_200(self):
+        self.assertEqual(auth_client(make_admin_role()).get(self.url).status_code, 200)
+
+    def test_owner_gets_only_buyers_without_pii(self):
+        resp = auth_client(self.owner).get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(resp.json(), key=lambda b: b['id']),
+            sorted([
+                {'id': self.buyer.pk, 'display_name': 'Іван П.'},
+                {'id': self.nameless.pk, 'display_name': 'Користувач'},
+            ], key=lambda b: b['id']),
+        )
+        body = resp.content.decode()
+        for leak in ('leaky.buyer', 'nameless.person', 'example.com', 'Петренко', 'owner@'):
+            self.assertNotIn(leak, body)
+
+    def test_unknown_listing_404(self):
+        self.assertEqual(auth_client(self.owner).get('/api/v1/deals/listing-buyers/999999/').status_code, 404)
+
+
+class DealsNoEmailLeakTest(TestCase):
+    """Задача 1.9 (06-S5): email контрагента не раскрывается в сделках, отзывах, уведомлениях."""
+
+    def setUp(self):
+        self.seller = make_user('seller.secret@example.com')
+        self.buyer = make_user('buyer.secret@example.com', first_name='Марія', last_name='Шевчук')
+        self.listing = make_local_listing(self.seller)
+        _make_conversation(self.listing, self.buyer)
+
+    def _assert_clean(self, text):
+        for leak in ('secret', 'example.com', 'Шевчук'):
+            self.assertNotIn(leak, text)
+
+    def test_deals_list_has_no_email(self):
+        propose_deal(self.listing, self.seller, self.buyer.pk)
+        for user in (self.seller, self.buyer):
+            resp = auth_client(user).get('/api/v1/deals/')
+            self.assertEqual(resp.status_code, 200)
+            self._assert_clean(resp.content.decode())
+            deal = resp.json()[0]
+            self.assertEqual(set(deal['seller']), {'id', 'display_name'})
+            self.assertEqual(set(deal['buyer']), {'id', 'display_name'})
+            self.assertEqual(deal['seller']['display_name'], 'Користувач')
+            self.assertEqual(deal['buyer']['display_name'], 'Марія Ш.')
+
+    def test_review_has_author_name_not_email(self):
+        deal = confirm_deal(propose_deal(self.listing, self.seller, self.buyer.pk), self.buyer)
+        resp = auth_client(self.buyer).post(f'/api/v1/deals/{deal.pk}/review/', {'rating': 5, 'text': 'ok'})
+        self.assertEqual(resp.status_code, 201)
+        self.assertNotIn('author_email', resp.json())
+        self.assertEqual(resp.json()['author_name'], 'Марія Ш.')
+        deals = auth_client(self.seller).get('/api/v1/deals/')
+        self.assertNotIn('author_email', deals.json()[0]['review'])
+        self._assert_clean(deals.content.decode())
+
+    def test_proposal_notification_has_no_email(self):
+        from unittest.mock import patch
+
+        from notifications.models import Notification
+        with patch('integrations.tasks.send_notification.delay') as tg:
+            propose_deal(self.listing, self.seller, self.buyer.pk)
+        note = Notification.objects.get(user=self.buyer, type=Notification.Type.DEAL_PROPOSED)
+        self._assert_clean(note.title + note.text)
+        self.assertIn('Користувач', note.text)
+        tg.assert_called_once()
+        self._assert_clean(tg.call_args.args[1])
+
+
+class SellerRatingAccessTest(TestCase):
+    """Задача 1.9 (06-S12): рейтинг только у продавцов с публичными объявлениями."""
+
+    def test_seller_with_active_listing_200(self):
+        seller = make_user()
+        make_local_listing(seller)
+        resp = APIClient().get(f'/api/v1/deals/seller-rating/{seller.pk}/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_user_without_public_listings_404(self):
+        seller = make_user()
+        make_local_listing(seller, status=LocalListing.Status.PENDING)
+        resp = APIClient().get(f'/api/v1/deals/seller-rating/{seller.pk}/')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_unknown_user_404(self):
+        self.assertEqual(APIClient().get('/api/v1/deals/seller-rating/999999/').status_code, 404)

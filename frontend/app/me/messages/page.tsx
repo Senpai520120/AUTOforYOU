@@ -1,9 +1,11 @@
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getConversations, getConversation, sendMessage } from '@/api/messages';
+import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import { isEmailNotVerified } from '@/lib/email-verify';
 import type { ConversationSummary, ConversationDetail } from '@/lib/types';
 
 function timeAgo(iso: string) {
@@ -16,8 +18,7 @@ function timeAgo(iso: string) {
 }
 
 export default function MessagesPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const searchParams = useSearchParams();
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -28,12 +29,9 @@ export default function MessagesPage() {
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState('');
+  const [notVerified, setNotVerified] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -102,6 +100,7 @@ export default function MessagesPage() {
   const handleSend = async () => {
     if (!text.trim() || !activeId || sending) return;
     setSending(true);
+    setNotVerified(false);
     try {
       const msg = await sendMessage(activeId, text.trim());
       setText('');
@@ -111,8 +110,9 @@ export default function MessagesPage() {
           c.id === activeId ? { ...c, last_message_text: msg.text.slice(0, 100), last_message_at: msg.created_at } : c
         )
       );
-    } catch {
-      setError('Не вдалось надіслати повідомлення.');
+    } catch (err) {
+      if (isEmailNotVerified(err)) setNotVerified(true);
+      else setError('Не вдалось надіслати повідомлення.');
     } finally {
       setSending(false);
     }
@@ -133,6 +133,7 @@ export default function MessagesPage() {
       </div>
       <h1 className="text-xl font-bold text-slate-900 mb-4">Повідомлення</h1>
 
+      {notVerified && <EmailNotVerified className="mb-3" />}
       {error && (
         <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
           {error}
@@ -162,7 +163,7 @@ export default function MessagesPage() {
                   >
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-medium text-slate-900 text-sm truncate">
-                        {conv.other_participant?.first_name || conv.other_participant?.email?.split('@')[0] || 'Менеджер'}
+                        {conv.other_participant?.display_name || 'Менеджер'}
                       </span>
                       {conv.unread_count > 0 && (
                         <span className="bg-blue-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">

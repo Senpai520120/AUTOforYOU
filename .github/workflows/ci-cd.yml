@@ -7,6 +7,17 @@ on:
     branches: [main]
 
 jobs:
+  # ─── Секреты: gitleaks по рабочему дереву (история не сканируется, см. задачу 1.1) ───
+  secrets-scan:
+    name: Secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks dir (working tree)
+        # TODO владельцу: закрепить образ по digest (zricethezav/gitleaks:v8.21.2@sha256:...).
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.21.2             dir . --config .gitleaks.toml --redact --verbose
+
   # ─── Backend: линтер + системные проверки + миграции + тесты ───
   backend:
     name: Backend checks
@@ -42,6 +53,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Shell scripts use LF
+        run: |
+          git ls-files --eol -- '*.sh' | awk '$1 != "i/lf" {print; bad=1} END {exit bad}'
+          ! grep -lU $'\r' $(git ls-files '*.sh')
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Ruff lint
@@ -106,30 +121,51 @@ jobs:
   e2e:
     name: E2E tests
     runs-on: ubuntu-latest
+    env:
+      # Стек читает только .env.e2e (override), боевой .env не подхватывается.
+      DC: docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate .env for the stack
+      - name: Generate .env.e2e for the stack
         run: |
-          cp .env.docker.example .env
+          cp .env.e2e.example .env.e2e
           {
             echo "SECRET_KEY=$(head -c 50 /dev/urandom | base64 | tr -d '\n/+=' | head -c 50)"
             echo "POSTGRES_PASSWORD=ci_$(head -c 12 /dev/urandom | base64 | tr -d '\n/+=')"
-          } >> .env
+          } >> .env.e2e
           # DATABASE_URL из шаблона содержит пароль по умолчанию — пересобираем
           # его под сгенерированный.
-          PG_PASS=$(grep '^POSTGRES_PASSWORD=' .env | tail -1 | cut -d= -f2)
-          echo "DATABASE_URL=postgres://autoforyou:${PG_PASS}@db:5432/autoforyou" >> .env
-          echo "POSTGRES_USER=autoforyou" >> .env
-          echo "POSTGRES_DB=autoforyou" >> .env
+          PG_PASS=$(grep '^POSTGRES_PASSWORD=' .env.e2e | tail -1 | cut -d= -f2)
+          echo "DATABASE_URL=postgres://autoforyou:${PG_PASS}@db:5432/autoforyou" >> .env.e2e
+          echo "POSTGRES_USER=autoforyou" >> .env.e2e
+          echo "POSTGRES_DB=autoforyou" >> .env.e2e
           # Стек поднимается с DEBUG=false — как в проде. Но TLS здесь нет,
           # и без этого Django редиректил бы весь HTTP на HTTPS.
-          echo "SECURE_SSL_REDIRECT=false" >> .env
-          echo "==== .env (без значений) ===="
-          cut -d= -f1 .env | grep -v '^#' | grep -v '^$' | sort -u
+          echo "SECURE_SSL_REDIRECT=false" >> .env.e2e
+          # Только для тестового стека: разрешение e2e_seed и случайный пароль
+          # тестовых пользователей (маскируем в логах).
+          E2E_PASS="e2e_$(head -c 18 /dev/urandom | base64 | tr -d '[:space:]/+=')"
+          echo "::add-mask::${E2E_PASS}"
+          echo "E2E_SEED_ALLOWED=true" >> .env.e2e
+          echo "E2E_PASSWORD=${E2E_PASS}" >> .env.e2e
+          echo "E2E_PASSWORD=${E2E_PASS}" >> "$GITHUB_ENV"
+          echo "==== .env.e2e (без значений) ===="
+          cut -d= -f1 .env.e2e | grep -v '^#' | grep -v '^$' | sort -u
+
+      - name: Fake production .env (override must ignore it)
+        run: echo "TELEGRAM_BOT_TOKEN=ci-fake-prod-token" > .env
 
       - name: Start the stack
-        run: docker compose up -d --build
+        run: $DC up -d --build
+
+      - name: Check production .env is not visible in the stack
+        run: |
+          for svc in backend bot celery_worker celery_beat; do
+            val=$($DC exec -T "$svc" printenv TELEGRAM_BOT_TOKEN || true)
+            if [ -n "$val" ]; then echo "$svc sees production .env" >&2; exit 1; fi
+          done
+          test "$($DC exec -T backend printenv E2E_SEED_ALLOWED)" = "true"
 
       - name: Wait for the site
         run: |
@@ -139,8 +175,27 @@ jobs:
             sleep 5
           done
           echo "site did not come up in time" >&2
-          docker compose ps
-          docker compose logs --tail 100
+          $DC ps
+          $DC logs --tail 100
+          exit 1
+
+      - name: Seed e2e data
+        run: |
+          # Сброс троттлинга (429 на логин/расчёт) — только на e2e-стеке.
+          $DC exec -T redis redis-cli FLUSHALL
+          $DC exec -T backend python manage.py e2e_seed
+          # Подвал кэширует публичные настройки на 300 с. «Wait for the site» выше
+          # отрисовал страницу до сида, и в кэше frontend остались пустые реквизиты.
+          # Пересоздаём контейнер frontend (кэш fetch лежит в его файловой системе
+          # и в памяти) и перезапускаем nginx, чтобы он взял новый адрес апстрима.
+          $DC up -d --force-recreate --no-deps frontend
+          $DC restart nginx
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://localhost/terms || true)
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 2
+          done
+          echo "frontend did not come back after restart" >&2
           exit 1
 
       - name: Set up Node.js
@@ -154,13 +209,19 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Install Chromium
+      - name: Install browsers
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run Playwright
         working-directory: frontend
         run: npx playwright test
+        env:
+          E2E_PASSWORD: ${{ env.E2E_PASSWORD }}
+
+      - name: Clean up e2e data
+        if: always()
+        run: $DC exec -T backend python manage.py e2e_cleanup
 
       - name: Upload report
         if: always()
@@ -172,7 +233,7 @@ jobs:
 
       - name: Dump stack logs on failure
         if: failure()
-        run: docker compose logs --tail 200
+        run: $DC logs --tail 200
 
   # ─── Deploy: только после зелёных проверок, только на push в main ───
   deploy:

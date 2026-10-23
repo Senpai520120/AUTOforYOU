@@ -1,23 +1,19 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { localApi } from '@/api/local';
 import { LocalListing } from '@/lib/types';
 import LocalListingForm from '@/components/local/LocalListingForm';
 
 export default function EditLocalListingPage() {
-  const { user, loading } = useAuth();
+  const { loading } = useRequireAuth();
   const router = useRouter();
   const params = useParams();
   const id = Number(params.id);
 
   const [listing, setListing] = useState<LocalListing | null>(null);
   const [fetching, setFetching] = useState(true);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (!id) return;

@@ -1,0 +1,50 @@
+from rest_framework import serializers
+
+from core.modules import module_enabled
+
+from .models import SiteSettings
+
+
+class PublicSiteSettingsSerializer(serializers.ModelSerializer):
+    """Белый список публичных полей. 6.7 добавит сюда read-only поле (c2c_enabled) не из модели."""
+
+    owner_configured = serializers.BooleanField(read_only=True)
+    # Единственный источник текста согласия партнёру: его же leads.services сохраняет в заявку.
+    partner_consent_text = serializers.SerializerMethodField()
+
+    # Флаги модулей (задача 2.8): только чтение, источник правды - .env, не модель.
+    lots_enabled = serializers.SerializerMethodField()
+    b2b_enabled = serializers.SerializerMethodField()
+    dealers_enabled = serializers.SerializerMethodField()
+    shipments_enabled = serializers.SerializerMethodField()
+
+    def get_lots_enabled(self, obj) -> bool:
+        return module_enabled('lots')
+
+    def get_b2b_enabled(self, obj) -> bool:
+        return module_enabled('b2b')
+
+    def get_dealers_enabled(self, obj) -> bool:
+        return module_enabled('dealers')
+
+    def get_shipments_enabled(self, obj) -> bool:
+        return module_enabled('shipments')
+
+    def get_partner_consent_text(self, obj) -> str:
+        from leads.services import PARTNER_CONSENT_TEMPLATE
+        name = (obj.partner_name or '').strip()
+        return PARTNER_CONSENT_TEMPLATE.format(partner=name)[:500] if name else ''
+
+    class Meta:
+        model = SiteSettings
+        fields = [
+            'owner_legal_form', 'owner_legal_name', 'owner_code', 'owner_address',
+            'support_email', 'privacy_email', 'phone', 'manager_contact', 'telegram_channel_url',
+            'partner_name', 'partner_legal_name',
+            'data_retention_years', 'log_retention_days', 'account_deletion_grace_days',
+            'legal_docs_approved', 'legal_docs_updated_at',
+            'legal_docs_version', 'legal_docs_reconsent_required',
+            'owner_configured', 'partner_consent_text',
+            'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled',
+        ]
+        read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]
