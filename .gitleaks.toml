@@ -24,6 +24,9 @@ regexes = [
   '''N3w-Str0ng-Pass-77''',
   # Фиктивный пароль в тестах регистрации и удаления аккаунта (tests/test_attribution.py, users/tests_account_data.py)
   '''Strong-Pass-9182''',
+  # Фиктивные токен Telegram и пароль БД в тестах маскировки секретов (integrations/tests.py, задача 3.1)
+  '''tok-12345-abc''',
+  '''dbpass-Secret9''',
   # Плейсхолдеры шаблонов .env*.example и документации: KEY=your_...
   '''(?i)api[_-]?key=your_[a-z0-9_]*''',
 ]
