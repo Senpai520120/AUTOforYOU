@@ -57,6 +57,8 @@ class SeededCase(CleanCacheTestCase):
     def setUpTestData(cls):
         call_command('seed_rates', verbosity=0)
         call_command('seed_auction_fees', '--clear', verbosity=0)
+        # Дата сида - из БД, а не TODAY: прогон может пересечь полночь (Europe/Kyiv) между импортом и сидом.
+        cls.seed_date = UsLandRoute.objects.latest('valid_from').valid_from
 
     def calc(self, as_staff=False, **extra):
         client = APIClient()
@@ -189,22 +191,22 @@ class OverlapLatestAppliedTests(SeededCase):
         base = self.calc().json()['breakdown']
         # более старая запись того же маршрута не побеждает, более свежая (или та же дата, больший pk) - да
         UsLandRoute.objects.bulk_create([UsLandRoute(auction_location='general', us_port='houston',
-                                                     cost_usd=D('1111'), valid_from=TODAY - timedelta(days=30))])
+                                                     cost_usd=D('1111'), valid_from=self.seed_date - timedelta(days=30))])
         invalidate_all()  # bulk_create не шлёт post_save
         self.assertEqual(self.calc().json()['breakdown']['us_land_usd'], base['us_land_usd'])
         UsLandRoute.objects.bulk_create([UsLandRoute(auction_location='general', us_port='houston',
-                                                     cost_usd=D('9999'), valid_from=TODAY)])
+                                                     cost_usd=D('9999'), valid_from=self.seed_date)])
         invalidate_all()
         self.assertEqual(self.calc().json()['breakdown']['us_land_usd'], '9999.00')
         self.assertNotEqual(base['us_land_usd'], '9999.00')
 
     def test_latest_ocean_eu_and_fixed_fee_applied(self):
         OceanFreightRate.objects.bulk_create([OceanFreightRate(us_port='houston', eu_port='klaipeda',
-                                                               cost_usd=D('7777'), valid_from=TODAY)])
+                                                               cost_usd=D('7777'), valid_from=self.seed_date)])
         EuToUaDeliveryRate.objects.bulk_create([EuToUaDeliveryRate(eu_port='klaipeda', cost_usd=D('6666'),
-                                                                   valid_from=TODAY)])
+                                                                   valid_from=self.seed_date)])
         AuctionFixedFee.objects.bulk_create([AuctionFixedFee(auction='copart', fee_type='environmental',
-                                                             title_type='any', amount=D('55.00'), valid_from=TODAY)])
+                                                             title_type='any', amount=D('55.00'), valid_from=self.seed_date)])
         b = self.calc().json()['breakdown']
         self.assertEqual((b['ocean_freight_usd'], b['eu_to_ua_usd'], b['auction_fee_environmental_usd']),
                          ('7777.00', '6666.00', '55.00'))
@@ -444,8 +446,8 @@ class SnapshotAndAdminTests(SeededCase):
         self.assertIsNone(calc.inputs_snapshot['calculation_date'])
         self.assertEqual(calc.inputs_snapshot['auction_price_usd'], '5000.00')
         self.assertEqual(calc.inputs_snapshot['engine_cc'], 2000)
-        self.assertEqual(body['rates_updated_on'], TODAY.isoformat())
-        self.assertEqual(calc.rates_snapshot['rates_updated_on'], TODAY.isoformat())
+        self.assertEqual(body['rates_updated_on'], self.seed_date.isoformat())
+        self.assertEqual(calc.rates_snapshot['rates_updated_on'], self.seed_date.isoformat())
 
     def test_empty_rates_422_without_500(self):
         for model in (UsLandRoute, OceanFreightRate, EuToUaDeliveryRate, CustomsExciseRate):
