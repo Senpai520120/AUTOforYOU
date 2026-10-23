@@ -1,4 +1,5 @@
 """Тесты модели прав (задача 1.2): аудит views, дефолт IsAuthenticated, публичные эндпоинты."""
+from django.conf import settings
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver, path
@@ -102,9 +103,41 @@ class TestPublicEndpointsStayPublic(CleanCacheTestCase):
     def test_vehicles(self):
         self.assertEqual(self.client.get('/api/v1/vehicles/').status_code, status.HTTP_200_OK)
 
-    def test_legacy_calculate(self):
-        # LEGACY_CARS_API_ENABLED (задача 2.8) ещё не введён: ожидается 200.
-        self.assertEqual(self.client.get('/api/calculate/').status_code, status.HTTP_200_OK)
 
-    def test_legacy_list(self):
-        self.assertEqual(self.client.get('/api/list/').status_code, status.HTTP_200_OK)
+class TestLegacyCarsApiFlag(TestCase):
+    """Q7, 23-D56: legacy /api/calculate/ и /api/list/ подключаются только при LEGACY_CARS_API_ENABLED."""
+
+    URLS = ('/api/calculate/', '/api/list/')
+
+    def _reload_urlconf(self):
+        import importlib
+
+        from django.urls import clear_url_caches
+
+        import core.urls
+        importlib.reload(core.urls)
+        clear_url_caches()
+
+    def _check(self, flag, expected):
+        with override_settings(LEGACY_CARS_API_ENABLED=flag):
+            self._reload_urlconf()
+            self.addCleanup(self._reload_urlconf)
+            for url in self.URLS:
+                with self.subTest(url=url, flag=flag):
+                    self.assertEqual(APIClient().get(url).status_code, expected)
+
+    def test_disabled_by_default_in_tests(self):
+        self.assertFalse(settings.LEGACY_CARS_API_ENABLED)
+
+    def test_disabled_returns_404(self):
+        self._check(False, status.HTTP_404_NOT_FOUND)
+
+    def test_enabled_returns_200(self):
+        self._check(True, status.HTTP_200_OK)
+
+    def test_disabled_routes_absent_from_openapi_schema(self):
+        with override_settings(LEGACY_CARS_API_ENABLED=False):
+            self._reload_urlconf()
+            from drf_spectacular.generators import SchemaGenerator
+            paths = SchemaGenerator().get_schema(request=None, public=True)['paths']
+        self.assertEqual([p for p in paths if p.startswith(('/api/calculate', '/api/list'))], [])

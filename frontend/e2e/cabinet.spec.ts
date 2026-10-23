@@ -46,7 +46,7 @@ test.describe('Кабінет buyer', () => {
     await expect(page.getByText('[E2E] Здравствуйте!').last()).toBeVisible();
   });
 
-  test('/me/shipments: контейнер [E2E]', async ({ page }) => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: /me/shipments: контейнер [E2E]', async ({ page }) => {
     await page.goto('/me/shipments');
     await expect(page.getByRole('heading', { name: 'Мої контейнери' })).toBeVisible();
     await expect(page.getByText('E2E-0000001')).toBeVisible();

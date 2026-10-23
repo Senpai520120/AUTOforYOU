@@ -13,7 +13,6 @@ test.describe('Мобільний smoke @mobile', () => {
 
   for (const [path, heading] of [
     ['/', 'Авто з США під ключ в Україну'],
-    ['/listings', 'Каталог автомобілів'],
     ['/ua', 'Каталог Україна'],
     ['/calculator', 'Калькулятор вартості «під ключ»'],
   ] as const) {

@@ -9,9 +9,8 @@ const PRIVATE_PATHS = [
   '/me/favorites',
   '/me/local-listings',
   '/me/messages',
-  '/b2b',
+  // '/b2b', '/dealers/apply' — модули заморожены (2.8): страницы отвечают 404, а не редиректом на /login.
   '/local/new',
-  '/dealers/apply',
 ];
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');

@@ -224,6 +224,12 @@ class BotLatestTest(BotRuntimeTestCase):
 
         self.assertEqual(sorted(self._listing_ids()), sorted([in_stock.pk, in_transit.pk]))
 
+    def test_latest_hides_lots_when_lots_disabled(self):
+        self._listing('1HGCM82633A000201')
+        with self.settings(LOTS_ENABLED=False):
+            self.send('/latest')
+        self.assertEqual(self.replies(), ['Наразі немає активних оголошень.'])
+
     def test_button_links_to_listing_page(self):
         listing = self._listing('1HGCM82633A000005')
         self.send('/latest')
@@ -543,3 +549,17 @@ class TelegramTokenDisabledInTestsTest(SimpleTestCase):
             settings.TELEGRAM_BOT_TOKEN, '',
             'В тестах TELEGRAM_BOT_TOKEN должен быть пустым — см. core/settings.py',
         )
+
+
+class PostListingToChannelLotsDisabledTest(TestCase):
+    def test_queued_task_does_not_publish_when_lots_disabled(self):
+        from listings.models import Listing
+        from telegram_bot.tasks import post_listing_to_channel
+        from tests.factories import make_listing, make_user, make_vehicle
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
+            listing = make_listing(make_vehicle(), make_user())
+        with self.settings(LOTS_ENABLED=False, TELEGRAM_BOT_TOKEN='fake', TELEGRAM_CHANNEL_ID='@ch'),                 patch('aiogram.Bot.__call__') as bot_call:
+            result = post_listing_to_channel(listing.pk)
+        self.assertEqual(result, {'posted': False, 'reason': 'lots disabled'})
+        bot_call.assert_not_called()
+        self.assertTrue(Listing.objects.filter(pk=listing.pk).exists())

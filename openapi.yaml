@@ -9,51 +9,6 @@ info:
 
     ⚠ **Тестовые тарифы** — все расчёты демонстрационные до подключения реальных ставок.
 paths:
-  /api/calculate/:
-    get:
-      operationId: calculate_retrieve
-      description: Устаревший эндпоинт. Используйте POST /api/v1/pricing/calculate/
-        вместо него.
-      summary: '[УСТАРЕЛО] Калькулятор растаможки'
-      tags:
-      - legacy
-      security:
-      - jwtAuth: []
-      - cookieAuth: []
-      - {}
-      deprecated: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LegacyCalcResponse'
-          description: ''
-  /api/list/:
-    get:
-      operationId: list_list
-      summary: '[УСТАРЕЛО] Список Car'
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      tags:
-      - legacy
-      security:
-      - jwtAuth: []
-      - cookieAuth: []
-      - {}
-      deprecated: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedCarList'
-          description: ''
   /api/v1/auth/config/:
     get:
       operationId: v1_auth_config_retrieve
@@ -1250,7 +1205,7 @@ paths:
   /api/v1/listings/create/:
     post:
       operationId: v1_listings_create_create
-      description: Требует авторизации.
+      description: Только брокер и администратор.
       summary: Создать объявление
       tags:
       - listings
@@ -2927,89 +2882,6 @@ components:
       - total_uah
       - total_usd
       - user
-    Car:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        images:
-          type: array
-          items:
-            $ref: '#/components/schemas/CarImage'
-          readOnly: true
-        title:
-          type: string
-          title: Марка и модель авто
-          maxLength: 100
-        vin:
-          type: string
-          title: VIN код
-          maxLength: 17
-        year:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          title: Год выпуска
-        price_in_usa:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
-          title: Цена на аукционе ($)
-        total_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
-          title: Цена под ключ в Украине ($)
-        status:
-          allOf:
-          - $ref: '#/components/schemas/CarStatusEnum'
-          title: Статус доставки
-        lot_number:
-          type: string
-          nullable: true
-          title: Номер лота Copart/IAAI
-          maxLength: 50
-        description:
-          type: string
-          nullable: true
-          title: Описание ремонта или состояния
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-          title: Дата добавления
-        owner:
-          type: integer
-          title: Продавец (Перекуп)
-      required:
-      - created_at
-      - id
-      - images
-      - owner
-      - price_in_usa
-      - title
-      - total_price
-      - vin
-      - year
-    CarImage:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        image:
-          type: string
-          format: uri
-      required:
-      - id
-      - image
-    CarStatusEnum:
-      enum:
-      - IN_USA
-      - IN_TRANSIT
-      - IN_UKRAINE
-      type: string
     ChannelEnum:
       enum:
       - retail
@@ -3415,26 +3287,6 @@ components:
       - rejected
       - spam
       type: string
-    LegacyCalcResponse:
-      type: object
-      properties:
-        auction_fee:
-          type: number
-          format: double
-        delivery_to_ukraine:
-          type: number
-          format: double
-        customs_total:
-          type: number
-          format: double
-        total_cost:
-          type: number
-          format: double
-      required:
-      - auction_fee
-      - customs_total
-      - delivery_to_ukraine
-      - total_cost
     Listing:
       type: object
       properties:
@@ -4485,29 +4337,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Calculation'
-    PaginatedCarList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/Car'
     PaginatedLeadMineList:
       type: object
       required:

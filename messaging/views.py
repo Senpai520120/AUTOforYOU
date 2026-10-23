@@ -18,6 +18,7 @@ from .serializers import (
     StartConversationSerializer,
 )
 from .services import (
+    ListingUnavailable,
     get_or_create_conversation,
     mark_as_read,
     send_message_to_conversation,
@@ -41,6 +42,8 @@ class StartConversationView(APIView):
                 listing_id=sr.validated_data['listing_id'],
                 first_text=sr.validated_data['text'],
             )
+        except ListingUnavailable as e:
+            return Response({'detail': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

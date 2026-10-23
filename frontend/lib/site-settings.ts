@@ -1,9 +1,26 @@
+import { notFound } from 'next/navigation';
 import { serverGet } from '@/lib/server-api';
 import type { SiteSettings } from '@/lib/types';
 
 /** Публічні налаштування сайту. null — API недоступне (сторінка показує «не заповнено»). */
 export async function getSiteSettings(revalidate = 300): Promise<SiteSettings | null> {
   return serverGet<SiteSettings>('/api/v1/site-settings/', revalidate);
+}
+
+export type ModuleName = 'lots' | 'b2b' | 'dealers' | 'shipments';
+
+/**
+ * Чи увімкнено замороженій модуль. Недоступність налаштувань = «вимкнено»:
+ * сторінка модуля не має розкриватись, якщо API не відповіло.
+ */
+export async function isModuleEnabled(name: ModuleName, revalidate = 60): Promise<boolean> {
+  const s = await getSiteSettings(revalidate);
+  return s?.[`${name}_enabled`] === true;
+}
+
+/** Для layout замороженого модуля: вимкнено → 404. */
+export async function requireModule(name: ModuleName): Promise<void> {
+  if (!(await isModuleEnabled(name))) notFound();
 }
 
 export const OWNER_NOT_CONFIGURED = 'Реквізити власника ще не заповнені адміністратором';

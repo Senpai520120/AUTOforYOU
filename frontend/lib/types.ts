@@ -505,6 +505,11 @@ export interface SiteSettings {
   legal_docs_version: string;
   legal_docs_reconsent_required: boolean;
   owner_configured: boolean;
+  /** Флаги модулів (задача 2.8): джерело правди — .env бекенда, лише читання. */
+  lots_enabled: boolean;
+  b2b_enabled: boolean;
+  dealers_enabled: boolean;
+  shipments_enabled: boolean;
 }
 
 // Заявки брокеру (задача 2.3)

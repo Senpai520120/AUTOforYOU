@@ -127,6 +127,22 @@ class LeadCreateApiTests(LeadApiBase):
         listing = make_listing(make_vehicle(), make_user(), channel='wholesale')
         self.assertEqual(self.post(auth_client(make_dealer()), listing_id=listing.pk).status_code, 201)
 
+    @override_settings(LOTS_ENABLED=False)
+    def test_listing_lead_rejected_when_lots_disabled(self):
+        listing = make_listing(make_vehicle(), make_user(), channel='retail')
+        resp = self.post(listing_id=listing.pk)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('listing_id', resp.json())
+        self.assertEqual(Lead.objects.count(), 0)
+
+    @override_settings(B2B_ENABLED=False)
+    def test_wholesale_lead_rejected_for_dealer_when_b2b_disabled(self):
+        listing = make_listing(make_vehicle(), make_user(), channel='wholesale')
+        resp = self.post(auth_client(make_dealer()), listing_id=listing.pk)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('listing_id', resp.json())
+        self.assertEqual(Lead.objects.count(), 0)
+
     def test_missing_listing_is_400(self):
         resp = self.post(listing_id=999999)
         self.assertEqual(resp.status_code, 400)

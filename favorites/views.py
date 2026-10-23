@@ -1,11 +1,20 @@
 from django.db import IntegrityError
+from django.http import Http404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.modules import module_enabled
+
 from .models import Favorite
 from .serializers import FavoriteSerializer
+
+
+def _require_lots_for(listing_type):
+    """Избранное по лотам (не 'local') при LOTS_ENABLED=false - 404 (задача 2.8)."""
+    if listing_type != 'local' and not module_enabled('lots'):
+        raise Http404
 
 
 class FavoriteListView(APIView):
@@ -19,6 +28,8 @@ class FavoriteListView(APIView):
             'local_listing__images',
             'imported_listing__vehicle__images',
         )
+        if not module_enabled('lots'):
+            qs = qs.filter(imported_listing__isnull=True)
         return Response(FavoriteSerializer(qs, many=True).data)
 
     def post(self, request):
@@ -27,6 +38,7 @@ class FavoriteListView(APIView):
         listing_id = request.data.get('listing_id')
         if listing_type not in ('local', 'imported') or not listing_id:
             return Response({'detail': 'listing_type and listing_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+        _require_lots_for(listing_type)
 
         kwargs = {'user': request.user}
         if listing_type == 'local':
@@ -49,6 +61,7 @@ class FavoriteListView(APIView):
         """Remove from favorites. Body: {listing_type, listing_id}"""
         listing_type = request.data.get('listing_type')
         listing_id = request.data.get('listing_id')
+        _require_lots_for(listing_type)
         kwargs = {'user': request.user}
         if listing_type == 'local':
             kwargs['local_listing_id'] = listing_id
@@ -67,6 +80,7 @@ class FavoriteStatusView(APIView):
         listing_id = request.query_params.get('listing_id')
         if not listing_type or not listing_id:
             return Response({'is_favorite': False})
+        _require_lots_for(listing_type)
         kwargs = {'user': request.user}
         if listing_type == 'local':
             kwargs['local_listing_id'] = listing_id

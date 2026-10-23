@@ -7,11 +7,22 @@ from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from PIL import Image
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from shipments.models import Shipment, TrackingEvent
-from tests.factories import make_staff, make_vehicle
+from tests.factories import (
+    make_admin_role,
+    make_broker,
+    make_dealer,
+    make_listing,
+    make_moderator,
+    make_staff,
+    make_user,
+    make_vehicle,
+)
 from tests.test_uploads import GPS_IFD, admin_form_data, image_bytes, use_temp_media
 
 from .models import VehicleImage
@@ -161,3 +172,81 @@ class TestSanitizeExistingImages(TestCase):
         self.assertFalse(default_storage.exists('tracking_photos/port.jpg'))
         self.assertFalse(os.path.exists(os.path.join(self.media_root, event.photo.name)))
 
+
+
+# ─── Утечка VIN через /api/v1/vehicles/ (задача 2.8, 04-S2, 13-S5, ревью 1.2b) ─
+
+LIST_URL = '/api/v1/vehicles/'
+
+
+class TestVehicleVisibility(APITestCase):
+    def setUp(self):
+        seller = make_user()
+        self.retail = make_vehicle(vin='RETAILVIN00000001')
+        self.wholesale = make_vehicle(vin='WHOLESVIN00000002')
+        self.unlisted = make_vehicle(vin='UNLISTVIN0000003')
+        self.in_container = make_vehicle(vin='CONTNRVIN0000004')
+        make_listing(self.retail, seller, channel='retail')
+        make_listing(self.wholesale, seller, channel='wholesale')
+        shipment = Shipment.objects.create(container_no='MSCU1112223')
+        shipment.vehicles.add(self.in_container)
+
+    def _vins(self, user, **params):
+        self.client.force_authenticate(user)
+        resp = self.client.get(LIST_URL, params)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        return {v['vin'] for v in resp.data['results']}
+
+    def _detail(self, user, vehicle):
+        self.client.force_authenticate(user)
+        return self.client.get(f'{LIST_URL}{vehicle.pk}/').status_code
+
+    def test_anon_sees_only_retail_vehicle(self):
+        self.assertEqual(self._vins(None), {'RETAILVIN00000001'})
+
+    def test_buyer_broker_moderator_see_only_retail_vehicle(self):
+        for user in (make_user(), make_broker(), make_moderator()):
+            with self.subTest(role=user.role):
+                self.assertEqual(self._vins(user), {'RETAILVIN00000001'})
+
+    def test_anon_detail_of_hidden_vehicles_is_404(self):
+        for vehicle in (self.wholesale, self.unlisted, self.in_container):
+            with self.subTest(vin=vehicle.vin):
+                self.assertEqual(self._detail(None, vehicle), status.HTTP_404_NOT_FOUND)
+
+    def test_buyer_detail_of_wholesale_is_404(self):
+        self.assertEqual(self._detail(make_user(), self.wholesale), status.HTTP_404_NOT_FOUND)
+
+    def test_broker_detail_of_wholesale_is_404(self):
+        self.assertEqual(self._detail(make_broker(), self.wholesale), status.HTTP_404_NOT_FOUND)
+
+    def test_anon_detail_of_retail_is_200(self):
+        self.assertEqual(self._detail(None, self.retail), status.HTTP_200_OK)
+
+    def test_dealer_sees_retail_and_wholesale_not_unlisted(self):
+        self.assertEqual(self._vins(make_dealer()), {'RETAILVIN00000001', 'WHOLESVIN00000002'})
+
+    def test_dealer_detail_of_wholesale_is_200(self):
+        self.assertEqual(self._detail(make_dealer(), self.wholesale), status.HTTP_200_OK)
+
+    def test_admin_sees_everything(self):
+        self.assertEqual(len(self._vins(make_admin_role())), 4)
+
+    def test_search_by_wholesale_vin_returns_nothing_for_anon(self):
+        self.assertEqual(self._vins(None, search='WHOLESVIN00000002'), set())
+
+    def test_search_by_wholesale_vin_returns_nothing_for_buyer(self):
+        self.assertEqual(self._vins(make_user(), search='WHOLESVIN00000002'), set())
+
+    def test_search_by_wholesale_vin_finds_for_dealer(self):
+        self.assertEqual(self._vins(make_dealer(), search='WHOLESVIN00000002'), {'WHOLESVIN00000002'})
+
+    @override_settings(B2B_ENABLED=False)
+    def test_dealer_does_not_see_wholesale_when_b2b_disabled(self):
+        self.assertEqual(self._vins(make_dealer()), {'RETAILVIN00000001'})
+
+    def test_vehicle_with_two_listings_not_duplicated(self):
+        make_listing(self.retail, make_user(), channel='wholesale')
+        self.client.force_authenticate(make_dealer())
+        resp = self.client.get(LIST_URL)
+        self.assertEqual(resp.data['count'], 2)

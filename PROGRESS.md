@@ -17,6 +17,22 @@
 
 ---
 
+## Задача 2.8: заморозка модулей и закрытие создания (2026-10-23, локальный оркестратор) — ЗАВЕРШЕНО
+
+- Флаги `LOTS_ENABLED`, `B2B_ENABLED`, `DEALERS_ENABLED`, `SHIPMENTS_ENABLED`, `LEGACY_CARS_API_ENABLED` (из env, по умолчанию false; в тестах модули true). Чтение — `core/modules.py::module_enabled`. `core/middleware.py::ModuleFlagMiddleware` (список `FROZEN_ROUTES`, 404 любому методу и пользователю, включая staff; `/vehicles/<vin>/decode|report|registry/` не заморожены). 6.7 добавляет `C2CFlagMiddleware` в тот же файл. `cars.urls` подключаются в `core/urls.py` только при `LEGACY_CARS_API_ENABLED`; `cars/` не менялся.
+- Избранное по лотам при `LOTS_ENABLED=false` — 404, в списке скрыто; сигнал `telegram_bot/signals.py` — ранний выход (5.2 обязана сохранить); `import_lot`, `upload_lot_photos` — `CommandError`. `site-settings` отдаёт четыре флага (не из кэша).
+- 04-S1: `POST /listings/create/` — `IsBrokerOrAdmin`; чужой `calculation` — 400 (admin может любой); дубль vehicle+channel — 400; `is_express_buyout` только admin (закрывает пункт ревью 1.2b про express/Telegram). 04-S2/13-S5: `vehicles` видны по `Exists(Listing)` (аноним/buyer/broker/moderator — retail; дилер + wholesale при B2B; admin — всё). 04-Q1/Q8: `ListingFilterSerializer` (400 на max_price и choices), и для B2B-доски. Wholesale не отдаётся и при `B2B_ENABLED=false`.
+- Фронт: ссылки на замороженные модули убраны, `notFound()` через `requireModule` в layout `listings`, `b2b`, `dealers`, `me/shipments`; sitemap без лотов; robots с `Disallow`; главная без блока лотов. E2E: `module-flags.spec.ts`; старые спеки переведены/`test.fixme`.
+- Ревью безопасности (`security-reviewer`): критичного нет; 5 «важно» исправлены с тестами и мутациями: `/latest` бота и `post_listing_to_channel` молчат при `LOTS_ENABLED=false`; `POST /messages/start/` с лотом — 404 при выключенном модуле и для чужого wholesale; `POST /leads/` с `listing_id` при выключенных лотах — та же ошибка поля; брокер не может создать retail на машину с wholesale-объявлением (400, иначе VIN раскрывался бы через `vehicles`); тест полноты `FROZEN_ROUTES` сверяет явный список из 13 путей. Не исправлено (желательно): `UniqueConstraint(vehicle, channel)` (сейчас дубль ловит `exists()`, гонка возможна) и wholesale в избранном при `B2B_ENABLED=false` — при разморозке (04-S5).
+- `/me/shipments`: страница даёт экран 404 с `noindex`, но HTTP 200 — `app/me/loading.tsx` начинает стрим раньше вложенного layout (документация Next, streaming.md «The HTTP contract»). Данные закрыты: `/api/v1/auth/me/shipments/` → 404. Спека проверяет именно это.
+- `frontend/e2e/test-1.spec.ts:36`: ассерт ссылки «Пригін/аукціон» → `/listings` заменён на «ссылки нет» (цель задачи — убрать ссылку; файл не переименован).
+- Проверки: бэкенд SQLite 1876 (падает только `test_entrypoint_refuses_debug_for_gunicorn`, Windows); `tsc`, `lint` (0 ошибок), `build` OK; e2e полный набор на чистом стеке с флагами false — 298, после повтора упавших из-за 429 падал только `/me/shipments` (исправлено выше, перепрогон спеки); `openapi.yaml` перегенерирован против PostgreSQL (ушли `/api/calculate/`, `/api/list/`). `git diff -- cars/` пуст.
+
+### Для владельца
+- Создание лота (`POST /listings/create/`, модуль заморожен): сделано broker + admin по основному разделу задачи, `is_express_buyout` — только admin; ревью 1.2b предлагало только admin. Если нужно строго admin — правка одной строки в `listings/views.py`.
+- `app/me/leads/page.tsx:68` — ссылка «Переглянути лот» на `/listings/…` (такие заявки создаются только со страницы лота, сейчас закрытой); убрать при 2.9 или раньше по решению.
+- Прод `.env`: `LOTS_ENABLED`, `B2B_ENABLED`, `DEALERS_ENABLED`, `SHIPMENTS_ENABLED`, `LEGACY_CARS_API_ENABLED` = false (см. `docs/LAUNCH_CHECKLIST.md`).
+
 ## Задача 2.7: доставка по Украине и услуги брокера в расчёте (2026-10-20, облачная сессия) — ЗАВЕРШЕНО
 
 - Модели (миграция 0009, только создание таблиц): `UaDeliveryRate` (город/зона, `eu_port` пусто = с любого порта, `cost_usd` или `quote_on_request`, `sort_order`) и `BrokerServiceFee` (`title`, `FeeMode` `fixed` по умолчанию / `percent`, `amount_usd` или `percent` 0…100, `sort_order`). `CheckConstraint`: сумма или «уточнюйте»; режим соответствует полям; суммы ≥ 0. Обе — `DateRangeModel`, участвуют в `is_verified`/демо из 2.6. Админка: даты, фильтр «Діють зараз», порядок по `sort_order`, action «Позначити перевіреними». Кэш и сигналы.

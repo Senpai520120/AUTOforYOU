@@ -34,6 +34,12 @@ export default function Error({
         >
           На головну
         </Link>
+        <Link
+          href="/calculator"
+          className="border border-slate-300 hover:border-blue-300 text-slate-700 font-semibold px-6 py-3 rounded-xl transition-colors"
+        >
+          Калькулятор
+        </Link>
       </div>
     </div>
   );

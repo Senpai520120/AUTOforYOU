@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from core.modules import module_enabled
+
 from .models import SiteSettings
 
 
@@ -9,6 +11,24 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
     owner_configured = serializers.BooleanField(read_only=True)
     # Единственный источник текста согласия партнёру: его же leads.services сохраняет в заявку.
     partner_consent_text = serializers.SerializerMethodField()
+
+    # Флаги модулей (задача 2.8): только чтение, источник правды - .env, не модель.
+    lots_enabled = serializers.SerializerMethodField()
+    b2b_enabled = serializers.SerializerMethodField()
+    dealers_enabled = serializers.SerializerMethodField()
+    shipments_enabled = serializers.SerializerMethodField()
+
+    def get_lots_enabled(self, obj) -> bool:
+        return module_enabled('lots')
+
+    def get_b2b_enabled(self, obj) -> bool:
+        return module_enabled('b2b')
+
+    def get_dealers_enabled(self, obj) -> bool:
+        return module_enabled('dealers')
+
+    def get_shipments_enabled(self, obj) -> bool:
+        return module_enabled('shipments')
 
     def get_partner_consent_text(self, obj) -> str:
         from leads.services import PARTNER_CONSENT_TEMPLATE
@@ -25,5 +45,6 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'legal_docs_approved', 'legal_docs_updated_at',
             'legal_docs_version', 'legal_docs_reconsent_required',
             'owner_configured', 'partner_consent_text',
+            'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled',
         ]
-        read_only_fields = [f for f in fields if f != 'partner_consent_text']
+        read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

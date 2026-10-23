@@ -86,6 +86,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'core.middleware.ModuleFlagMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -253,6 +254,15 @@ NUM_PROXIES_COUNT = int(os.environ.get('NUM_PROXIES', '0'))
 LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', '5'))
 LOGIN_FAILURE_WINDOW_MINUTES = int(os.environ.get('LOGIN_FAILURE_WINDOW_MINUTES', '15'))
 LOGIN_LOCKOUT_MINUTES = int(os.environ.get('LOGIN_LOCKOUT_MINUTES', '15'))
+
+# ─── Флаги модулей (задача 2.8) ───────────────────────────────────────────────
+# Заморожены до разморозки соответствующих задач (2.9, 2.10, 2.11, 3.3). Читать только через core.modules.module_enabled.
+LOTS_ENABLED = os.environ.get('LOTS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+B2B_ENABLED = os.environ.get('B2B_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+DEALERS_ENABLED = os.environ.get('DEALERS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+SHIPMENTS_ENABLED = os.environ.get('SHIPMENTS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+# Q7: legacy cars (/api/calculate/, /api/list/). Код cars/ не меняется, выключается подключение маршрутов.
+LEGACY_CARS_API_ENABLED = os.environ.get('LEGACY_CARS_API_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 
 # ─── Подтверждение email и антибот (задача 1.6) ──────────────────────────────
 _TRUE = ('true', '1', 'yes')
@@ -578,6 +588,12 @@ if not DEBUG and not _TESTING:
 TEST_RUNNER = 'core.test_runner.IsolatedDiscoverRunner'
 
 if _TESTING:
+    # Модули включены, отдельные тесты выключают их через override_settings (задача 2.8).
+    LOTS_ENABLED = True
+    B2B_ENABLED = True
+    DEALERS_ENABLED = True
+    SHIPMENTS_ENABLED = True
+    LEGACY_CARS_API_ENABLED = False
     OPENDATABOT_API_KEY = ''
     APIFY_TOKEN = ''
     LIQPAY_PUBLIC_KEY = ''

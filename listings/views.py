@@ -2,9 +2,12 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, generics, permissions
 
+from core.modules import module_enabled
+from users.permissions import IsBrokerOrAdmin
+
 from .models import Listing
 from .permissions import IsVerifiedDealerOrAdmin, can_view_wholesale
-from .serializers import ListingCreateSerializer, ListingSerializer
+from .serializers import ListingCreateSerializer, ListingFilterSerializer, ListingSerializer
 
 
 def _base_queryset():
@@ -12,26 +15,27 @@ def _base_queryset():
 
 
 def _apply_filters(qs, params):
-    status = params.get('status')
-    channel = params.get('channel')
-    fuel_type = params.get('fuel_type')
-    max_price = params.get('max_price')
-    currency = params.get('currency')
+    """Фильтры каталога проверяет DRF-сериализатор: неверное значение - 400 с ошибкой поля, а не 500."""
+    filters_ser = ListingFilterSerializer(data=params)
+    filters_ser.is_valid(raise_exception=True)
+    data = filters_ser.validated_data
 
-    if status:
-        qs = qs.filter(status=status)
-    if channel:
-        qs = qs.filter(channel=channel)
-    if fuel_type:
-        qs = qs.filter(vehicle__fuel_type=fuel_type)
-    if currency:
-        qs = qs.filter(currency=currency)
-    if max_price:
-        try:
-            qs = qs.filter(price__lte=max_price)
-        except (ValueError, TypeError):
-            pass
+    if data.get('status'):
+        qs = qs.filter(status=data['status'])
+    if data.get('channel'):
+        qs = qs.filter(channel=data['channel'])
+    if data.get('fuel_type'):
+        qs = qs.filter(vehicle__fuel_type=data['fuel_type'])
+    if data.get('currency'):
+        qs = qs.filter(currency=data['currency'])
+    if data.get('max_price') is not None:
+        qs = qs.filter(price__lte=data['max_price'])
     return qs
+
+
+def _can_see_wholesale(user):
+    # Оптовые объявления: право роли И включённый модуль B2B (задача 2.8).
+    return module_enabled('b2b') and can_view_wholesale(user)
 
 
 @extend_schema_view(
@@ -59,7 +63,7 @@ class ListingListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = _base_queryset() if can_view_wholesale(user) else _base_queryset().filter(channel=Listing.Channel.RETAIL)
+        qs = _base_queryset() if _can_see_wholesale(user) else _base_queryset().filter(channel=Listing.Channel.RETAIL)
         return _apply_filters(qs, self.request.query_params)
 
 
@@ -74,17 +78,17 @@ class ListingDetailView(generics.RetrieveAPIView):
         qs = _base_queryset()
         user = self.request.user
         # Wholesale только для дилеров/админов
-        if not can_view_wholesale(user):
+        if not _can_see_wholesale(user):
             qs = qs.filter(channel=Listing.Channel.RETAIL)
         return qs
 
 
 @extend_schema_view(
-    post=extend_schema(tags=['listings'], summary='Создать объявление', description='Требует авторизации.'),
+    post=extend_schema(tags=['listings'], summary='Создать объявление', description='Только брокер и администратор.'),
 )
 class ListingCreateView(generics.CreateAPIView):
     serializer_class = ListingCreateSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsBrokerOrAdmin]
 
 
 @extend_schema_view(

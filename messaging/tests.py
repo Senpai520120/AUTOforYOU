@@ -1,10 +1,10 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from local_listings.models import City, LocalListing, Region
-from messaging.models import Message
+from messaging.models import Conversation, Message
 from messaging.services import get_or_create_conversation, unread_count_for_user
-from tests.factories import make_local_listing, make_user
+from tests.factories import make_dealer, make_listing, make_local_listing, make_user, make_vehicle
 
 
 class SetupMixin(TestCase):
@@ -231,3 +231,38 @@ class TestNoEmailLeak(SetupMixin):
         self.assertIn('Користувач', note.title)
         tg.assert_called_once()
         self._assert_clean(tg.call_args.args[1])
+
+
+class TestStartImportedConversationGating(SetupMixin):
+    url = '/api/v1/messages/start/'
+
+    def _start(self, user, listing):
+        self.auth(user)
+        return self.client.post(
+            self.url, {'listing_type': 'imported', 'listing_id': listing.pk, 'text': 'Hi'}, format='json',
+        )
+
+    def test_retail_lot_works_when_lots_enabled(self):
+        lot = make_listing(make_vehicle(), self.seller)
+        self.assertEqual(self._start(self.buyer, lot).status_code, 201)
+
+    @override_settings(LOTS_ENABLED=False)
+    def test_imported_is_404_when_lots_disabled(self):
+        lot = make_listing(make_vehicle(), self.seller)
+        self.assertEqual(self._start(self.buyer, lot).status_code, 404)
+        self.assertEqual(Conversation.objects.count(), 0)
+
+    def test_wholesale_is_404_for_regular_buyer(self):
+        lot = make_listing(make_vehicle(), self.seller, channel='wholesale')
+        self.assertEqual(self._start(self.buyer, lot).status_code, 404)
+        self.assertEqual(Conversation.objects.count(), 0)
+
+    def test_wholesale_works_for_verified_dealer(self):
+        lot = make_listing(make_vehicle(), self.seller, channel='wholesale')
+        self.assertEqual(self._start(make_dealer(), lot).status_code, 201)
+
+    @override_settings(B2B_ENABLED=False)
+    def test_wholesale_is_404_for_dealer_when_b2b_disabled(self):
+        lot = make_listing(make_vehicle(), self.seller, channel='wholesale')
+        self.assertEqual(self._start(make_dealer(), lot).status_code, 404)
+        self.assertEqual(Conversation.objects.count(), 0)

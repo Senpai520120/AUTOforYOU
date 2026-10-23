@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import ListingCard from '@/components/listings/ListingCard';
-import type { Listing, PaginatedResponse } from '@/lib/types';
 
 // INTERNAL_API_URL задається в Docker (http://backend:8000) для SSR.
 const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -29,20 +27,6 @@ export const metadata: Metadata = {
 
 type ExchangeRate = { from_currency: string; to_currency: string; rate: number; date: string };
 
-/** Свіжі роздрібні лоти. Порожній масив — блок просто не рендериться. */
-async function fetchLatestListings(): Promise<Listing[]> {
-  try {
-    const res = await fetch(`${apiUrl}/api/v1/listings/?channel=retail`, {
-      next: { revalidate: 300 },
-    });
-    if (!res.ok) return [];
-    const data: PaginatedResponse<Listing> = await res.json();
-    return data.results.slice(0, 3);
-  } catch {
-    return [];
-  }
-}
-
 /** Актуальний курс НБУ. null — блок покаже формулу без конкретної цифри. */
 async function fetchUsdRate(): Promise<ExchangeRate | null> {
   try {
@@ -59,7 +43,7 @@ const STEPS = [
   {
     n: '1',
     title: 'Обираєте лот',
-    text: 'Знаходите авто на Copart або IAAI чи в нашому каталозі. Перевіряєте VIN і стан.',
+    text: 'Знаходите авто на Copart або IAAI. Перевіряєте VIN і стан.',
   },
   {
     n: '2',
@@ -91,7 +75,7 @@ const COST_ITEMS = [
 ];
 
 export default async function Home() {
-  const [listings, usdRate] = await Promise.all([fetchLatestListings(), fetchUsdRate()]);
+  const usdRate = await fetchUsdRate();
 
   return (
     <div className="space-y-14">
@@ -108,12 +92,6 @@ export default async function Home() {
           >
             Порахувати вартість
           </Link>
-          <Link
-            href="/listings"
-            className="bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
-          >
-            Переглянути каталог
-          </Link>
         </div>
         <p className="mt-6 text-xs text-amber-300">
           ⚠ Тестові тарифи — всі розрахунки є демонстраційними
@@ -127,7 +105,7 @@ export default async function Home() {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link
-            href="/listings"
+            href="/calculator"
             className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <div className="text-4xl mb-3" aria-hidden="true">🇺🇸</div>
@@ -135,7 +113,7 @@ export default async function Home() {
               Імпорт з аукціонів США
             </h3>
             <p className="text-sm text-slate-500">
-              Лоти Copart та IAAI, розрахунок «під ключ», відстеження контейнера від складу до гаража.
+              Авто з Copart та IAAI: розрахунок «під ключ», викуп, доставка й розмитнення.
             </p>
           </Link>
           <Link
@@ -203,25 +181,6 @@ export default async function Home() {
           )}
         </div>
       </section>
-
-      {/* Свіжі авто — рендериться тільки якщо є що показати */}
-      {listings.length > 0 && (
-        <section aria-labelledby="latest-heading">
-          <div className="flex items-center justify-between mb-6">
-            <h2 id="latest-heading" className="text-2xl font-bold text-slate-900">
-              Свіжі авто
-            </h2>
-            <Link href="/listings" className="text-sm text-blue-700 hover:underline">
-              Весь каталог →
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {listings.map(l => (
-              <ListingCard key={l.id} listing={l} />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

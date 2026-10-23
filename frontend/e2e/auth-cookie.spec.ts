@@ -56,8 +56,8 @@ test.describe('23-P8: вхід через форму', () => {
     expect(html).toContain('data-ssr-auth="user"');
 
     // Публічна SSR-сторінка після входу рендериться як і раніше.
-    const listings = await page.goto('/listings');
-    expect(listings?.status()).toBe(200);
+    const calculator = await page.goto('/calculator');
+    expect(calculator?.status()).toBe(200);
     await expect(logoutButton(page)).toBeVisible();
   });
 
@@ -93,7 +93,7 @@ test.describe('23-P8: вхід через форму', () => {
       page,
       (r) => /\/auth\/(profile|token\/refresh)\//.test(r.url()),
       async () => {
-        await page.goto('/listings');
+        await page.goto('/calculator');
         await expect(page.getByRole('banner').getByRole('link', { name: 'Увійти' })).toBeVisible();
       },
     );

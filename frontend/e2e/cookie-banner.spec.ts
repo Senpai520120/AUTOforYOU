@@ -81,7 +81,7 @@ test.describe('Банер cookie (23-P7)', () => {
       if (isThirdParty(r)) hits.push(`${r.resourceType()} ${r.url()}`);
     });
 
-    for (const path of ['/', '/listings', '/calculator']) {
+    for (const path of ['/', '/ua', '/calculator']) {
       await page.goto(path);
       await expect(page.getByRole('dialog', { name: BANNER })).toBeVisible();
     }

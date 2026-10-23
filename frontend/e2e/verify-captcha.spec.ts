@@ -89,21 +89,8 @@ test.describe('Підтвердження email (23-P12)', () => {
     const banner = page.getByTestId('verify-email-banner');
     await expect(banner.getByText('Підтвердіть email', { exact: true })).toBeVisible();
 
-    // Заявка дилера: сервер відповідає 403 email_not_verified, форма показує підказку.
-    await page.goto('/dealers/apply');
-    await page.getByPlaceholder('ТОВ Авто Трейд').fill('[E2E] Авто Трейд');
-    await page.getByPlaceholder('Іван Петрович Іванов').fill('[E2E] Іван Іванов');
-    await page.getByPlaceholder('+380991234567').fill('+380991234567');
-    await page.getByLabel(/Я даю згоду на обробку/).check();
-    await page.getByLabel(/18 років/).check();
-    const applyResponse = page.waitForResponse(
-      (r) => r.url().includes('/dealers/apply/') && r.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Подати заявку' }).click();
-    const resp = await applyResponse;
-    expect(resp.status()).toBe(403);
-    expect((await resp.json()).code).toBe('email_not_verified');
-    await expect(page.getByText(/Підтвердіть email, щоб виконати цю дію/)).toBeVisible();
+    // Шаг «заявка дилера → 403 email_not_verified» убран: /dealers заморожен флагом (2.8).
+    // Контракт 403 email_not_verified покрыт Django-тестами IsEmailVerified.
 
     // Повторна відправка листа з банера в /me.
     await page.goto('/me');

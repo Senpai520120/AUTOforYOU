@@ -111,7 +111,7 @@ test.describe('Фото оголошення: продавець', () => {
 });
 
 test.describe('Фото трекінгу: приватна віддача', () => {
-  test('watcher отримує фото; аноніму 401; прямі шляхи до файлу — 404 від nginx', async ({ request, api }) => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: watcher отримує фото; аноніму 401; прямі шляхи до файлу — 404 від nginx', async ({ request, api }) => {
     // e2e_seed: контейнер покупця (buyer — watcher) з подією, у якої є фото.
     const buyer = await api('buyer');
     const list = await buyer.get('/api/v1/shipments/');

@@ -5,7 +5,6 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.permissions import AllowAny
 
-from cars.views import CarListView, CustomsCalculatorView
 from integrations.views import LotImportView, RegistryReportView, VinDecodeView, VinReportView
 from listings.urls import b2b_urlpatterns
 from users.urls import dealer_urlpatterns
@@ -37,16 +36,20 @@ urlpatterns = [
     path('api/v1/telegram/', include('telegram_bot.urls')),
     path('api/v1/b2b/', include((b2b_urlpatterns, 'b2b'))),
     path('api/v1/dealers/', include((dealer_urlpatterns, 'dealers'))),
-    # Legacy
-    # cars/ не правим (Q7): публичность задаём здесь, как раньше давал AllowAny по умолчанию.
-    # Пути и name те же, что в cars/urls.py.
-    path('api/calculate/', CustomsCalculatorView.as_view(permission_classes=[AllowAny]), name='calculator'),
-    path('api/list/', CarListView.as_view(permission_classes=[AllowAny]), name='car-list'),
     # OpenAPI / Swagger
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
+
+if settings.LEGACY_CARS_API_ENABLED:
+    # Legacy cars/ не правим (Q7): публичность задаём здесь. Пути и name те же, что в cars/urls.py.
+    from cars.views import CarListView, CustomsCalculatorView
+
+    urlpatterns += [
+        path('api/calculate/', CustomsCalculatorView.as_view(permission_classes=[AllowAny]), name='calculator'),
+        path('api/list/', CarListView.as_view(permission_classes=[AllowAny]), name='car-list'),
+    ]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

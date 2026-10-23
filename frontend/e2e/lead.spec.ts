@@ -218,7 +218,7 @@ test.describe('Гість', () => {
 test.describe('Джерело заявки (Н-26)', () => {
   test('UTM зберігаються в sessionStorage, не в cookie, і йдуть у тілі запиту', async ({ page, context }) => {
     await page.goto('/calculator?utm_source=tiktok&utm_campaign=test');
-    await page.goto('/listings');
+    await page.goto('/ua');
     await calculate(page);
     await fillLead(page, { name: '[E2E] UTM', phone: '0671234567' });
     const { resp, body } = await submitAndWait(page);
@@ -234,7 +234,7 @@ test.describe('Джерело заявки (Н-26)', () => {
   test('нова кампанія замінює стару; звичайний перехід не стирає', async ({ page }) => {
     await page.goto('/calculator?utm_source=tiktok&utm_campaign=a');
     await page.goto('/calculator?utm_source=instagram');
-    await page.goto('/listings');
+    await page.goto('/ua');
     await calculate(page);
     await fillLead(page, { name: '[E2E] UTM2', phone: '0671234567' });
     const { body } = await submitAndWait(page);
@@ -250,7 +250,7 @@ test.describe('Джерело заявки (Н-26)', () => {
   });
 
   test('page_url без query, реферер власного сайту ігнорується, зовнішній зберігається як origin', async ({ page, baseURL }) => {
-    await page.goto('/calculator?utm_source=x&token=secret', { referer: `${baseURL}/listings` });
+    await page.goto('/calculator?utm_source=x&token=secret', { referer: `${baseURL}/ua` });
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await fillLead(page, { name: '[E2E] URL', phone: '0671234567' });
     const { body } = await submitAndWait(page);
@@ -286,7 +286,7 @@ test.describe('Джерело заявки (Н-26)', () => {
 });
 
 test.describe('Лот', () => {
-  test('кнопка «Залишити заявку» -> форма з listing_id -> успіх', async ({ page, request }) => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: кнопка «Залишити заявку» -> форма з listing_id -> успіх', async ({ page, request }) => {
     const list = await (await request.get('/api/v1/listings/?search=RAV4')).json();
     const item = (list.results as { id: number; vehicle_detail: { model: string } }[])
       .find((l) => l.vehicle_detail.model.includes('[E2E] RAV4 retail'));

@@ -17,6 +17,10 @@ from .models import Conversation, Message
 User = get_user_model()
 
 
+class ListingUnavailable(LookupError):
+    """Лот не існує або недоступний користувачу (не розрізняємо) - view відповідає 404."""
+
+
 def handles_imports(user) -> bool:
     """Імпортні діалоги бачать лише broker і admin (06-S9), is_staff без ролі - ні."""
     return bool(
@@ -64,10 +68,19 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
         conv.participants.set([initiator.pk, listing.owner_id])
 
     elif listing_type == 'imported':
+        from core.modules import module_enabled
+        from listings.permissions import can_view_wholesale
+
+        if not module_enabled('lots'):
+            raise ListingUnavailable('Оголошення не знайдено.')
         try:
             listing = Listing.objects.get(pk=listing_id)
         except Listing.DoesNotExist:
-            raise ValueError('Оголошення не знайдено.')
+            raise ListingUnavailable('Оголошення не знайдено.')
+        if listing.channel == Listing.Channel.WHOLESALE and not (
+            module_enabled('b2b') and can_view_wholesale(initiator)
+        ):
+            raise ListingUnavailable('Оголошення не знайдено.')
 
         conv = Conversation.objects.filter(
             initiator=initiator, imported_listing=listing

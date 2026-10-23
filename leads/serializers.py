@@ -3,6 +3,7 @@ import re
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from core.modules import module_enabled
 from listings.models import Listing
 from listings.permissions import can_view_wholesale
 from pricing.models import Calculation
@@ -92,7 +93,14 @@ class LeadCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError({'calculation_id': _INVALID_CALCULATION})
         if listing_id is not None:
             listing = Listing.objects.select_related('vehicle').filter(pk=listing_id).first()
-            if listing is None or (listing.channel == Listing.Channel.WHOLESALE and not can_view_wholesale(user)):
+            if (
+                listing is None
+                or not module_enabled('lots')
+                or (
+                    listing.channel == Listing.Channel.WHOLESALE
+                    and not (module_enabled('b2b') and can_view_wholesale(user))
+                )
+            ):
                 raise serializers.ValidationError({'listing_id': _INVALID_LISTING})
 
         source = attrs.get('source')

@@ -13,14 +13,14 @@ import { test, expect } from '@playwright/test';
 const DEMO_BANNER = 'Тестові тарифи — розрахунок демонстраційний';
 
 test.describe('Каталог імпорту з США @smoke', () => {
-  test('сторінка каталогу відповідає 200 і рендерить заголовок', async ({ page }) => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: сторінка каталогу відповідає 200 і рендерить заголовок', async ({ page }) => {
     const resp = await page.goto('/listings');
     expect(resp?.status()).toBe(200);
     await expect(page).toHaveTitle(/AUTOforYOU/);
     await expect(page.getByRole('heading', { name: 'Каталог автомобілів' })).toBeVisible();
   });
 
-  test('демо-банер на каталозі не показується', async ({ page }) => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: демо-банер на каталозі не показується', async ({ page }) => {
     // DemoBanner рендериться тільки на /calculator і всередині CalcBreakdown.
     // Раніше цей тест називався «demo banner is visible on catalog page»,
     // оголошував локатор банера і не перевіряв його — був зеленим завжди.

@@ -12,7 +12,7 @@ const ME_PATHS = [
   '/me/deals',
   '/me/local-listings',
   '/me/calculations',
-  '/me/shipments',
+  // '/me/shipments' — модуль заморожен (2.8): страница отвечает 404 вместо редиректа на /login.
   '/me/favorites',
   '/me/notifications',
   '/me/saved-searches',
