@@ -17,6 +17,25 @@
 
 ---
 
+## Задача 3.1: каркас адаптеров и страница статуса интеграций (2026-10-23, локальный оркестратор) — ЗАВЕРШЕНО
+
+- `integrations/base.py`: `is_placeholder`, `resolve_mode` (auto/real/demo/off), `ProviderStatus`, `BaseProvider` (`wrap_response` всегда отдаёт `configured`/`demo`, в off и real без ключа данных нет; `call` ловит только `RETRYABLE_EXCEPTIONS`, `ExternalNetworkBlocked` не глотает), `mask_secrets` (отрезает query URL, `apikey=`, значения секретных настроек), `record_success`/`record_error`, `http_timeout()`. Хелпера из 1.1 для переиспользования не было (в `providers.py` свой `_mask`, файл не тронут) - `mask_secrets` написан здесь, 3.2 переведёт `_mask` на него.
+- `integrations/registry.py`: `register_provider(...)` (дубль -> `ImproperlyConfigured`), 8 базовых ключей, статус по `settings` без сети и БД; сбой статус-функции не ломает страницу. Остальные (captcha, monitoring, storage, analytics, pixel_*) регистрируют свои задачи.
+- Модель `IntegrationHealth` (миграция 0003; причина - админу нужны время последнего успеха/ошибки, из `settings` не вычислить). В админке только чтение.
+- `/admin/integrations/status/` (право `integrations.view_integrationhealth`: staff без права - 403, обычный пользователь и аноним - 302 на вход); ссылка на главной админки с пометкой «потрібна увага» (real без ключа или ошибка за 24 ч). Подключено через обёртку `admin.site.get_urls`/`admin.site.index` в `integrations/admin.py` (`core/urls.py` не менялся).
+- System checks: `integrations.E001` (опечатка в `*_MODE`), `W001` (real без ключа), `W002` (demo при `DEBUG=False`).
+- Настройки: 8 `*_MODE`, `INTEGRATIONS_HTTP_TIMEOUT`, `CARVERTICAL_API_KEY` (в блоке `_TESTING` обнулены). `.env.example`: ключи LiqPay/Opendatabot/Apify пустые (03-C1), добавлены `*_MODE=auto`; в `.env.docker.example` добавлены `*_MODE`.
+- Тесты: 43 новых в `integrations/tests.py` (всего 157 в приложении). Мутации (шесть): плейсхолдер-regex, перехват `ExternalNetworkBlocked`, маскировка секретов, права add/страницы, условия W001/W002, правило auto - каждая роняла тест, откат выполнен.
+- Playwright `frontend/e2e/integrations-status.spec.ts`: обход (buyer -> вход в админку) активен, успех - `test.fixme`: `e2e_seed` не создаёт суперпользователя (staff@e2e.test без прав). Запуск e2e не выполнялся.
+- Ревью безопасности: критичного нет. Исправлено: `mask_secrets` теперь режет токен Telegram в пути, пароль в DSN, заголовки (`Authorization`, `X-API-Key`, `api-key=`), JSON-поля `api_key/token/secret/password`, пароли из `DATABASES`; ссылка на статус в индексе админки покрыта тестом на право; `INTEGRATIONS_HTTP_TIMEOUT` при мусоре или <=0 откатывается на 10; в статусе LiqPay/Telegram пометка «режим ще не застосовується кодом (задачі 3.2–3.4)»; плейсхолдеры `test/dummy/placeholder/none/null/todo` (префикс `sandbox_` не трогали). Не сделано: перевод `providers._mask` на `mask_secrets` - в 3.2.
+- Не сделано (по границам задачи): перевод провайдеров на адаптеры - 3.2–3.4; `openapi.yaml` не меняется (API не затронут).
+- Проверки (оркестратор, после правок ревью): бэкенд SQLite 1935 (падает только `test_entrypoint_refuses_debug_for_gunicorn`, Windows); e2e полный набор на чистом стеке 301: 278 passed, 23 skipped, 8 упавших из-за 429 зелёные после FLUSHALL и повтора; миграция 0003 и `check` на PostgreSQL e2e-стека OK.
+
+### Для владельца
+- Успешный e2e админа стоит под `fixme`, пока в `e2e_seed` нет суперпользователя.
+- Нужно решение: в `e2e_seed` добавить суперпользователя `admin@e2e.test` (файл вне раздела «Файлы» 3.1), после чего снять `fixme`.
+- Прод: `*_MODE` оставить `auto`; после запуска открыть админку -> «Статус інтеграцій» и выполнить `manage.py check` (без `integrations.W00*`). Подробности - `docs/LAUNCH_CHECKLIST.md` п. 2.5.
+
 ## Задача 2.8: заморозка модулей и закрытие создания (2026-10-23, локальный оркестратор) — ЗАВЕРШЕНО
 
 - Флаги `LOTS_ENABLED`, `B2B_ENABLED`, `DEALERS_ENABLED`, `SHIPMENTS_ENABLED`, `LEGACY_CARS_API_ENABLED` (из env, по умолчанию false; в тестах модули true). Чтение — `core/modules.py::module_enabled`. `core/middleware.py::ModuleFlagMiddleware` (список `FROZEN_ROUTES`, 404 любому методу и пользователю, включая staff; `/vehicles/<vin>/decode|report|registry/` не заморожены). 6.7 добавляет `C2CFlagMiddleware` в тот же файл. `cars.urls` подключаются в `core/urls.py` только при `LEGACY_CARS_API_ENABLED`; `cars/` не менялся.

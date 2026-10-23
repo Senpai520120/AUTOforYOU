@@ -433,6 +433,25 @@ OPENDATABOT_API_KEY = os.environ.get('OPENDATABOT_API_KEY', '')
 
 # Apify — скрейпер лотов аукционов. Без токена → demo=True, не падает.
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '')
+CARVERTICAL_API_KEY = os.environ.get('CARVERTICAL_API_KEY', '')
+
+# Режимы провайдеров (задача 3.1): auto | real | demo | off. auto: ключ задан и не плейсхолдер -> real,
+# иначе off («не налаштовано»). Недопустимое значение -> ошибка manage.py check (integrations.E001).
+NBU_MODE = os.environ.get('NBU_MODE', '').strip().lower() or 'auto'
+VIN_DECODE_MODE = os.environ.get('VIN_DECODE_MODE', '').strip().lower() or 'auto'
+VIN_REPORT_MODE = os.environ.get('VIN_REPORT_MODE', '').strip().lower() or 'auto'
+OPENDATABOT_MODE = os.environ.get('OPENDATABOT_MODE', '').strip().lower() or 'auto'
+LOTS_MODE = os.environ.get('LOTS_MODE', '').strip().lower() or 'auto'
+LIQPAY_MODE = os.environ.get('LIQPAY_MODE', '').strip().lower() or 'auto'
+EMAIL_MODE = os.environ.get('EMAIL_MODE', '').strip().lower() or 'auto'
+TELEGRAM_MODE = os.environ.get('TELEGRAM_MODE', '').strip().lower() or 'auto'
+# Общий таймаут HTTP-вызовов провайдеров, секунды (03-C9).
+try:
+    INTEGRATIONS_HTTP_TIMEOUT = int(os.environ.get('INTEGRATIONS_HTTP_TIMEOUT', '') or 10)
+except ValueError:
+    INTEGRATIONS_HTTP_TIMEOUT = 10
+if INTEGRATIONS_HTTP_TIMEOUT <= 0:
+    INTEGRATIONS_HTTP_TIMEOUT = 10
 
 # ─── Email ────────────────────────────────────────────────────────────────────
 # Dev: console-вывод. Продакшен: вписати SMTP-провайдер через env EMAIL_BACKEND=...smtp...
@@ -596,6 +615,10 @@ if _TESTING:
     LEGACY_CARS_API_ENABLED = False
     OPENDATABOT_API_KEY = ''
     APIFY_TOKEN = ''
+    CARVERTICAL_API_KEY = ''
+    NBU_MODE = VIN_DECODE_MODE = VIN_REPORT_MODE = OPENDATABOT_MODE = 'auto'
+    LOTS_MODE = LIQPAY_MODE = EMAIL_MODE = TELEGRAM_MODE = 'auto'
+    INTEGRATIONS_HTTP_TIMEOUT = 10
     LIQPAY_PUBLIC_KEY = ''
     LIQPAY_PRIVATE_KEY = ''
     TELEGRAM_BOT_TOKEN = ''

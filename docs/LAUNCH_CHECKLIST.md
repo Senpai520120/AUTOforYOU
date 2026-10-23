@@ -204,7 +204,8 @@
 Переключатели `*_MODE` (задачи 3.1, 3.2, 3.3, 3.4): значение по умолчанию `auto` подходит почти всегда. В проде ни один из четырёх провайдеров (курс НБУ, почта, LiqPay, Telegram) не должен быть в `demo`.
 
 - [ ] `NBU_MODE` (`auto`), `NBU_API_URL` (менять не нужно), `EXCHANGE_RATE_MAX_AGE_DAYS` — курс НБУ, ключ не нужен (задача 3.4). *Проверка:* админка → «Оновити курс НБУ» → в «Курси валют» строка с источником `nbu`.
-- [ ] `VIN_DECODE_MODE` (`auto`; NHTSA бесплатный, ключа нет), `VIN_REPORT_MODE` (`auto`), `OPENDATABOT_MODE` (`auto`), `LOTS_MODE` (`auto`), `LIQPAY_MODE`, `TELEGRAM_MODE`, `INTEGRATIONS_HTTP_TIMEOUT`, `DEMO_OUTBOX_KEEP` (по умолчанию 200) — задачи 3.1–3.4.
+- [ ] `VIN_DECODE_MODE` (`auto`; NHTSA бесплатный, ключа нет), `VIN_REPORT_MODE` (`auto`), `OPENDATABOT_MODE` (`auto`), `LOTS_MODE` (`auto`), `LIQPAY_MODE`, `EMAIL_MODE`, `TELEGRAM_MODE`, `INTEGRATIONS_HTTP_TIMEOUT` (секунды, по умолчанию 10), `DEMO_OUTBOX_KEEP` (по умолчанию 200) — задачи 3.1–3.4.
+  Схема (задача 3.1): `auto` - ключ задан и не заглушка → `real`, иначе «Не налаштовано»; `demo` - только для показа/dev; `real` без ключа - ошибка конфигурации; `off` - выключено. В `.env` заглушки вида `your_*` считаются «не задано». Страница: `/admin/integrations/status/`.
   *Проверка:* админка → «Статус інтеграцій»: нужные провайдеры «Налаштовано / real» и без свежих ошибок; `python manage.py check` без предупреждений `integrations.W00*`.
 - [ ] **[ЗАМОРОЖЕНО]** `OPENDATABOT_API_KEY`, `OPENDATABOT_API_URL` (менять, только если Opendatabot сменит адрес API) — **если включаете проверку по реестрам**. ⚠ Не заполнять до задачи 1.1. Заглушку из `.env.example` стереть.
   *Проверка:* `https://ваш-домен/api/v1/integrations/registry/<госномер>/` отдаёт `"demo": false`.

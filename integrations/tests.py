@@ -6,6 +6,7 @@ from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import httpx
+from django.conf import settings
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from PIL import Image as PILImage
@@ -912,3 +913,381 @@ class _SlowStream(httpx.SyncByteStream):
 
     def __iter__(self):
         yield from self.chunks
+
+
+# ── Каркас адаптеров и статус интеграций (задача 3.1) ─────────────────────────
+
+from datetime import timedelta  # noqa: E402
+
+from django.core.checks import run_checks  # noqa: E402
+from django.core.exceptions import ImproperlyConfigured  # noqa: E402
+from django.test import Client  # noqa: E402
+from django.utils import timezone  # noqa: E402
+
+from core.test_runner import ExternalNetworkBlocked  # noqa: E402
+from integrations import base, registry  # noqa: E402
+from integrations.models import IntegrationHealth  # noqa: E402
+
+BASE_KEYS = ('nbu', 'vin_decode', 'vin_report', 'opendatabot', 'lots', 'liqpay', 'email', 'telegram')
+EMPTY_ENV = dict(
+    CARVERTICAL_API_KEY='', OPENDATABOT_API_KEY='', APIFY_TOKEN='', LIQPAY_PUBLIC_KEY='',
+    LIQPAY_PRIVATE_KEY='', TELEGRAM_BOT_TOKEN='', TELEGRAM_CHANNEL_ID='', TELEGRAM_B2B_CHANNEL_ID='',
+    TELEGRAM_WEBHOOK_SECRET='', EMAIL_HOST='', EMAIL_HOST_USER='', EMAIL_HOST_PASSWORD='',
+)
+
+
+class IsPlaceholderTests(SimpleTestCase):
+
+    def test_placeholders_are_true(self):
+        for value in ('', '   ', None, 'your_opendatabot_api_key', 'your-key', 'changeme', 'xxx', '<token>'):
+            with self.subTest(value=value):
+                self.assertTrue(base.is_placeholder(value))
+
+    def test_real_value_is_not_placeholder(self):
+        self.assertFalse(base.is_placeholder('a1b2c3d4e5f6a7b8'))
+
+
+class ResolveModeTests(SimpleTestCase):
+
+    @override_settings(OPENDATABOT_MODE='auto')
+    def test_auto_with_key_is_real(self):
+        res = base.resolve_mode('opendatabot', True, env_vars=('OPENDATABOT_API_KEY',))
+        self.assertEqual((res.mode, res.configured), ('real', True))
+
+    @override_settings(OPENDATABOT_MODE='auto', OPENDATABOT_API_KEY='your_opendatabot_api_key')
+    def test_auto_with_placeholder_is_off_not_configured(self):
+        status = registry.build_status(registry.RegisteredProvider('opendatabot', 'x', registry._opendatabot))
+        self.assertEqual((status.mode, status.configured), ('off', False))
+        self.assertIn('Не налаштовано: немає OPENDATABOT_API_KEY', status.reason)
+
+    @override_settings(LOTS_MODE='demo')
+    def test_demo_mode(self):
+        res = base.resolve_mode('lots', False)
+        self.assertEqual((res.mode, res.configured), ('demo', True))
+
+    @override_settings(LIQPAY_MODE='real')
+    def test_real_without_key_is_config_error(self):
+        res = base.resolve_mode('liqpay', False, env_vars=('LIQPAY_PUBLIC_KEY',))
+        self.assertEqual((res.mode, res.configured), ('real', False))
+        self.assertIn('Помилка конфігурації', res.reason)
+
+    @override_settings(TELEGRAM_MODE='off')
+    def test_off_mode(self):
+        res = base.resolve_mode('telegram', True)
+        self.assertEqual((res.mode, res.configured), ('off', False))
+
+    @override_settings(NBU_MODE='auto')
+    def test_auto_without_credentials_provider_is_real(self):
+        res = base.resolve_mode('nbu', False, needs_credentials=False)
+        self.assertEqual((res.mode, res.configured), ('real', True))
+
+    @override_settings(NBU_MODE='foo')
+    def test_invalid_mode_is_not_configured(self):
+        res = base.resolve_mode('nbu', True, needs_credentials=False)
+        self.assertEqual((res.mode, res.configured, res.valid), ('off', False, False))
+
+
+class _DemoAdapter(base.BaseProvider):
+    key = 'lots'
+    title = 'Тест'
+    env_vars = ('APIFY_TOKEN',)
+
+
+class BaseProviderResponseTests(SimpleTestCase):
+
+    @override_settings(LOTS_MODE='off')
+    def test_off_response_has_no_data_fields(self):
+        resp = _DemoAdapter().wrap_response({'price': 100})
+        self.assertEqual(set(resp), {'configured', 'demo', 'reason'})
+        self.assertFalse(resp['configured'])
+
+    @override_settings(LOTS_MODE='real')
+    def test_real_without_key_response_not_configured(self):
+        class NoKey(_DemoAdapter):
+            def has_credentials(self):
+                return False
+        resp = NoKey().wrap_response({'price': 100})
+        self.assertNotIn('price', resp)
+        self.assertIs(resp['configured'], False)
+
+    @override_settings(LOTS_MODE='demo')
+    def test_demo_response_flags(self):
+        resp = _DemoAdapter().wrap_response({'price': 100})
+        self.assertEqual(resp, {'price': 100, 'configured': True, 'demo': True})
+
+    @override_settings(LOTS_MODE='real')
+    def test_real_response_flags(self):
+        resp = _DemoAdapter().wrap_response({'price': 100})
+        self.assertEqual(resp, {'price': 100, 'configured': True, 'demo': False})
+
+
+class RegistryTests(TestCase):
+
+    @override_settings(**EMPTY_ENV)
+    def test_all_base_statuses_build(self):
+        keys = {s.key for s in registry.get_statuses()}
+        self.assertTrue(set(BASE_KEYS) <= keys)
+
+    @override_settings(**{**EMPTY_ENV, 'OPENDATABOT_API_KEY': 'SECRET123', 'TELEGRAM_BOT_TOKEN': 'tok-12345-abc'})
+    def test_status_does_not_contain_key_values(self):
+        statuses = registry.get_statuses()
+        blob = repr(statuses)
+        self.assertNotIn('SECRET123', blob)
+        self.assertNotIn('tok-12345-abc', blob)
+        opendatabot = next(s for s in statuses if s.key == 'opendatabot')
+        self.assertEqual(opendatabot.env_states['OPENDATABOT_API_KEY'], 'задано')
+
+    def test_duplicate_registration_raises(self):
+        with self.assertRaisesMessage(ImproperlyConfigured, 'уже зарегистрирован'):
+            registry.register_provider('nbu', 'Дубль', lambda: None)
+
+    def test_broken_status_fn_does_not_break_registry(self):
+        def boom():
+            raise ValueError('boom')
+        registry.register_provider('t_broken', 'Зламаний', boom)
+        self.addCleanup(registry.unregister_provider, 't_broken')
+        status = next(s for s in registry.get_statuses() if s.key == 't_broken')
+        self.assertEqual(status.reason, 'Помилка перевірки статусу')
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend', EMAIL_HOST='smtp.example.com',
+                       DEFAULT_FROM_EMAIL='noreply@example.com')
+    def test_email_configured_with_smtp(self):
+        status = next(s for s in registry.get_statuses() if s.key == 'email')
+        self.assertEqual((status.mode, status.configured), ('real', True))
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend', EMAIL_HOST='')
+    def test_email_smtp_without_host_not_configured(self):
+        status = next(s for s in registry.get_statuses() if s.key == 'email')
+        self.assertEqual((status.mode, status.configured), ('off', False))
+
+
+class RecordErrorTests(TestCase):
+
+    @override_settings(OPENDATABOT_API_KEY='SECRETVALUE-987654')
+    def test_secrets_not_in_last_error_or_log(self):
+        exc = RuntimeError(
+            'GET https://api.example.com/v1?apikey=SECRET123 failed, key SECRETVALUE-987654'
+        )
+        with self.assertLogs('integrations.base', level='WARNING') as logs:
+            base.record_error('opendatabot', exc)
+        row = IntegrationHealth.objects.get(provider_key='opendatabot')
+        for text in (row.last_error, '\n'.join(logs.output)):
+            self.assertNotIn('SECRET123', text)
+            self.assertNotIn('SECRETVALUE-987654', text)
+        self.assertEqual(row.error_count, 1)
+        self.assertIsNotNone(row.last_error_at)
+
+    def test_last_error_truncated_and_count_grows(self):
+        base.record_error('nbu', ValueError('x' * 2000))
+        base.record_error('nbu', ValueError('y'))
+        row = IntegrationHealth.objects.get(provider_key='nbu')
+        self.assertEqual(row.error_count, 2)
+        self.assertLessEqual(len(row.last_error), 500)
+
+    def test_record_success_sets_time(self):
+        base.record_success('nbu')
+        self.assertIsNotNone(IntegrationHealth.objects.get(provider_key='nbu').last_success_at)
+
+
+class NetworkGuardNotSwallowedTests(TestCase):
+
+    def test_blocked_network_propagates_and_health_untouched(self):
+        adapter = _DemoAdapter()
+        with self.assertRaisesMessage(ExternalNetworkBlocked, 'Внешний сетевой запрос в тесте'):
+            adapter.call(httpx.get, 'http://example.com/')
+        self.assertEqual(IntegrationHealth.objects.count(), 0)
+
+    def test_retryable_error_is_recorded_and_returned(self):
+        def fail():
+            raise httpx.ConnectError('down')
+        result = _DemoAdapter().call(fail)
+        self.assertEqual(result['error'], 'service_unavailable')
+        self.assertEqual(IntegrationHealth.objects.get(provider_key='lots').error_count, 1)
+
+    def test_success_is_recorded(self):
+        self.assertEqual(_DemoAdapter().call(lambda: {'ok': 1}), {'ok': 1})
+        self.assertIsNotNone(IntegrationHealth.objects.get(provider_key='lots').last_success_at)
+
+
+class StatusPageTests(TestCase):
+    URL = '/admin/integrations/status/'
+
+    def _login(self, user):
+        client = Client()
+        client.force_login(user)
+        return client
+
+    def test_superuser_sees_all_providers(self):
+        resp = self._login(make_staff(superuser=True)).get(self.URL)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        providers = registry.get_providers()
+        self.assertGreaterEqual(len(providers), 8)
+        for provider in providers:
+            self.assertIn(provider.title, html)
+
+    @override_settings(OPENDATABOT_API_KEY='SECRET123456')
+    def test_page_never_prints_key_values(self):
+        html = self._login(make_staff(superuser=True)).get(self.URL).content.decode()
+        self.assertIn('OPENDATABOT_API_KEY', html)
+        self.assertNotIn('SECRET123456', html)
+
+    def test_staff_without_permission_gets_403(self):
+        self.assertEqual(self._login(make_staff()).get(self.URL).status_code, 403)
+
+    def test_regular_user_redirected_to_admin_login(self):
+        resp = self._login(make_user()).get(self.URL)
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp['Location'].startswith('/admin/login/'))
+
+    def test_anonymous_redirected(self):
+        self.assertEqual(Client().get(self.URL).status_code, 302)
+
+    def test_registered_provider_appears_without_registry_edit(self):
+        registry.register_provider(
+            't_extra', 'Додатковий тест-провайдер',
+            lambda: base.ProviderStatus(key='t_extra', title='Додатковий тест-провайдер'),
+        )
+        self.addCleanup(registry.unregister_provider, 't_extra')
+        resp = self._login(make_staff(superuser=True)).get(self.URL)
+        self.assertContains(resp, 'Додатковий тест-провайдер')
+
+    def test_index_has_link_without_attention_mark(self):
+        html = self._login(make_staff(superuser=True)).get('/admin/').content.decode()
+        self.assertIn(self.URL, html)
+        self.assertNotIn('потрібна увага', html)
+
+    @override_settings(LIQPAY_MODE='real', LIQPAY_PUBLIC_KEY='', LIQPAY_PRIVATE_KEY='')
+    def test_index_attention_on_real_without_key(self):
+        resp = self._login(make_staff(superuser=True)).get('/admin/')
+        self.assertContains(resp, 'потрібна увага')
+
+    def test_index_attention_on_recent_error(self):
+        IntegrationHealth.objects.create(
+            provider_key='nbu', last_error_at=timezone.now() - timedelta(hours=1), last_error='x',
+        )
+        resp = self._login(make_staff(superuser=True)).get('/admin/')
+        self.assertContains(resp, 'потрібна увага')
+
+    def test_old_error_does_not_raise_attention(self):
+        IntegrationHealth.objects.create(
+            provider_key='nbu', last_error_at=timezone.now() - timedelta(hours=30), last_error='x',
+        )
+        resp = self._login(make_staff(superuser=True)).get('/admin/')
+        self.assertNotContains(resp, 'потрібна увага')
+
+    def test_health_admin_add_forbidden(self):
+        client = self._login(make_staff(superuser=True))
+        self.assertEqual(client.post('/admin/integrations/integrationhealth/add/', {}).status_code, 403)
+
+    def test_health_admin_change_forbidden(self):
+        row = IntegrationHealth.objects.create(provider_key='nbu')
+        client = self._login(make_staff(superuser=True))
+        self.assertEqual(client.post(f'/admin/integrations/integrationhealth/{row.pk}/change/', {}).status_code, 403)
+
+    def test_health_admin_delete_forbidden(self):
+        row = IntegrationHealth.objects.create(provider_key='nbu')
+        client = self._login(make_staff(superuser=True))
+        self.assertEqual(client.post(f'/admin/integrations/integrationhealth/{row.pk}/delete/', {}).status_code, 403)
+
+
+class SystemCheckTests(SimpleTestCase):
+
+    @staticmethod
+    def _ids():
+        return [m.id for m in run_checks() if (m.id or '').startswith('integrations.')]
+
+    def test_clean_env_has_no_integration_messages(self):
+        self.assertEqual(self._ids(), [])
+
+    @override_settings(LIQPAY_MODE='real', LIQPAY_PUBLIC_KEY='', LIQPAY_PRIVATE_KEY='')
+    def test_w001_real_without_key(self):
+        self.assertEqual(self._ids(), ['integrations.W001'])
+
+    @override_settings(DEBUG=False, NBU_MODE='demo')
+    def test_w002_demo_without_debug(self):
+        self.assertEqual(self._ids(), ['integrations.W002'])
+
+    @override_settings(DEBUG=True, NBU_MODE='demo')
+    def test_demo_in_debug_is_fine(self):
+        self.assertEqual(self._ids(), [])
+
+    @override_settings(NBU_MODE='foo')
+    def test_invalid_mode_is_error(self):
+        self.assertEqual(self._ids(), ['integrations.E001'])
+
+
+class MaskSecretsFormatTests(SimpleTestCase):
+
+    def _assert_masked(self, text, secret):
+        self.assertNotIn(secret, base.mask_secrets(text))
+
+    def test_telegram_token_in_path(self):
+        self._assert_masked(
+            'POST https://api.telegram.org/bot123456789:AAHabcdefghijklmnopqrstuvwxyz0123456/sendMessage',
+            'AAHabcdefghijklmnopqrstuvwxyz0123456',
+        )
+
+    def test_postgres_dsn_password(self):
+        self._assert_masked('could not connect postgresql://user:pw-Secret1@db/x', 'pw-Secret1')
+
+    def test_redis_dsn_password_without_user(self):
+        self._assert_masked('redis://:pw-Secret2@redis:6379/0', 'pw-Secret2')
+
+    def test_dsn_keeps_host(self):
+        self.assertEqual(base.mask_secrets('redis://:pw-Secret2@redis'), 'redis://:***@redis')
+
+    def test_authorization_bearer_header(self):
+        self._assert_masked('Authorization: Bearer abc.DEF-secret9', 'abc.DEF-secret9')
+
+    def test_x_api_key_header(self):
+        self._assert_masked('X-API-Key: key-Secret3', 'key-Secret3')
+
+    def test_api_key_dash_assignment(self):
+        self._assert_masked('request api-key=Secret4 failed', 'Secret4')
+
+    def test_json_api_key(self):
+        self._assert_masked('{"api_key": "Secret5", "other": 1}', 'Secret5')
+
+    def test_json_password_and_token(self):
+        out = base.mask_secrets('{"password": "Secret6", "access_token": "Secret7"}')
+        self.assertNotIn('Secret6', out)
+        self.assertNotIn('Secret7', out)
+
+    def test_token_equals_outside_url(self):
+        self._assert_masked('call failed token=Secret8 retry', 'Secret8')
+
+    def test_database_password_from_settings(self):
+        from unittest.mock import patch
+        with patch.dict(settings.DATABASES['default'], {'PASSWORD': 'dbpass-Secret9'}):
+            self._assert_masked('connection refused, password dbpass-Secret9 rejected', 'dbpass-Secret9')
+
+    def test_plain_text_unchanged(self):
+        self.assertEqual(base.mask_secrets('ConnectError: timeout'), 'ConnectError: timeout')
+
+
+class MorePlaceholderTests(SimpleTestCase):
+
+    def test_extra_placeholders(self):
+        for value in ('test', 'DUMMY', 'Placeholder', 'none', 'null', 'todo'):
+            with self.subTest(value=value):
+                self.assertTrue(base.is_placeholder(value))
+
+    def test_sandbox_prefix_is_real_key(self):
+        self.assertFalse(base.is_placeholder('sandbox_i12345678901'))
+
+
+class IndexLinkPermissionTests(TestCase):
+
+    def test_staff_without_permission_has_no_link(self):
+        client = Client()
+        client.force_login(make_staff())
+        self.assertNotContains(client.get('/admin/'), '/admin/integrations/status/')
+
+
+class NotAppliedNoteTests(SimpleTestCase):
+
+    def test_liqpay_and_telegram_note_mode_not_applied(self):
+        statuses = {s.key: s for s in registry.get_statuses(with_health=False)}
+        for key in ('liqpay', 'telegram'):
+            self.assertIn(registry.NOT_APPLIED_NOTE, statuses[key].notes)

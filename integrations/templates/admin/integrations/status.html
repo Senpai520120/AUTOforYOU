@@ -1,0 +1,33 @@
+{% extends "admin/base_site.html" %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Головна</a> &rsaquo; Статус інтеграцій</div>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+<p>Значення ключів тут не показуються: лише чи задано змінну в .env. Подробиці - у docs/LAUNCH_CHECKLIST.md.</p>
+<table id="integrations-status-table">
+  <thead>
+    <tr>
+      <th>Провайдер</th><th>Режим</th><th>Налаштовано</th><th>Причина</th>
+      <th>Змінні .env</th><th>Останній успіх</th><th>Остання помилка</th><th>Чек-лист</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for s in statuses %}
+    <tr data-provider="{{ s.key }}">
+      <td>{{ s.title }}</td>
+      <td>{{ s.mode_label }}</td>
+      <td>{% if s.configured %}Налаштовано{% else %}Не налаштовано{% endif %}</td>
+      <td>{{ s.reason }}{% for note in s.notes %}<br><small>{{ note }}</small>{% endfor %}</td>
+      <td>
+        {% for name, state in s.env_rows %}<code>{{ name }}</code>{% if state %}: {{ state }}{% endif %}<br>{% endfor %}
+      </td>
+      <td>{{ s.last_success_at|default:"-" }}</td>
+      <td>{% if s.last_error_at %}{{ s.last_error_at }}<br><small>{{ s.last_error }}</small>{% else %}-{% endif %}</td>
+      <td>{% if s.checklist_anchor %}docs/LAUNCH_CHECKLIST.md, розділ {{ s.checklist_anchor }}{% else %}-{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
