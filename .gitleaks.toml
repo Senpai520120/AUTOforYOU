@@ -27,6 +27,8 @@ regexes = [
   # Фиктивные токен Telegram и пароль БД в тестах маскировки секретов (integrations/tests.py, задача 3.1)
   '''tok-12345-abc''',
   '''dbpass-Secret9''',
+  # Фиктивный ключ в тесте маскировки ошибки НБУ (pricing/tests_rates_provider.py, задача 3.4a)
+  '''sekret-key-777''',
   # Плейсхолдеры шаблонов .env*.example и документации: KEY=your_...
   '''(?i)api[_-]?key=your_[a-z0-9_]*''',
 ]
