@@ -1,7 +1,7 @@
-import asyncio
 import logging
 import time
 
+from aiogram.exceptions import TelegramRetryAfter
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
@@ -30,10 +30,14 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
         # Задача могла встать в очередь до выключения модуля.
         return {'posted': False, 'reason': 'lots disabled'}
 
-    token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-    if not token:
-        logger.warning('post_listing_to_channel: TELEGRAM_BOT_TOKEN не задан, пропуск')
-        return {'posted': False, 'reason': 'no token'}
+    from integrations.base import record_skip
+    from telegram_bot.provider import get_telegram_provider
+
+    provider = get_telegram_provider()
+    if not provider.is_configured():
+        record_skip('telegram')  # пропуск виден в статусе интеграций
+        logger.warning('post_listing_to_channel: Telegram не налаштовано, пропуск')
+        return {'posted': False, 'reason': 'not_configured'}
 
     from listings.models import Listing
     try:
@@ -69,52 +73,28 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
     img = v.images.filter(is_primary=True).first() or v.images.first()
     photo_url = (img.source_url or '') if img else ''
 
-    async def _post() -> bool:
-        from aiogram import Bot
-        from aiogram.exceptions import TelegramRetryAfter
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-        bot = Bot(token=token)
-        kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(
-                text='Переглянути оголошення',
-                url=f'{site_url}/listings/{listing_id}',
-            )
-        ]])
-        try:
-            if photo_url:
-                try:
-                    await bot.send_photo(
-                        chat_id=channel_id,
-                        photo=photo_url,
-                        caption=text,
-                        reply_markup=kb,
-                        parse_mode='HTML',
-                    )
-                    return True
-                except Exception:
-                    pass  # fallback to text
-            await bot.send_message(
-                chat_id=channel_id,
-                text=text,
-                reply_markup=kb,
-                parse_mode='HTML',
-            )
-            return True
-        except TelegramRetryAfter as exc:
-            raise self.retry(countdown=exc.retry_after + 1) from exc
-        except Exception as exc:
-            # Bad URL (localhost dev), invalid chat_id, network — log and skip, never crash listing creation.
-            logger.warning('post_listing_to_channel: Telegram error for listing %s: %s', listing_id, exc)
-            return False
-        finally:
-            await bot.session.close()
-
+    buttons = [{'text': 'Переглянути оголошення', 'url': f'{site_url}/listings/{listing_id}'}]
     try:
-        posted = asyncio.run(_post())
+        result = None
+        if photo_url:
+            try:
+                result = provider.send_photo(channel_id, photo_url, caption=text, buttons=buttons,
+                                             parse_mode='HTML')
+            except TelegramRetryAfter:
+                raise
+            except Exception:
+                result = None  # fallback to text
+            if result is not None and not result.ok:
+                result = None
+        if result is None:
+            result = provider.send_message(channel_id, text, buttons=buttons, parse_mode='HTML')
+        posted = result.ok
+    except TelegramRetryAfter as exc:
+        raise self.retry(countdown=exc.retry_after + 1) from exc
     except Exception as exc:
-        logger.warning('post_listing_to_channel: skipped listing %s: %s', listing_id, exc)
-        return {'posted': False, 'reason': str(exc)}
+        # Bad URL (localhost dev), invalid chat_id, network - log and skip, never crash listing creation.
+        logger.warning('post_listing_to_channel: skipped listing %s: %s', listing_id, type(exc).__name__)
+        return {'posted': False, 'reason': type(exc).__name__}
     if not posted:
         return {'posted': False, 'reason': 'telegram_error'}
     time.sleep(_CHANNEL_THROTTLE_SECONDS)

@@ -1,5 +1,4 @@
 from django import forms
-from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
@@ -189,9 +188,11 @@ class LeadAdmin(admin.ModelAdmin):
         return TemplateResponse(request, 'admin/leads/funnel.html', context)
 
     def changelist_view(self, request, extra_context=None):
+        from telegram_bot.provider import telegram_configured
+
         from .notify import broker_chat_id, email_channel_configured
         cfg = LeadNotificationSettings.get_solo()
-        tg_ok = bool(cfg.telegram_enabled and broker_chat_id() and settings.TELEGRAM_BOT_TOKEN)
+        tg_ok = bool(cfg.telegram_enabled and broker_chat_id() and telegram_configured())
         if not tg_ok:
             messages.warning(request, 'Telegram для заявок не налаштовано')
         if not tg_ok and not email_channel_configured():

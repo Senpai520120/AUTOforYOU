@@ -464,6 +464,7 @@ def reverse_any_namespace(name, kwargs):
 
 
 # --------------------------------------------------------------------------------------
+@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
 class AuthzMatrixTests(CleanCacheTestCase):
     """Тесты генерируются ниже из MATRIX."""
 

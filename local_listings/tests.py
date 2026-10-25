@@ -852,6 +852,7 @@ class TestExpiryTasks(APITestCase):
 # ─── Тести: promote endpoint + callback ──────────────────────────────────────
 
 
+@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
 class TestPromoteEndpoint(APITestCase):
     def setUp(self):
         self.owner = make_user('promo_owner@test.com')
@@ -873,6 +874,45 @@ class TestPromoteEndpoint(APITestCase):
             tariff=self.tariff,
             purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
         ).exists())
+
+    def test_promote_sandbox_mode_checkout(self):
+        import base64
+        import json
+        self.client = auth_client(self.owner)
+        with override_settings(LIQPAY_MODE='sandbox'):
+            r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertIs(r.data['sandbox'], True)
+        self.assertEqual(json.loads(base64.b64decode(r.data['form_data']['data']))['sandbox'], 1)
+
+    def test_promote_real_mode_checkout(self):
+        import base64
+        import json
+        self.client = auth_client(self.owner)
+        with override_settings(LIQPAY_MODE='real'):
+            r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(json.loads(base64.b64decode(r.data['form_data']['data']))['sandbox'], 0)
+
+    def _assert_unavailable(self):
+        self.client = auth_client(self.owner)
+        r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.data['detail'], 'Оплата тимчасово недоступна')
+        self.assertIs(r.data['configured'], False)
+        self.assertFalse(Payment.objects.filter(local_listing=self.listing).exists())
+
+    @override_settings(LIQPAY_PUBLIC_KEY='', LIQPAY_PRIVATE_KEY='')
+    def test_promote_empty_keys_503_no_payment(self):
+        self._assert_unavailable()
+
+    @override_settings(LIQPAY_PUBLIC_KEY='your_liqpay_public_key', LIQPAY_PRIVATE_KEY='your_liqpay_private_key')
+    def test_promote_placeholder_keys_503(self):
+        self._assert_unavailable()
+
+    @override_settings(LIQPAY_MODE='off')
+    def test_promote_mode_off_503(self):
+        self._assert_unavailable()
 
     def test_promote_non_owner_403(self):
         self.client = auth_client(self.other)

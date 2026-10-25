@@ -26,6 +26,9 @@ MODE_REAL = 'real'
 MODE_DEMO = 'demo'
 MODE_OFF = 'off'
 MODES = (MODE_AUTO, MODE_REAL, MODE_DEMO, MODE_OFF)
+# У LiqPay демо-режим называется sandbox (тестовые ключи кабинета), значения demo там нет.
+MODE_SANDBOX = 'sandbox'
+LIQPAY_MODES = (MODE_AUTO, MODE_REAL, MODE_SANDBOX, MODE_OFF)
 
 # Сетевые сбои, на которых допустим повтор (03-C9). Остальные исключения адаптер не глотает.
 RETRYABLE_EXCEPTIONS = (httpx.TransportError, urllib.error.URLError, OSError)
@@ -62,6 +65,10 @@ def env_state(name: str) -> str:
 
 def mode_setting_name(key: str) -> str:
     return f'{key.upper()}_MODE'
+
+
+def allowed_modes(key: str) -> tuple:
+    return LIQPAY_MODES if key == 'liqpay' else MODES
 
 
 def configured_mode(key: str) -> str:
@@ -131,9 +138,13 @@ class ProviderStatus:
     last_error: str = ''
     mode_setting: str = ''
     mode_setting_valid: bool = True
+    mode_display: str = ''                # подпись режима, если она не совпадает с real/demo/off (LiqPay: sandbox)
+    skipped_count: int = 0                # сколько раз операция пропущена из-за «не налаштовано»
 
     @property
     def mode_label(self) -> str:
+        if self.mode_display:
+            return self.mode_display
         return {MODE_REAL: 'real', MODE_DEMO: 'demo', MODE_OFF: 'off'}.get(self.mode, self.mode)
 
     @property
@@ -277,6 +288,17 @@ def record_success(key: str) -> None:
             )
     except DatabaseError:
         logger.warning('Integration %s: не удалось записать успех в журнал', key)
+
+
+def record_skip(key: str) -> None:
+    """Считает пропуск из-за «не налаштовано»: админ видит число на странице статуса."""
+    from .models import IntegrationHealth
+    try:
+        with transaction.atomic():
+            row, _ = IntegrationHealth.objects.get_or_create(provider_key=key)
+            IntegrationHealth.objects.filter(pk=row.pk).update(skipped_count=F('skipped_count') + 1)
+    except DatabaseError:
+        logger.warning('Integration %s: не удалось записать пропуск в журнал', key)
 
 
 def record_error(key: str, exc: BaseException) -> None:

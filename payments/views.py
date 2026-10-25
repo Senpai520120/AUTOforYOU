@@ -10,8 +10,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .liqpay_client import LiqPayClient, LiqPaySignatureError
+from .liqpay_client import LiqPaySignatureError
 from .models import Payment
+from .providers import get_payment_provider, unavailable_response
 from .serializers import LiqPayCheckoutSerializer
 
 logger = logging.getLogger(__name__)
@@ -56,11 +57,12 @@ def _apply_local_listing_promote(payment):
     description=(
         'Создаёт платёж через LiqPay и возвращает checkout URL + HTML-форму.\n\n'
         'Требует авторизации. `order_id` должен быть уникальным.\n\n'
-        'Для sandbox-режима установите `LIQPAY_SANDBOX=true` в env.'
+        'Режим задаёт `LIQPAY_MODE` (auto/real/sandbox/off); без ключей ответ 503.'
     ),
     responses={
         200: OpenApiResponse(description='checkout_url и form_data для HTML-формы'),
         400: OpenApiResponse(description='Ошибка валидации'),
+        503: OpenApiResponse(description='Оплата не налаштована или выключена (LIQPAY_MODE)'),
     },
 )
 class LiqPayCheckoutView(APIView):
@@ -70,6 +72,10 @@ class LiqPayCheckoutView(APIView):
         serializer = LiqPayCheckoutSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        provider = get_payment_provider()
+        if not provider.is_configured():
+            return unavailable_response()
 
         data = serializer.validated_data
         order_id = data['order_id']
@@ -96,8 +102,7 @@ class LiqPayCheckoutView(APIView):
             status=Payment.Status.PENDING,
         )
 
-        client = LiqPayClient.from_settings()
-        checkout = client.create_checkout(
+        checkout = provider.create_checkout(
             order_id=order_id,
             amount=amount,
             currency=currency,
@@ -141,9 +146,9 @@ class LiqPayCallbackView(APIView):
         if not data or not signature:
             return Response({'error': 'data и signature обязательны.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        client = LiqPayClient.from_settings()
+        provider = get_payment_provider()
         try:
-            decoded = client.decode_callback(data, signature)
+            decoded = provider.decode_callback(data, signature)
         except LiqPaySignatureError as exc:
             logger.warning('LiqPay callback: неверная подпись (%s): %s', type(exc).__name__, exc)
             return Response({'error': 'Неверная подпись.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -161,7 +166,7 @@ class LiqPayCallbackView(APIView):
             logger.warning('LiqPay callback: платёж order_id=%s не найден', order_id)
             return Response({'error': f'Платёж {order_id!r} не найден.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        new_status = LiqPayClient.map_status(liqpay_status)
+        new_status = provider.map_status(liqpay_status)
 
         # Idempotency: повторный COMPLETED-колбэк не вызывает unlock дважды
         if payment.status == Payment.Status.COMPLETED and new_status == Payment.Status.COMPLETED:

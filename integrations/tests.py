@@ -1297,14 +1297,6 @@ class IndexLinkPermissionTests(TestCase):
         self.assertNotContains(client.get('/admin/'), '/admin/integrations/status/')
 
 
-class NotAppliedNoteTests(SimpleTestCase):
-
-    def test_liqpay_and_telegram_note_mode_not_applied(self):
-        statuses = {s.key: s for s in registry.get_statuses(with_health=False)}
-        for key in ('liqpay', 'telegram'):
-            self.assertIn(registry.NOT_APPLIED_NOTE, statuses[key].notes)
-
-
 # ── 3.2a: NHTSA-декодер, Stub на проде, флаг VIN_REPORTS_ENABLED, autoretry ──
 
 from tests.factories import nhtsa_response  # noqa: E402

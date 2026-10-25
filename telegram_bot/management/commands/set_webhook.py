@@ -3,6 +3,8 @@ import asyncio
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from telegram_bot.provider import get_telegram_provider, telegram_real_ready
+
 
 class Command(BaseCommand):
     help = 'Устанавливает Telegram webhook (для прод. деплоя)'
@@ -19,20 +21,17 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-        if not token:
+        if not telegram_real_ready():
             raise CommandError('TELEGRAM_BOT_TOKEN не задан')
 
         webhook_url = options['webhook_url']
         secret = getattr(settings, 'TELEGRAM_WEBHOOK_SECRET', '') or None
         delete = options['delete']
 
-        asyncio.run(self._run(token, webhook_url, secret, delete))
+        asyncio.run(self._run(webhook_url, secret, delete))
 
-    async def _run(self, token: str, webhook_url: str, secret, delete: bool) -> None:
-        from aiogram import Bot
-
-        bot = Bot(token=token)
+    async def _run(self, webhook_url: str, secret, delete: bool) -> None:
+        bot = get_telegram_provider().bot()
         try:
             if delete:
                 await bot.delete_webhook()

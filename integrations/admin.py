@@ -38,8 +38,9 @@ STATUS_PERM = 'integrations.view_integrationhealth'
 @admin.register(IntegrationHealth)
 class IntegrationHealthAdmin(admin.ModelAdmin):
     """Журнал здоровья провайдеров: только чтение."""
-    list_display = ('provider_key', 'last_success_at', 'last_error_at', 'error_count')
-    readonly_fields = ('provider_key', 'last_success_at', 'last_error_at', 'last_error', 'error_count')
+    list_display = ('provider_key', 'last_success_at', 'last_error_at', 'error_count', 'skipped_count')
+    readonly_fields = ('provider_key', 'last_success_at', 'last_error_at', 'last_error', 'error_count',
+                       'skipped_count')
 
     def has_add_permission(self, request):
         return False
@@ -136,6 +137,44 @@ def test_email_view(request):
     return redirect('admin:integrations_status')
 
 
+@require_POST
+def check_liqpay_view(request):
+    """Кнопка «Перевірити конфігурацію LiqPay»: только настройки, без запросов к API LiqPay."""
+    _check_status_perm(request)
+    from payments.providers import LiqPayProvider
+
+    provider = LiqPayProvider()
+    res = provider.resolution()
+    if res.configured:
+        kind = 'sandbox (реальні гроші не списуються)' if provider.is_sandbox else 'бойовий режим'
+        messages.success(request, f'LiqPay налаштовано: {kind}. Запити до LiqPay не надсилалися.')
+    else:
+        messages.warning(request, f'LiqPay: {res.reason}')
+    return redirect('admin:integrations_status')
+
+
+@require_POST
+def check_bot_view(request):
+    """Кнопка «Перевірити бота»: getMe и getWebhookInfo. Токен в сообщение не попадает."""
+    _check_status_perm(request)
+    from telegram_bot.provider import RealTelegramProvider, TelegramProvider
+
+    res = TelegramProvider().resolution()
+    if not res.configured:
+        messages.warning(request, f'Telegram: {res.reason}')
+    elif res.mode == MODE_DEMO:
+        messages.success(request, 'Демо: бот не перевіряється, повідомлення пишуться в Outbox.')
+    else:
+        try:
+            info = RealTelegramProvider().check()
+        except Exception as exc:  # noqa: BLE001 - причина показывается админу, токен маскируется
+            messages.error(request, f'Не вдалося перевірити бота: {mask_secrets(exc)[:200]}')
+        else:
+            webhook = info['webhook_url'] or 'не встановлено (polling)'
+            messages.success(request, f'Бот: @{info["username"]}. Webhook: {webhook}.')
+    return redirect('admin:integrations_status')
+
+
 _original_get_urls = admin.site.get_urls
 _original_index = admin.site.index
 
@@ -147,6 +186,10 @@ def _get_urls():
              name='integrations_refresh_nbu'),
         path('integrations/status/test-email/', admin.site.admin_view(test_email_view),
              name='integrations_test_email'),
+        path('integrations/status/check-liqpay/', admin.site.admin_view(check_liqpay_view),
+             name='integrations_check_liqpay'),
+        path('integrations/status/check-bot/', admin.site.admin_view(check_bot_view),
+             name='integrations_check_bot'),
     ]
     return custom + _original_get_urls()
 

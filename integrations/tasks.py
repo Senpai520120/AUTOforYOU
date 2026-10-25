@@ -81,23 +81,25 @@ def import_lot_task(self, lot_data: dict, seller_id: int):
 )
 def send_notification(self, user_id: int, text: str, buttons=None):
     """
-    Отправляет Telegram-уведомление привязанному пользователю.
-    Если пользователь не привязан или TELEGRAM_BOT_TOKEN не задан → молча пропускает.
+    Отправляет Telegram-уведомление привязанному пользователю через адаптер `telegram_bot.provider`.
+    Telegram не налаштовано -> {'sent': False, 'reason': 'not_configured'}; пропуск виден в статусе интеграций.
 
     Args:
         user_id: PK CustomUser.
         text: текст сообщения.
         buttons: список dict {text, url} для inline-кнопок (необязательно).
     """
-    import asyncio
-
-    from django.conf import settings
     from django.contrib.auth import get_user_model
 
-    token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-    if not token:
-        logger.info('send_notification: TELEGRAM_BOT_TOKEN не задан, пропуск')
-        return {'sent': False, 'reason': 'no token'}
+    from integrations.base import record_skip
+    from telegram_bot.provider import NOT_CONFIGURED, get_telegram_provider
+
+    provider = get_telegram_provider()
+    if not provider.is_configured():
+        # Явный отказ вместо «тихого» пропуска: счётчик пропусков покажет это в статусе (3.4b).
+        record_skip('telegram')
+        logger.info('send_notification: Telegram не налаштовано, пропуск')
+        return {'sent': False, 'reason': NOT_CONFIGURED}
 
     User = get_user_model()
     try:
@@ -111,23 +113,9 @@ def send_notification(self, user_id: int, text: str, buttons=None):
         logger.info('send_notification: user pk=%s не привязан к Telegram, пропуск', user_id)
         return {'sent': False, 'reason': 'not linked'}
 
-    async def _send() -> bool:
-        from aiogram import Bot
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-        bot = Bot(token=token)
-        kb = None
-        if buttons:
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=b['text'], url=b['url'])]
-                for b in buttons
-            ])
-        try:
-            await bot.send_message(chat_id=telegram_id, text=text, reply_markup=kb)
-            return True
-        finally:
-            await bot.session.close()
-
-    sent = asyncio.run(_send())
-    logger.info('send_notification: user pk=%s → sent=%s', user_id, sent)
-    return {'sent': sent}
+    # В лог идёт только pk пользователя, telegram_id не пишем (03-S4 / 07-S9).
+    result = provider.send_message(telegram_id, text, buttons=buttons)
+    logger.info('send_notification: user pk=%s → sent=%s', user_id, result.ok)
+    if not result.ok:
+        return {'sent': False, 'reason': result.reason}
+    return {'sent': True}

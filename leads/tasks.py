@@ -62,13 +62,14 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
 
 def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool) -> dict:
     from telegram_bot import sender
+    from telegram_bot.provider import telegram_configured
 
     lead_id = lead.pk
     if lead.telegram_status == NotifyStatus.SENT and not force:
         return {'status': 'already_sent'}
 
     chat_id = notify.broker_chat_id()
-    if not cfg.telegram_enabled or not chat_id or not getattr(settings, 'TELEGRAM_BOT_TOKEN', ''):
+    if not cfg.telegram_enabled or not chat_id or not telegram_configured():
         logger.warning('lead.notify lead_id=%s telegram not configured', lead_id)
         _mark(lead, NotifyStatus.SKIPPED)
         return {'status': NotifyStatus.SKIPPED}
@@ -99,7 +100,7 @@ def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool)
     try:
         for attempt in range(attempts):
             try:
-                result = sender.send_message(chat_id, text, buttons=buttons)
+                result = sender.send_message(chat_id, text, buttons=buttons, demo_body=f'lead #{lead_id}')
                 break
             except (OSError, ConnectionError):
                 if attempt == attempts - 1:

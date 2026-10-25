@@ -50,6 +50,7 @@ class IntegrationHealth(models.Model):
     last_error_at = models.DateTimeField(null=True, blank=True, verbose_name='Последняя ошибка')
     last_error = models.CharField(max_length=500, blank=True, verbose_name='Текст последней ошибки')
     error_count = models.PositiveIntegerField(default=0, verbose_name='Число ошибок')
+    skipped_count = models.PositiveIntegerField(default=0, verbose_name='Пропусков (не налаштовано)')
 
     class Meta:
         verbose_name = 'Здоровье интеграции'

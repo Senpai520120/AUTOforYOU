@@ -363,9 +363,10 @@ def send_journal_message(lead_id: int) -> str:
     from django.conf import settings
 
     from telegram_bot import sender
+    from telegram_bot.provider import telegram_configured
 
     chat_id = str(getattr(settings, 'LEAD_JOURNAL_CHAT_ID', '') or '').strip()
-    if not chat_id or not getattr(settings, 'TELEGRAM_BOT_TOKEN', ''):
+    if not chat_id or not telegram_configured():
         return 'disabled'
     now = timezone.now()
     claimed = Lead.objects.filter(pk=lead_id, journal_message_id__isnull=True).filter(
@@ -378,7 +379,7 @@ def send_journal_message(lead_id: int) -> str:
         return 'already_sent' if lead['journal_message_id'] is not None else 'in_progress'
     try:
         lead = Lead.objects.select_related('listing__vehicle').get(pk=lead_id)
-        result = sender.send_message(chat_id, journal_text(lead))
+        result = sender.send_message(chat_id, journal_text(lead), demo_body=f'lead #{lead_id}')
         if not result.ok or result.message_id is None:
             logger.warning('lead.journal lead_id=%s reason=%s', lead_id, result.reason or 'no_message_id')
             raise RuntimeError('send_failed')

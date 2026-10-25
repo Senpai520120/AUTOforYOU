@@ -303,7 +303,7 @@ class SenderTests(NotifyBase):
     def test_api_error_returns_result_and_logs_class_only(self):
         from aiogram.exceptions import TelegramBadRequest
         exc = TelegramBadRequest(method=mock.Mock(), message='bad Іван 0671234567 SECRETtoken')
-        with self.assertLogs('telegram_bot.sender', 'WARNING') as logs:
+        with self.assertLogs('telegram_bot.provider', 'WARNING') as logs:
             result = self.run_send(exc)
         self.assertEqual((result.ok, result.reason), (False, 'TelegramBadRequest'))
         out = ''.join(logs.output)

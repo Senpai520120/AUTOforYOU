@@ -1,7 +1,8 @@
 import asyncio
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+
+from telegram_bot.provider import get_telegram_provider, telegram_real_ready
 
 
 class Command(BaseCommand):
@@ -12,17 +13,14 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-        if not token:
+        if not telegram_real_ready():
             raise CommandError(
                 'TELEGRAM_BOT_TOKEN не задан. Добавьте его в .env и повторите.'
             )
-        asyncio.run(self._run(token))
+        asyncio.run(self._run())
 
-    async def _run(self, token: str) -> None:
-        from aiogram import Bot
-
-        bot = Bot(token=token)
+    async def _run(self) -> None:
+        bot = get_telegram_provider().bot()
         try:
             info_before = await bot.get_webhook_info()
             if info_before.url:

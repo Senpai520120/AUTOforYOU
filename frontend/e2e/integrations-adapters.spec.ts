@@ -1,5 +1,5 @@
 /**
- * E2E: адаптери НБУ і пошти (задача 3.4a). Частина LiqPay/Telegram — задача 3.4b, тут її немає.
+ * E2E: адаптери НБУ і пошти (3.4a), LiqPay і Telegram (3.4b).
  * Сторінка статусу інтеграцій у Django Admin: /admin/integrations/status/.
  */
 import { test, expect, storageStatePath } from './fixtures';
@@ -8,6 +8,8 @@ const STATUS_URL = '/admin/integrations/status/';
 const BUTTON_URLS = [
   '/admin/integrations/status/refresh-nbu/',
   '/admin/integrations/status/test-email/',
+  '/admin/integrations/status/check-liqpay/',
+  '/admin/integrations/status/check-bot/',
 ];
 const NOT_CONFIGURED = 'Відправка листів тимчасово не налаштована, зверніться до підтримки';
 
@@ -88,5 +90,52 @@ test.describe('Калькулятор: демо-курс (3.4a, 02-C8)', () => {
     expect(body.is_demo).toBe(true);
     await expect(page.getByTestId('calc-result')).toBeVisible();
     await expect(page.getByTestId('demo-banner').first()).toBeVisible();
+  });
+});
+
+test.describe('Просування: оплата LiqPay (3.4b)', () => {
+  test.use({ storageState: storageStatePath('seller') });
+
+  async function openPromoteModal(page: import('@playwright/test').Page) {
+    await page.goto('/me/local-listings');
+    const active = page.getByRole('link', { name: 'Skoda Octavia 2018' });
+    const card = page.locator('div.rounded-xl').filter({ has: active });
+    await card.getByRole('button', { name: /Підняти/ }).click();
+    const pay = page.getByRole('button', { name: /^Оплатити/ });
+    await expect(pay).toBeEnabled();
+    return pay;
+  }
+
+  test('обхід: 503 «Оплата тимчасово недоступна» — текст у модалці, переходу на liqpay немає', async ({ page }) => {
+    const liqpayRequests: string[] = [];
+    page.on('request', (r) => { if (/liqpay\.(ua|com)/.test(r.url())) liqpayRequests.push(r.url()); });
+    await page.route('**/api/v1/local/listings/*/promote/', (route) =>
+      route.fulfill({ status: 503, json: { detail: 'Оплата тимчасово недоступна', configured: false } }),
+    );
+    const pay = await openPromoteModal(page);
+    await pay.click();
+    await expect(page.getByText('Оплата тимчасово недоступна')).toBeVisible();
+    await expect(page).toHaveURL(/\/me\/local-listings/);
+    expect(liqpayRequests).toEqual([]);
+  });
+
+  test('успіх: checkout від API веде на сторінку LiqPay (запит перехоплено)', async ({ page }) => {
+    await page.route('**/api/v1/local/listings/*/promote/', (route) =>
+      route.fulfill({
+        status: 201,
+        json: {
+          payment_id: 1, order_id: 'promo-e2e', sandbox: true,
+          checkout_url: 'https://www.liqpay.ua/api/3/checkout?data=e2e&signature=e2e',
+          form_data: { data: 'e2e', signature: 'e2e' },
+        },
+      }),
+    );
+    await page.route(/liqpay\.(ua|com)/, (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>liqpay stub</body></html>' }),
+    );
+    const pay = await openPromoteModal(page);
+    await pay.click();
+    await page.waitForURL(/liqpay\.ua/);
+    await expect(page.getByText('liqpay stub')).toBeVisible();
   });
 });

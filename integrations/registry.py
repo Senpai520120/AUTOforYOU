@@ -9,7 +9,6 @@ import logging
 from dataclasses import dataclass
 from typing import Callable
 
-from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 from core.modules import module_enabled
@@ -34,9 +33,6 @@ class RegisteredProvider:
     env_vars: tuple = ()
     checklist_anchor: str = ''
 
-
-# Пока провайдер не переведён на адаптер (3.2–3.4), его *_MODE кодом не применяется.
-NOT_APPLIED_NOTE = 'режим ще не застосовується кодом (задачі 3.2–3.4)'
 
 _REGISTRY: dict = {}
 
@@ -91,6 +87,7 @@ def get_statuses(with_health=True) -> list:
                 status.last_success_at = row.last_success_at
                 status.last_error_at = row.last_error_at
                 status.last_error = row.last_error
+                status.skipped_count = row.skipped_count
     return statuses
 
 
@@ -160,11 +157,9 @@ def _lots():
 
 
 def _liqpay():
-    sandbox = 'пісочниця (LIQPAY_SANDBOX=true)' if getattr(settings, 'LIQPAY_SANDBOX', True) else 'бойовий режим'
-    return settings_status('liqpay', 'LiqPay (платежі)',
-                           credentials=('LIQPAY_PUBLIC_KEY', 'LIQPAY_PRIVATE_KEY'),
-                           extra_vars=('LIQPAY_SANDBOX',), checklist_anchor='2.6',
-                           notes=[f'Режим LiqPay: {sandbox}', NOT_APPLIED_NOTE])
+    from payments.providers import LiqPayProvider
+
+    return LiqPayProvider().status()
 
 
 def _email():
@@ -178,15 +173,9 @@ def _email():
 
 
 def _telegram():
-    status = settings_status(
-        'telegram', 'Telegram', credentials=('TELEGRAM_BOT_TOKEN',),
-        extra_vars=('TELEGRAM_CHANNEL_ID', 'TELEGRAM_B2B_CHANNEL_ID', 'TELEGRAM_WEBHOOK_SECRET'),
-        checklist_anchor='2.7',
-    )
-    status.notes.append(NOT_APPLIED_NOTE)
-    for name in ('TELEGRAM_CHANNEL_ID', 'TELEGRAM_B2B_CHANNEL_ID', 'TELEGRAM_WEBHOOK_SECRET'):
-        status.notes.append(f'{name}: {env_state(name)}')
-    return status
+    from telegram_bot.provider import TelegramProvider
+
+    return TelegramProvider().status()
 
 
 def register_builtin_providers():

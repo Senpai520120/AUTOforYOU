@@ -1,3 +1,4 @@
+import hmac
 import json
 import logging
 from datetime import timedelta
@@ -14,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import TelegramLinkToken
+from .provider import get_telegram_provider, telegram_real_ready
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +71,7 @@ class TelegramWebhookView(View):
     """
 
     def post(self, request):
-        token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-        if not token:
+        if not telegram_real_ready():
             return HttpResponse('Bot not configured', status=503)
 
         secret = getattr(settings, 'TELEGRAM_WEBHOOK_SECRET', '')
@@ -85,7 +86,7 @@ class TelegramWebhookView(View):
             return HttpResponse('Webhook secret not configured', status=503)
 
         incoming = request.META.get('HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN', '')
-        if incoming != secret:
+        if not hmac.compare_digest(incoming.encode('utf-8'), secret.encode('utf-8')):
             logger.warning('Webhook: неверный секрет, отклонено')
             return HttpResponse('Forbidden', status=403)
 
@@ -96,17 +97,16 @@ class TelegramWebhookView(View):
 
         # async_to_sync, а не asyncio.run: так sync_to_async в хендлерах
         # выполняется в потоке запроса и работает с его соединением к БД.
-        async_to_sync(self._process_update)(token, data)
+        async_to_sync(self._process_update)(data)
         return HttpResponse('ok')
 
     @staticmethod
-    async def _process_update(token: str, data: dict) -> None:
-        from aiogram import Bot
+    async def _process_update(data: dict) -> None:
         from aiogram.types import Update
 
         from telegram_bot.dispatcher import get_dispatcher
 
-        bot = Bot(token=token)
+        bot = get_telegram_provider().bot()
         try:
             update = Update.model_validate(data)
             await get_dispatcher().feed_update(bot, update)

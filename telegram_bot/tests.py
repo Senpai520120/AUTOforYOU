@@ -356,9 +356,9 @@ class RunBotCommandTest(TestCase):
         self.assertIn('TELEGRAM_BOT_TOKEN не задан', err.getvalue())
 
     def test_polling_uses_shared_dispatcher(self):
-        with patch.object(Bot, 'delete_webhook') as delete_webhook, \
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN), patch.object(Bot, 'delete_webhook') as delete_webhook, \
                 patch.object(Dispatcher, 'start_polling', autospec=True) as start_polling:
-            async_to_sync(RunBotCommand._run)(BOT_TOKEN)
+            async_to_sync(RunBotCommand._run)()
 
         delete_webhook.assert_awaited_once_with(drop_pending_updates=True)
         start_polling.assert_awaited_once()
@@ -376,7 +376,7 @@ class SendNotificationTaskTest(TestCase):
         with self.settings(TELEGRAM_BOT_TOKEN=''):
             result = send_notification(self.user.pk, 'Hello')
         self.assertFalse(result['sent'])
-        self.assertEqual(result['reason'], 'no token')
+        self.assertEqual(result['reason'], 'not_configured')
 
     def test_unlinked_user_skipped(self):
         from integrations.tasks import send_notification
@@ -417,7 +417,7 @@ class PostListingToChannelTaskTest(TestCase):
         with self.settings(TELEGRAM_BOT_TOKEN=''):
             result = post_listing_to_channel(1)
         self.assertFalse(result['posted'])
-        self.assertEqual(result['reason'], 'no token')
+        self.assertEqual(result['reason'], 'not_configured')
 
     def test_listing_not_found(self):
         from telegram_bot.tasks import post_listing_to_channel

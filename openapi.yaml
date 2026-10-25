@@ -1859,7 +1859,7 @@ paths:
 
         Требует авторизации. `order_id` должен быть уникальным.
 
-        Для sandbox-режима установите `LIQPAY_SANDBOX=true` в env.
+        Режим задаёт `LIQPAY_MODE` (auto/real/sandbox/off); без ключей ответ 503.
       summary: Создать LiqPay checkout
       tags:
       - payments
@@ -1871,6 +1871,8 @@ paths:
           description: checkout_url и form_data для HTML-формы
         '400':
           description: Ошибка валидации
+        '503':
+          description: Оплата не налаштована или выключена (LIQPAY_MODE)
   /api/v1/pricing/calculate/:
     post:
       operationId: v1_pricing_calculate_create

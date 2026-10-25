@@ -422,8 +422,12 @@ class LocalListingPromoteView(APIView):
         order_id = f'promo-{listing.pk}-{tariff.code}-{uuid.uuid4().hex[:8]}'
         description = f'{tariff.name}: {listing.make} {listing.model} {listing.year}'
 
-        from payments.liqpay_client import LiqPayClient
         from payments.models import Payment
+        from payments.providers import get_payment_provider, unavailable_response
+
+        provider = get_payment_provider()
+        if not provider.is_configured():
+            return unavailable_response()
 
         payment = Payment.objects.create(
             user=request.user,
@@ -436,8 +440,7 @@ class LocalListingPromoteView(APIView):
             purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
         )
 
-        client = LiqPayClient.from_settings()
-        checkout = client.create_checkout(
+        checkout = provider.create_checkout(
             order_id=order_id,
             amount=str(tariff.price),
             currency=tariff.currency,

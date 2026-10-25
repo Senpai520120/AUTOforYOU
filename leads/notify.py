@@ -172,8 +172,9 @@ def email_channel_configured() -> bool:
 
 
 def telegram_channel_configured() -> bool:
+    from telegram_bot.provider import telegram_configured
     return bool(LeadNotificationSettings.get_solo().telegram_enabled and broker_chat_id()
-                and getattr(settings, 'TELEGRAM_BOT_TOKEN', ''))
+                and telegram_configured())
 
 
 def admin_recipient_ids() -> list[int]:

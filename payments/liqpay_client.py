@@ -8,13 +8,12 @@ LiqPay API client — Python 3.12+.
 Официальный SDK (liqpay/sdk-python) — Python 2 only, поэтому реализуем
 протокол напрямую. Логика идентична SDK (~20 строк).
 
-Ключи из env: LIQPAY_PUBLIC_KEY, LIQPAY_PRIVATE_KEY.
-Sandbox: установить sandbox=1 в параметрах или LIQPAY_SANDBOX=true в env.
+Низкоуровневый протокол. Во вью клиент напрямую не используется: см. `payments/providers.py`
+(режимы `LIQPAY_MODE`, статус «не налаштовано»).
 """
 import base64
 import hashlib
 import json
-import os
 
 LIQPAY_CHECKOUT_URL = 'https://www.liqpay.com/api/3/checkout'
 LIQPAY_API_URL = 'https://www.liqpay.com/api/3/request'
@@ -34,8 +33,8 @@ class LiqPayClient:
     def from_settings(cls) -> 'LiqPayClient':
         from django.conf import settings as django_settings
         return cls(
-            public_key=getattr(django_settings, 'LIQPAY_PUBLIC_KEY', '') or os.environ.get('LIQPAY_PUBLIC_KEY', ''),
-            private_key=getattr(django_settings, 'LIQPAY_PRIVATE_KEY', '') or os.environ.get('LIQPAY_PRIVATE_KEY', ''),
+            public_key=getattr(django_settings, 'LIQPAY_PUBLIC_KEY', ''),
+            private_key=getattr(django_settings, 'LIQPAY_PRIVATE_KEY', ''),
             sandbox=getattr(django_settings, 'LIQPAY_SANDBOX', True),
         )
 

@@ -1,8 +1,9 @@
 import asyncio
 import logging
 
-from django.conf import settings
 from django.core.management.base import BaseCommand
+
+from telegram_bot.provider import get_telegram_provider, telegram_real_ready
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,7 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-        if not token:
+        if not telegram_real_ready():
             self.stderr.write(
                 self.style.ERROR(
                     '\n'
@@ -32,15 +32,13 @@ class Command(BaseCommand):
         from core.monitoring import init_monitoring
         init_monitoring('bot')  # мониторинг ошибок (7.6); пустой SENTRY_DSN - выключен
         self.stdout.write(self.style.SUCCESS('🤖 Запуск Telegram-бота (polling)...'))
-        asyncio.run(self._run(token))
+        asyncio.run(self._run())
 
     @staticmethod
-    async def _run(token: str) -> None:
-        from aiogram import Bot
-
+    async def _run() -> None:
         from telegram_bot.dispatcher import get_dispatcher
 
-        bot = Bot(token=token)
+        bot = get_telegram_provider().bot()
 
         # Idempotent: снимаем webhook перед polling, чтобы не было конфликта
         # если предыдущий бот работал в webhook-режиме.
