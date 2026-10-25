@@ -9,10 +9,12 @@ AuctionHistoryProvider — заглушка BidFax/Carfax (платный, кл�
 AuctionLotProvider — импорт лотов: ManualLotProvider (всегда), ApifyLotProvider (с токеном).
 """
 import logging
-import re
 from abc import ABC, abstractmethod
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
+
+from .base import BaseProvider, http_timeout, mask_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +23,6 @@ PROVIDER_ERROR_CODE = 'service_unavailable'
 PROVIDER_ERROR_MESSAGE = 'Сервіс тимчасово недоступний. Спробуйте пізніше.'
 REGISTRY_ERROR_MESSAGE = 'Сервіс реєстрів тимчасово недоступний. Спробуйте пізніше.'
 
-_SECRET_QS_RE = re.compile(r"(?i)(api[_-]?key|access_token|token|key)=[^&\s'\"]+")
-
-
-def _mask(text: str) -> str:
-    """Маскирует значения apikey=/token= в тексте (для логов)."""
-    return _SECRET_QS_RE.sub(lambda m: f'{m.group(1)}=***', text)
 
 # ─── VIN-провайдер ───────────────────────────────────────────────────────────
 
@@ -83,48 +79,58 @@ _FUEL_MAP = {
 }
 
 
-class NHTSAVinDecodeProvider:
+def _int(val):
+    try:
+        return int(float(val)) if val else None
+    except (ValueError, TypeError):
+        return None
+
+
+def nhtsa_error_ok(error_code) -> bool:
+    """ErrorCode NHTSA: '0' - без ошибок; '1,8' и т.п. - есть проблемы (03-Q9)."""
+    codes = [c.strip() for c in str(error_code or '').split(',') if c.strip()]
+    return bool(codes) and all(c == '0' for c in codes)
+
+
+class NHTSAVinDecodeProvider(BaseProvider):
+    """Декодер VIN через NHTSA vPIC (бесплатно, без ключа). Режим - `VIN_DECODE_MODE`.
+
+    `decode()` сам ничего не глотает: сетевые и HTTP-сбои обрабатывает вызывающий
+    (`integrations.services.decode_vin`), который отдаёт пользователю общий текст.
     """
-    Декодирует VIN через NHTSA vPIC API.
-    Возвращает технические характеристики: make, model, year, engine_cc, fuel_type, body.
-    demo=False — данные реальные из федеральной базы США.
-    """
+    key = 'vin_decode'
+    title = 'VIN-декодер (NHTSA)'
+    needs_credentials = False
+    checklist_anchor = '2.5'
+
+    def demo_data(self, vin: str) -> dict:
+        return {
+            'provider': 'demo', 'vin': vin, 'make': 'ДЕМО', 'model': 'ДЕМО', 'year': None,
+            'engine_cc': None, 'fuel_type': None, 'valid': True,
+        }
 
     def decode(self, vin: str) -> dict:
         import httpx
 
-        url = _NHTSA_URL.format(vin=vin.upper())
-        try:
-            resp = httpx.get(url, timeout=10.0)
-            resp.raise_for_status()
-            results = resp.json().get('Results', [{}])
-        except Exception as exc:
-            logger.warning('NHTSA request failed: %s', _mask(str(exc)))
-            return {
-                'error': PROVIDER_ERROR_CODE,
-                'message': PROVIDER_ERROR_MESSAGE,
-                'demo': False,
-                'provider': 'nhtsa_vpic',
-            }
-
-        r = results[0] if results else {}
-
-        def _int(val):
-            try:
-                return int(float(val)) if val else None
-            except (ValueError, TypeError):
-                return None
+        # vin уже прошёл валидатор; quote - второй рубеж: сегмент пути не выходит за свои границы.
+        url = _NHTSA_URL.format(vin=quote(vin.upper(), safe=''))
+        resp = httpx.get(url, timeout=http_timeout())
+        resp.raise_for_status()
+        body = resp.json()
+        results = body.get('Results') if isinstance(body, dict) else None
+        if not isinstance(results, list) or not results or not isinstance(results[0], dict):
+            raise ValueError('Unexpected NHTSA response shape')
+        r = results[0]
 
         raw_fuel = (r.get('FuelTypePrimary') or '').lower()
         fuel_type = _FUEL_MAP.get(raw_fuel, 'petrol') if raw_fuel else None
+        engine_cc = _int(r.get('DisplacementCC'))
+        ok = nhtsa_error_ok(r.get('ErrorCode'))
 
-        engine_cc_raw = r.get('DisplacementCC') or ''
-        engine_cc = _int(engine_cc_raw)
-
-        return {
-            'demo': False,
+        data = {
             'provider': 'nhtsa_vpic',
             'vin': vin.upper(),
+            'valid': ok,
             'make': r.get('Make') or None,
             'model': r.get('Model') or None,
             'year': _int(r.get('ModelYear')),
@@ -134,9 +140,11 @@ class NHTSAVinDecodeProvider:
             'engine_cylinders': _int(r.get('EngineCylinders')),
             'displacement_cc': engine_cc,
             'fuel_type_primary_raw': r.get('FuelTypePrimary') or None,
-            'error_code': r.get('ErrorCode'),
-            'error_text': r.get('AdditionalErrorText') or r.get('ErrorText') or None,
         }
+        if not ok:
+            data['error_code'] = r.get('ErrorCode')
+            data['error_text'] = r.get('AdditionalErrorText') or r.get('ErrorText') or None
+        return data
 
 
 # ─── История торгов (BidFax) ─────────────────────────────────────────────────
@@ -229,12 +237,12 @@ class RealOpendatabotProvider(OpendatabotProvider):
                 return {'demo': True, 'provider': 'opendatabot', 'error': 'Ни VIN, ни номер не переданы.'}
 
             # Ключ в query: передача заголовком в документации
-            # https://opendatabot.ua/doc не подтверждена. URL с ключом наружу не отдаём (см. _mask).
+            # https://opendatabot.ua/doc не подтверждена. URL с ключом наружу не отдаём (см. mask_secrets).
             resp = httpx.get(url, params={'apikey': self._api_key}, timeout=10.0)
             resp.raise_for_status()
             body = resp.json()
         except Exception as exc:
-            logger.warning('Opendatabot request failed: %s', _mask(str(exc)))
+            logger.warning('Opendatabot request failed: %s', mask_secrets(str(exc)))
             return {
                 'demo': False,
                 'provider': 'opendatabot',
@@ -267,16 +275,48 @@ class RealOpendatabotProvider(OpendatabotProvider):
 
 # ─── Фабрика — выбирает реального или stub-провайдера ────────────────────────
 
+VIN_REPORT_NOT_CONFIGURED_MESSAGE = 'Звіт за VIN не налаштовано'
+
+
+class UnconfiguredVinProvider(VinProvider):
+    """Боевой ответ без провайдера отчётов: никаких фейковых полей (make, model, accidents)."""
+
+    def get_report(self, vin: str) -> dict:
+        return {'configured': False, 'demo': False, 'message': VIN_REPORT_NOT_CONFIGURED_MESSAGE}
+
+
+def demo_vin_report_allowed() -> bool:
+    """Фейковый StubVinProvider допустим только в dev (DEBUG) или при явном VIN_REPORT_MODE=demo."""
+    from django.conf import settings
+
+    from .base import MODE_DEMO, configured_mode
+    return bool(settings.DEBUG) or configured_mode('vin_report') == MODE_DEMO
+
+
 def get_vin_provider() -> VinProvider:
-    return StubVinProvider()
+    if demo_vin_report_allowed():
+        return StubVinProvider()
+    return UnconfiguredVinProvider()
 
 
 def get_auction_history_provider() -> AuctionHistoryProvider:
     return StubAuctionHistoryProvider()
 
 
+class UnconfiguredOpendatabotProvider(OpendatabotProvider):
+    """OPENDATABOT_MODE=off: платный вызов не делается, ответ без данных."""
+
+    def get_vehicle_info(self, vin: str = None, plate: str = None) -> dict:
+        return {'configured': False, 'demo': False, 'provider': 'opendatabot',
+                'message': 'Перевірка за реєстрами не налаштована'}
+
+
 def get_opendatabot_provider() -> OpendatabotProvider:
     from django.conf import settings
+
+    from .base import MODE_OFF, configured_mode
+    if configured_mode('opendatabot') == MODE_OFF:
+        return UnconfiguredOpendatabotProvider()
     api_key = getattr(settings, 'OPENDATABOT_API_KEY', '')
     if api_key:
         return RealOpendatabotProvider(api_key=api_key)
@@ -389,7 +429,7 @@ class ApifyLotProvider(AuctionLotProvider):
                 return {'error': 'Apify актор вернул пустой результат', 'demo': False}
             return _normalize_lot({**items[0], 'provider': 'apify'})
         except Exception as exc:
-            logger.warning('Apify request failed: %s', _mask(str(exc)))
+            logger.warning('Apify request failed: %s', mask_secrets(str(exc)))
             return {
                 'error': PROVIDER_ERROR_CODE,
                 'message': PROVIDER_ERROR_MESSAGE,

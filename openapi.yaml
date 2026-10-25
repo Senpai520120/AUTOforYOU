@@ -2242,6 +2242,8 @@ paths:
           description: Технические данные из NHTSA vPIC
         '400':
           description: Некорректный VIN
+        '503':
+          description: NHTSA недоступен или VIN_DECODE_MODE=off
   /api/v1/vehicles/{vin}/registry/:
     get:
       operationId: v1_vehicles_registry_retrieve

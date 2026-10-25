@@ -14,7 +14,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from integrations.importer import import_lot
-from integrations.models import RegistryReport
+from integrations.models import RegistryReport, VinReport
 from integrations.providers import ApifyLotProvider, ManualLotProvider, RealOpendatabotProvider
 from listings.models import Listing
 from tests.factories import auth_client, make_admin_role, make_broker, make_moderator, make_staff, make_user
@@ -579,6 +579,7 @@ class VinReportAccessTest(APITestCase):
     def test_anonymous_rejected(self):
         self.assertEqual(self.client.get(self.URL).status_code, 401)
 
+    @override_settings(VIN_REPORT_MODE='demo')
     def test_authenticated_allowed(self):
         user = make_user('vin@test.com')
         self.client.force_authenticate(user=user)
@@ -634,16 +635,9 @@ class TestProviderErrorsDoNotLeak(SimpleTestCase):
         with self.assertLogs('integrations.providers', level='WARNING') as cm:
             RealOpendatabotProvider(api_key='SECRET123').get_vehicle_info(vin='1HGBH41JXMN109186')
         out = ' '.join(cm.output)
-        self.assertIn('apikey=***', out)
         self.assertNotIn('SECRET123', out)
+        self.assertNotIn('apikey', out)
 
-    @patch('httpx.get')
-    def test_nhtsa_error_is_generic(self, mock_get):
-        from integrations.providers import NHTSAVinDecodeProvider
-        mock_get.side_effect = Exception('boom internal host 10.0.0.5')
-        result = NHTSAVinDecodeProvider().decode('1HGBH41JXMN109186')
-        self.assertEqual(result['error'], 'service_unavailable')
-        self.assertNotIn('10.0.0.5', str(result))
 
     @patch('httpx.post')
     def test_apify_error_is_generic(self, mock_post):
@@ -1291,3 +1285,250 @@ class NotAppliedNoteTests(SimpleTestCase):
         statuses = {s.key: s for s in registry.get_statuses(with_health=False)}
         for key in ('liqpay', 'telegram'):
             self.assertIn(registry.NOT_APPLIED_NOTE, statuses[key].notes)
+
+
+# ── 3.2a: NHTSA-декодер, Stub на проде, флаг VIN_REPORTS_ENABLED, autoretry ──
+
+from tests.factories import nhtsa_response  # noqa: E402
+
+GOOD_VIN = '1HGBH41JXMN109186'
+DECODE = f'/api/v1/vehicles/{GOOD_VIN}/decode/'
+REPORT = f'/api/v1/vehicles/{GOOD_VIN}/report/'
+REGISTRY = f'/api/v1/vehicles/{GOOD_VIN}/registry/'
+
+
+class NhtsaDecodeTests(APITestCase):
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_success_parsed_and_cached(self):
+        with patch('httpx.get', return_value=nhtsa_response(DisplacementCC='1498.2', FuelTypePrimary='Gasoline')) as g:
+            resp = self.client.get(DECODE)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual((resp.data['make'], resp.data['year'], resp.data['engine_cc']), ('HONDA', 2021, 1498))
+        self.assertEqual((resp.data['fuel_type'], resp.data['valid'], resp.data['cached']), ('petrol', True, False))
+        g.assert_called_once()
+        self.assertEqual(VinReport.objects.filter(vin=GOOD_VIN, provider='nhtsa_vpic').count(), 1)
+
+    def test_network_error_generic_text_nothing_cached_error_recorded(self):
+        with patch('httpx.get', side_effect=httpx.ConnectError('boom internal host 10.0.0.5')):
+            resp = self.client.get(DECODE)
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.data['error'], 'service_unavailable')
+        self.assertNotIn('10.0.0.5', resp.content.decode())
+        self.assertNotIn('boom', resp.content.decode())
+        self.assertEqual(VinReport.objects.count(), 0)
+        self.assertEqual(IntegrationHealth.objects.get(provider_key='vin_decode').error_count, 1)
+
+    def test_http_error_status_is_also_generic_503(self):
+        bad = MagicMock()
+        bad.raise_for_status.side_effect = _http_error()
+        with patch('httpx.get', return_value=bad):
+            resp = self.client.get(DECODE)
+        self.assertEqual(resp.status_code, 503)
+        self.assertNotIn('SECRET123', resp.content.decode())
+        self.assertEqual(VinReport.objects.count(), 0)
+        self.assertEqual(IntegrationHealth.objects.get(provider_key='vin_decode').error_count, 1)
+
+    def test_nonzero_error_code_is_invalid_and_not_cached(self):
+        with patch('httpx.get', return_value=nhtsa_response(ErrorCode='1', Make='', Model='')):
+            resp = self.client.get(DECODE)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIs(resp.data['valid'], False)
+        self.assertEqual(VinReport.objects.count(), 0)
+
+    def test_multi_code_error_is_invalid(self):
+        with patch('httpx.get', return_value=nhtsa_response(ErrorCode='0,8')):
+            resp = self.client.get(DECODE)
+        self.assertIs(resp.data['valid'], False)
+
+    def test_forbidden_letters_and_encoded_chars_rejected_without_network(self):
+        for vin in ('1HGBH41JXMN10918I', '1HGBH41JXMN10918O', '1HGBH41JXMN10918Q', '1HGBH41JXMN1091%3F',
+                    '1HGBH41JXMN1091-6', 'SHORT'):
+            with self.subTest(vin=vin), patch('httpx.get') as g:
+                resp = self.client.get(f'/api/v1/vehicles/{vin}/decode/')
+                g.assert_not_called()
+            self.assertEqual(resp.status_code, 400)
+
+    def test_lowercase_vin_is_normalized(self):
+        with patch('httpx.get', return_value=nhtsa_response()) as g:
+            resp = self.client.get(f'/api/v1/vehicles/{GOOD_VIN.lower()}/decode/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(GOOD_VIN, g.call_args.args[0])
+
+    def test_two_requests_one_record_one_call(self):
+        with patch('httpx.get', return_value=nhtsa_response()) as g:
+            first = self.client.get(DECODE)
+            second = self.client.get(DECODE)
+        self.assertFalse(first.data['cached'])
+        self.assertTrue(second.data['cached'])
+        g.assert_called_once()
+        self.assertEqual(VinReport.objects.filter(vin=GOOD_VIN).count(), 1)
+
+    @override_settings(VIN_DECODE_MODE='off')
+    def test_mode_off_returns_503_without_network(self):
+        with patch('httpx.get') as g:
+            resp = self.client.get(DECODE)
+            g.assert_not_called()
+        self.assertEqual(resp.status_code, 503)
+        self.assertIs(resp.data['configured'], False)
+
+    @override_settings(VIN_DECODE_MODE='demo')
+    def test_mode_demo_no_network_no_cache_marked_demo(self):
+        with patch('httpx.get') as g:
+            resp = self.client.get(DECODE)
+            g.assert_not_called()
+        self.assertEqual(resp.status_code, 200)
+        self.assertIs(resp.data['demo'], True)
+        self.assertEqual(VinReport.objects.count(), 0)
+
+    def test_url_segment_is_escaped(self):
+        from integrations.providers import NHTSAVinDecodeProvider
+        with patch('httpx.get', return_value=nhtsa_response()) as g:
+            NHTSAVinDecodeProvider().decode('AB/../?x=1')
+        self.assertEqual(
+            g.call_args.args[0],
+            'https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/AB%2F..%2F%3FX%3D1?format=json',
+        )
+
+    def test_unexpected_response_shape_is_503_not_cached(self):
+        for body in ([], {'Results': []}, {'Results': 'x'}, {'Results': [1]}, {}):
+            bad = MagicMock()
+            bad.json.return_value = body
+            with self.subTest(body=body), patch('httpx.get', return_value=bad):
+                resp = self.client.get(DECODE)
+            self.assertEqual(resp.status_code, 503)
+        self.assertEqual(VinReport.objects.count(), 0)
+
+    def test_cache_row_without_valid_flag_is_ignored(self):
+        VinReport.objects.create(vin=GOOD_VIN, provider='nhtsa_vpic', report_data={'make': 'OLD'}, demo=False)
+        with patch('httpx.get', return_value=nhtsa_response()) as g:
+            resp = self.client.get(DECODE)
+        g.assert_called_once()
+        self.assertEqual(resp.data['make'], 'HONDA')
+
+
+class VinValidatorTests(SimpleTestCase):
+    def test_valid_and_invalid(self):
+        from integrations.validators import is_valid_vin
+        self.assertTrue(is_valid_vin(GOOD_VIN))
+        for bad in ('', GOOD_VIN + '\n', GOOD_VIN[:-1] + 'O', GOOD_VIN[:-1], GOOD_VIN + '1', GOOD_VIN.lower()):
+            with self.subTest(bad=bad):
+                self.assertFalse(is_valid_vin(bad))
+
+
+class StubVinProviderGatingTests(APITestCase):
+    """Без DEBUG и без VIN_REPORT_MODE=demo фейковый отчёт (Toyota Camry) наружу не отдаётся."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = auth_client(make_user('stub_gate@test.com'))
+
+    @override_settings(DEBUG=False, VIN_REPORT_MODE='auto', CARVERTICAL_API_KEY='')
+    def test_prod_without_keys_is_not_configured_and_has_no_fake_data(self):
+        with patch('httpx.get') as g, patch('httpx.post') as p:
+            resp = self.client.get(REPORT)
+            g.assert_not_called()
+            p.assert_not_called()
+        self.assertEqual(resp.status_code, 200)
+        self.assertIs(resp.json()['configured'], False)
+        self.assertEqual(resp.json()['message'], 'Звіт за VIN не налаштовано')
+        body = resp.content.decode()
+        for fake in ('Toyota', 'Camry', 'Copart', 'accidents'):
+            self.assertNotIn(fake, body)
+        self.assertIs(resp.json()['demo'], False)
+        self.assertEqual(VinReport.objects.count(), 0)
+
+    @override_settings(DEBUG=False, VIN_REPORT_MODE='demo')
+    def test_demo_mode_returns_marked_demo(self):
+        resp = self.client.get(REPORT)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIs(resp.json()['demo'], True)
+        self.assertIn('ДЕМО', resp.content.decode())
+
+    @override_settings(DEBUG=True, VIN_REPORT_MODE='auto')
+    def test_debug_allows_stub(self):
+        resp = self.client.get(REPORT)
+        self.assertIs(resp.json()['demo'], True)
+
+    @override_settings(DEBUG=False, VIN_REPORT_MODE='auto')
+    def test_stale_stub_cache_is_not_served_on_prod(self):
+        VinReport.objects.create(vin=GOOD_VIN, provider='stub', report_data={'make': 'Toyota', 'demo': True}, demo=True)
+        resp = self.client.get(REPORT)
+        self.assertNotIn('Toyota', resp.content.decode())
+
+
+class VinReportsFlagTests(APITestCase):
+    """VIN_REPORTS_ENABLED=false: отчёт и реестр = 404 всем (включая staff), внешние API не вызываются."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.clients = {
+            'anon': APIClient(),
+            'buyer': auth_client(make_user('flag_buyer@test.com')),
+            'staff': auth_client(make_staff(superuser=True)),
+        }
+
+    @override_settings(VIN_REPORTS_ENABLED=False)
+    def test_report_and_registry_are_404_for_everyone(self):
+        for who, client in self.clients.items():
+            for url in (REPORT, REGISTRY, '/api/v1/vehicles/_/registry/?plate=AA1234BB'):
+                with self.subTest(who=who, url=url), patch('httpx.get') as g, patch('httpx.post') as p, \
+                        patch('integrations.views.get_opendatabot_provider') as odb:
+                    resp = client.get(url)
+                    g.assert_not_called()
+                    p.assert_not_called()
+                    odb.assert_not_called()
+                self.assertEqual(resp.status_code, 404)
+
+    @override_settings(VIN_REPORTS_ENABLED=False)
+    def test_nhtsa_decode_still_works(self):
+        with patch('httpx.get', return_value=nhtsa_response()):
+            resp = self.clients['anon'].get(DECODE)
+        self.assertEqual(resp.status_code, 200)
+
+    @override_settings(VIN_REPORTS_ENABLED=True)
+    def test_enabled_flag_restores_auth_check(self):
+        self.assertEqual(self.clients['anon'].get(REPORT).status_code, 401)
+
+    @override_settings(VIN_REPORTS_ENABLED=False)
+    def test_registry_status_is_frozen_not_unconfigured(self):
+        for key in ('vin_report', 'opendatabot'):
+            status = next(s for s in registry.get_statuses(with_health=False) if s.key == key)
+            self.assertEqual(status.mode, 'off')
+            self.assertIn('заморожено', status.reason)
+            self.assertFalse(status.needs_attention)
+
+    @override_settings(VIN_REPORTS_ENABLED=True, OPENDATABOT_API_KEY='', OPENDATABOT_MODE='auto')
+    def test_registry_status_normal_when_enabled(self):
+        status = next(s for s in registry.get_statuses(with_health=False) if s.key == 'opendatabot')
+        self.assertNotIn('заморожено', status.reason)
+
+
+class SendNotificationRetryTests(SimpleTestCase):
+    def test_autoretry_covers_transport_errors(self):
+        from integrations.tasks import send_notification
+        self.assertIn(httpx.TransportError, send_notification.autoretry_for)
+        self.assertIn(OSError, send_notification.autoretry_for)
+
+
+class OpendatabotModeOffTests(APITestCase):
+    @override_settings(VIN_REPORTS_ENABLED=True, OPENDATABOT_MODE='off', OPENDATABOT_API_KEY='realkey123456')
+    def test_mode_off_with_key_makes_no_paid_call(self):
+        client = auth_client(make_user('odb_off@test.com'))
+        with patch('httpx.get') as g:
+            registry_resp = client.get(REGISTRY)
+            report_resp = client.get(REPORT)
+            g.assert_not_called()
+        self.assertEqual(registry_resp.status_code, 503)
+        self.assertIs(registry_resp.json()['configured'], False)
+        self.assertEqual(RegistryReport.objects.count(), 0)
+        self.assertEqual(report_resp.status_code, 200)
+
+    @override_settings(VIN_REPORTS_ENABLED=True)
+    def test_report_rejects_forbidden_letters(self):
+        client = auth_client(make_user('rep_vin@test.com'))
+        self.assertEqual(client.get('/api/v1/vehicles/1HGBH41JXMN10918Q/report/').status_code, 400)

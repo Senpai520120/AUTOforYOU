@@ -11,6 +11,7 @@ MODULE_FLAGS = {
     'b2b': 'B2B_ENABLED',
     'dealers': 'DEALERS_ENABLED',
     'shipments': 'SHIPMENTS_ENABLED',
+    'vin_reports': 'VIN_REPORTS_ENABLED',  # 3.2a: carVertical-отчёт и реестры Opendatabot
 }
 
 

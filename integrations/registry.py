@@ -12,6 +12,8 @@ from typing import Callable
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
+from core.modules import module_enabled
+
 from .base import (
     ENV_SET,
     MODE_OFF,
@@ -123,12 +125,30 @@ def _vin_decode():
                            checklist_anchor='2.5')
 
 
+FROZEN_REASON = 'Вимкнено (заморожено до розморозки, VIN_REPORTS_ENABLED=false). Налаштовувати не потрібно'
+
+
+def _frozen_status(key, title) -> ProviderStatus:
+    """Платные VIN-провайдеры заморожены флагом: статус «вимкнено», а не «не налаштовано» (3.2a)."""
+    setting = mode_setting_name(key)
+    return ProviderStatus(
+        key=key, title=title, mode=MODE_OFF, configured=False, reason=FROZEN_REASON,
+        env_vars=('VIN_REPORTS_ENABLED', setting), mode_setting=setting,
+        env_states={n: env_state(n) for n in (setting,)},
+        notes=['Заморожено: ключі не потрібні'], checklist_anchor='3.2a',
+    )
+
+
 def _vin_report():
+    if not module_enabled('vin_reports'):
+        return _frozen_status('vin_report', 'VIN-звіт (carVertical)')
     return settings_status('vin_report', 'VIN-звіт (carVertical)', credentials=('CARVERTICAL_API_KEY',),
                            checklist_anchor='2.5')
 
 
 def _opendatabot():
+    if not module_enabled('vin_reports'):
+        return _frozen_status('opendatabot', 'Opendatabot (реєстри)')
     return settings_status('opendatabot', 'Opendatabot (реєстри)', credentials=('OPENDATABOT_API_KEY',),
                            checklist_anchor='2.5')
 

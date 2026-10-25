@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -161,3 +161,34 @@ class PublicApiTests(CleanCacheTestCase):
         r = self.client.post(reverse('admin:site_settings_sitesettings_change', args=[1]), form)
         self.assertEqual(r.status_code, 302)
         self.assertEqual(APIClient().get(URL).json()['phone'], '+380509998877')
+
+
+class CarverticalPartnerUrlTests(CleanCacheTestCase):
+    def _url(self):
+        return APIClient().get(URL).json()['carvertical_partner_url']
+
+    @override_settings(CARVERTICAL_PARTNER_URL='')
+    def test_empty_means_no_link(self):
+        self.assertEqual(self._url(), '')
+
+    @override_settings(CARVERTICAL_PARTNER_URL='https://partner.example/ref?id=1')
+    def test_https_url_is_passed(self):
+        self.assertEqual(self._url(), 'https://partner.example/ref?id=1')
+
+    @override_settings(CARVERTICAL_PARTNER_URL='javascript:alert(1)')
+    def test_non_https_is_dropped(self):
+        self.assertEqual(self._url(), '')
+
+    @override_settings(CARVERTICAL_PARTNER_URL='http://partner.example/ref')
+    def test_plain_http_is_dropped(self):
+        self.assertEqual(self._url(), '')
+
+    @override_settings(CARVERTICAL_PARTNER_URL='your_partner_url')
+    def test_placeholder_is_dropped(self):
+        self.assertEqual(self._url(), '')
+
+    def test_url_is_not_stuck_in_cache(self):
+        with override_settings(CARVERTICAL_PARTNER_URL='https://partner.example/a'):
+            self.assertEqual(self._url(), 'https://partner.example/a')
+        with override_settings(CARVERTICAL_PARTNER_URL=''):
+            self.assertEqual(self._url(), '')

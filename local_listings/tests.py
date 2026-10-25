@@ -3,6 +3,7 @@ import os
 from datetime import timedelta
 from unittest.mock import patch
 
+import httpx
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -25,6 +26,7 @@ from tests.factories import (
     make_moderator,
     make_staff,
     make_user,
+    nhtsa_response,
 )
 from tests.test_uploads import admin_form_data, image_bytes, use_temp_media
 
@@ -395,27 +397,45 @@ class TestLocalListingFilters(APITestCase):
 
 class TestVinPrefill(APITestCase):
     def test_vin_prefill_from_nhtsa(self):
-        mock_data = {
-            'demo': False, 'provider': 'nhtsa_vpic', 'vin': '1HGCM82633A004352',
-            'make': 'Honda', 'model': 'Accord', 'year': 2003,
-            'engine_cc': 2354, 'fuel_type': 'petrol', 'body_class': 'Sedan',
-        }
-        with patch('local_listings.views.NHTSAVinDecodeProvider') as MockProv:
-            MockProv.return_value.decode.return_value = mock_data
+        with patch('httpx.get') as mock_get:
+            mock_get.return_value = nhtsa_response(Make='HONDA', Model='Accord', ModelYear='2003',
+                                                   DisplacementCC='2354', FuelTypePrimary='Gasoline')
             r = self.client.get('/api/v1/local/vin-prefill/1HGCM82633A004352/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data['make'], 'Honda')
+        self.assertEqual(r.data['make'], 'HONDA')
+        self.assertEqual(r.data['engine_cc'], 2354)
         self.assertFalse(r.data['cached'])
 
     def test_vin_prefill_from_cache(self):
         vin = '1HGCM82633A004352'
-        cached = {'demo': False, 'provider': 'nhtsa_vpic', 'vin': vin, 'make': 'Honda', 'model': 'Accord', 'year': 2003}
+        cached = {'demo': False, 'provider': 'nhtsa_vpic', 'vin': vin, 'make': 'Honda', 'model': 'Accord', 'year': 2003,
+                  'valid': True}
         VinReport.objects.create(vin=vin, provider='nhtsa_vpic', report_data=cached, demo=False)
-        with patch('local_listings.views.NHTSAVinDecodeProvider') as MockProv:
+        with patch('httpx.get') as mock_get:
             r = self.client.get(f'/api/v1/local/vin-prefill/{vin}/')
-            MockProv.assert_not_called()
+            mock_get.assert_not_called()
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data['cached'])
+
+    def test_vin_prefill_is_throttled_with_expensive_scope(self):
+        cache.clear()
+        rates = {**settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], 'expensive': '2/min'}
+        with override_settings(REST_FRAMEWORK={**settings.REST_FRAMEWORK, 'DEFAULT_THROTTLE_RATES': rates}),                 patch.object(SimpleRateThrottle, 'THROTTLE_RATES', rates),                 patch('httpx.get', return_value=nhtsa_response()):
+            codes = [self.client.get('/api/v1/local/vin-prefill/1HGCM82633A004352/').status_code for _ in range(3)]
+        cache.clear()
+        self.assertEqual(codes, [200, 200, 429])
+
+    def test_vin_prefill_rejects_forbidden_letters_without_network(self):
+        with patch('httpx.get') as mock_get:
+            r = self.client.get('/api/v1/local/vin-prefill/1HGCM82633A00435Q/')
+            mock_get.assert_not_called()
+        self.assertEqual(r.status_code, 400)
+
+    def test_vin_prefill_network_error_is_generic_503(self):
+        with patch('httpx.get', side_effect=httpx.ConnectError('boom internal host 10.0.0.5')):
+            r = self.client.get('/api/v1/local/vin-prefill/1HGCM82633A004352/')
+        self.assertEqual(r.status_code, 503)
+        self.assertNotIn('10.0.0.5', r.content.decode())
 
     def test_vin_too_short_returns_400(self):
         r = self.client.get('/api/v1/local/vin-prefill/SHORT/')

@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from core.modules import MODULE_FLAGS, module_enabled
 
 from .models import PUBLIC_CACHE_KEY, SiteSettings
-from .serializers import PublicSiteSettingsSerializer
+from .serializers import PublicSiteSettingsSerializer, carvertical_partner_url
 
 CACHE_TTL = 300
 
@@ -25,4 +25,5 @@ class SiteSettingsView(APIView):
             cache.set(PUBLIC_CACHE_KEY, data, CACHE_TTL)
         # Флаги не кэшируем: это значения из окружения, дешёвые и не должны залипать в кэше.
         data = {**data, **{f'{name}_enabled': module_enabled(name) for name in MODULE_FLAGS}}
+        data['carvertical_partner_url'] = carvertical_partner_url()
         return Response(data)

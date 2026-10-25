@@ -2,6 +2,8 @@ import logging
 
 from celery import shared_task
 
+from integrations.base import RETRYABLE_EXCEPTIONS
+
 logger = logging.getLogger(__name__)
 
 # ─── Импорт лотов аукционов (Apify) ──────────────────────────────────────────
@@ -46,7 +48,7 @@ def import_lot_task(self, lot_data: dict, seller_id: int):
 
 @shared_task(
     bind=True,
-    autoretry_for=(OSError, ConnectionError),
+    autoretry_for=RETRYABLE_EXCEPTIONS,
     retry_kwargs={'max_retries': 3, 'countdown': 60},
     name='integrations.tasks.send_notification',
 )

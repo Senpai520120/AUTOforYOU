@@ -126,3 +126,15 @@ def make_lead(**kw):
                     source='calculator')
     defaults.update(kw)
     return Lead.objects.create(**defaults)
+
+
+def nhtsa_response(**fields):
+    """Мок ответа NHTSA vPIC (DecodeVinValuesExtended) для `patch('httpx.get')`. ErrorCode по умолчанию '0'."""
+    from unittest.mock import MagicMock
+
+    row = {'ErrorCode': '0', 'Make': 'HONDA', 'Model': 'Civic', 'ModelYear': '2021'}
+    row.update(fields)
+    resp = MagicMock()
+    resp.json.return_value = {'Results': [row]}
+    resp.raise_for_status = MagicMock()
+    return resp

@@ -6,6 +6,7 @@ import { CalcOption, CalcRatesResponse, CalcResult } from '@/lib/types';
 import { CalcErrorView, describeCalcError } from '@/lib/calc-errors';
 import { trackCalculatorVisitOnce } from '@/lib/metrics';
 import CalcBreakdown from '@/components/calculator/CalcBreakdown';
+import PartnerVinLink from '@/components/calculator/PartnerVinLink';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
 
@@ -251,6 +252,7 @@ export default function CalculatorPage() {
       <Suspense fallback={<FormSkeleton />}>
         <CalculatorLoader />
       </Suspense>
+      <PartnerVinLink />
     </div>
   );
 }

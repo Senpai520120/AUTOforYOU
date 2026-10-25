@@ -1,8 +1,21 @@
+from urllib.parse import urlparse
+
+from django.conf import settings
 from rest_framework import serializers
 
 from core.modules import module_enabled
+from integrations.base import is_placeholder
 
 from .models import SiteSettings
+
+
+def carvertical_partner_url() -> str:
+    """Партнёрская ссылка carVertical из .env. Пусто, плейсхолдер или не https - пустая строка (ссылки нет)."""
+    url = str(getattr(settings, 'CARVERTICAL_PARTNER_URL', '') or '').strip()
+    if is_placeholder(url):
+        return ''
+    parsed = urlparse(url)
+    return url if parsed.scheme == 'https' and parsed.netloc else ''
 
 
 class PublicSiteSettingsSerializer(serializers.ModelSerializer):
@@ -17,6 +30,9 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
     b2b_enabled = serializers.SerializerMethodField()
     dealers_enabled = serializers.SerializerMethodField()
     shipments_enabled = serializers.SerializerMethodField()
+    vin_reports_enabled = serializers.SerializerMethodField()
+    # Задача 3.2a: партнёрская ссылка carVertical из .env; пусто - фронт ссылку не показывает.
+    carvertical_partner_url = serializers.SerializerMethodField()
 
     def get_lots_enabled(self, obj) -> bool:
         return module_enabled('lots')
@@ -29,6 +45,12 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
 
     def get_shipments_enabled(self, obj) -> bool:
         return module_enabled('shipments')
+
+    def get_vin_reports_enabled(self, obj) -> bool:
+        return module_enabled('vin_reports')
+
+    def get_carvertical_partner_url(self, obj) -> str:
+        return carvertical_partner_url()
 
     def get_partner_consent_text(self, obj) -> str:
         from leads.services import PARTNER_CONSENT_TEMPLATE
@@ -45,6 +67,7 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'legal_docs_approved', 'legal_docs_updated_at',
             'legal_docs_version', 'legal_docs_reconsent_required',
             'owner_configured', 'partner_consent_text',
-            'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled',
+            'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled', 'vin_reports_enabled',
+            'carvertical_partner_url',
         ]
         read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

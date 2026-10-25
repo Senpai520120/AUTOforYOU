@@ -510,6 +510,9 @@ export interface SiteSettings {
   b2b_enabled: boolean;
   dealers_enabled: boolean;
   shipments_enabled: boolean;
+  vin_reports_enabled: boolean;
+  /** Партнерське посилання carVertical (3.2a); порожній рядок — посилання немає. */
+  carvertical_partner_url: string;
 }
 
 // Заявки брокеру (задача 2.3)

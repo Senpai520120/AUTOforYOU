@@ -261,6 +261,8 @@ LOTS_ENABLED = os.environ.get('LOTS_ENABLED', 'false').strip().lower() in ('true
 B2B_ENABLED = os.environ.get('B2B_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 DEALERS_ENABLED = os.environ.get('DEALERS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 SHIPMENTS_ENABLED = os.environ.get('SHIPMENTS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+# Задача 3.2a: платные VIN-отчёты и реестры (carVertical, Opendatabot) заморожены; NHTSA-декодер флагом не закрыт.
+VIN_REPORTS_ENABLED = os.environ.get('VIN_REPORTS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 # Q7: legacy cars (/api/calculate/, /api/list/). Код cars/ не меняется, выключается подключение маршрутов.
 LEGACY_CARS_API_ENABLED = os.environ.get('LEGACY_CARS_API_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 
@@ -434,13 +436,16 @@ OPENDATABOT_API_KEY = os.environ.get('OPENDATABOT_API_KEY', '')
 # Apify — скрейпер лотов аукционов. Без токена → demo=True, не падает.
 APIFY_TOKEN = os.environ.get('APIFY_TOKEN', '')
 CARVERTICAL_API_KEY = os.environ.get('CARVERTICAL_API_KEY', '')
+# Партнёрская ссылка carVertical (выдаёт программа партнёров). Пусто - ссылка на сайте не показывается.
+CARVERTICAL_PARTNER_URL = os.environ.get('CARVERTICAL_PARTNER_URL', '').strip()
 
 # Режимы провайдеров (задача 3.1): auto | real | demo | off. auto: ключ задан и не плейсхолдер -> real,
 # иначе off («не налаштовано»). Недопустимое значение -> ошибка manage.py check (integrations.E001).
 NBU_MODE = os.environ.get('NBU_MODE', '').strip().lower() or 'auto'
 VIN_DECODE_MODE = os.environ.get('VIN_DECODE_MODE', '').strip().lower() or 'auto'
-VIN_REPORT_MODE = os.environ.get('VIN_REPORT_MODE', '').strip().lower() or 'auto'
-OPENDATABOT_MODE = os.environ.get('OPENDATABOT_MODE', '').strip().lower() or 'auto'
+# VIN-отчёт и Opendatabot заморожены (3.2a): по умолчанию off.
+VIN_REPORT_MODE = os.environ.get('VIN_REPORT_MODE', '').strip().lower() or 'off'
+OPENDATABOT_MODE = os.environ.get('OPENDATABOT_MODE', '').strip().lower() or 'off'
 LOTS_MODE = os.environ.get('LOTS_MODE', '').strip().lower() or 'auto'
 LIQPAY_MODE = os.environ.get('LIQPAY_MODE', '').strip().lower() or 'auto'
 EMAIL_MODE = os.environ.get('EMAIL_MODE', '').strip().lower() or 'auto'
@@ -612,6 +617,8 @@ if _TESTING:
     B2B_ENABLED = True
     DEALERS_ENABLED = True
     SHIPMENTS_ENABLED = True
+    VIN_REPORTS_ENABLED = True
+    CARVERTICAL_PARTNER_URL = ''
     LEGACY_CARS_API_ENABLED = False
     OPENDATABOT_API_KEY = ''
     APIFY_TOKEN = ''

@@ -23,8 +23,8 @@ from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from core.uploads import ImageUploadError, max_bytes_from_setting, sanitize_image
-from integrations.models import VinReport
-from integrations.providers import NHTSAVinDecodeProvider
+from integrations.services import decode_vin
+from integrations.validators import normalize_vin
 from metrics.models import MetricKey
 from metrics.services import record_metric
 from users.permissions import IsEmailVerified
@@ -214,27 +214,13 @@ class MyListingsView(generics.ListAPIView):
 )
 class VinPrefillView(APIView):
     permission_classes = [permissions.AllowAny]
+    # Тот же лимит, что у /vehicles/<vin>/decode/: оба ходят в NHTSA.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'expensive'
 
     def get(self, request, vin: str):
-        vin = vin.upper()
-        if len(vin) != 17:
-            return Response({'error': 'VIN має бути 17 символів.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        cached = VinReport.objects.filter(vin=vin, provider='nhtsa_vpic').first()
-        if cached:
-            return Response({**cached.report_data, 'cached': True})
-
-        provider = NHTSAVinDecodeProvider()
-        data = provider.decode(vin)
-
-        if 'error' not in data:
-            VinReport.objects.get_or_create(
-                vin=vin,
-                provider='nhtsa_vpic',
-                defaults={'report_data': data, 'demo': False},
-            )
-
-        return Response({**data, 'cached': False})
+        payload, http_status = decode_vin(normalize_vin(vin))
+        return Response(payload, status=http_status)
 
 
 @extend_schema(tags=['local'], summary='Список областей України')
