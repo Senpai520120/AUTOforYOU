@@ -511,6 +511,11 @@ export interface SiteSettings {
   dealers_enabled: boolean;
   shipments_enabled: boolean;
   vin_reports_enabled: boolean;
+  /** Розділ «Оголошення по Україні» і платежі (задача 6.7): джерело правди — .env бекенда. */
+  c2c_enabled: boolean;
+  /** false = «засів»: оголошення вносить staff, підача/переписка/угоди закриті. */
+  c2c_public_posting_enabled: boolean;
+  payments_enabled: boolean;
   /** Партнерське посилання carVertical (3.2a); порожній рядок — посилання немає. */
   carvertical_partner_url: string;
 }

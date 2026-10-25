@@ -87,6 +87,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'core.middleware.ModuleFlagMiddleware',
+    'core.middleware.C2CFlagMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -265,6 +266,15 @@ SHIPMENTS_ENABLED = os.environ.get('SHIPMENTS_ENABLED', 'false').strip().lower()
 VIN_REPORTS_ENABLED = os.environ.get('VIN_REPORTS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 # Q7: legacy cars (/api/calculate/, /api/list/). Код cars/ не меняется, выключается подключение маршрутов.
 LEGACY_CARS_API_ENABLED = os.environ.get('LEGACY_CARS_API_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+
+# ─── Раздел «Оголошення по Україні» (C2C) и платежи (задача 6.7) ──────────────
+# Читать только через core.c2c (c2c_enabled, c2c_public_posting_enabled, payments_enabled).
+# C2C_ENABLED: раздел виден (false = 404 на всех C2C-маршрутах, фронт показывает «Скоро»).
+# C2C_PUBLIC_POSTING_ENABLED: подача открыта всем (false = «засев», объявления вносит staff).
+# PAYMENTS_ENABLED: создание оплат (promote, checkout); callback LiqPay от флага не зависит.
+C2C_ENABLED = os.environ.get('C2C_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+C2C_PUBLIC_POSTING_ENABLED = os.environ.get('C2C_PUBLIC_POSTING_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
+PAYMENTS_ENABLED = os.environ.get('PAYMENTS_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 
 # ─── Подтверждение email и антибот (задача 1.6) ──────────────────────────────
 _TRUE = ('true', '1', 'yes')
@@ -657,6 +667,10 @@ if _TESTING:
     DEALERS_ENABLED = True
     SHIPMENTS_ENABLED = True
     VIN_REPORTS_ENABLED = True
+    # 6.7: старые тесты C2C и платежей идут при полностью открытых флагах, закрытые режимы - override_settings.
+    C2C_ENABLED = True
+    C2C_PUBLIC_POSTING_ENABLED = True
+    PAYMENTS_ENABLED = True
     CARVERTICAL_PARTNER_URL = ''
     LEGACY_CARS_API_ENABLED = False
     OPENDATABOT_API_KEY = ''

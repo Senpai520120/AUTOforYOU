@@ -104,12 +104,12 @@ export default function LocalListingFilters() {
           <input className={inputCls} type="number" placeholder="2024" value={yearMax} onChange={e => setYearMax(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Ціна від</label>
-          <input className={inputCls} type="number" placeholder="100000" value={priceMin} onChange={e => setPriceMin(e.target.value)} />
+          <label className={labelCls}>Ціна від, $</label>
+          <input className={inputCls} type="number" placeholder="5000" value={priceMin} onChange={e => setPriceMin(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Ціна до</label>
-          <input className={inputCls} type="number" placeholder="1000000" value={priceMax} onChange={e => setPriceMax(e.target.value)} />
+          <label className={labelCls}>Ціна до, $</label>
+          <input className={inputCls} type="number" placeholder="30000" value={priceMax} onChange={e => setPriceMax(e.target.value)} />
         </div>
         <div>
           <label className={labelCls}>КПП</label>

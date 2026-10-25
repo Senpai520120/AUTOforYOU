@@ -7,13 +7,14 @@
 - real: боевой режим (`sandbox=0`);
 - off: оплата выключена.
 
-Адаптер НЕ читает `PAYMENTS_ENABLED` (открыты ли платные услуги - решает задача 4.1) и НЕ отказывает
-в callback при пустом ключе (06-S1 - тоже 4.1): `decode_callback` ведёт себя как раньше.
+Адаптер НЕ читает `PAYMENTS_ENABLED` (создание оплат закрывают views через core.c2c.payments_enabled, 6.7).
+Отказ callback при пустом ключе/режиме off (503) делает view до `decode_callback` (6.7, минимум от 06-S1).
 """
 from django.conf import settings
 from rest_framework import status as http_status
 from rest_framework.response import Response
 
+from core.c2c import payments_enabled
 from integrations.base import (
     LIQPAY_MODES,
     MODE_AUTO,
@@ -119,7 +120,7 @@ class LiqPayProvider(PaymentProvider):
             if not self._public_key().startswith(SANDBOX_KEY_PREFIX):
                 st.notes.append('Увага: режим sandbox, але LIQPAY_PUBLIC_KEY схожий на бойовий ключ')
         # Два независимых уровня: режим провайдера и открытость платных услуг (PAYMENTS_ENABLED, задача 4.1).
-        enabled = bool(getattr(settings, 'PAYMENTS_ENABLED', False))
+        enabled = payments_enabled()
         st.notes.append(f'Платежі: {"увімкнено" if enabled else "вимкнено"} (PAYMENTS_ENABLED)')
         return st
 
@@ -139,7 +140,7 @@ class LiqPayProvider(PaymentProvider):
         )
 
     def decode_callback(self, data: str, signature: str) -> dict:
-        # Намеренно без проверки режима и ключей: отказ при пустом ключе - задача 4.1 (06-S1).
+        # Проверка режима и ключей - во view (503 до БД); подпись сравнивается через hmac.compare_digest (06-S10).
         return self._client().decode_callback(data, signature)
 
     def map_status(self, provider_status: str) -> str:

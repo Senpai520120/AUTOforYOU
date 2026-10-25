@@ -71,6 +71,7 @@ class TestCheckoutValidation(APITestCase):
 class TestCallbackErrorTexts(APITestCase):
     """Клиенту (LiqPay/атакующему) не уходит текст исключения, тип и детали - в лог."""
 
+    @override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
     def test_bad_signature_has_generic_text(self):
         from unittest import mock
 

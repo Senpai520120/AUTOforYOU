@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from rest_framework import serializers
 
+from core.c2c import c2c_enabled, c2c_public_posting_enabled, payments_enabled
 from core.modules import module_enabled
 from integrations.base import is_placeholder
 
@@ -31,8 +32,21 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
     dealers_enabled = serializers.SerializerMethodField()
     shipments_enabled = serializers.SerializerMethodField()
     vin_reports_enabled = serializers.SerializerMethodField()
+    # Задача 6.7: флаги раздела C2C и платежей (из окружения через core.c2c, не из модели).
+    c2c_enabled = serializers.SerializerMethodField()
+    c2c_public_posting_enabled = serializers.SerializerMethodField()
+    payments_enabled = serializers.SerializerMethodField()
     # Задача 3.2a: партнёрская ссылка carVertical из .env; пусто - фронт ссылку не показывает.
     carvertical_partner_url = serializers.SerializerMethodField()
+
+    def get_c2c_enabled(self, obj) -> bool:
+        return c2c_enabled()
+
+    def get_c2c_public_posting_enabled(self, obj) -> bool:
+        return c2c_public_posting_enabled()
+
+    def get_payments_enabled(self, obj) -> bool:
+        return payments_enabled()
 
     def get_lots_enabled(self, obj) -> bool:
         return module_enabled('lots')
@@ -68,6 +82,7 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'legal_docs_version', 'legal_docs_reconsent_required',
             'owner_configured', 'partner_consent_text',
             'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled', 'vin_reports_enabled',
+            'c2c_enabled', 'c2c_public_posting_enabled', 'payments_enabled',
             'carvertical_partner_url',
         ]
         read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

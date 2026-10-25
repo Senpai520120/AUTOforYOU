@@ -13,6 +13,7 @@ LiqPay API client — Python 3.12+.
 """
 import base64
 import hashlib
+import hmac
 import json
 
 LIQPAY_CHECKOUT_URL = 'https://www.liqpay.com/api/3/checkout'
@@ -95,7 +96,7 @@ class LiqPayClient:
         Поднимает LiqPaySignatureError при несовпадении подписи.
         """
         expected = self._sign(data)
-        if expected != signature:
+        if not hmac.compare_digest(expected.encode('utf-8'), str(signature).encode('utf-8')):
             raise LiqPaySignatureError(
                 'Неверная подпись LiqPay — возможна подделка колбэка.'
             )

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getC2CFlags } from '@/lib/c2c';
 
 // INTERNAL_API_URL задається в Docker (http://backend:8000) для SSR.
 const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -75,7 +76,7 @@ const COST_ITEMS = [
 ];
 
 export default async function Home() {
-  const usdRate = await fetchUsdRate();
+  const [usdRate, c2c] = await Promise.all([fetchUsdRate(), getC2CFlags()]);
 
   return (
     <div className="space-y-14">
@@ -116,18 +117,27 @@ export default async function Home() {
               Авто з Copart та IAAI: розрахунок «під ключ», викуп, доставка й розмитнення.
             </p>
           </Link>
-          <Link
-            href="/ua"
-            className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
-            <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
-              Каталог Україна
-            </h3>
-            <p className="text-sm text-slate-500">
-              Оголошення від власників і дилерів по всій Україні. Подати своє — безкоштовно.
-            </p>
-          </Link>
+          {c2c.enabled ? (
+            <Link
+              href="/ua"
+              className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
+              <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
+                Каталог Україна
+              </h3>
+              <p className="text-sm text-slate-500">
+                Оголошення від власників і дилерів по всій Україні.
+                {c2c.postingEnabled ? ' Подати своє — безкоштовно.' : ''}
+              </p>
+            </Link>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-xl p-6 opacity-70" data-testid="home-ua-soon">
+              <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
+              <h3 className="font-bold text-lg text-slate-900 mb-1">Оголошення по Україні — незабаром</h3>
+              <p className="text-sm text-slate-500">Каталог авто від власників і дилерів готується до запуску.</p>
+            </div>
+          )}
         </div>
       </section>
 

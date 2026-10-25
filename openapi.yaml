@@ -1851,6 +1851,8 @@ paths:
           description: OK
         '400':
           description: Неверная подпись или данные
+        '503':
+          description: Оплата не налаштована (нет ключа или LIQPAY_MODE=off)
   /api/v1/payments/liqpay/checkout/:
     post:
       operationId: v1_payments_liqpay_checkout_create

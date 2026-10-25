@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { resendErrorText, resendVerificationEmail } from '@/lib/email-verify';
 import { formatDeletionDate } from '@/lib/deletion';
+import { useC2C } from '@/components/c2c/C2CProvider';
 
 const ROLE_LABELS: Record<string, string> = {
   buyer: 'Покупець',
@@ -60,10 +61,13 @@ function DeletionBanner({ date }: { date: string }) {
 
 export default function MeDashboard() {
   const { user, loading, logout } = useRequireAuth();
+  const c2c = useC2C();
 
   if (loading || !user) return null;
 
-  const menuItems = [
+  // Плитки C2C (переписка, збережені пошуки, мої оголошення, угоди) — лише коли розділ і подача відкриті.
+  const C2C_ONLY = ['/me/messages', '/me/saved-searches', '/me/local-listings', '/me/deals'];
+  const allItems = [
     { href: '/me/profile', icon: '👤', title: 'Профіль', desc: 'Ім\'я, прізвище, телефон' },
     { href: '/me/notifications', icon: '🔔', title: 'Сповіщення', desc: 'Алерти про оголошення, повідомлення' },
     { href: '/me/messages', icon: '💬', title: 'Повідомлення', desc: 'Переписка по оголошеннях' },
@@ -78,6 +82,7 @@ export default function MeDashboard() {
     { href: '/me/telegram', icon: '✈️', title: 'Прив\'язати Telegram', desc: 'Отримуйте сповіщення у Telegram' },
     { href: '/me/data', icon: '🗂️', title: 'Мої дані', desc: 'Завантажити копію даних, видалити акаунт' },
   ];
+  const menuItems = allItems.filter(i => c2c.social || !C2C_ONLY.includes(i.href));
   if (user.role === 'broker' || user.is_admin_role) {
     menuItems.unshift({ href: '/broker/leads', icon: '📥', title: 'Заявки', desc: 'Заявки клієнтів і їх статуси' });
   }

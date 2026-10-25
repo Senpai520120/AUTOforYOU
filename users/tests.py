@@ -1273,6 +1273,8 @@ class CookieAuthTests(CleanCacheTestCase):
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     # Регрессия: эндпоинт без DRF-аутентификации cookie и CSRF не трогают.
+    # Ключи нужны: без них callback отвечает 503 раньше проверки полей (6.7).
+    @override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
     def test_liqpay_callback_ignores_cookie_and_csrf(self):
         self._login()
         resp = self.client.post('/api/v1/payments/liqpay/callback/', {}, format='json')

@@ -7,6 +7,7 @@ import Badge from '@/components/ui/Badge';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
 import LeadForm from '@/components/leads/LeadForm';
+import { useC2C } from '@/components/c2c/C2CProvider';
 
 const FUEL: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид',
@@ -17,6 +18,8 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
   const imgs = v.images;
   const [imgIdx, setImgIdx] = useState(0);
   const [leadOpen, setLeadOpen] = useState(false);
+  // Переписка закрита → лише «Залишити заявку» (контакт по лоту іде через брокера).
+  const chatOpen = useC2C().social;
 
   const currentImg = imgs[imgIdx];
   const imgSrc = currentImg?.image || currentImg?.source_url || null;
@@ -122,7 +125,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
               <LeadForm source="listing" listingId={listing.id}
                 vehicleLabel={`${v.year} ${v.make} ${v.model}`} onNew={() => setLeadOpen(false)} newLabel="Закрити" />
             )}
-            <WriteSellerButton listingType="imported" listingId={listing.id} />
+            {chatOpen && <WriteSellerButton listingType="imported" listingId={listing.id} />}
             <div className="flex justify-center">
               <HeartButton listingType="imported" listingId={listing.id} />
             </div>

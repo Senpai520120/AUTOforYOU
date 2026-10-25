@@ -1,6 +1,7 @@
 import logging
 from datetime import timedelta
 
+from django.http import Http404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -10,12 +11,16 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.c2c import payments_enabled
+
 from .liqpay_client import LiqPaySignatureError
 from .models import Payment
 from .providers import get_payment_provider, unavailable_response
 from .serializers import LiqPayCheckoutSerializer
 
 logger = logging.getLogger(__name__)
+
+CALLBACK_NOT_CONFIGURED_DETAIL = 'Оплата не налаштована'
 
 
 def _apply_local_listing_promote(payment):
@@ -69,6 +74,8 @@ class LiqPayCheckoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not payments_enabled():  # 6.7: создание оплат закрыто флагом, Payment не создаётся
+            raise Http404
         serializer = LiqPayCheckoutSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -133,6 +140,7 @@ class LiqPayCheckoutView(APIView):
     responses={
         200: OpenApiResponse(description='OK'),
         400: OpenApiResponse(description='Неверная подпись или данные'),
+        503: OpenApiResponse(description='Оплата не налаштована (нет ключа или LIQPAY_MODE=off)'),
     },
 )
 class LiqPayCallbackView(APIView):
@@ -143,10 +151,15 @@ class LiqPayCallbackView(APIView):
         data = request.POST.get('data') or request.data.get('data', '')
         signature = request.POST.get('signature') or request.data.get('signature', '')
 
+        # 6.7 (минимум от 06-S1): без настроенного провайдера подпись проверить нечем - 503 до любого обращения к БД.
+        # Callback флагами C2C_*/PAYMENTS_ENABLED не закрывается (Q17).
+        provider = get_payment_provider()
+        if not provider.is_configured():
+            return Response({'detail': CALLBACK_NOT_CONFIGURED_DETAIL}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         if not data or not signature:
             return Response({'error': 'data и signature обязательны.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        provider = get_payment_provider()
         try:
             decoded = provider.decode_callback(data, signature)
         except LiqPaySignatureError as exc:
@@ -164,7 +177,7 @@ class LiqPayCallbackView(APIView):
             payment = Payment.objects.get(order_id=order_id)
         except Payment.DoesNotExist:
             logger.warning('LiqPay callback: платёж order_id=%s не найден', order_id)
-            return Response({'error': f'Платёж {order_id!r} не найден.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Платёж не найден.'}, status=status.HTTP_400_BAD_REQUEST)
 
         new_status = provider.map_status(liqpay_status)
 

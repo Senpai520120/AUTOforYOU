@@ -16,7 +16,9 @@ const PAGE_SIZE = 20;
 export default function LocalCatalogGrid({
   data,
   params,
+  postingEnabled = false,
 }: {
+  postingEnabled?: boolean;
   data: PaginatedResponse<LocalListing> | null;
   params: SearchParams;
 }) {
@@ -34,10 +36,15 @@ export default function LocalCatalogGrid({
         <p className="text-4xl mb-3" aria-hidden="true">🚗</p>
         <p className="font-medium text-slate-600">Оголошень не знайдено</p>
         <p className="text-sm mt-1">
-          Спробуйте змінити фільтри або{' '}
-          <Link href="/local/new" className="text-blue-600 underline">
-            додайте своє оголошення
-          </Link>
+          Спробуйте змінити фільтри
+          {postingEnabled && (
+            <>
+              {' '}або{' '}
+              <Link href="/local/new" className="text-blue-600 underline">
+                додайте своє оголошення
+              </Link>
+            </>
+          )}
         </p>
       </div>
     );

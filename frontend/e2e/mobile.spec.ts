@@ -2,7 +2,21 @@
  * E2E: мобільний smoke (mobile-chrome та mobile-safari, див. playwright.config.ts).
  * Повна мобільна перевірка (горизонтальний скрол, форми) — 23-P43/P44 у задачі 6.1.
  */
+import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
+
+// WebKit: layout динамічний (6.7), гідратація може скинути вже введене значення —
+// повторюємо, доки обидва поля не тримають значення.
+async function fillLogin(page: Page, emailValue: string, passwordValue: string) {
+  const email = page.locator('input[type="email"]');
+  const pass = page.locator('input[type="password"]');
+  await expect(async () => {
+    await email.fill(emailValue);
+    await pass.fill(passwordValue);
+    await expect(email).toHaveValue(emailValue, { timeout: 500 });
+    await expect(pass).toHaveValue(passwordValue, { timeout: 500 });
+  }).toPass();
+}
 
 test.describe('Мобільний smoke @mobile', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -40,8 +54,7 @@ test.describe('Мобільний smoke @mobile', () => {
     const password = process.env.E2E_PASSWORD;
     if (!password) throw new Error('E2E_PASSWORD не задано.');
     await page.goto('/login');
-    await page.locator('input[type="email"]').fill('buyer@e2e.test');
-    await page.locator('input[type="password"]').fill(password);
+    await fillLogin(page, 'buyer@e2e.test', password);
     await page.getByRole('button', { name: 'Увійти' }).click();
 
     await expect(page).toHaveURL(/\/me$/);
@@ -50,8 +63,7 @@ test.describe('Мобільний smoke @mobile', () => {
 
   test('невірний пароль на мобільному → повідомлення, лишаємось на /login', async ({ page }) => {
     await page.goto('/login');
-    await page.locator('input[type="email"]').fill('buyer@e2e.test');
-    await page.locator('input[type="password"]').fill('definitely-wrong-password');
+    await fillLogin(page, 'buyer@e2e.test', 'definitely-wrong-password');
     await page.getByRole('button', { name: 'Увійти' }).click();
 
     await expect(page.getByText('Невірний email або пароль')).toBeVisible();

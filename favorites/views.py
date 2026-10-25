@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.c2c import c2c_public_posting_enabled
 from core.modules import module_enabled
 
 from .models import Favorite
@@ -12,8 +13,12 @@ from .serializers import FavoriteSerializer
 
 
 def _require_lots_for(listing_type):
-    """Избранное по лотам (не 'local') при LOTS_ENABLED=false - 404 (задача 2.8)."""
-    if listing_type != 'local' and not module_enabled('lots'):
+    """Избранное по лотам при LOTS_ENABLED=false - 404 (задача 2.8); по C2C ('local') при выключенном
+    разделе и в засеве - 404 (задача 6.7)."""
+    if listing_type == 'local':
+        if not c2c_public_posting_enabled():
+            raise Http404
+    elif not module_enabled('lots'):
         raise Http404
 
 
@@ -30,6 +35,8 @@ class FavoriteListView(APIView):
         )
         if not module_enabled('lots'):
             qs = qs.filter(imported_listing__isnull=True)
+        if not c2c_public_posting_enabled():
+            qs = qs.filter(local_listing__isnull=True)
         return Response(FavoriteSerializer(qs, many=True).data)
 
     def post(self, request):

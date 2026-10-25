@@ -8,6 +8,7 @@ import { localApi } from '@/api/local';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
 import ReportButton from '@/components/reports/ReportButton';
+import { useC2C } from '@/components/c2c/C2CProvider';
 
 const PLACEHOLDER_SVG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%2394a3b8'%3EФото відсутнє%3C/text%3E%3C/svg%3E";
@@ -28,6 +29,8 @@ const CONDITION_LABELS: Record<string, string> = {
 
 export default function LocalListingDetail({ listing }: { listing: LocalListing }) {
   const { user } = useAuth();
+  // У «засіві» переписка, обране й скарги по C2C закриті (бекенд відповідає 404), кнопки ховаємо.
+  const social = useC2C().social;
   const [activeImg, setActiveImg] = useState(0);
   const [phone, setPhone] = useState<string | null>(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
@@ -85,9 +88,11 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
         <span>{listing.make} {listing.model}</span>
       </div>
 
-      <div className="flex justify-end mb-2">
-        <HeartButton listingType="local" listingId={listing.id} />
-      </div>
+      {social && (
+        <div className="flex justify-end mb-2">
+          <HeartButton listingType="local" listingId={listing.id} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Gallery */}
@@ -176,26 +181,33 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                 >
                   {phone}
                 </a>
+              ) : !user ? (
+                <Link
+                  href="/login"
+                  className="block w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
+                >
+                  Увійдіть, щоб побачити телефон
+                </Link>
               ) : (
                 <button
                   onClick={handleShowPhone}
                   disabled={phoneLoading}
                   className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
                 >
-                  {phoneLoading ? 'Завантаження...' : user ? 'Показати телефон' : 'Увійдіть, щоб побачити телефон'}
+                  {phoneLoading ? 'Завантаження...' : 'Показати телефон'}
                 </button>
               )}
               {phoneError && <p className="mt-1 text-xs text-red-500">{phoneError}</p>}
             </div>
           </div>
 
-          {!isOwner && listing.status === 'active' && (
+          {social && !isOwner && listing.status === 'active' && (
             <div className="mt-3">
               <WriteSellerButton listingType="local" listingId={listing.id} />
             </div>
           )}
 
-          {isOwner && (
+          {social && isOwner && (
             <div className="mt-3 flex gap-2">
               <Link
                 href={`/local/${listing.id}/edit`}
@@ -206,7 +218,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
             </div>
           )}
 
-          {!isOwner && (
+          {social && !isOwner && (
             <div className="mt-3 flex justify-end">
               <ReportButton listingId={listing.id} />
             </div>

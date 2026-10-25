@@ -4,6 +4,7 @@ import Link from 'next/link';
 import LocalListingFilters from '@/components/local/LocalListingFilters';
 import LocalCatalogGrid from './LocalCatalogGrid';
 import SaveSearchButton from '@/components/local/SaveSearchButton';
+import { getC2CFlags } from '@/lib/c2c';
 import { buildQuery, serverGet, type SearchParams } from '@/lib/server-api';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
 
@@ -32,15 +33,26 @@ const LOCAL_FILTERS = [
   'mileage_max', 'search', 'ordering', 'page',
 ] as const;
 
+const NUMERIC_FILTERS = ['year_min', 'year_max', 'price_min', 'price_max', 'mileage_max'] as const;
+
 export default async function UaCatalogPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const data = await serverGet<PaginatedResponse<LocalListing>>(
-    `/api/v1/local/listings/${buildQuery(params, LOCAL_FILTERS)}`,
-  );
+  const flags = await getC2CFlags();
+  // Нечислові значення бекенд відхиляє (400): показуємо підказку замість «не вдалося завантажити».
+  const badFilters = NUMERIC_FILTERS.filter((k) => {
+    const raw = params[k];
+    const v = Array.isArray(raw) ? raw[0] : raw;
+    return v !== undefined && v !== '' && !/^\d+(\.\d+)?$/.test(v);
+  });
+  const data = badFilters.length > 0
+    ? null
+    : await serverGet<PaginatedResponse<LocalListing>>(
+        `/api/v1/local/listings/${buildQuery(params, LOCAL_FILTERS)}`,
+      );
 
   return (
     <div>
@@ -50,15 +62,20 @@ export default async function UaCatalogPage({
           <p className="text-sm text-slate-500 mt-1">Місцеві оголошення від власників</p>
         </div>
         <div className="flex items-center gap-2">
-          <Suspense>
-            <SaveSearchButton />
-          </Suspense>
-          <Link
-            href="/local/new"
-            className="bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
-          >
-            + Подати оголошення
-          </Link>
+          {/* «Засів»: пошуки й подача закриті (бекенд: 404 / 403) — кнопок немає ні в кого. */}
+          {flags.postingEnabled && (
+            <>
+              <Suspense>
+                <SaveSearchButton />
+              </Suspense>
+              <Link
+                href="/local/new"
+                className="bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+              >
+                + Подати оголошення
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -67,7 +84,13 @@ export default async function UaCatalogPage({
       </Suspense>
 
       <div className="mt-6">
-        <LocalCatalogGrid data={data} params={params} />
+        {badFilters.length > 0 ? (
+          <div role="alert" className="text-center py-12 text-red-600" data-testid="ua-filter-error">
+            Некоректне значення фільтра (ціна, рік або пробіг мають бути числом). Змініть фільтри та спробуйте ще раз.
+          </div>
+        ) : (
+          <LocalCatalogGrid data={data} params={params} postingEnabled={flags.postingEnabled} />
+        )}
       </div>
     </div>
   );

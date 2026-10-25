@@ -6,6 +6,7 @@ import { localApi } from '@/api/local';
 import { dealsApi } from '@/api/deals';
 import { LocalListing } from '@/lib/types';
 import PromoteModal from '@/components/local/PromoteModal';
+import { useC2C } from '@/components/c2c/C2CProvider';
 
 interface Buyer { id: number; display_name: string; }
 interface SoldModalState { listing: LocalListing; buyers: Buyer[]; loading: boolean; }
@@ -33,6 +34,8 @@ interface ModalState {
 
 export default function MyLocalListingsPage() {
   const { user, loading } = useRequireAuth();
+  // Платні послуги (просування) — лише при PAYMENTS_ENABLED; інакше кнопок немає.
+  const payments = useC2C().paymentsEnabled;
   const [listings, setListings] = useState<LocalListing[]>([]);
   const [fetching, setFetching] = useState(true);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -195,7 +198,7 @@ export default function MyLocalListingsPage() {
                         {daysLeft > 0 ? ` (${daysLeft} дн.)` : ' — закінчується сьогодні'}
                       </p>
                     )}
-                    {l.status === 'expired' && (
+                    {payments && l.status === 'expired' && (
                       <p className="mt-1 text-xs text-red-600">Термін дії закінчився. Продовжте оголошення.</p>
                     )}
 
@@ -245,7 +248,7 @@ export default function MyLocalListingsPage() {
                       🔄 Продовжити
                     </button>
                   )}
-                  {l.status === 'active' && expiringSoon && (
+                  {payments && l.status === 'active' && expiringSoon && (
                     <button
                       onClick={() => openPromote(l, 'renew')}
                       className="text-sm border border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg transition-colors"
@@ -261,18 +264,22 @@ export default function MyLocalListingsPage() {
                       >
                         ✅ Позначити проданим
                       </button>
-                      <button
+                      {payments && (
+<button
                         onClick={() => openPromote(l, 'bump')}
                         className="text-sm border border-blue-200 hover:bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         ⬆️ Підняти
                       </button>
-                      <button
+                      )}
+                      {payments && (
+<button
                         onClick={() => openPromote(l, 'top')}
                         className="text-sm border border-amber-300 hover:bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         ⭐ ТОП
                       </button>
+                      )}
                     </>
                   )}
 

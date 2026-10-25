@@ -1,8 +1,12 @@
 import type { MetadataRoute } from 'next';
+import { isC2CEnabled } from '@/lib/c2c';
+
+export const dynamic = 'force-dynamic';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const c2c = await isC2CEnabled();
   return {
     rules: {
       userAgent: '*',
@@ -18,6 +22,8 @@ export default function robots(): MetadataRoute.Robots {
         '/register',
         '/admin/',
         '/api/',
+        // Розділ «Оголошення по Україні» закритий, поки C2C_ENABLED=false.
+        ...(c2c ? [] : ['/ua', '/local/']),
       ],
     },
     sitemap: `${siteUrl}/sitemap.xml`,

@@ -15,7 +15,7 @@ export default async function Footer() {
         {/* Футер показується і на /ua — сторінці локальних оголошень, тому опис
             покриває обидва напрямки, а не тільки імпорт. */}
         <p className="font-semibold text-white mb-1">AUTOforYOU</p>
-        <p>Авто з аукціонів США під ключ · Оголошення по Україні</p>
+        <p>Авто з аукціонів США під ключ{s?.c2c_enabled === true ? ' · Оголошення по Україні' : ''}</p>
         {(owner || contacts.length > 0 || tgUrl) && (
           <p className="mt-2 text-xs text-slate-500" data-testid="footer-requisites">
             {owner && <span>{owner}{s?.owner_code ? `, код ${s.owner_code}` : ''}</span>}

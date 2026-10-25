@@ -1,6 +1,10 @@
 import type { MetadataRoute } from 'next';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
 import { serverGet } from '@/lib/server-api';
+import { isC2CEnabled } from '@/lib/c2c';
+
+// Залежить від прапорця C2C з API: без цього збірка запекла б значення на момент build.
+export const dynamic = 'force-dynamic';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
 
@@ -12,13 +16,15 @@ async function fetchLocalListings(): Promise<LocalListing[]> {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Лоти імпорту (/listings) заморожені (задача 2.8): у sitemap їх немає і лоти не запитуються.
-  const localListings = await fetchLocalListings();
+  // C2C вимкнено: /ua і /local/* у sitemap немає, оголошення не запитуються.
+  const c2c = await isC2CEnabled();
+  const localListings = c2c ? await fetchLocalListings() : [];
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${siteUrl}/`, changeFrequency: 'daily', priority: 1 },
     // Каталог України раніше в sitemap не потрапляв, хоча це єдиний розділ
     // з реальними оголошеннями.
-    { url: `${siteUrl}/ua`, changeFrequency: 'hourly', priority: 0.9 },
+    ...(c2c ? [{ url: `${siteUrl}/ua`, changeFrequency: 'hourly' as const, priority: 0.9 }] : []),
     { url: `${siteUrl}/calculator`, changeFrequency: 'monthly', priority: 0.7 },
     // Юридичні документи мають бути публічно доступними та індексованими
     { url: `${siteUrl}/terms`, changeFrequency: 'yearly', priority: 0.3 },

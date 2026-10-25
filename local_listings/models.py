@@ -7,6 +7,29 @@ from django.utils import timezone
 from core.uploads import SanitizedImageField, UuidUploadTo
 
 
+def price_to_usd(price, currency, rates=None, on_date=None):
+    """Сумма в USD по последнему курсу не позже on_date (прямой X->USD или обратный USD->X); нет курса - None."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    from pricing.cache import get_exchange_rates
+    from pricing.calculator import pick_exchange_rate
+
+    if price is None:
+        return None
+    price = Decimal(str(price))
+    if currency == 'USD':
+        return price.quantize(Decimal('0.01'))
+    rates = get_exchange_rates() if rates is None else rates
+    on_date = on_date or timezone.localdate()
+    direct = pick_exchange_rate(rates, currency, 'USD', on_date)
+    if direct is not None and direct.rate:
+        return (price * direct.rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    inverse = pick_exchange_rate(rates, 'USD', currency, on_date)
+    if inverse is not None and inverse.rate:
+        return (price / inverse.rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return None
+
+
 class Region(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name='Область')
     slug = models.SlugField(max_length=100, unique=True)
@@ -136,6 +159,12 @@ class LocalListing(models.Model):
     currency = models.CharField(
         max_length=3, choices=Currency.choices, default=Currency.UAH, verbose_name='Валюта'
     )
+    # 6.7 (05-Q3): цена в USD по курсу на момент сохранения - единая шкала для фильтра и сортировки.
+    # Пусто, если курса нет (такое объявление не попадает в фильтр по цене). На лету курс не применяется.
+    price_usd = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True, editable=False, db_index=True,
+        verbose_name='Ціна, USD (за курсом на момент збереження)',
+    )
     price_type = models.CharField(
         max_length=20, choices=PriceType.choices, default=PriceType.FIXED, verbose_name='Тип ціни'
     )
@@ -200,6 +229,11 @@ class LocalListing(models.Model):
         if not self.pk and self.expires_at is None:
             days = getattr(settings, 'LOCAL_LISTING_EXPIRY_DAYS', 30)
             self.expires_at = timezone.now() + timedelta(days=days)
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or {'price', 'currency'} & set(update_fields):
+            self.price_usd = price_to_usd(self.price, self.currency)
+            if update_fields is not None:
+                kwargs['update_fields'] = [*update_fields, 'price_usd']
         super().save(*args, **kwargs)
 
     def __str__(self):

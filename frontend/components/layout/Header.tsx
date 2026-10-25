@@ -4,23 +4,28 @@ import { useAuth } from '@/lib/auth-context';
 import { useEffect, useState } from 'react';
 import { getUnreadCount as getMsgUnread } from '@/api/messages';
 import { getUnreadCount as getNotifUnread } from '@/api/notifications';
+import { useC2C } from '@/components/c2c/C2CProvider';
 
 export default function Header() {
   const { user, logout } = useAuth();
+  const c2c = useC2C();
+  // Переписка закрита (C2C вимкнено або «засів») — іконки й опитування messages/unread-count немає.
+  const chatOpen = c2c.social;
   const [msgUnread, setMsgUnread] = useState(0);
   const [notifUnread, setNotifUnread] = useState(0);
 
   useEffect(() => {
     if (!user) { setMsgUnread(0); setNotifUnread(0); return; }
+    if (!chatOpen) setMsgUnread(0);
     let cancelled = false;
     const load = () => {
-      getMsgUnread().then(d => { if (!cancelled) setMsgUnread(d.unread_count); }).catch(() => {});
+      if (chatOpen) getMsgUnread().then(d => { if (!cancelled) setMsgUnread(d.unread_count); }).catch(() => {});
       getNotifUnread().then(d => { if (!cancelled) setNotifUnread(d.unread_count); }).catch(() => {});
     };
     load();
     const interval = setInterval(load, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user]);
+  }, [user, chatOpen]);
 
   const handleLogout = () => { void logout(); };
 
@@ -34,7 +39,9 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-          <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
+          {c2c.enabled && (
+            <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
+          )}
           <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
           {/* role приходить із сервера й клієнтом не змінюється; реальний доступ перевіряє API (403).
               На вузьких екранах пункт «Заявки» є в /me. */}
@@ -58,7 +65,7 @@ export default function Header() {
                 )}
               </Link>
               {/* Chat icon */}
-              <Link href="/me/messages" className="relative hover:text-amber-400 transition-colors" aria-label="Повідомлення">
+              {chatOpen && <Link href="/me/messages" className="relative hover:text-amber-400 transition-colors" aria-label="Повідомлення">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
@@ -67,7 +74,7 @@ export default function Header() {
                     {msgUnread > 9 ? '9+' : msgUnread}
                   </span>
                 )}
-              </Link>
+              </Link>}
               <Link href="/me" className="hover:text-amber-400 transition-colors truncate min-w-0 max-w-[8rem] sm:max-w-[16rem]">
                 {user.email.split('@')[0]}
               </Link>

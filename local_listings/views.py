@@ -13,15 +13,18 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
+from core.c2c import payments_enabled
 from core.uploads import ImageUploadError, max_bytes_from_setting, sanitize_image
 from integrations.services import decode_vin
 from integrations.validators import normalize_vin
@@ -31,6 +34,7 @@ from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
+from .permissions import POSTING_CLOSED_DETAIL, CanPostLocalListing, posting_allowed
 from .serializers import (
     CitySerializer,
     LocalListingCreateSerializer,
@@ -132,7 +136,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [permissions.IsAuthenticated(), IsEmailVerified()]
+            return [permissions.IsAuthenticated(), CanPostLocalListing(), IsEmailVerified()]
         return [permissions.AllowAny()]
 
     def get_serializer_class(self):
@@ -155,7 +159,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 )
 class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
     http_method_names = ['get', 'patch', 'delete', 'head', 'options']
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrAdmin]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, CanPostLocalListing, IsOwnerOrAdmin]
 
     def get_serializer_class(self):
         if self.request.method == 'PATCH':
@@ -219,6 +223,11 @@ class VinPrefillView(APIView):
     throttle_scope = 'expensive'
 
     def get(self, request, vin: str):
+        # Помощник формы подачи: пока подача закрыта (6.7), недоступен (аноним в открытом режиме - как раньше).
+        if not posting_allowed(request.user):
+            if not request.user.is_authenticated:
+                raise NotAuthenticated()
+            raise PermissionDenied(POSTING_CLOSED_DETAIL)
         payload, http_status = decode_vin(normalize_vin(vin))
         return Response(payload, status=http_status)
 
@@ -257,7 +266,7 @@ def _get_owned_listing(pk, user):
     description='Завантажити одне або кілька фото. Перше фото стає головним, якщо головного ще немає.',
 )
 class LocalListingImageUploadView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanPostLocalListing]
     parser_classes = [MultiPartParser, FormParser]
     # Каждый запрос декодирует и пересохраняет картинки (задача 1.10): отдельный лимит.
     throttle_classes = [UserRateThrottle, ScopedRateThrottle]
@@ -322,7 +331,7 @@ class LocalListingImageUploadView(APIView):
     summary='Видалити або призначити головним фото оголошення',
 )
 class LocalListingImageDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanPostLocalListing]
 
     def _get(self, pk, img_id, user):
         listing, err = _get_owned_listing(pk, user)
@@ -407,6 +416,8 @@ class LocalListingPromoteView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
+        if not payments_enabled():  # 6.7: платные услуги закрыты, платёж не создаётся
+            raise Http404
         listing = get_object_or_404(LocalListing, pk=pk)
         if listing.owner != request.user and not request.user.has_perm('local_listings.moderate_locallisting'):
             return Response(

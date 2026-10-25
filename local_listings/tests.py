@@ -1,6 +1,7 @@
 import io
 import os
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 import httpx
@@ -19,6 +20,7 @@ from integrations.models import VinReport
 from local_listings.models import PromotionTariff
 from local_listings.tasks import expire_listings, warn_expiring_listings
 from payments.models import Payment
+from pricing.models import ExchangeRate
 from tests.factories import (
     TEST_PASSWORD,
     auth_client,
@@ -342,6 +344,10 @@ class TestLocalListingFilters(APITestCase):
         self.r2 = Region.objects.create(name='Одеська область', slug='odeska')
         self.c1 = City.objects.create(region=self.r1, name='Київ', slug='kyiv')
         self.c2 = City.objects.create(region=self.r2, name='Одеса', slug='odesa')
+        # 6.7 (05-Q3): цена в каталоге считается в USD по курсу на момент сохранения.
+        cache.clear()
+        self.addCleanup(cache.clear)
+        ExchangeRate.objects.create(from_currency='UAH', to_currency='USD', rate=Decimal('0.025'), date=timezone.localdate())
 
         def _mk(region, city, fuel, price, year):
             return LocalListing.objects.create(
@@ -369,7 +375,8 @@ class TestLocalListingFilters(APITestCase):
         self.assertNotIn(self.l1.pk, ids)
 
     def test_filter_by_price_range(self):
-        r = self.client.get('/api/v1/local/listings/?price_min=400000&price_max=600000')
+        # 300000/500000/800000 UAH * 0.025 = 7500/12500/20000 USD
+        r = self.client.get('/api/v1/local/listings/?price_min=10000&price_max=15000')
         ids = {item['id'] for item in r.data['results']}
         self.assertIn(self.l2.pk, ids)
         self.assertNotIn(self.l1.pk, ids)
