@@ -19,7 +19,6 @@ from .base import (
     MODE_OFF,
     ProviderStatus,
     env_state,
-    is_placeholder,
     mode_setting_name,
     resolve_mode,
 )
@@ -117,7 +116,9 @@ def settings_status(key, title, credentials=(), extra_vars=(), needs_credentials
 
 
 def _nbu():
-    return settings_status('nbu', 'Курс НБУ', needs_credentials=False, checklist_anchor='2.5')
+    from pricing.rates_provider import NbuRateProvider
+
+    return NbuRateProvider().status()
 
 
 def _vin_decode():
@@ -167,17 +168,12 @@ def _liqpay():
 
 
 def _email():
-    backend = str(getattr(settings, 'EMAIL_BACKEND', '') or '')
-    is_smtp = 'smtp' in backend.lower()
-    host_ok = env_state('EMAIL_HOST') == ENV_SET
-    from_ok = not is_placeholder(getattr(settings, 'DEFAULT_FROM_EMAIL', ''))
-    ok = is_smtp and host_ok and from_ok
-    status = settings_status(
-        'email', 'Пошта (SMTP)', credentials=('EMAIL_BACKEND', 'EMAIL_HOST', 'DEFAULT_FROM_EMAIL'),
-        extra_vars=('EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD'), has_credentials=ok, checklist_anchor='2.4',
-    )
-    if not ok and status.mode == MODE_OFF and not status.reason.startswith('Помилка'):
-        status.reason = 'Не налаштовано: потрібні EMAIL_BACKEND (smtp), EMAIL_HOST, DEFAULT_FROM_EMAIL'
+    from .email import EmailProvider
+
+    status = EmailProvider().status()
+    from_state = env_state('DEFAULT_FROM_EMAIL')
+    if from_state != ENV_SET:
+        status.notes.append(f'Відправник (DEFAULT_FROM_EMAIL): {from_state}')
     return status
 
 

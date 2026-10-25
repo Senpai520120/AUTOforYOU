@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { ApiError } from '@/api/client';
-import { resendVerificationEmail } from '@/lib/email-verify';
+import { resendErrorText, resendVerificationEmail } from '@/lib/email-verify';
 
 /** Повідомлення «Підтвердіть email» з посиланням на повторну відправку листа. */
 export default function EmailNotVerified({ className = '' }: { className?: string }) {
@@ -14,9 +13,7 @@ export default function EmailNotVerified({ className = '' }: { className?: strin
       await resendVerificationEmail();
       setState('sent');
     } catch (err) {
-      setMsg(err instanceof ApiError && err.status === 429
-        ? 'Забагато спроб. Спробуйте пізніше.'
-        : 'Не вдалося надіслати лист. Спробуйте пізніше.');
+      setMsg(resendErrorText(err));
       setState('error');
     }
   };

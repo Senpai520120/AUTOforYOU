@@ -123,8 +123,8 @@ class TestRegisterSendsVerification(CleanCacheTestCase):
         self.assertTrue(User.objects.filter(email=REG['email']).exists())
 
     def test_smtp_failure_does_not_break_registration(self):
-        with mock.patch('users.emails.send_mail', side_effect=OSError('smtp down')):
-            with self.assertLogs('users.emails', level='ERROR'):
+        with mock.patch('django.core.mail.EmailMessage.send', side_effect=OSError('smtp down')):
+            with self.assertLogs('integrations.email', level='WARNING'):
                 resp = self.client.post(REGISTER_URL, REG, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 

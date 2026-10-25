@@ -25,7 +25,14 @@ def check_integration_modes(app_configs=None, **kwargs):
                 hint=f'Задайте змінні {", ".join(status.env_vars)} або поставте {status.mode_setting}=auto.',
                 id='integrations.W001',
             ))
-        if not settings.DEBUG and status.mode == MODE_DEMO:
+        if not settings.DEBUG and status.mode == MODE_DEMO and status.key == 'email':
+            messages.append(Error(
+                'Пошта: EMAIL_MODE=demo при DEBUG=False - тіла листів (посилання скидання пароля) '
+                'зберігаються в Outbox.',
+                hint='На проді поставте EMAIL_MODE=auto або real.',
+                id='integrations.E002',
+            ))
+        elif not settings.DEBUG and status.mode == MODE_DEMO:
             messages.append(Warning(
                 f'{status.title}: режим demo при DEBUG=False.',
                 hint=f'На проді поставте {status.mode_setting}=auto або real.',

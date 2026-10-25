@@ -469,7 +469,30 @@ EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'false').lower() in ('true', '1', 'yes')
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '') or 'noreply@localhost'
+# Без дефолта-домена (01-C3): пустой адрес = пошта «не налаштовано» (integrations/email.py).
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '').strip()
+
+
+def _positive_int_env(name, default):
+    try:
+        value = int(os.environ.get(name, '') or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+# Таймаут SMTP-соединения, секунды: зависший сервер не держит воркер (Н-28).
+EMAIL_TIMEOUT = _positive_int_env('EMAIL_TIMEOUT', 10)
+# Сколько последних записей OutboxMessage хранить (demo-режимы email и Telegram).
+DEMO_OUTBOX_KEEP = _positive_int_env('DEMO_OUTBOX_KEEP', 200)
+
+# ─── Курс НБУ (задача 3.4a) ───────────────────────────────────────────────────
+# Базовый URL API НБУ без query; параметры valcode/date/json добавляет провайдер.
+NBU_API_URL = os.environ.get(
+    'NBU_API_URL', 'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange',
+).strip()
+# Курс старше этого числа дней (относительно даты расчёта) даёт предупреждение в ответе калькулятора.
+EXCHANGE_RATE_MAX_AGE_DAYS = _positive_int_env('EXCHANGE_RATE_MAX_AGE_DAYS', 3)
 
 # ─── JWT ──────────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
@@ -624,7 +647,14 @@ if _TESTING:
     APIFY_TOKEN = ''
     CARVERTICAL_API_KEY = ''
     NBU_MODE = VIN_DECODE_MODE = VIN_REPORT_MODE = OPENDATABOT_MODE = 'auto'
-    LOTS_MODE = LIQPAY_MODE = EMAIL_MODE = TELEGRAM_MODE = 'auto'
+    LOTS_MODE = LIQPAY_MODE = TELEGRAM_MODE = 'auto'
+    # Почта в тестах: locmem-бекенд + явный real (auto при не-SMTP бекенде = «не налаштовано»).
+    EMAIL_MODE = 'real'
+    DEFAULT_FROM_EMAIL = 'noreply@afy-mail.test'
+    EMAIL_TIMEOUT = 10
+    DEMO_OUTBOX_KEEP = 200
+    NBU_API_URL = 'https://nbu.example.test/exchange'
+    EXCHANGE_RATE_MAX_AGE_DAYS = 3
     INTEGRATIONS_HTTP_TIMEOUT = 10
     LIQPAY_PUBLIC_KEY = ''
     LIQPAY_PRIVATE_KEY = ''

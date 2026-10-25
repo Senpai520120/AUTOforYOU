@@ -58,3 +58,41 @@ class IntegrationHealth(models.Model):
 
     def __str__(self):
         return self.provider_key
+
+
+class OutboxMessage(models.Model):
+    """Что демо-режим отправил бы вместо реального сервиса (письма, Telegram) - задача 3.4a.
+
+    Нужна, чтобы владелец и e2e видели уведомления без SMTP и бота. Пишется только в demo-режиме,
+    хранятся последние `DEMO_OUTBOX_KEEP` записей. В админке только чтение.
+    """
+    PROVIDER_CHOICES = [('email', 'Пошта'), ('telegram', 'Telegram')]
+
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, verbose_name='Провайдер')
+    recipient = models.CharField(max_length=255, blank=True, verbose_name='Отримувач')
+    subject = models.CharField(max_length=255, blank=True, verbose_name='Тема')
+    body = models.TextField(blank=True, verbose_name='Текст')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Час')
+
+    class Meta:
+        verbose_name = 'Outbox (демо-відправка)'
+        verbose_name_plural = 'Outbox (демо-відправки)'
+        ordering = ['-created_at', '-pk']
+
+    def __str__(self):
+        return f'{self.provider} -> {self.recipient or "-"}: {self.subject[:40]}'
+
+
+def write_outbox(provider: str, recipient: str = '', subject: str = '', body: str = '') -> 'OutboxMessage':
+    """Записывает демо-отправку и обрезает таблицу до `DEMO_OUTBOX_KEEP` последних записей."""
+    from django.conf import settings
+
+    row = OutboxMessage.objects.create(
+        provider=provider, recipient=str(recipient)[:255], subject=str(subject)[:255], body=body,
+    )
+    keep = max(1, int(getattr(settings, 'DEMO_OUTBOX_KEEP', 200)))
+    stale = OutboxMessage.objects.order_by('-created_at', '-pk').values_list('pk', flat=True)[keep:]
+    stale_ids = list(stale)
+    if stale_ids:
+        OutboxMessage.objects.filter(pk__in=stale_ids).delete()
+    return row

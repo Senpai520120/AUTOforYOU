@@ -925,7 +925,7 @@ class TestFetchNbuRatesTask(CleanCacheTestCase):
         get_exchange_rates()
         self.assertIsNotNone(cache.get(KEYS['exchange']))
 
-        with patch('pricing.nbu.urlopen', side_effect=self._nbu_side_effect):
+        with patch('pricing.rates_provider.urlopen', side_effect=self._nbu_side_effect):
             result = fetch_nbu_rates_task()
 
         # Курсы сохранены
@@ -955,7 +955,7 @@ class TestFetchNbuRatesTask(CleanCacheTestCase):
 
         from pricing.tasks import fetch_nbu_rates_task
 
-        with patch('pricing.nbu.urlopen', side_effect=URLError('timeout')):
+        with patch('pricing.rates_provider.urlopen', side_effect=URLError('timeout')):
             with self.assertRaises((URLError, Retry)):
                 fetch_nbu_rates_task()
 

@@ -22,7 +22,11 @@
       <td>
         {% for name, state in s.env_rows %}<code>{{ name }}</code>{% if state %}: {{ state }}{% endif %}<br>{% endfor %}
       </td>
-      <td>{{ s.last_success_at|default:"-" }}</td>
+      <td>{{ s.last_success_at|default:"-" }}{% if s.key == 'nbu' %}
+        <form method="post" action="{% url 'admin:integrations_refresh_nbu' %}">{% csrf_token %}<button type="submit" class="button">Оновити курс НБУ</button></form>
+        {% elif s.key == 'email' %}
+        <form method="post" action="{% url 'admin:integrations_test_email' %}">{% csrf_token %}<button type="submit" class="button">Надіслати тестовий лист</button></form>
+        {% endif %}</td>
       <td>{% if s.last_error_at %}{{ s.last_error_at }}<br><small>{{ s.last_error }}</small>{% else %}-{% endif %}</td>
       <td>{% if s.checklist_anchor %}docs/LAUNCH_CHECKLIST.md, розділ {{ s.checklist_anchor }}{% else %}-{% endif %}</td>
     </tr>

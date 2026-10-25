@@ -1043,16 +1043,34 @@ class RegistryTests(TestCase):
         status = next(s for s in registry.get_statuses() if s.key == 't_broken')
         self.assertEqual(status.reason, 'Помилка перевірки статусу')
 
-    @override_settings(EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend', EMAIL_HOST='smtp.example.com',
-                       DEFAULT_FROM_EMAIL='noreply@example.com')
+    @override_settings(EMAIL_MODE='auto', EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+                       EMAIL_HOST='smtp.example.com', DEFAULT_FROM_EMAIL='noreply@mail.afy.test')
     def test_email_configured_with_smtp(self):
         status = next(s for s in registry.get_statuses() if s.key == 'email')
         self.assertEqual((status.mode, status.configured), ('real', True))
 
-    @override_settings(EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend', EMAIL_HOST='')
+    @override_settings(EMAIL_MODE='auto', EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend', EMAIL_HOST='')
     def test_email_smtp_without_host_not_configured(self):
         status = next(s for s in registry.get_statuses() if s.key == 'email')
         self.assertEqual((status.mode, status.configured), ('off', False))
+
+    @override_settings(EMAIL_MODE='real', EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+                       EMAIL_HOST='', DEFAULT_FROM_EMAIL='noreply@mail.afy.test')
+    def test_email_real_smtp_without_host_not_configured(self):
+        status = next(s for s in registry.get_statuses() if s.key == 'email')
+        self.assertEqual((status.mode, status.configured), ('real', False))
+
+    @override_settings(EMAIL_MODE='real', EMAIL_BACKEND='django.core.mail.backends.dummy.EmailBackend',
+                       DEFAULT_FROM_EMAIL='noreply@mail.afy.test')
+    def test_email_real_dummy_backend_not_configured(self):
+        status = next(s for s in registry.get_statuses() if s.key == 'email')
+        self.assertEqual((status.mode, status.configured), ('real', False))
+
+    @override_settings(EMAIL_MODE='real', EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+                       DEFAULT_FROM_EMAIL='noreply@mail.afy.test', IS_TESTING=False)
+    def test_email_real_locmem_outside_tests_not_configured(self):
+        status = next(s for s in registry.get_statuses() if s.key == 'email')
+        self.assertEqual((status.mode, status.configured), ('real', False))
 
 
 class RecordErrorTests(TestCase):

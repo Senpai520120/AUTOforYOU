@@ -390,7 +390,7 @@ class AnonymizeTests(AccountTestCase):
 
     def test_smtp_failure_does_not_block_anonymization(self):
         self._schedule(days_ago=4)
-        with mock.patch('users.emails.send_mail', side_effect=OSError('smtp down')):
+        with mock.patch('django.core.mail.EmailMessage.send', side_effect=OSError('smtp down')):
             self.assertEqual(self._run_task(), 1)
         self.user.refresh_from_db()
         self.assertIsNotNone(self.user.deleted_at)

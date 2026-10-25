@@ -624,9 +624,10 @@ class TestDealerApplicationAdmin(TestCase):
         self.assertFalse(self.user.is_verified_dealer)
 
     def test_approve_action_sets_dealer(self):
-        resp = self.client.post('/admin/users/dealerapplication/', {
-            'action': '_approve', '_selected_action': [self.app.pk],
-        })
+        with self.captureOnCommitCallbacks(execute=True):  # письмо уходит после коммита (3.4a)
+            resp = self.client.post('/admin/users/dealerapplication/', {
+                'action': '_approve', '_selected_action': [self.app.pk],
+            })
         self.assertEqual(resp.status_code, status.HTTP_302_FOUND)
         self.app.refresh_from_db()
         self.user.refresh_from_db()

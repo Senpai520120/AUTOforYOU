@@ -7,8 +7,9 @@
   currency, price_type, contact_phone, mileage_km, engine_cc,
   fuel_type, transmission, body_type, condition, region, city
 """
-from django.core.mail import send_mail
 from django.utils import timezone
+
+from integrations.email import send_email
 
 from .models import LocalListing
 
@@ -59,7 +60,7 @@ def _notify_owner(listing: LocalListing, *, approved: bool, reason: str = '') ->
         )
         tg_text = f'❌ Оголошення «{title}» відхилено.\nПричина: {reason}'
 
-    send_mail(subject, body, 'noreply@autoforyou.ua', [user.email], fail_silently=True)
+    send_email(user.email, subject, body)  # не бросает: модерация не зависит от почты
 
     # In-app сповіщення
     try:

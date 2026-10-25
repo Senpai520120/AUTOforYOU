@@ -22,6 +22,7 @@ from pricing.models import (
     PensionFundBracket,
     UsLandRoute,
 )
+from pricing.rates_provider import DemoRateProvider
 
 # ПРОВЕРИТЬ — прожиточный минимум 2026 (Украина, грн/месяц)
 # https://minfin.com.ua/ua/economy/budget/subsistence/
@@ -74,15 +75,12 @@ class Command(BaseCommand):
                 defaults=dict(cost_usd=cost, valid_from=today)
             )
 
-        # --- Курсы валют ---
-        ExchangeRate.objects.get_or_create(
-            from_currency='USD', to_currency='UAH', date=today,
-            defaults=dict(rate=Decimal('41.50'), source='demo')
-        )
-        ExchangeRate.objects.get_or_create(
-            from_currency='USD', to_currency='EUR', date=today,
-            defaults=dict(rate=Decimal('0.92'), source='demo')
-        )
+        # --- Курсы валют: демо-курсы из DemoRateProvider с source='demo' (02-C8) ---
+        for quote in DemoRateProvider().fetch(today):
+            ExchangeRate.objects.get_or_create(
+                from_currency=quote.from_currency, to_currency=quote.to_currency, date=today,
+                defaults=dict(rate=quote.rate, source=quote.source),
+            )
 
         # --- Ставки акциза ---
         # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026;

@@ -1,17 +1,18 @@
 """Письма пользователю (задача 1.6). Тексты - в users/templates/users/email/*.txt.
 
 Отправитель - settings.DEFAULT_FROM_EMAIL. Ошибка отправки логируется и не валит вызывающего.
-Полноценный SMTP-адаптер со статусом - задача 3.4.
+Доставка - через адаптер почты `integrations.email.send_email` (3.4a): режим `EMAIL_MODE`, очередь Celery.
 """
 import logging
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
+
+from integrations.email import send_email
 
 from .tokens import email_verification_token
 
@@ -28,17 +29,16 @@ def build_verification_url(user):
     return f'{_site_url()}/verify-email?uid={uid}&token={token}'
 
 
-def _send(user, subject, template, context, kind, to=None):
+def _send(user, subject, template, context, kind, to=None, direct=False):
     if not _site_url():
         logger.warning('SITE_URL не задан: письмо %s не отправлено', kind)
         return False
     body = render_to_string(template, context)
-    try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to or user.email], fail_silently=False)
-    except Exception as exc:  # SMTP недоступен - регистрацию не валим
-        logger.error('Не удалось отправить письмо %s: %s', kind, type(exc).__name__)
-        return False
-    return True
+    # Адрес и ссылки в лог не попадают. Почта не настроена или очередь недоступна - вызывающий не падает.
+    result = send_email(to or user.email, subject, body, sync=direct, raise_errors=direct)
+    if not result['queued']:
+        logger.warning('Письмо %s не поставлено в очередь (configured=%s)', kind, result['configured'])
+    return result['queued']
 
 
 def send_verification_email(user):
@@ -58,14 +58,14 @@ def build_password_reset_url(user):
     return f'{_site_url()}/password-reset/confirm?uid={uid}&token={token}'
 
 
-def send_password_reset_email(user):
+def send_password_reset_email(user, direct=False):
     if not _site_url():
         logger.warning('SITE_URL не задан: письмо password_reset не отправлено')
         return False
     return _send(
         user, 'AUTOforYOU: скидання пароля', 'users/email/password_reset.txt',
         {'url': build_password_reset_url(user), 'ttl_minutes': max(1, settings.PASSWORD_RESET_TIMEOUT // 60)},
-        'password_reset',
+        'password_reset', direct=direct,
     )
 
 

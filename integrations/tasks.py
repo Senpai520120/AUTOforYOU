@@ -2,9 +2,36 @@ import logging
 
 from celery import shared_task
 
+from core.tasks import ResilientTask
 from integrations.base import RETRYABLE_EXCEPTIONS
 
 logger = logging.getLogger(__name__)
+
+# ─── Письма (задача 3.4a) ────────────────────────────────────────────────────
+
+# Паузы 60, 120, 240, 480, 900, 900 с (до ~45 мин): минутный сбой SMTP не должен терять письмо.
+EMAIL_RETRY_BACKOFF = 60
+EMAIL_RETRY_BACKOFF_MAX = 900
+EMAIL_MAX_RETRIES = 6
+
+
+@shared_task(
+    base=ResilientTask,
+    retry_backoff=EMAIL_RETRY_BACKOFF,
+    retry_backoff_max=EMAIL_RETRY_BACKOFF_MAX,
+    max_retries=EMAIL_MAX_RETRIES,
+    name='integrations.tasks.send_email_task',
+)
+def send_email_task(to, subject, body):
+    """Асинхронная отправка письма через адаптер почты (Н-28).
+
+    Сбой SMTP повторяется базой ResilientTask; окончательная неудача попадает в FailedTask (8.9).
+    Аргументы (адрес, текст) в учёте упавших задач сводятся к длине строки.
+    """
+    from integrations.email import deliver_email
+
+    return deliver_email(to, subject, body)
+
 
 # ─── Импорт лотов аукционов (Apify) ──────────────────────────────────────────
 

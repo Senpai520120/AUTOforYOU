@@ -12,9 +12,10 @@ import uuid
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
 from django.db import models, transaction
 from django.utils import timezone
+
+from integrations.email import send_email
 
 from .consents import record_consents
 from .models import ConsentDocument, ConsentMethod, DealerApplication
@@ -85,7 +86,9 @@ def _notify(user, *, approved):
         'Ваша заявка на статус дилера отклонена. Свяжитесь с поддержкой для уточнения.'
     )
     # позже заменить на Telegram-уведомление (промт 11)
-    send_mail(subject, body, 'noreply@autoforyou.ua', [user.email], fail_silently=True)
+    to = user.email
+    # После фиксации транзакции: откат одобрения не должен оставлять отправленное письмо.
+    transaction.on_commit(lambda: send_email(to, subject, body))  # не бросает
 
 
 # ─── Сессии и бан ────────────────────────────────────────────────────────────
@@ -218,6 +221,7 @@ def anonymize_user(user, *, due_before=None) -> bool:
     Возвращает False, если аккаунт уже обезличен или удаление отменено.
     """
     from favorites.models import Favorite
+    from integrations.models import OutboxMessage
     from leads.services import anonymize_user_leads
     from local_listings.models import LocalListing, LocalListingImage
     from notifications.models import Notification
@@ -247,6 +251,8 @@ def anonymize_user(user, *, due_before=None) -> bool:
         Notification.objects.filter(user=locked).delete()
         TelegramLinkToken.objects.filter(user=locked).delete()
         DealerApplication.objects.filter(user=locked).delete()
+        # Демо-Outbox хранит адрес и тела писем (ссылки сброса): удаляем записи этого адреса.
+        OutboxMessage.objects.filter(recipient__iexact=email).delete()
 
         # Объявления - в архив (hidden до задачи 4.3, она переведёт их в deleted по owner.deleted_at).
         # Фото удаляются целиком: на них бывают номера и дом.

@@ -2,8 +2,7 @@
 import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
 import { useState } from 'react';
-import { ApiError } from '@/api/client';
-import { resendVerificationEmail } from '@/lib/email-verify';
+import { resendErrorText, resendVerificationEmail } from '@/lib/email-verify';
 import { formatDeletionDate } from '@/lib/deletion';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -23,9 +22,7 @@ function VerifyEmailBanner() {
       await resendVerificationEmail();
       setState('sent');
     } catch (err) {
-      setMsg(err instanceof ApiError && err.status === 429
-        ? 'Забагато спроб. Спробуйте пізніше.'
-        : 'Не вдалося надіслати лист. Спробуйте пізніше.');
+      setMsg(resendErrorText(err));
       setState('error');
     }
   };

@@ -27,6 +27,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from integrations.captcha import captcha_public_config, require_captcha
+from integrations.email import EMAIL_UNAVAILABLE_DETAIL, email_configured
 
 from . import lockout
 from .authentication import enforce_csrf
@@ -292,7 +293,7 @@ class VerifyEmailView(APIView):
     tags=['auth'],
     summary='Отправить письмо подтверждения ещё раз',
     request=None,
-    responses={200: None, 429: None},
+    responses={200: None, 429: None, 503: None},
 )
 class ResendVerificationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -301,6 +302,11 @@ class ResendVerificationView(APIView):
 
     def post(self, request):
         if not request.user.is_email_verified:
+            if not email_configured():
+                return Response(
+                    {'detail': EMAIL_UNAVAILABLE_DETAIL, 'configured': False},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
             send_verification_email(request.user)
         return Response({'ok': True})
 
@@ -316,7 +322,7 @@ RESET_REQUESTED_DETAIL = 'Якщо акаунт із такою адресою �
         'honeypot -> капча (400 captcha_failed) -> только затем поиск пользователя и письмо.'
     ),
     request=PasswordResetRequestSerializer,
-    responses={200: None, 400: None, 429: None},
+    responses={200: None, 400: None, 429: None, 503: None},
 )
 class PasswordResetRequestView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -329,6 +335,12 @@ class PasswordResetRequestView(APIView):
         require_captcha(request, request.data, point='password_reset')
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # Состояние почты общее для всех адресов, поэтому ответ не выдаёт, есть ли аккаунт.
+        if not email_configured():
+            return Response(
+                {'detail': EMAIL_UNAVAILABLE_DETAIL, 'configured': False},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         # Всегда одно и то же действие; поиск пользователя - в задаче, не в запросе.
         try:
             send_password_reset_email_task.delay(serializer.validated_data['email'])

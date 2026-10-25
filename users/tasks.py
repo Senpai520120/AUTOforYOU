@@ -4,6 +4,9 @@ import logging
 from celery import shared_task
 from django.core.management import call_command
 
+from core.tasks import ResilientTask
+from integrations.tasks import EMAIL_MAX_RETRIES, EMAIL_RETRY_BACKOFF, EMAIL_RETRY_BACKOFF_MAX
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,7 +17,13 @@ def flush_expired_tokens():
     call_command('clearsessions')
 
 
-@shared_task
+@shared_task(
+    base=ResilientTask,
+    retry_backoff=EMAIL_RETRY_BACKOFF,
+    retry_backoff_max=EMAIL_RETRY_BACKOFF_MAX,
+    max_retries=EMAIL_MAX_RETRIES,
+    name='users.tasks.send_password_reset_email_task',
+)
 def send_password_reset_email_task(email):
     """Письмо сброса: поиск аккаунта и отправка в воркере, чтобы запрос не выдавал, есть ли аккаунт."""
     from django.contrib.auth import get_user_model
@@ -23,7 +32,9 @@ def send_password_reset_email_task(email):
 
     user = get_user_model().objects.filter(email__iexact=email, is_active=True).first()
     if user is not None:
-        send_password_reset_email(user)
+        # Прямая доставка: воркер уже в фоне, второй .delay потерялся бы при сбое брокера;
+        # ошибка SMTP пробрасывается, ResilientTask повторяет задачу.
+        send_password_reset_email(user, direct=True)
 
 
 @shared_task
