@@ -302,7 +302,7 @@ MATRIX: list[Case] = [
     # GET saved-searches/<pk>/ во view не реализован (405) - строки нет; появится метод - тест полноты потребует.
 
     # ---- Telegram (23-D91) -----------------------------------------------------------
-    Case('telegram-link-token', 'get', other=200),
+    Case('telegram-link-token', 'post', other=200),
     Case('telegram-unlink', 'delete', other=400, state=st_user,
          note='у постороннего Telegram не привязан: 400; привязка владельца цела'),
 

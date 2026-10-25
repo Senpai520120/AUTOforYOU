@@ -326,6 +326,8 @@ REST_FRAMEWORK = {
         'calculator': os.environ.get('THROTTLE_CALCULATOR_RATE', '30/hour'),
         # Клиентские счётчики (8.7): публичный эндпоинт без ПДн, на IP.
         'metrics_event': os.environ.get('THROTTLE_METRICS_EVENT_RATE', '60/min'),
+        # Выдача ссылки привязки Telegram (5.4): каждый вызов пишет токен в БД.
+        'telegram_link': os.environ.get('THROTTLE_TELEGRAM_LINK_RATE', '10/hour'),
     },
     'NUM_PROXIES': NUM_PROXIES_COUNT,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -673,6 +675,7 @@ if _TESTING:
     LIQPAY_PUBLIC_KEY = ''
     LIQPAY_PRIVATE_KEY = ''
     TELEGRAM_BOT_TOKEN = ''
+    TELEGRAM_BOT_USERNAME = ''
     TELEGRAM_UPDATES_MODE = 'polling'
     TELEGRAM_UPDATE_DEDUP_TTL = 86400
     TELEGRAM_BROKER_CHAT_ID = ''

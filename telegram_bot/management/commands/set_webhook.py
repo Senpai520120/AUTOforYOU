@@ -1,44 +1,37 @@
 import asyncio
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from telegram_bot.provider import get_telegram_provider, telegram_real_ready
+from telegram_bot.webhook_setup import WebhookConfigError, build_webhook_config, install_webhook
 
 
 class Command(BaseCommand):
-    help = 'Устанавливает Telegram webhook (для прод. деплоя)'
+    help = (
+        'Устанавливает Telegram webhook (для прод. деплоя). Адрес по умолчанию: SITE_URL + /api/v1/telegram/webhook/. '
+        'Требует TELEGRAM_WEBHOOK_SECRET. Снять webhook: manage.py unset_webhook.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
-            'webhook_url',
-            help='Полный HTTPS-URL webhook, например: https://yourdomain.com/api/v1/telegram/webhook/',
-        )
-        parser.add_argument(
-            '--delete',
-            action='store_true',
-            help='Удалить webhook (перейти в polling-режим)',
+            'webhook_url', nargs='?', default=None,
+            help='Полный HTTPS-URL webhook; по умолчанию SITE_URL + /api/v1/telegram/webhook/',
         )
 
     def handle(self, *args, **options):
         if not telegram_real_ready():
             raise CommandError('TELEGRAM_BOT_TOKEN не задан')
+        try:
+            url, secret = build_webhook_config(options['webhook_url'])
+        except WebhookConfigError as exc:
+            raise CommandError(str(exc)) from None
+        installed = asyncio.run(self._run(url, secret))
+        self.stdout.write(self.style.SUCCESS(f'Webhook установлен: {installed}'))
 
-        webhook_url = options['webhook_url']
-        secret = getattr(settings, 'TELEGRAM_WEBHOOK_SECRET', '') or None
-        delete = options['delete']
-
-        asyncio.run(self._run(webhook_url, secret, delete))
-
-    async def _run(self, webhook_url: str, secret, delete: bool) -> None:
+    @staticmethod
+    async def _run(url: str, secret: str) -> str:
         bot = get_telegram_provider().bot()
         try:
-            if delete:
-                await bot.delete_webhook()
-                self.stdout.write(self.style.SUCCESS('Webhook удалён. Теперь используйте polling (run_bot).'))
-            else:
-                await bot.set_webhook(webhook_url, secret_token=secret)
-                info = await bot.get_webhook_info()
-                self.stdout.write(self.style.SUCCESS(f'Webhook установлен: {info.url}'))
+            return await install_webhook(bot, url, secret)
         finally:
             await bot.session.close()

@@ -16,6 +16,7 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework.throttling import SimpleRateThrottle
 
 from .dispatcher import get_dispatcher
 from .management.commands.run_bot import Command as RunBotCommand
@@ -49,22 +50,86 @@ class TelegramLinkTokenModelTest(TestCase):
 
 # ─── Link-token API ───────────────────────────────────────────────────────────
 
+LINK_URL = '/api/v1/telegram/link-token/'
+BOT_NAME = 'afy_test_bot'
+
+
 class TelegramLinkApiTest(TestCase):
+    """POST link-token: выдача ссылки, честный статус «не налаштовано», аннулирование прежних токенов (5.4)."""
+
     def setUp(self):
+        cache.clear()  # счётчики throttle живут в кэше
         self.user = User.objects.create_user(email='api@test.com', password='pass')
         self.client = APIClient()
 
-    def test_unauth_returns_401(self):
-        r = self.client.get('/api/v1/telegram/link-token/')
-        self.assertEqual(r.status_code, 401)
+    def _configured(self, **kw):
+        return self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_BOT_USERNAME=BOT_NAME, **kw)
 
-    def test_authenticated_returns_token(self):
+    def test_unauth_returns_401(self):
+        self.assertEqual(self.client.post(LINK_URL).status_code, 401)
+
+    def test_get_not_allowed(self):
         self.client.force_authenticate(self.user)
-        r = self.client.get('/api/v1/telegram/link-token/')
+        self.assertEqual(self.client.get(LINK_URL).status_code, 405)
+
+    def test_configured_returns_link_with_bot_username(self):
+        self.client.force_authenticate(self.user)
+        with self._configured():
+            r = self.client.post(LINK_URL)
         self.assertEqual(r.status_code, 200)
-        self.assertIn('token', r.data)
-        self.assertIn('expires_at', r.data)
-        self.assertTrue(TelegramLinkToken.objects.filter(user=self.user).exists())
+        token = TelegramLinkToken.objects.get(user=self.user)
+        self.assertEqual(r.data['link'], f'https://t.me/{BOT_NAME}?start=link_{token.token}')
+        self.assertEqual(r.data['bot_username'], BOT_NAME)
+        self.assertTrue(r.data['configured'])
+        self.assertEqual(r.data['expires_at'], token.expires_at.isoformat())
+        self.assertIn('30', r.data['note'])
+
+    def test_without_bot_username_not_configured_and_no_token_created(self):
+        self.client.force_authenticate(self.user)
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_BOT_USERNAME=''):
+            r = self.client.post(LINK_URL)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data['configured'])
+        self.assertIsNone(r.data['link'])
+        self.assertFalse(TelegramLinkToken.objects.filter(user=self.user).exists())
+
+    def test_without_bot_token_not_configured(self):
+        self.client.force_authenticate(self.user)
+        with self.settings(TELEGRAM_BOT_TOKEN='', TELEGRAM_BOT_USERNAME=BOT_NAME):
+            r = self.client.post(LINK_URL)
+        self.assertFalse(r.data['configured'])
+        self.assertFalse(TelegramLinkToken.objects.filter(user=self.user).exists())
+
+    def test_provider_off_not_configured(self):
+        self.client.force_authenticate(self.user)
+        with self._configured(TELEGRAM_MODE='off'):
+            r = self.client.post(LINK_URL)
+        self.assertFalse(r.data['configured'])
+        self.assertFalse(TelegramLinkToken.objects.filter(user=self.user).exists())
+
+    def test_new_token_revokes_previous_unused_only_for_this_user(self):
+        other = User.objects.create_user(email='other-link@test.com', password='pass')
+        exp = timezone.now() + timedelta(minutes=10)
+        old = TelegramLinkToken.objects.create(user=self.user, expires_at=exp)
+        foreign = TelegramLinkToken.objects.create(user=other, expires_at=exp)
+        self.client.force_authenticate(self.user)
+        with self._configured():
+            r = self.client.post(LINK_URL)
+        old.refresh_from_db()
+        foreign.refresh_from_db()
+        self.assertTrue(old.used)
+        self.assertFalse(foreign.used)
+        self.assertFalse(TelegramLinkToken.objects.get(token=r.data['token']).used)
+
+    def test_throttle_429(self):
+        self.client.force_authenticate(self.user)
+        with self._configured(), patch.dict(SimpleRateThrottle.THROTTLE_RATES, {'telegram_link': '2/hour'}):
+            codes = [self.client.post(LINK_URL).status_code for _ in range(3)]
+        self.assertEqual(codes, [200, 200, 429])
+
+    def test_throttle_rate_is_configured_in_settings(self):
+        from django.conf import settings
+        self.assertEqual(settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['telegram_link'], '10/hour')
 
 
 class TelegramUnlinkApiTest(TestCase):
@@ -90,6 +155,15 @@ class TelegramUnlinkApiTest(TestCase):
         neighbour.refresh_from_db()
         self.assertIsNone(user.telegram_id)
         self.assertEqual(neighbour.telegram_id, 777002)
+
+    def test_unlink_revokes_unused_tokens(self):
+        user = User.objects.create_user(email='tok@test.com', password='pass', telegram_id=777003)
+        token = TelegramLinkToken.objects.create(user=user, expires_at=timezone.now() + timedelta(minutes=10))
+        client = APIClient()
+        client.force_authenticate(user)
+        self.assertEqual(client.delete(self.URL).status_code, 200)
+        token.refresh_from_db()
+        self.assertTrue(token.used)
 
 
 # ─── Рантайм бота: апдейт → webhook → диспетчер → хендлер ────────────────────
@@ -374,12 +448,16 @@ class RunBotCommandTest(TestCase):
 
     def test_polling_uses_shared_dispatcher(self):
         with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN), patch.object(Bot, 'delete_webhook') as delete_webhook, \
+                patch.object(Bot, 'set_my_commands') as set_my_commands, \
                 patch.object(Dispatcher, 'start_polling', autospec=True) as start_polling:
             async_to_sync(RunBotCommand._run)()
 
         delete_webhook.assert_awaited_once_with(drop_pending_updates=False)
         start_polling.assert_awaited_once()
         self.assertIs(start_polling.await_args.args[0], get_dispatcher())
+        set_my_commands.assert_awaited_once()
+        self.assertEqual([c.command for c in set_my_commands.await_args.args[0]],
+                         ['start', 'help', 'latest', 'unlink'])
 
 
 # ─── send_notification task ───────────────────────────────────────────────────
@@ -779,11 +857,13 @@ class RunBotModesTest(TestCase):
                 patch.object(Bot, 'set_webhook') as set_webhook, \
                 patch.object(Bot, 'get_webhook_info', return_value=SimpleNamespace(url=self.URL_OK)), \
                 patch.object(Bot, 'delete_webhook') as delete_webhook, \
+                patch.object(Bot, 'set_my_commands') as set_my_commands, \
                 patch.object(Dispatcher, 'start_polling') as start_polling:
             call_command('run_bot', stdout=out)
         set_webhook.assert_awaited_once_with(self.URL_OK, secret_token=self.SECRET32, drop_pending_updates=False)
         delete_webhook.assert_not_called()
         start_polling.assert_not_called()
+        set_my_commands.assert_awaited_once()
         self.assertIn(f'Webhook установлен: {self.URL_OK}', out.getvalue())
 
     def test_webhook_mode_without_secret_fails_and_does_not_touch_webhook(self):
@@ -816,3 +896,493 @@ class RunBotModesTest(TestCase):
             call_command('run_bot', stdout=StringIO())
         run.assert_called_once()
         set_webhook.assert_not_called()
+
+
+# ─── Тексты бота в админке (5.4) ─────────────────────────────────────────────
+
+class BotTextRegistryTest(TestCase):
+    def test_data_migration_filled_every_registry_key(self):
+        from .models import BotText
+        from .texts import REGISTRY
+        self.assertEqual(set(BotText.objects.values_list('key', flat=True)), set(REGISTRY))
+
+    def test_defaults_are_valid_for_their_own_rules(self):
+        from .texts import REGISTRY, validate_text
+        for key, definition in REGISTRY.items():
+            with self.subTest(key=key):
+                self.assertEqual(validate_text(key, definition.default), [])
+
+    def test_reminder_keys_have_required_placeholders(self):
+        from .texts import REGISTRY
+        self.assertEqual(REGISTRY['listing_expiring'].placeholders, ('title', 'days', 'renew_url'))
+        self.assertIn('renew_url', REGISTRY['listing_expires_today'].placeholders)
+        self.assertIn('renew_url', REGISTRY['listing_expired'].placeholders)
+
+
+class BotTextValidationTest(TestCase):
+    def _errors(self, key, text):
+        from .texts import validate_text
+        return validate_text(key, text)
+
+    def test_unknown_placeholder_rejected(self):
+        [err] = self._errors('start', 'Привіт, {name}')
+        self.assertIn('{name}', err)
+
+    def test_attribute_access_in_placeholder_rejected(self):
+        self.assertEqual(len(self._errors('latest_item', '{title.__class__}')), 1)
+
+    def test_format_spec_rejected(self):
+        self.assertEqual(len(self._errors('latest_item', '{title!r}')), 1)
+
+    def test_script_tag_rejected(self):
+        errors = self._errors('start', 'Привіт <script>alert(1)</script>')
+        self.assertTrue(errors)
+        self.assertIn('<script>', errors[0])
+
+    def test_unclosed_tag_rejected(self):
+        [err] = self._errors('start', 'Привіт <b>друже')
+        self.assertIn('не закрыт тег', err)
+
+    def test_bare_ampersand_and_angle_bracket_rejected(self):
+        self.assertEqual(len(self._errors('start', 'Tom & Jerry')), 1)
+        self.assertEqual(len(self._errors('start', '2 < 3')), 1)
+
+    def test_escaped_entities_and_allowed_tags_accepted(self):
+        self.assertEqual(self._errors('start', '<b>Tom</b> &amp; <i>Jerry</i> <a href="https://x.test">s</a>'), [])
+
+    def test_plain_text_rejects_tags(self):
+        self.assertEqual(len(self._errors('btn_view', '<b>Дивитись</b>')), 1)
+
+    def test_model_clean_raises_validation_error(self):
+        from django.core.exceptions import ValidationError
+
+        from .models import BotText
+        with self.assertRaises(ValidationError) as ctx:
+            BotText(key='start', text='<script>').full_clean(exclude=['updated_at'], validate_unique=False)
+        self.assertIn('text', ctx.exception.message_dict)
+
+
+class BotTextRuntimeTest(BotRuntimeTestCase):
+    def _set(self, key, text):
+        from .models import BotText
+        BotText.objects.update_or_create(key=key, defaults={'text': text})
+
+    def test_edit_applies_without_restart(self):
+        self.send('/start', update_id=1)  # прогревает кэш
+        self._set('start', 'Новий <b>привіт</b>')
+        self.send('/start', update_id=2)
+        self.assertEqual(self.replies()[-1], 'Новий <b>привіт</b>')
+
+    def test_missing_key_falls_back_to_default_with_warning(self):
+        from .models import BotText
+        from .texts import REGISTRY
+        BotText.objects.filter(key='help').delete()
+        with self.assertLogs('telegram_bot.texts', 'WARNING') as logs:
+            self.send('/help')
+        self.assertEqual(self.replies(), [REGISTRY['help'].default])
+        self.assertIn('help', logs.output[0])
+
+    def test_stored_text_with_bad_placeholder_falls_back_to_default(self):
+        from .texts import REGISTRY, get_text
+        self._set('latest_item', '{zzz}')
+        with self.assertLogs('telegram_bot.texts', 'WARNING'):
+            text = get_text('latest_item', title='T', price=1, currency='USD', status='S')
+        self.assertEqual(text, REGISTRY['latest_item'].default.format(title='T', price=1, currency='USD', status='S'))
+
+    def test_latest_uses_edited_card_template_and_escapes_values(self):
+        from tests.factories import make_listing, make_user, make_vehicle
+        self._set('latest_item', '<i>{title}</i> / {price}')
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
+            make_listing(make_vehicle(make='<b>X'), make_user())
+        self.send('/latest')
+        [text] = self.replies()
+        self.assertTrue(text.startswith('<i>&lt;b&gt;X '), text)
+
+    def test_latest_button_text_from_bottext(self):
+        from tests.factories import make_listing, make_user, make_vehicle
+        self._set('btn_view', 'Дивитись')
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
+            make_listing(make_vehicle(), make_user())
+        self.send('/latest')
+        [msg] = self.messages()
+        self.assertEqual(msg.reply_markup.inline_keyboard[0][0].text, 'Дивитись')
+
+    def test_empty_latest_text_from_bottext(self):
+        self._set('latest_empty', 'Порожньо')
+        self.send('/latest')
+        self.assertEqual(self.replies(), ['Порожньо'])
+
+    def test_help_sent_with_html_parse_mode(self):
+        self.send('/help')
+        self.assertEqual(self.messages()[0].parse_mode, 'HTML')
+
+
+class BotTextAdminTest(TestCase):
+    def setUp(self):
+        from tests.factories import make_user
+        cache.clear()
+        self.admin = make_user(is_staff=True, is_superuser=True)
+        self.client.force_login(self.admin)
+
+    def _change_url(self, key):
+        from django.urls import reverse
+
+        from .models import BotText
+        return reverse('admin:telegram_bot_bottext_change', args=[BotText.objects.get(key=key).pk])
+
+    def test_save_with_unknown_placeholder_shows_error_and_does_not_save(self):
+        from .models import BotText
+        from .texts import REGISTRY
+        r = self.client.post(self._change_url('start'), {'text': 'Привіт {unknown}'})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '{unknown}')
+        self.assertEqual(BotText.objects.get(key='start').text, REGISTRY['start'].default)
+
+    def test_save_with_script_tag_shows_error(self):
+        from .models import BotText
+        r = self.client.post(self._change_url('start'), {'text': '<script>x</script>'})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '&lt;script&gt;')
+        self.assertNotEqual(BotText.objects.get(key='start').text, '<script>x</script>')
+
+    def test_valid_save_updates_and_invalidates_cache(self):
+        from .texts import get_text
+        self.assertIn('Ласкаво', get_text('start'))  # кэш прогрет
+        r = self.client.post(self._change_url('start'), {'text': 'Інший <b>текст</b>'})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(get_text('start'), 'Інший <b>текст</b>')
+
+    def test_key_is_readonly_on_change_form(self):
+        r = self.client.get(self._change_url('start'))
+        self.assertNotContains(r, 'name="key"')
+
+    def test_placeholder_hint_lists_allowed(self):
+        from .admin import BotTextAdmin
+        from .models import BotText
+        hint = BotTextAdmin(BotText, None).allowed_placeholders(BotText.objects.get(key='latest_item'))
+        self.assertIn('{title}', hint)
+        self.assertIn('{status}', hint)
+
+
+class TelegramLinkTokenAdminTest(TestCase):
+    def setUp(self):
+        from tests.factories import make_user
+        self.admin = make_user(is_staff=True, is_superuser=True)
+        self.client.force_login(self.admin)
+        self.token = TelegramLinkToken.objects.create(
+            user=self.admin, expires_at=timezone.now() + timedelta(minutes=10))
+
+    def test_changelist_masks_token(self):
+        from django.urls import reverse
+        r = self.client.get(reverse('admin:telegram_bot_telegramlinktoken_changelist'))
+        self.assertContains(r, str(self.token.token)[:8] + '…')
+        self.assertNotContains(r, str(self.token.token))
+
+    def test_change_form_is_readonly_and_masked(self):
+        from django.urls import reverse
+        r = self.client.get(reverse('admin:telegram_bot_telegramlinktoken_change', args=[self.token.pk]))
+        self.assertNotContains(r, str(self.token.token))
+        for field in ('used', 'expires_at_0', 'user', 'token'):
+            self.assertNotContains(r, f'name="{field}"')
+
+    def test_add_forbidden(self):
+        from django.urls import reverse
+        self.assertEqual(self.client.get(reverse('admin:telegram_bot_telegramlinktoken_add')).status_code, 403)
+
+
+# ─── /unlink, меню команд, ссылка привязки ───────────────────────────────────
+
+class BotUnlinkCommandTest(BotRuntimeTestCase):
+    def test_linked_user_unlinked_and_tokens_revoked(self):
+        from tests.factories import make_user
+
+        from .texts import REGISTRY
+        user = make_user(telegram_id=TG_USER_ID)
+        token = TelegramLinkToken.objects.create(user=user, expires_at=timezone.now() + timedelta(minutes=10))
+        self.send('/unlink')
+        user.refresh_from_db()
+        token.refresh_from_db()
+        self.assertIsNone(user.telegram_id)
+        self.assertTrue(token.used)
+        self.assertEqual(self.replies(), [REGISTRY['unlink_ok'].default])
+
+    def test_not_linked_gets_not_linked_reply_and_other_users_untouched(self):
+        from tests.factories import make_user
+
+        from .texts import REGISTRY
+        other = make_user(telegram_id=TG_USER_ID + 1)
+        self.send('/unlink')
+        other.refresh_from_db()
+        self.assertEqual(other.telegram_id, TG_USER_ID + 1)
+        self.assertEqual(self.replies(), [REGISTRY['unlink_not_linked'].default])
+
+    def test_second_link_token_makes_first_stale(self):
+        """23-D93: после выдачи нового токена привязка по старому - «посилання застаріло»."""
+        from tests.factories import make_user
+        cache.clear()
+        user = make_user()
+        client = APIClient()
+        client.force_authenticate(user)
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_BOT_USERNAME=BOT_NAME):
+            first = client.post(LINK_URL).data['token']
+            client.post(LINK_URL)
+        self.send(f'/start link_{first}')
+        user.refresh_from_db()
+        self.assertIsNone(user.telegram_id)
+        self.assertIn('застаріло', self.replies()[0])
+
+
+class SetBotCommandsTest(TestCase):
+    def test_command_sets_four_commands(self):
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN), patch.object(Bot, 'set_my_commands') as setter:
+            call_command('set_bot_commands', stdout=StringIO())
+        [commands] = setter.await_args.args
+        self.assertEqual([(c.command, c.description) for c in commands],
+                         [('start', 'Привітання'), ('help', 'Список команд'),
+                          ('latest', 'Останні оголошення'), ('unlink', "Відв'язати акаунт")])
+
+    def test_descriptions_come_from_bottext(self):
+        from .bot_commands import install_bot_commands
+        from .models import BotText
+        BotText.objects.filter(key='cmd_help').update(text='Допомога')
+        cache.clear()
+        with patch.object(Bot, 'set_my_commands') as setter:
+            async_to_sync(install_bot_commands)(Bot(token=BOT_TOKEN))
+        [commands] = setter.await_args.args
+        self.assertEqual(commands[1].description, 'Допомога')
+
+    def test_without_token_fails(self):
+        with self.settings(TELEGRAM_BOT_TOKEN=''), patch.object(Bot, 'set_my_commands') as setter:
+            with self.assertRaisesMessage(CommandError, 'TELEGRAM_BOT_TOKEN'):
+                call_command('set_bot_commands')
+        setter.assert_not_called()
+
+    def test_run_bot_survives_menu_failure(self):
+        from aiogram.exceptions import TelegramNetworkError
+        err = TelegramNetworkError(method=SendMessage(chat_id=1, text='x'), message='boom')
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN), patch.object(Bot, 'delete_webhook'), \
+                patch.object(Bot, 'set_my_commands', side_effect=err), \
+                patch.object(Dispatcher, 'start_polling', autospec=True) as start_polling:
+            async_to_sync(RunBotCommand._run)()
+        start_polling.assert_awaited_once()
+
+
+class SetWebhookCommandTest(TestCase):
+    SECRET32 = 'a1B2_c3-' * 4
+
+    def _cfg(self, **kw):
+        base = dict(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET=self.SECRET32, SITE_URL='https://site.test')
+        base.update(kw)
+        return self.settings(**base)
+
+    def test_without_secret_fails_and_bot_api_not_called(self):
+        with self._cfg(TELEGRAM_WEBHOOK_SECRET=''), patch.object(Bot, 'set_webhook') as set_webhook:
+            with self.assertRaisesMessage(CommandError, 'TELEGRAM_WEBHOOK_SECRET'):
+                call_command('set_webhook')
+        set_webhook.assert_not_called()
+
+    def test_default_url_from_site_url(self):
+        out = StringIO()
+        url = 'https://site.test/api/v1/telegram/webhook/'
+        with self._cfg(), patch.object(Bot, 'set_webhook') as set_webhook, \
+                patch.object(Bot, 'get_webhook_info', return_value=SimpleNamespace(url=url)):
+            call_command('set_webhook', stdout=out)
+        set_webhook.assert_awaited_once_with(url, secret_token=self.SECRET32, drop_pending_updates=False)
+        self.assertIn(url, out.getvalue())
+
+    def test_explicit_https_url_overrides_site_url(self):
+        url = 'https://other.test/hook/'
+        with self._cfg(SITE_URL='http://localhost'), patch.object(Bot, 'set_webhook') as set_webhook, \
+                patch.object(Bot, 'get_webhook_info', return_value=SimpleNamespace(url=url)):
+            call_command('set_webhook', url, stdout=StringIO())
+        set_webhook.assert_awaited_once_with(url, secret_token=self.SECRET32, drop_pending_updates=False)
+
+    def test_http_url_fails(self):
+        with self._cfg(), patch.object(Bot, 'set_webhook') as set_webhook:
+            with self.assertRaisesMessage(CommandError, 'https://'):
+                call_command('set_webhook', 'http://site.test/hook/')
+        set_webhook.assert_not_called()
+
+    def test_http_site_url_fails(self):
+        with self._cfg(SITE_URL='http://site.test'), patch.object(Bot, 'set_webhook') as set_webhook:
+            with self.assertRaisesMessage(CommandError, 'SITE_URL'):
+                call_command('set_webhook')
+        set_webhook.assert_not_called()
+
+    def test_delete_option_is_gone(self):
+        with self._cfg(), self.assertRaises(CommandError):
+            call_command('set_webhook', '--delete')
+
+
+class UnsetWebhookCommandTest(TestCase):
+    def _run(self, *args):
+        info = SimpleNamespace(url='')
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN), patch.object(Bot, 'get_webhook_info', return_value=info), \
+                patch.object(Bot, 'delete_webhook') as delete_webhook:
+            call_command('unset_webhook', *args, stdout=StringIO())
+        return delete_webhook
+
+    def test_keeps_pending_updates_by_default(self):
+        self._run().assert_awaited_once_with(drop_pending_updates=False)
+
+    def test_drop_pending_flag(self):
+        self._run('--drop-pending').assert_awaited_once_with(drop_pending_updates=True)
+
+
+# ─── send_notification: заблокированный бот ──────────────────────────────────
+
+class SendNotificationBlockedTest(TestCase):
+    def setUp(self):
+        from tests.factories import make_user
+        self.user = make_user(telegram_id=424242)
+        self.token = TelegramLinkToken.objects.create(
+            user=self.user, expires_at=timezone.now() + timedelta(minutes=10))
+
+    def _send(self, exc):
+        from integrations.tasks import send_notification
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN), \
+                patch.object(Bot, 'send_message', new_callable=AsyncMock, side_effect=exc):
+            return send_notification(self.user.pk, 'Hello')
+
+    def test_forbidden_unlinks_and_returns_blocked(self):
+        from aiogram.exceptions import TelegramForbiddenError
+        result = self._send(TelegramForbiddenError(method=SendMessage(chat_id=1, text='x'),
+                                                   message='Forbidden: bot was blocked by the user'))
+        self.assertEqual(result, {'sent': False, 'reason': 'blocked'})
+        self.user.refresh_from_db()
+        self.token.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertTrue(self.token.used)
+
+    def test_bad_request_is_not_retried_and_keeps_binding(self):
+        from aiogram.exceptions import TelegramBadRequest
+        result = self._send(TelegramBadRequest(method=SendMessage(chat_id=1, text='x'),
+                                               message='Bad Request: chat not found'))
+        self.assertEqual(result, {'sent': False, 'reason': 'TelegramBadRequest'})
+        self.user.refresh_from_db()
+        self.token.refresh_from_db()
+        self.assertEqual(self.user.telegram_id, 424242)
+        self.assertFalse(self.token.used)
+
+
+# ─── Посты канала берут тексты из BotText ────────────────────────────────────
+
+class ChannelTextsFromBotTextTest(TestCase):
+    def test_express_prefix_button_and_card_from_bottext(self):
+        from telegram_bot.provider import SendResult
+        from telegram_bot.tasks import post_listing_to_channel
+        from tests.factories import make_listing, make_user, make_vehicle
+
+        from .models import BotText
+        BotText.objects.filter(key='channel_express_prefix').update(text='<b>СРОЧНО</b>\n')
+        BotText.objects.filter(key='btn_view_listing').update(text='Відкрити')
+        BotText.objects.filter(key='channel_listing').update(text='{title} за {price} {currency} {url}')
+        cache.clear()
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
+            listing = make_listing(make_vehicle(make='A&B'), make_user(), is_express_buyout=True)
+        calls = []
+        provider = SimpleNamespace(
+            is_configured=lambda: True,
+            send_message=lambda chat_id, text, **kw: calls.append((text, kw)) or SendResult(ok=True),
+            send_photo=lambda *a, **kw: SendResult(ok=False),
+        )
+        with self.settings(TELEGRAM_CHANNEL_ID='@ch'), \
+                patch('telegram_bot.provider.get_telegram_provider', return_value=provider), \
+                patch('telegram_bot.tasks.time.sleep'):
+            post_listing_to_channel(listing.pk)
+        [(text, kw)] = calls
+        self.assertTrue(text.startswith('<b>СРОЧНО</b>\nA&amp;B '), text)
+        self.assertEqual(kw['buttons'][0]['text'], 'Відкрити')
+
+
+# ─── Ревью 5.4: атрибуты, служебные конструкции, сущности, длины ──────────────
+
+class BotTextHardenedValidationTest(TestCase):
+    def _errors(self, text, key='start'):
+        from .texts import validate_text
+        return validate_text(key, text)
+
+    def test_dangerous_or_unsupported_markup_rejected(self):
+        bad = {
+            'javascript href': '<a href="javascript:alert(1)">x</a>',
+            'tg href': '<a href="tg://user?id=1">x</a>',
+            'http href': '<a href="http://x.test">x</a>',
+            'unquoted tg href': '<a href=tg://x>x</a>',
+            'onclick on b': '<b onclick="x">x</b>',
+            'placeholder in href': '<a href="{title}">x</a>',
+            'href without value': '<a href>x</a>',
+            'a without href attr but with id': '<a id="1">x</a>',
+            'class on a': '<a href="https://x.test" class="y">x</a>',
+            'bad class on code': '<code class="evil">x</code>',
+            'style on pre': '<pre style="x">x</pre>',
+            'nested a': '<a href="https://x.test">1<a href="https://y.test">2</a></a>',
+            'comment': 'a <!-- x --> b',
+            'doctype': '<!DOCTYPE x>',
+            'pi': '<?pi x>',
+            'cdata': '<![CDATA[x]]>',
+            'nbsp entity': 'a&nbsp;b',
+            'zero charref': 'a&#0;b',
+            'surrogate charref': 'a&#xD800;b',
+            'huge charref': 'a&#1114112;b',
+        }
+        for name, text in bad.items():
+            with self.subTest(name):
+                self.assertTrue(self._errors(text, 'latest_item' if 'title' in text else 'start'), text)
+
+    def test_literal_https_link_and_language_class_accepted(self):
+        self.assertEqual(self._errors('<a href="https://x.test/p?a=1">x</a> <code class="language-python">1</code>'), [])
+
+    def test_allowed_entities_accepted(self):
+        self.assertEqual(self._errors('&lt; &gt; &amp; &quot; &#169; &#x41;'), [])
+
+    def test_command_description_length(self):
+        self.assertEqual(len(self._errors('x' * 257, 'cmd_help')), 1)
+        self.assertEqual(len(self._errors('ab', 'cmd_help')), 1)
+        self.assertEqual(self._errors('x' * 256, 'cmd_help'), [])
+
+    def test_button_text_length(self):
+        self.assertEqual(len(self._errors('x' * 65, 'btn_view')), 1)
+        self.assertEqual(self._errors('x' * 64, 'btn_view'), [])
+
+
+class UnlinkRaceAndUsernameTest(TestCase):
+    def test_blocked_old_id_does_not_unlink_new_binding(self):
+        from tests.factories import make_user
+
+        from .models import unlink_telegram
+        user = make_user(telegram_id=2002)
+        token = TelegramLinkToken.objects.create(user=user, expires_at=timezone.now() + timedelta(minutes=10))
+        self.assertFalse(unlink_telegram(user.pk, only_telegram_id=1001))  # старый id, привязка уже новая
+        user.refresh_from_db()
+        token.refresh_from_db()
+        self.assertEqual(user.telegram_id, 2002)
+        self.assertFalse(token.used)
+
+    def test_blocked_current_id_unlinks(self):
+        from tests.factories import make_user
+
+        from .models import unlink_telegram
+        user = make_user(telegram_id=1001)
+        self.assertTrue(unlink_telegram(user.pk, only_telegram_id=1001))
+        user.refresh_from_db()
+        self.assertIsNone(user.telegram_id)
+
+    def test_invalid_bot_username_means_not_configured(self):
+        from tests.factories import make_user
+        cache.clear()
+        user = make_user()
+        client = APIClient()
+        client.force_authenticate(user)
+        for name in ('ab', 'bad name', 'x' * 33, 'bot/../x'):
+            with self.subTest(name), self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_BOT_USERNAME=name):
+                self.assertFalse(client.post(LINK_URL).data['configured'])
+        self.assertFalse(TelegramLinkToken.objects.filter(user=user).exists())
+
+
+class MigrationDefaultsFrozenTest(SimpleTestCase):
+    def test_migration_does_not_import_live_registry(self):
+        import importlib
+        import inspect
+        mod = importlib.import_module('telegram_bot.migrations.0003_bottext_defaults')
+        self.assertNotIn('REGISTRY', inspect.getsource(mod))
+        self.assertIn('start', mod.DEFAULTS)

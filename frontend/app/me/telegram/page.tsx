@@ -2,13 +2,21 @@
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { apiFetch } from '@/api/client';
+import { ApiError, apiFetch } from '@/api/client';
 
 interface LinkTokenResponse {
-  token: string;
-  expires_at: string;
+  configured: boolean;
+  bot_username: string | null;
+  token: string | null;
+  expires_at: string | null;
   link: string | null;
-  note: string;
+  note: string | null;
+}
+
+// Срок действия ссылки: из expires_at ответа API, а не константа на фронте.
+function minutesLeft(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  return Math.max(1, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60000));
 }
 
 export default function TelegramPage() {
@@ -17,6 +25,9 @@ export default function TelegramPage() {
 
   const [generating, setGenerating] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState<string | null>(null);
+  const [ttlMinutes, setTtlMinutes] = useState<number | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,12 +37,25 @@ export default function TelegramPage() {
 
   async function handleGenerateLink() {
     setError(null);
+    setNotConfigured(false);
     setGenerating(true);
     try {
-      const data = await apiFetch<LinkTokenResponse>('/api/v1/telegram/link-token/');
+      const data = await apiFetch<LinkTokenResponse>('/api/v1/telegram/link-token/', { method: 'POST' });
+      if (!data.configured || !data.link) {
+        setLink(null);
+        setNotConfigured(true);
+        return;
+      }
       setLink(data.link);
-    } catch {
-      setError('Не вдалося отримати посилання. Спробуйте ще раз.');
+      setBotUsername(data.bot_username);
+      setTtlMinutes(minutesLeft(data.expires_at));
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : undefined;
+      setError(
+        status === 429
+          ? 'Забагато запитів. Спробуйте за годину.'
+          : 'Не вдалося отримати посилання. Спробуйте ще раз.',
+      );
     } finally {
       setGenerating(false);
     }
@@ -91,6 +115,12 @@ export default function TelegramPage() {
               <p className="text-sm text-slate-600">Telegram ще не прив'язаний до вашого акаунту.</p>
             </div>
 
+            {notConfigured && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3">
+                Telegram-бот ще не налаштований, спробуйте пізніше.
+              </div>
+            )}
+
             {link ? (
               <div className="space-y-3">
                 <p className="text-sm text-slate-600">Натисніть кнопку нижче, щоб відкрити бота і завершити прив'язку:</p>
@@ -100,9 +130,9 @@ export default function TelegramPage() {
                   rel="noopener noreferrer"
                   className="block w-full text-center bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl transition-colors"
                 >
-                  Відкрити @AUTO_F_Y_bot у Telegram →
+                  Відкрити @{botUsername} у Telegram →
                 </a>
-                <p className="text-xs text-slate-400 text-center">Посилання діє 30 хвилин. Після прив'язки оновіть сторінку.</p>
+                <p className="text-xs text-slate-400 text-center">{ttlMinutes ? `Посилання діє ${ttlMinutes} хв. ` : ''}Після прив'язки оновіть сторінку.</p>
                 <button
                   onClick={handleGenerateLink}
                   className="w-full text-sm text-slate-500 hover:text-slate-700 underline"

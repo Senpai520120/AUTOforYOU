@@ -1,11 +1,13 @@
 import hmac
 import json
 import logging
+import re
 from datetime import timedelta
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -13,53 +15,66 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .models import TelegramLinkToken
+from .models import TelegramLinkToken, unlink_telegram
 from .provider import get_telegram_provider, telegram_real_ready
+from .texts import get_text
 
 logger = logging.getLogger(__name__)
 
 
+LINK_TTL_MINUTES = 30
+# Правила Telegram для username бота: 5-32 символа, латиница, цифры, подчёркивание.
+_USERNAME_RE = re.compile(r'^[A-Za-z0-9_]{5,32}$')
+
+
 class TelegramLinkTokenView(APIView):
     """
-    GET /api/v1/telegram/link-token/
-    Генерирует deep-link для привязки Telegram-аккаунта в личном кабинете.
-    Токен действует 30 минут, одноразовый.
+    POST /api/v1/telegram/link-token/
+    Выдаёт deep-link для привязки Telegram. Токен одноразовый, действует LINK_TTL_MINUTES;
+    выдача нового аннулирует прежние неиспользованные токены пользователя.
+    Бот не настроен (нет токена бота, TELEGRAM_BOT_USERNAME или режим не real) ->
+    `configured: false`, токен не создаётся.
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'telegram_link'
 
-    def get(self, request):
-        token_obj = TelegramLinkToken.objects.create(
-            user=request.user,
-            expires_at=timezone.now() + timedelta(minutes=30),
-        )
-        bot_username = getattr(settings, 'TELEGRAM_BOT_USERNAME', '')
-        link = (
-            f'https://t.me/{bot_username}?start=link_{token_obj.token}'
-            if bot_username else None
-        )
+    def post(self, request):
+        bot_username = str(getattr(settings, 'TELEGRAM_BOT_USERNAME', '') or '').strip().lstrip('@')
+        if not (_USERNAME_RE.match(bot_username) and telegram_real_ready()):
+            return Response({
+                'configured': False, 'bot_username': None, 'token': None,
+                'expires_at': None, 'link': None, 'note': None,
+            })
+        with transaction.atomic():
+            TelegramLinkToken.revoke_unused(request.user)
+            token_obj = TelegramLinkToken.objects.create(
+                user=request.user,
+                expires_at=timezone.now() + timedelta(minutes=LINK_TTL_MINUTES),
+            )
         return Response({
+            'configured': True,
+            'bot_username': bot_username,
             'token': str(token_obj.token),
             'expires_at': token_obj.expires_at.isoformat(),
-            'link': link,
-            'note': 'Перейдіть за посиланням у Telegram для прив\'язки акаунту. Діє 30 хвилин.',
+            'link': f'https://t.me/{bot_username}?start=link_{token_obj.token}',
+            'note': get_text('link_token_note', minutes=LINK_TTL_MINUTES),
         })
 
 
 class TelegramUnlinkView(APIView):
     """
     DELETE /api/v1/telegram/link/
-    Відв'язує Telegram-акаунт від профілю поточного користувача.
+    Відв'язує Telegram-акаунт від профілю поточного користувача и аннулирует его неиспользованные токены.
     """
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
-        user = request.user
-        if not user.telegram_id:
-            return Response({'detail': 'Telegram не прив\'язаний.'}, status=400)
-        user.telegram_id = None
-        user.save(update_fields=['telegram_id'])
+        if not unlink_telegram(request.user.pk):
+            return Response({'detail': "Telegram не прив'язаний."}, status=400)
         return Response({'ok': True})
 
 

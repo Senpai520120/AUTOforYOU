@@ -3,7 +3,6 @@ from functools import lru_cache
 from aiogram import Dispatcher
 
 from telegram_bot.handlers import router
-from telegram_bot.middleware import UserBindingMiddleware
 
 
 @lru_cache(maxsize=1)
@@ -18,5 +17,4 @@ def get_dispatcher() -> Dispatcher:
     """
     dp = Dispatcher()
     dp.include_router(router)
-    dp.message.middleware(UserBindingMiddleware())
     return dp

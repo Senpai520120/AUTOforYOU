@@ -267,7 +267,8 @@
 - [ ] `TELEGRAM_UPDATES_MODE` — `polling` (по умолчанию, без домена и HTTPS) или `webhook` (для прода после HTTPS из 7.1) (задача 5.1).
   *Проверка:* для `webhook` в логе `bot` строка «Webhook установлен: https://<домен>/api/v1/telegram/webhook/»; `docker compose restart bot` webhook не снимает.
 - [ ] `TELEGRAM_WEBHOOK_SECRET` — **обязательно для режима webhook** (и для `set_webhook`). Случайная строка от 32 символов, только `A-Z a-z 0-9 _ -`. После заполнения: `docker compose exec backend python manage.py set_webhook`.
-  ⚠ Сейчас команда ставит webhook даже без секрета (находка 07-C4) — исправляется в задаче 5.4. Webhook требует HTTPS (задача 7.1).
+  Команда без секрета или с не-https адресом завершается ошибкой (задача 5.4); адрес по умолчанию `SITE_URL` + `/api/v1/telegram/webhook/`; снять webhook: `unset_webhook` (`--drop-pending` выбрасывает накопленные апдейты). Webhook требует HTTPS (задача 7.1).
+- [ ] Админка → «Тексти Telegram-бота» (задача 5.4): при желании поправить приветствие, `/help`, подписи кнопок и шаблоны постов. Плейсхолдеры в фигурных скобках не удалять и не добавлять свои (допустимые указаны у каждого текста); теги только `b i u s a code pre`. Меню команд бота: `docker compose exec backend python manage.py set_bot_commands` (ставится и при старте бота). *Проверка:* в Telegram у бота видно меню из 4 команд; изменить `start` в админке - `/start` отвечает новым текстом; на `/me/telegram` ссылка ведёт на вашего бота.
 - [ ] `TELEGRAM_CHANNEL_RATE_LIMIT` (`20/m`), `TELEGRAM_UPDATE_DEDUP_TTL`, `THROTTLE_TELEGRAM_LINK_RATE` (`10/hour`) — менять не нужно (задачи 5.1, 5.2, 5.4).
 
 ### 2.8. Защита от ботов и спама

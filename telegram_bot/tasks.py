@@ -33,6 +33,7 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
     from integrations.base import record_skip
     from telegram_bot.formatting import listing_card_html
     from telegram_bot.provider import get_telegram_provider
+    from telegram_bot.texts import get_text
 
     provider = get_telegram_provider()
     if not provider.is_configured():
@@ -64,7 +65,7 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
 
     v = listing.vehicle
     site_url = getattr(settings, 'SITE_URL', 'https://autoforyou.ua')
-    prefix = '⚡ <b>ТЕРМІНОВИЙ ВИКУП</b>\n' if is_express else ''
+    prefix = get_text('channel_express_prefix') if is_express else ''
     text = listing_card_html(
         (v.make, v.model, v.year), listing.price, listing.currency,
         prefix=prefix, url=f'{site_url}/listings/{listing_id}',
@@ -72,7 +73,7 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
     img = v.images.filter(is_primary=True).first() or v.images.first()
     photo_url = (img.source_url or '') if img else ''
 
-    buttons = [{'text': 'Переглянути оголошення', 'url': f'{site_url}/listings/{listing_id}'}]
+    buttons = [{'text': get_text('btn_view_listing'), 'url': f'{site_url}/listings/{listing_id}'}]
     try:
         result = None
         if photo_url:

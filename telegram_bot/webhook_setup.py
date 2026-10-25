@@ -12,8 +12,11 @@ class WebhookConfigError(Exception):
     """Для webhook не хватает настроек; текст говорит, что задать в .env."""
 
 
-def build_webhook_config() -> tuple[str, str]:
-    """(url, secret) из settings или WebhookConfigError. Telegram принимает webhook только по HTTPS."""
+def build_webhook_config(url: str | None = None) -> tuple[str, str]:
+    """(url, secret) из settings или WebhookConfigError. Telegram принимает webhook только по HTTPS.
+
+    `url` - явный адрес (аргумент `set_webhook`); без него адрес = SITE_URL + WEBHOOK_PATH.
+    """
     secret = str(getattr(settings, 'TELEGRAM_WEBHOOK_SECRET', '') or '').strip()
     if not secret:
         raise WebhookConfigError(
@@ -22,6 +25,11 @@ def build_webhook_config() -> tuple[str, str]:
         )
     if not _SECRET_RE.match(secret):
         raise WebhookConfigError('TELEGRAM_WEBHOOK_SECRET должен быть длиной 32-256 символов из A-Z a-z 0-9 _ -.')
+    if url is not None:
+        url = url.strip()
+        if not url.startswith('https://'):
+            raise WebhookConfigError('Webhook-URL должен начинаться с https:// (Telegram не принимает HTTP).')
+        return url, secret
     site_url = str(getattr(settings, 'SITE_URL', '') or '').strip().rstrip('/')
     if not site_url.startswith('https://'):
         raise WebhookConfigError('SITE_URL должен начинаться с https:// (Telegram не принимает webhook по HTTP).')

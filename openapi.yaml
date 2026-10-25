@@ -2141,7 +2141,7 @@ paths:
       operationId: v1_telegram_link_destroy
       description: |-
         DELETE /api/v1/telegram/link/
-        Відв'язує Telegram-акаунт від профілю поточного користувача.
+        Відв'язує Telegram-акаунт від профілю поточного користувача и аннулирует его неиспользованные токены.
       tags:
       - v1
       security:
@@ -2151,12 +2151,14 @@ paths:
         '204':
           description: No response body
   /api/v1/telegram/link-token/:
-    get:
-      operationId: v1_telegram_link_token_retrieve
+    post:
+      operationId: v1_telegram_link_token_create
       description: |-
-        GET /api/v1/telegram/link-token/
-        Генерирует deep-link для привязки Telegram-аккаунта в личном кабинете.
-        Токен действует 30 минут, одноразовый.
+        POST /api/v1/telegram/link-token/
+        Выдаёт deep-link для привязки Telegram. Токен одноразовый, действует LINK_TTL_MINUTES;
+        выдача нового аннулирует прежние неиспользованные токены пользователя.
+        Бот не настроен (нет токена бота, TELEGRAM_BOT_USERNAME или режим не real) ->
+        `configured: false`, токен не создаётся.
       tags:
       - v1
       security:

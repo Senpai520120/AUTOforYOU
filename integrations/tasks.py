@@ -117,5 +117,12 @@ def send_notification(self, user_id: int, text: str, buttons=None):
     result = provider.send_message(telegram_id, text, buttons=buttons)
     logger.info('send_notification: user pk=%s → sent=%s', user_id, result.ok)
     if not result.ok:
+        if result.reason == 'TelegramForbiddenError':
+            # Пользователь заблокировал бота: привязка мертва, дальше слать некуда (5.4, 07-Q13).
+            from telegram_bot.models import unlink_telegram
+            unlink_telegram(user.pk, only_telegram_id=telegram_id)
+            logger.info('send_notification: user pk=%s заблокировал бота, Telegram отвязан', user_id)
+            return {'sent': False, 'reason': 'blocked'}
+        # Прочие ошибки API (в т.ч. TelegramBadRequest) не повторяются: привязка не трогается.
         return {'sent': False, 'reason': result.reason}
     return {'sent': True}

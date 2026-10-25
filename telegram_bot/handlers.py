@@ -6,6 +6,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from telegram_bot.formatting import listing_card_html
+from telegram_bot.texts import aget_text
 
 logger = logging.getLogger(__name__)
 router = Router(name='autoforyou')
@@ -19,33 +20,37 @@ async def cmd_start_deeplink(message: Message, command: CommandObject) -> None:
     if payload.startswith('link_'):
         await _handle_link_token(message, payload[5:])
     else:
-        await message.answer(
-            'Ласкаво просимо до AUTOforYOU!\n'
-            'Для прив\'язки акаунту скористайтесь кнопкою в особистому кабінеті.'
-        )
+        await message.answer(await aget_text('start_other_payload'), parse_mode='HTML')
 
 
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
-    await message.answer(
-        'Ласкаво просимо до AUTOforYOU! 🚗\n\n'
-        '/help — список команд\n'
-        '/latest — останні оголошення\n\n'
-        'Щоб отримувати сповіщення — прив\'яжіть акаунт у особистому кабінеті.'
-    )
+    await message.answer(await aget_text('start'), parse_mode='HTML')
 
 
 # ─── /help ───────────────────────────────────────────────────────────────────
 
 @router.message(Command('help'))
 async def cmd_help(message: Message) -> None:
-    await message.answer(
-        '<b>Команди бота:</b>\n'
-        '/start — привітання\n'
-        '/help — ця довідка\n'
-        '/latest — 3–5 свіжих оголошень (в наявності або в дорозі)',
-        parse_mode='HTML',
-    )
+    await message.answer(await aget_text('help'), parse_mode='HTML')
+
+
+# ─── /unlink ─────────────────────────────────────────────────────────────────
+
+@router.message(Command('unlink'))
+async def cmd_unlink(message: Message) -> None:
+    from asgiref.sync import sync_to_async
+
+    from telegram_bot.models import unlink_telegram
+    from users.models import CustomUser
+
+    @sync_to_async
+    def _unlink(telegram_id: int) -> bool:
+        user_id = CustomUser.objects.filter(telegram_id=telegram_id).values_list('pk', flat=True).first()
+        return user_id is not None and unlink_telegram(user_id)
+
+    unlinked = await _unlink(message.from_user.id)
+    await message.answer(await aget_text('unlink_ok' if unlinked else 'unlink_not_linked'), parse_mode='HTML')
 
 
 # ─── /latest ─────────────────────────────────────────────────────────────────
@@ -88,18 +93,21 @@ async def cmd_latest(message: Message) -> None:
 
     items = await _fetch()
     if not items:
-        await message.answer('Наразі немає активних оголошень.')
+        await message.answer(await aget_text('latest_empty'), parse_mode='HTML')
         return
 
     site_url = getattr(settings, 'SITE_URL', 'https://autoforyou.ua')
+    button_text = await aget_text('btn_view')
     for item in items:
         kb = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(
-                text='Переглянути',
+                text=button_text,
                 url=f'{site_url}/listings/{item["id"]}',
             )
         ]])
-        text = listing_card_html(item['title_parts'], item['price'], item['currency'], item['status'])
+        # Шаблон читается из БД/кэша: вне async-потока ORM недоступен.
+        text = await sync_to_async(listing_card_html)(
+            item['title_parts'], item['price'], item['currency'], item['status'])
         await message.answer(text, reply_markup=kb, parse_mode='HTML')
 
 
@@ -153,16 +161,7 @@ async def _handle_link_token(message: Message, token_str: str) -> None:
             return 'ok'
 
     result = await _process(message.from_user.id, token_str)
-    if result == 'ok':
-        await message.answer('✅ Акаунт успішно прив\'язано до Telegram! Тепер ви отримуватимете сповіщення.')
-    elif result == 'already':
-        await message.answer('ℹ️ Цей Telegram уже прив\'язано до вашого акаунту.')
-    elif result == 'taken':
-        await message.answer(
-            '❌ Цей Telegram уже прив\'язано до іншого акаунту. '
-            'Спочатку відв\'яжіть його там, потім повторіть спробу.'
-        )
-    elif result == 'expired':
-        await message.answer('❌ Посилання застаріло або вже використане. Запросіть нове в особистому кабінеті.')
-    else:
-        await message.answer('❌ Невалідне посилання. Спробуйте ще раз.')
+    key = {
+        'ok': 'link_ok', 'already': 'link_already', 'taken': 'link_taken', 'expired': 'link_expired',
+    }.get(result, 'link_invalid')
+    await message.answer(await aget_text(key), parse_mode='HTML')

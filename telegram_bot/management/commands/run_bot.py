@@ -4,10 +4,20 @@ import logging
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from telegram_bot.bot_commands import install_bot_commands
 from telegram_bot.provider import get_telegram_provider, telegram_real_ready
 from telegram_bot.webhook_setup import WebhookConfigError, build_webhook_config, install_webhook
 
 logger = logging.getLogger(__name__)
+
+
+async def _install_commands(bot) -> None:
+    """Меню команд при старте. Сбой (сеть, лимит) не должен останавливать бота: меню можно поставить позже."""
+    try:
+        await install_bot_commands(bot)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('run_bot: не удалось установить меню команд (%s); повторите manage.py set_bot_commands',
+                       type(exc).__name__)
 
 
 class Command(BaseCommand):
@@ -56,6 +66,7 @@ class Command(BaseCommand):
         bot = get_telegram_provider().bot()
         try:
             await install_webhook(bot, url, secret)
+            await _install_commands(bot)
         finally:
             await bot.session.close()
 
@@ -68,6 +79,8 @@ class Command(BaseCommand):
         # Idempotent: снимаем webhook перед polling, чтобы не было конфликта, если
         # предыдущий запуск был в webhook-режиме. Накопленные апдейты не выбрасываем (07-Q9).
         await bot.delete_webhook(drop_pending_updates=False)
+
+        await _install_commands(bot)
 
         dp = get_dispatcher()
 
