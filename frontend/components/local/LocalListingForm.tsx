@@ -50,7 +50,8 @@ function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void
               <button
                 type="button"
                 onClick={() => remove(i)}
-                className="absolute top-1 right-1 bg-white/90 hover:bg-white text-red-600 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1 right-1 bg-white/90 hover:bg-white text-red-600 text-xs font-bold w-8 h-8 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                aria-label="Видалити фото"
               >
                 ✕
               </button>
@@ -242,7 +243,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Марка *</label>
           <input className={inputCls} value={make} onChange={e => setMake(e.target.value)} required placeholder="Toyota" />
@@ -310,8 +311,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="sm:col-span-2">
           <label className={labelCls}>Ціна *</label>
           <input className={inputCls} type="number" value={price} onChange={e => setPrice(e.target.value)} required placeholder="500000" min={0} />
           {errors.price && <p className={errCls}>{errors.price}</p>}
@@ -324,7 +325,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
             <option value="EUR">EUR</option>
           </select>
         </div>
-        <div className="col-span-3">
+        <div className="sm:col-span-3">
           <label className={labelCls}>Тип ціни</label>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -337,7 +338,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Область *</label>
           <select className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }} required>

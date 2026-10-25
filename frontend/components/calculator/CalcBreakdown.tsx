@@ -39,6 +39,7 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
     <div className="bg-white border border-slate-200 rounded-xl p-6 mt-2" data-testid="calc-result">
       <DemoBanner show={result.is_demo} title={result.demo_banner.title} text={result.demo_banner.text} />
       <h3 className="font-bold text-lg text-slate-900 mb-4">Деталізація вартості «під ключ»</h3>
+      <div className="overflow-x-auto" data-testid="calc-breakdown-scroll">
       <table className="w-full">
         <thead>
           <tr className="text-xs text-slate-500 uppercase">
@@ -77,6 +78,7 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
           </tr>
         </tfoot>
       </table>
+      </div>
       <p className="text-xs text-amber-700 mt-4 bg-amber-50 rounded p-2">
         #{result.calculation_id} · {result.warning}
       </p>

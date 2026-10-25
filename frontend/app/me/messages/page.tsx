@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getConversations, getConversation, sendMessage } from '@/api/messages';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
@@ -20,6 +20,7 @@ function timeAgo(iso: string) {
 export default function MessagesPage() {
   const { user, loading } = useRequireAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [active, setActive] = useState<ConversationDetail | null>(null);
@@ -122,6 +123,13 @@ export default function MessagesPage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
+  // На < md тред і список не стоять поруч: «назад» скидає активний діалог і ?conv=.
+  const backToList = () => {
+    setActiveId(null);
+    setActive(null);
+    router.push('/me/messages');
+  };
+
   if (loading || !user) return null;
 
   return (
@@ -143,7 +151,7 @@ export default function MessagesPage() {
 
       <div className="flex border border-slate-200 rounded-2xl overflow-hidden bg-white" style={{ minHeight: 480 }}>
         {/* Conversation list */}
-        <aside className="w-72 border-r border-slate-200 flex flex-col flex-shrink-0">
+        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-72 border-r border-slate-200 flex-col flex-shrink-0`}>
           <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">
             Діалоги
           </div>
@@ -182,7 +190,7 @@ export default function MessagesPage() {
         </aside>
 
         {/* Thread */}
-        <div className="flex-1 flex flex-col">
+        <div className={`${activeId ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`}>
           {!activeId ? (
             <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
               Оберіть діалог
@@ -194,8 +202,15 @@ export default function MessagesPage() {
           ) : active ? (
             <>
               {/* Thread header */}
-              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
-                <div>
+              <div className="px-3 sm:px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={backToList}
+                  className="md:hidden shrink-0 text-sm text-blue-700 hover:underline min-h-8"
+                >
+                  ← Діалоги
+                </button>
+                <div className="min-w-0">
                   <div className="font-semibold text-slate-900 text-sm">{active.subject_title}</div>
                   <Link href={active.subject_url} className="text-xs text-blue-600 hover:underline">
                     Переглянути оголошення →
@@ -219,7 +234,7 @@ export default function MessagesPage() {
                     const isMine = msg.sender === user.id;
                     return (
                       <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${isMine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'}`}>
+                        <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2 text-sm ${isMine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'}`}>
                           {!isMine && (
                             <div className="text-xs font-semibold mb-1 text-slate-500">{msg.sender_name}</div>
                           )}

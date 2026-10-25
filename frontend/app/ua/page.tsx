@@ -56,7 +56,7 @@ export default async function UaCatalogPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Каталог Україна</h1>
           <p className="text-sm text-slate-500 mt-1">Місцеві оголошення від власників</p>

@@ -114,13 +114,13 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
                   Головне
                 </span>
               )}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <div className="absolute inset-0 bg-black/40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 {!img.is_primary && (
                   <button
                     type="button"
                     title="Зробити головним"
                     onClick={() => handleSetPrimary(img.id)}
-                    className="bg-white/90 hover:bg-white text-blue-700 text-xs font-semibold px-2 py-1 rounded"
+                    className="bg-white/90 hover:bg-white text-blue-700 text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
                   >
                     Гол.
                   </button>
@@ -129,7 +129,7 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
                   type="button"
                   title="Видалити"
                   onClick={() => handleDelete(img.id)}
-                  className="bg-white/90 hover:bg-white text-red-600 text-xs font-semibold px-2 py-1 rounded"
+                  className="bg-white/90 hover:bg-white text-red-600 text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
                 >
                   ✕
                 </button>

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { getUnreadCount as getMsgUnread } from '@/api/messages';
 import { getUnreadCount as getNotifUnread } from '@/api/notifications';
 import { useC2C } from '@/components/c2c/C2CProvider';
+import MobileNav, { getNavLinks } from '@/components/layout/MobileNav';
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -27,10 +28,11 @@ export default function Header() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [user, chatOpen]);
 
+  const navLinks = getNavLinks(user, c2c);
   const handleLogout = () => { void logout(); };
 
   return (
-    <header className="bg-blue-900 text-white shadow-md">
+    <header className="relative bg-blue-900 text-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight shrink-0">
           <span className="text-amber-400">AUTO</span>
@@ -39,15 +41,9 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-          {c2c.enabled && (
-            <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
-          )}
-          <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
-          {/* role приходить із сервера й клієнтом не змінюється; реальний доступ перевіряє API (403).
-              На вузьких екранах пункт «Заявки» є в /me. */}
-          {user && (user.role === 'broker' || user.is_admin_role) && (
-            <Link href="/broker/leads" className="hover:text-amber-400 transition-colors">Заявки</Link>
-          )}
+          {navLinks.map(l => (
+            <Link key={l.href} href={l.href} className={`hover:text-amber-400 transition-colors ${l.className ?? ''}`}>{l.label}</Link>
+          ))}
         </nav>
 
         <div className="flex items-center gap-3 text-sm min-w-0">
@@ -75,12 +71,12 @@ export default function Header() {
                   </span>
                 )}
               </Link>}
-              <Link href="/me" className="hover:text-amber-400 transition-colors truncate min-w-0 max-w-[8rem] sm:max-w-[16rem]">
+              <Link href="/me" className="hover:text-amber-400 transition-colors hidden sm:inline truncate min-w-0 max-w-[16rem]">
                 {user.email.split('@')[0]}
               </Link>
               <button
                 onClick={handleLogout}
-                className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors shrink-0"
+                className="hidden sm:inline-block bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors shrink-0"
               >
                 Вийти
               </button>
@@ -96,6 +92,7 @@ export default function Header() {
               </Link>
             </>
           )}
+          <MobileNav links={navLinks} loggedIn={!!user} onLogout={handleLogout} />
         </div>
       </div>
     </header>
