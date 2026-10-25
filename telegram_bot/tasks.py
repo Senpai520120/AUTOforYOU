@@ -31,6 +31,7 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
         return {'posted': False, 'reason': 'lots disabled'}
 
     from integrations.base import record_skip
+    from telegram_bot.formatting import listing_card_html
     from telegram_bot.provider import get_telegram_provider
 
     provider = get_telegram_provider()
@@ -64,11 +65,9 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
     v = listing.vehicle
     site_url = getattr(settings, 'SITE_URL', 'https://autoforyou.ua')
     prefix = '⚡ <b>ТЕРМІНОВИЙ ВИКУП</b>\n' if is_express else ''
-    text = (
-        f'{prefix}'
-        f'🚗 <b>{v.make} {v.model} {v.year}</b>\n'
-        f'💵 {listing.price} {listing.currency}\n'
-        f'🔗 {site_url}/listings/{listing_id}'
+    text = listing_card_html(
+        (v.make, v.model, v.year), listing.price, listing.currency,
+        prefix=prefix, url=f'{site_url}/listings/{listing_id}',
     )
     img = v.images.filter(is_primary=True).first() or v.images.first()
     photo_url = (img.source_url or '') if img else ''

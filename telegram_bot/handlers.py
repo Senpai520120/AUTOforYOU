@@ -5,6 +5,8 @@ from aiogram import Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from telegram_bot.formatting import listing_card_html
+
 logger = logging.getLogger(__name__)
 router = Router(name='autoforyou')
 
@@ -76,8 +78,9 @@ async def cmd_latest(message: Message) -> None:
             )
             result.append({
                 'id': listing.pk,
-                'title': f'{v.make} {v.model} {v.year}',
-                'price': f'{listing.price} {listing.currency}',
+                'title_parts': (v.make, v.model, v.year),
+                'price': listing.price,
+                'currency': listing.currency,
                 'status': listing.get_status_display(),
                 'photo_url': (img.source_url or '') if img else '',
             })
@@ -96,11 +99,7 @@ async def cmd_latest(message: Message) -> None:
                 url=f'{site_url}/listings/{item["id"]}',
             )
         ]])
-        text = (
-            f'🚗 <b>{item["title"]}</b>\n'
-            f'💵 {item["price"]}\n'
-            f'📦 {item["status"]}'
-        )
+        text = listing_card_html(item['title_parts'], item['price'], item['currency'], item['status'])
         await message.answer(text, reply_markup=kb, parse_mode='HTML')
 
 
@@ -111,27 +110,58 @@ async def _handle_link_token(message: Message, token_str: str) -> None:
 
     @sync_to_async
     def _process(telegram_id: int, token_str: str) -> str:
+        from django.db import IntegrityError, transaction
+
         from telegram_bot.models import TelegramLinkToken
+        from users.models import CustomUser
 
         try:
             token_uuid = uuid.UUID(token_str)
-            token_obj = TelegramLinkToken.objects.select_related('user').get(token=token_uuid)
-        except (ValueError, TelegramLinkToken.DoesNotExist):
+        except ValueError:
             return 'invalid'
 
-        if not token_obj.is_valid():
-            return 'expired'
+        # Проверка и погашение токена атомарны: строка блокируется на время транзакции,
+        # из двух параллельных апдейтов с одним токеном второй увидит used=True.
+        with transaction.atomic():
+            try:
+                token_obj = (
+                    TelegramLinkToken.objects.select_for_update(of=('self',))
+                    .select_related('user').get(token=token_uuid)
+                )
+            except TelegramLinkToken.DoesNotExist:
+                return 'invalid'
 
-        user = token_obj.user
-        user.telegram_id = telegram_id
-        user.save(update_fields=['telegram_id'])
-        token_obj.used = True
-        token_obj.save(update_fields=['used'])
-        return 'ok'
+            if not token_obj.is_valid():
+                return 'expired'
+
+            user = token_obj.user
+            if user.telegram_id == telegram_id:
+                return 'already'
+            if CustomUser.objects.filter(telegram_id=telegram_id).exclude(pk=user.pk).exists():
+                return 'taken'
+
+            # Условное погашение: страховка там, где блокировка строк недоступна (SQLite).
+            if not TelegramLinkToken.objects.filter(pk=token_obj.pk, used=False).update(used=True):
+                return 'expired'
+            try:
+                with transaction.atomic():  # savepoint: IntegrityError не ломает внешнюю транзакцию
+                    user.telegram_id = telegram_id
+                    user.save(update_fields=['telegram_id'])
+            except IntegrityError:
+                transaction.set_rollback(True)  # откатывается и погашение: токен остаётся неиспользованным
+                return 'taken'
+            return 'ok'
 
     result = await _process(message.from_user.id, token_str)
     if result == 'ok':
         await message.answer('✅ Акаунт успішно прив\'язано до Telegram! Тепер ви отримуватимете сповіщення.')
+    elif result == 'already':
+        await message.answer('ℹ️ Цей Telegram уже прив\'язано до вашого акаунту.')
+    elif result == 'taken':
+        await message.answer(
+            '❌ Цей Telegram уже прив\'язано до іншого акаунту. '
+            'Спочатку відв\'яжіть його там, потім повторіть спробу.'
+        )
     elif result == 'expired':
         await message.answer('❌ Посилання застаріло або вже використане. Запросіть нове в особистому кабінеті.')
     else:

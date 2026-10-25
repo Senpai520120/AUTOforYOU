@@ -92,7 +92,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    # on-failure: won't restart if bot exits cleanly (exit 0 = no token set)
+    # on-failure: не перезапускается при exit 0 (нет токена или TELEGRAM_UPDATES_MODE=webhook:
+    # webhook установлен, апдейты принимает backend). Падение (ненулевой код) - перезапуск.
     restart: on-failure
 
   # ─── Celery worker ────────────────────────────────────────────────────────────

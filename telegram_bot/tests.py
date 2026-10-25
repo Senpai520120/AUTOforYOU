@@ -10,7 +10,9 @@ from aiogram.methods import SendMessage
 from aiogram.types import Update
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -117,10 +119,31 @@ def _update(text: str, update_id: int = 1, from_id: int = TG_USER_ID) -> str:
     return json.dumps({'update_id': update_id, 'message': message})
 
 
-class BotRuntimeTestCase(TestCase):
+class TelegramUpdateTestCase(TestCase):
+    """База для тестов, которые разбирают настоящий `Update` или ходят в webhook (23-D4).
+
+    В aiogram Update.event_type - @property поверх @lru_cache: разобранные Update живут в кэше
+    класса до конца процесса, и на сборке Python в GitHub Actions это segfault (exit 139)
+    после 'OK'. Кэш чистится после каждого теста; страховка проверяет, что он пуст.
+    Кэш Django (дедупликация update_id) чистится перед тестом: в locmem он живёт весь прогон.
+    """
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        # Cleanup идут в обратном порядке: проверка выполнится после cache_clear.
+        self.addCleanup(self._assert_update_cache_empty)
+        self.addCleanup(Update.event_type.fget.cache_clear)
+
+    def _assert_update_cache_empty(self):
+        self.assertEqual(Update.event_type.fget.cache_info().currsize, 0)
+
+
+class BotRuntimeTestCase(TelegramUpdateTestCase):
     URL = '/api/v1/telegram/webhook/'
 
     def setUp(self):
+        super().setUp()
         self.sent = []
         sent = self.sent
 
@@ -131,14 +154,8 @@ class BotRuntimeTestCase(TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-        # В aiogram Update.event_type — @property поверх @lru_cache: разобранные
-        # Update (а с ними Message.date — datetime с tzinfo из pydantic_core)
-        # Вторая страховка: основная очистка — в core.test_runner.IsolatedDiscoverRunner
-        # (teardown_test_environment), этот cleanup защищает и при запуске без него.
-        # живут в кэше класса до конца процесса. При завершении интерпретатора
-        # кэш освобождается после частичной выгрузки pydantic_core, и на сборке
-        # Python в GitHub Actions это segfault (exit 139) уже после 'OK'.
-        self.addCleanup(Update.event_type.fget.cache_clear)
+        # Очистка кэша Update (segfault 139) - в базовом классе TelegramUpdateTestCase,
+        # вторая страховка - core.test_runner.IsolatedDiscoverRunner.
 
     def send(self, text: str, update_id: int = 1, from_id: int = TG_USER_ID):
         with self.settings(
@@ -360,7 +377,7 @@ class RunBotCommandTest(TestCase):
                 patch.object(Dispatcher, 'start_polling', autospec=True) as start_polling:
             async_to_sync(RunBotCommand._run)()
 
-        delete_webhook.assert_awaited_once_with(drop_pending_updates=True)
+        delete_webhook.assert_awaited_once_with(drop_pending_updates=False)
         start_polling.assert_awaited_once()
         self.assertIs(start_polling.await_args.args[0], get_dispatcher())
 
@@ -499,7 +516,7 @@ class ListingAutopostSignalTest(TestCase):
 
 # ─── Webhook: секрет обязателен ───────────────────────────────────────────────
 
-class TelegramWebhookSecretTest(TestCase):
+class TelegramWebhookSecretTest(TelegramUpdateTestCase):
     """
     Раньше при пустом TELEGRAM_WEBHOOK_SECRET проверка пропускалась целиком:
     кто угодно мог прислать произвольный Update, и он обрабатывался роутером
@@ -563,3 +580,239 @@ class PostListingToChannelLotsDisabledTest(TestCase):
         self.assertEqual(result, {'posted': False, 'reason': 'lots disabled'})
         bot_call.assert_not_called()
         self.assertTrue(Listing.objects.filter(pk=listing.pk).exists())
+
+
+# ─── 5.1: экранирование, привязка, webhook, режимы ───────────────────────────
+
+class BotEscapingTest(BotRuntimeTestCase):
+    """07-S3: данные из БД показываются буквально и не ломают отправку."""
+
+    def test_latest_escapes_make_and_does_not_fail(self):
+        from tests.factories import make_listing, make_user, make_vehicle
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
+            make_listing(make_vehicle(make='<b>X & Y', model='"M"'), make_user())
+        self.assertEqual(self.send('/latest').status_code, 200)
+        [msg] = self.messages()
+        self.assertIn('&lt;b&gt;X &amp; Y &quot;M&quot;', msg.text)
+        self.assertNotIn('<b>X', msg.text)
+
+    def test_channel_post_escapes_text(self):
+        from telegram_bot.provider import SendResult
+        from telegram_bot.tasks import post_listing_to_channel
+        from tests.factories import make_listing, make_user, make_vehicle
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
+            listing = make_listing(make_vehicle(make='<i>X & Y'), make_user())
+        calls = []
+        provider = SimpleNamespace(
+            is_configured=lambda: True,
+            send_message=lambda chat_id, text, **kw: calls.append(text) or SendResult(ok=True),
+            send_photo=lambda *a, **kw: SendResult(ok=False),
+        )
+        with self.settings(TELEGRAM_CHANNEL_ID='@ch'), \
+                patch('telegram_bot.provider.get_telegram_provider', return_value=provider), \
+                patch('telegram_bot.tasks.time.sleep'):
+            result = post_listing_to_channel(listing.pk)
+        self.assertTrue(result['posted'])
+        [text] = calls
+        self.assertIn('&lt;i&gt;X &amp; Y', text)
+        self.assertNotIn('<i>', text)
+
+
+class BotLinkConflictTest(BotRuntimeTestCase):
+    """07-Q1, 07-S4: занятый Telegram и одноразовость токена."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.factories import make_user
+        self.user = make_user()
+
+    def _token(self, **kw):
+        defaults = {'user': self.user, 'expires_at': timezone.now() + timedelta(minutes=10)}
+        defaults.update(kw)
+        return TelegramLinkToken.objects.create(**defaults)
+
+    def test_telegram_taken_by_other_account(self):
+        from tests.factories import make_user
+        other = make_user(telegram_id=TG_USER_ID)
+        token = self._token()
+        self.assertEqual(self.send(f'/start link_{token.token}').status_code, 200)
+
+        self.user.refresh_from_db()
+        other.refresh_from_db()
+        token.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertEqual(other.telegram_id, TG_USER_ID)
+        self.assertFalse(token.used)
+        [reply] = self.replies()
+        self.assertIn('уже прив\'язано до іншого акаунту', reply)
+
+    def test_integrity_error_is_reported_as_taken(self):
+        """Гонка: проверка занятости прошла, а уникальный индекс сработал при записи."""
+        from django.db import IntegrityError
+
+        from users.models import CustomUser
+        token = self._token()
+
+        def failing_save(obj, *a, **kw):
+            raise IntegrityError('dup')
+        with patch.object(CustomUser, 'save', failing_save):
+            self.assertEqual(self.send(f'/start link_{token.token}').status_code, 200)
+        token.refresh_from_db()
+        self.assertFalse(token.used)
+        self.assertIn('іншого акаунту', self.replies()[0])
+
+    def test_same_telegram_same_account_is_already(self):
+        self.user.telegram_id = TG_USER_ID
+        self.user.save(update_fields=['telegram_id'])
+        token = self._token()
+        self.assertEqual(self.send(f'/start link_{token.token}').status_code, 200)
+        [reply] = self.replies()
+        self.assertIn('уже прив\'язано до вашого акаунту', reply)
+
+    def test_second_update_with_same_token_gets_expired(self):
+        token = self._token()
+        self.send(f'/start link_{token.token}', update_id=1)
+        self.send(f'/start link_{token.token}', update_id=2, from_id=TG_USER_ID + 1)
+        self.assertIn('успішно', self.replies()[0])
+        self.assertIn('застаріло', self.replies()[1])
+
+    def test_token_redeemed_in_parallel_does_not_link(self):
+        """Хендлер прочитал токен валидным, но параллельный апдейт успел его погасить: привязки нет."""
+        token = self._token()
+
+        def valid_but_redeemed_meanwhile(obj):
+            TelegramLinkToken.objects.filter(pk=obj.pk).update(used=True)
+            return True
+        with patch.object(TelegramLinkToken, 'is_valid', valid_but_redeemed_meanwhile):
+            self.send(f'/start link_{token.token}')
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertIn('застаріло', self.replies()[0])
+
+
+class WebhookReliabilityTest(BotRuntimeTestCase):
+    """07-Q6, 23-D100: коды ответа, дедупликация, исключения хендлеров."""
+
+    def _raw(self, body, secret=WEBHOOK_SECRET):
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET):
+            return self.client.post(
+                self.URL, data=body, content_type='application/json',
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=secret,
+            )
+
+    def test_invalid_json_400(self):
+        self.assertEqual(self._raw('{not json').status_code, 400)
+
+    def test_json_without_update_id_400(self):
+        self.assertEqual(self._raw('{"message": {}}').status_code, 400)
+
+    def test_non_integer_update_id_400(self):
+        self.assertEqual(self._raw('{"update_id": "7"}').status_code, 400)
+
+    def test_json_array_400(self):
+        self.assertEqual(self._raw('[1, 2]').status_code, 400)
+
+    def test_handler_exception_returns_200_and_logs_without_pii(self):
+        with patch.object(Dispatcher, 'feed_update', side_effect=RuntimeError('boom')), \
+                self.assertLogs('telegram_bot.views', level='ERROR') as logs:
+            resp = self.send('секретний текст', update_id=42)
+        self.assertEqual(resp.status_code, 200)
+        out = '\n'.join(logs.output)
+        self.assertIn('update_id=42', out)
+        self.assertIn('type=message', out)
+        self.assertNotIn('секретний текст', out)
+        self.assertNotIn(str(TG_USER_ID), out)
+
+    def test_exception_text_with_pii_not_logged(self):
+        boom = RuntimeError(f'input_value={TG_USER_ID} text=приватне повідомлення')
+        with patch.object(Dispatcher, 'feed_update', side_effect=boom), \
+                self.assertLogs('telegram_bot.views', level='ERROR') as logs:
+            self.assertEqual(self.send('приватне повідомлення', update_id=43).status_code, 200)
+        out = '\n'.join(logs.output)
+        self.assertIn('exc=RuntimeError', out)
+        self.assertNotIn('приватне', out)
+        self.assertNotIn(str(TG_USER_ID), out)
+        self.assertNotIn('Traceback', out)
+
+    def test_same_update_id_from_other_bot_is_processed(self):
+        self.assertEqual(self.send('/start', update_id=11).status_code, 200)
+        with self.settings(TELEGRAM_BOT_TOKEN='777000:OTHER-TEST-TOKEN', TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET):
+            resp = self.client.post(
+                self.URL, data=_update('/start', 11), content_type='application/json',
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=WEBHOOK_SECRET,
+            )
+            self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(self.replies()), 2)
+
+    def test_duplicate_update_processed_once(self):
+        self.assertEqual(self.send('/start', update_id=9).status_code, 200)
+        self.assertEqual(self.send('/start', update_id=9).status_code, 200)
+        self.assertEqual(len(self.replies()), 1)
+
+    def test_failed_update_is_not_retried(self):
+        with patch.object(Dispatcher, 'feed_update', side_effect=RuntimeError('boom')) as feed, \
+                self.assertLogs('telegram_bot.views', level='ERROR'):
+            self.send('/start', update_id=5)
+            self.assertEqual(self.send('/start', update_id=5).status_code, 200)
+        self.assertEqual(feed.call_count, 1)
+
+    def test_secret_compared_via_compare_digest(self):
+        with patch('telegram_bot.views.hmac.compare_digest', return_value=False) as cmp:
+            resp = self._raw(_update('/start'))
+        self.assertEqual(resp.status_code, 403)
+        cmp.assert_called_once()
+
+
+class RunBotModesTest(TestCase):
+    SECRET32 = 'a1B2_c3-' * 4
+    URL_OK = 'https://site.test/api/v1/telegram/webhook/'
+
+    def _cfg(self, **kw):
+        base = dict(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_UPDATES_MODE='webhook',
+                    TELEGRAM_WEBHOOK_SECRET=self.SECRET32, SITE_URL='https://site.test')
+        base.update(kw)
+        return self.settings(**base)
+
+    def test_webhook_mode_sets_webhook_and_exits(self):
+        out = StringIO()
+        with self._cfg(), \
+                patch.object(Bot, 'set_webhook') as set_webhook, \
+                patch.object(Bot, 'get_webhook_info', return_value=SimpleNamespace(url=self.URL_OK)), \
+                patch.object(Bot, 'delete_webhook') as delete_webhook, \
+                patch.object(Dispatcher, 'start_polling') as start_polling:
+            call_command('run_bot', stdout=out)
+        set_webhook.assert_awaited_once_with(self.URL_OK, secret_token=self.SECRET32, drop_pending_updates=False)
+        delete_webhook.assert_not_called()
+        start_polling.assert_not_called()
+        self.assertIn(f'Webhook установлен: {self.URL_OK}', out.getvalue())
+
+    def test_webhook_mode_without_secret_fails_and_does_not_touch_webhook(self):
+        with self._cfg(TELEGRAM_WEBHOOK_SECRET=''), patch.object(Bot, 'set_webhook') as set_webhook:
+            with self.assertRaisesMessage(CommandError, 'TELEGRAM_WEBHOOK_SECRET'):
+                call_command('run_bot')
+        set_webhook.assert_not_called()
+
+    def test_webhook_mode_with_http_site_url_fails(self):
+        with self._cfg(SITE_URL='http://site.test'), patch.object(Bot, 'set_webhook') as set_webhook:
+            with self.assertRaisesMessage(CommandError, 'https://'):
+                call_command('run_bot')
+        set_webhook.assert_not_called()
+
+    def test_webhook_mode_with_short_secret_fails(self):
+        with self._cfg(TELEGRAM_WEBHOOK_SECRET='short-secret'), patch.object(Bot, 'set_webhook') as set_webhook:
+            with self.assertRaisesMessage(CommandError, '32-256'):
+                call_command('run_bot')
+        set_webhook.assert_not_called()
+
+    def test_unknown_mode_fails(self):
+        with self._cfg(TELEGRAM_UPDATES_MODE='sockets'), patch('asyncio.run') as run:
+            with self.assertRaisesMessage(CommandError, 'TELEGRAM_UPDATES_MODE'):
+                call_command('run_bot')
+        run.assert_not_called()
+
+    def test_polling_mode_runs_polling_not_set_webhook(self):
+        with self._cfg(TELEGRAM_UPDATES_MODE='polling'), patch('asyncio.run', side_effect=lambda coro: coro.close()) as run, \
+                patch.object(Bot, 'set_webhook') as set_webhook:
+            call_command('run_bot', stdout=StringIO())
+        run.assert_called_once()
+        set_webhook.assert_not_called()

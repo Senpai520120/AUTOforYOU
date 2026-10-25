@@ -590,7 +590,7 @@ CELERY_BEAT_SCHEDULE = {
 # ─── Telegram-бот ─────────────────────────────────────────────────────────────
 # Без TELEGRAM_BOT_TOKEN бот не стартует; run_bot завершается с понятным сообщением.
 # Сайт и все API работают как обычно — токен нужен только боту.
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
 
 # В тестах токен всегда пустой.
 # post_save на listings.Listing запускает post_listing_to_channel, а в тестах
@@ -601,7 +601,12 @@ TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_BOT_USERNAME = os.environ.get('TELEGRAM_BOT_USERNAME', '')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '')      # @channel или -100xxx
 TELEGRAM_B2B_CHANNEL_ID = os.environ.get('TELEGRAM_B2B_CHANNEL_ID', '')  # опц. B2B-канал
-TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')   # для прод. webhook
+TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '').strip()   # для прод. webhook; strip: view и setWebhook видят одно значение
+# Как бот получает апдейты (5.1): polling (по умолчанию) или webhook (нужен HTTPS, задача 7.1).
+# Не путать с TELEGRAM_MODE=real|demo (адаптер отправки, 3.4).
+TELEGRAM_UPDATES_MODE = os.environ.get('TELEGRAM_UPDATES_MODE', '').strip().lower() or 'polling'
+# Сколько секунд помнить update_id для дедупликации повторов webhook.
+TELEGRAM_UPDATE_DEDUP_TTL = _positive_int_env('TELEGRAM_UPDATE_DEDUP_TTL', 86400)
 # Запасной chat_id брокера/группы брокеров (основной задаётся в админке, задача 2.2)
 TELEGRAM_BROKER_CHAT_ID = os.environ.get('TELEGRAM_BROKER_CHAT_ID', '')
 # Журнал заявок в группу с партнёром (2.15): только AFY-ID, авто, бюджет, город, время; без ПДн.
@@ -668,6 +673,8 @@ if _TESTING:
     LIQPAY_PUBLIC_KEY = ''
     LIQPAY_PRIVATE_KEY = ''
     TELEGRAM_BOT_TOKEN = ''
+    TELEGRAM_UPDATES_MODE = 'polling'
+    TELEGRAM_UPDATE_DEDUP_TTL = 86400
     TELEGRAM_BROKER_CHAT_ID = ''
     LEAD_JOURNAL_CHAT_ID = ''
     BROKER_NOTIFY_EMAIL = ''
