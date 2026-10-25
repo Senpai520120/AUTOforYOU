@@ -3,7 +3,11 @@ from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
+from django.db import transaction
+from django.db.models import F, Q
 from django.utils import timezone
+
+from core.tasks import ResilientTask
 
 from . import notify
 from .models import Lead, LeadNotificationSettings, NotifyStatus
@@ -39,8 +43,7 @@ def _in_app_once(lead: Lead, cfg: LeadNotificationSettings) -> None:
 
 @shared_task(bind=True, name='leads.tasks.notify_broker_new_lead')
 def notify_broker_new_lead(self, lead_id: int, force: bool = False):
-    from telegram_bot import sender
-
+    """Личное уведомление брокеру: Telegram, затем (если Telegram не доставил) резервный email (2.12)."""
     lead = Lead.objects.filter(pk=lead_id).first()
     if lead is None:
         logger.warning('lead.notify lead_id=%s not found', lead_id)
@@ -48,6 +51,19 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
     cfg = LeadNotificationSettings.get_solo()
     _in_app_once(lead, cfg)
 
+    result = _telegram_step(self, lead, cfg, force)
+    # Повтор Telegram (self.retry) сюда не доходит: письмо идёт после окончательного итога.
+    if result['status'] not in ('in_progress', 'already_sent') and (
+            result['status'] != NotifyStatus.SENT or force):
+        # Аргумент - только id заявки: учёт упавших задач (8.9) хранит аргументы.
+        notify_broker_email.delay(lead_id, force=force)
+    return result
+
+
+def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool) -> dict:
+    from telegram_bot import sender
+
+    lead_id = lead.pk
     if lead.telegram_status == NotifyStatus.SENT and not force:
         return {'status': 'already_sent'}
 
@@ -112,6 +128,147 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
     logger.warning('lead.notify lead_id=%s reason=%s', lead_id, result.reason)
     _mark(lead, status, '' if status == NotifyStatus.SKIPPED else result.reason)
     return {'status': status}
+
+
+def _mark_email(lead: Lead, status: str, error: str = '') -> None:
+    lead.email_status = status
+    lead.email_error = error[:200]
+    fields = ['email_status', 'email_error']
+    if status == NotifyStatus.SENT:
+        lead.email_sent_at = timezone.now()
+        fields.append('email_sent_at')
+    lead.save(update_fields=fields)
+
+
+def _finish_round(lead: Lead) -> None:
+    """Конец круга доставки: если заявка не доставлена и есть что повторять, считаем попытку.
+    Если оба канала не настроены, попытки не растут (досыл не зацикливается)."""
+    lead.refresh_from_db(fields=['telegram_status', 'email_status'])
+    if NotifyStatus.SENT in (lead.telegram_status, lead.email_status):
+        return
+    if lead.telegram_status == lead.email_status == NotifyStatus.SKIPPED:
+        return
+    Lead.objects.filter(pk=lead.pk).update(
+        notify_attempts=F('notify_attempts') + 1, last_notify_attempt_at=timezone.now())
+
+
+@shared_task(bind=True, base=ResilientTask, name='leads.tasks.notify_broker_email')
+def notify_broker_email(self, lead_id: int, force: bool = False):
+    """Резервное письмо брокеру через integrations.email.send_email (единственная точка отправки писем).
+
+    Идемпотентна по email_status == sent. Работает в воркере, поэтому письмо уходит синхронно в
+    рамках задачи (таймаут EMAIL_TIMEOUT), а итог (sent/failed) честно пишется в заявку.
+    Лог и email_error - только lead_id и имя класса ошибки, без адресов, имени и телефона.
+    """
+    from integrations.email import send_email
+
+    lead = Lead.objects.filter(pk=lead_id).first()
+    if lead is None:
+        return {'status': 'not_found'}
+    if lead.email_status == NotifyStatus.SENT and not force:
+        return {'status': 'already_sent'}
+    claim = Lead.objects.filter(pk=lead.pk).exclude(email_status=NotifyStatus.SENDING)
+    if not force:
+        claim = claim.exclude(email_status=NotifyStatus.SENT)
+    if not claim.update(email_status=NotifyStatus.SENDING):
+        return {'status': 'in_progress'}
+
+    status, error = NotifyStatus.FAILED, ''
+    try:
+        recipients = notify.broker_emails()
+        if not recipients:
+            status = NotifyStatus.SKIPPED
+        else:
+            try:
+                subject, body = notify.render_new_lead_email(lead, LeadNotificationSettings.get_solo())
+            except Exception as exc:  # битый шаблон из админки
+                error = 'template_error'
+                logger.warning('lead.email lead_id=%s template_error=%s', lead_id, type(exc).__name__)
+            else:
+                status, error = _send_to_all(send_email, recipients, subject, body, lead_id)
+    except Exception as exc:
+        status, error = NotifyStatus.FAILED, type(exc).__name__
+        logger.warning('lead.email lead_id=%s error=%s', lead_id, type(exc).__name__)
+    finally:
+        # Любой выход, включая исключение: статус не должен остаться «sending».
+        if Lead.objects.filter(pk=lead.pk, email_status=NotifyStatus.SENDING).exists():
+            _mark_email(lead, status, error)
+    if status == NotifyStatus.SKIPPED:
+        logger.warning('lead.email lead_id=%s email not configured', lead_id)
+    _finish_round(lead)
+    return {'status': status}
+
+
+def _send_to_all(send_email, recipients, subject, body, lead_id):
+    """Письмо уходит на каждый адрес; итог sent, если принят хотя бы одним. Не настроена почта - skipped."""
+    ok, skipped, error = 0, 0, ''
+    for address in recipients:
+        try:
+            res = send_email(address, subject, body, sync=True)
+        except Exception as exc:
+            error = type(exc).__name__
+            continue
+        if not res.get('configured'):
+            skipped += 1
+        elif res.get('queued'):
+            ok += 1
+        else:
+            error = str(res.get('error') or 'send_failed')
+    if ok:
+        # Часть адресов не приняла письмо: sent, но код ошибки виден в админке.
+        return NotifyStatus.SENT, f'partial:{error}' if error else ''
+    if skipped == len(recipients):
+        return NotifyStatus.SKIPPED, ''
+    logger.warning('lead.email lead_id=%s failed error=%s', lead_id, error)
+    return NotifyStatus.FAILED, error or 'send_failed'
+
+
+RESEND_NOTIFY_BATCH = 50
+
+
+@shared_task(base=ResilientTask, name='leads.tasks.resend_undelivered_leads')
+def resend_undelivered_leads():
+    """Периодический досыл личного уведомления брокеру (Telegram + email) и предупреждение админам.
+
+    Недоставлена = ни один канал не sent. Не повторяем, если оба канала не настроены (нечего повторять).
+    Выборка под select_for_update(skip_locked) с отметкой времени попытки: второй воркер те же заявки не берёт.
+    """
+    now = timezone.now()
+    cutoff = now - timedelta(minutes=int(settings.LEAD_NOTIFY_RETRY_MINUTES))
+    max_attempts = int(settings.LEAD_NOTIFY_MAX_ATTEMPTS)
+    skipped = NotifyStatus.SKIPPED
+    undelivered = Lead.objects.exclude(telegram_status=NotifyStatus.SENT).exclude(
+        email_status=NotifyStatus.SENT).exclude(telegram_status=skipped, email_status=skipped)
+
+    with transaction.atomic():
+        due = undelivered.filter(notify_attempts__lt=max_attempts).filter(
+            Q(last_notify_attempt_at__lte=cutoff)
+            | Q(last_notify_attempt_at__isnull=True, created_at__lte=cutoff))
+        ids = list(due.select_for_update(skip_locked=True).order_by('created_at')
+                   .values_list('pk', flat=True)[:RESEND_NOTIFY_BATCH])
+        # Зависший «sending» (воркер упал посреди отправки): считаем попытку и возвращаем в «pending»,
+        # иначе claim видит SENDING, задача отвечает in_progress, а попытки не растут.
+        stuck = Q(telegram_status=NotifyStatus.SENDING) | Q(email_status=NotifyStatus.SENDING)
+        stuck_ids = list(Lead.objects.filter(pk__in=ids).filter(stuck).values_list('pk', flat=True))
+        Lead.objects.filter(pk__in=stuck_ids).update(notify_attempts=F('notify_attempts') + 1)
+        Lead.objects.filter(pk__in=ids, telegram_status=NotifyStatus.SENDING).update(
+            telegram_status=NotifyStatus.PENDING)
+        Lead.objects.filter(pk__in=ids, email_status=NotifyStatus.SENDING).update(
+            email_status=NotifyStatus.PENDING)
+        Lead.objects.filter(pk__in=ids).update(last_notify_attempt_at=now)
+
+    alerted = 0
+    exhausted = undelivered.filter(notify_attempts__gte=max_attempts, undelivered_alerted_at__isnull=True)
+    for lead in exhausted[:RESEND_NOTIFY_BATCH]:
+        # Метка ставится атомарно: второй запуск не пришлёт то же предупреждение.
+        if Lead.objects.filter(pk=lead.pk, undelivered_alerted_at__isnull=True).update(undelivered_alerted_at=now):
+            notify.alert_admins_undelivered(lead)
+            logger.warning('lead.undelivered lead_id=%s attempts=%s', lead.pk, lead.notify_attempts)
+            alerted += 1
+
+    for lead_id in ids:
+        notify_broker_new_lead.delay(lead_id)  # повторяет Telegram и, если он не доставил, email
+    return {'resent': len(ids), 'alerted': alerted}
 
 
 @shared_task(bind=True, name='leads.tasks.send_journal')

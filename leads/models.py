@@ -2,7 +2,7 @@ import string
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator, validate_email
 from django.db import models
 
 
@@ -55,7 +55,7 @@ class NeededWhen(models.TextChoices):
 class NotifyStatus(models.TextChoices):
     PENDING = 'pending', 'Очікує'
     SENT = 'sent', 'Надіслано'
-    SKIPPED = 'skipped_not_configured', 'Telegram не налаштовано'
+    SKIPPED = 'skipped_not_configured', 'Канал не налаштовано'
     FAILED = 'failed', 'Помилка'
     SENDING = 'sending', 'Надсилається'
 
@@ -73,6 +73,16 @@ def validate_template(value: str) -> None:
             raise ValidationError(f'Недопустимий плейсхолдер {{{field}}}: лише прості імена без . [ ! :')
 
 
+def validate_email_lines(value: str) -> None:
+    """Адреса брокера: по одному в строке, каждый - корректный email."""
+    for line in value.splitlines():
+        line = line.strip()
+        if line:
+            try:
+                validate_email(line)
+            except ValidationError:
+                raise ValidationError('Некоректна адреса у списку: по одній адресі в рядку.') from None
+
 
 class LeadNotificationSettings(models.Model):
     """Singleton (pk=1): кому и что слать брокеру о новой заявке."""
@@ -89,6 +99,16 @@ class LeadNotificationSettings(models.Model):
                   '{utm_medium} {utm_campaign} {utm_content} {referrer} {page_url} {comment} {admin_url} '
                   '{cabinet_url}. Значення екрануються автоматично.')
     notify_brokers_in_app = models.BooleanField('Сповіщення брокерам на сайті', default=True)
+    broker_emails = models.TextField(
+        'Резервний email брокера', blank=True, validators=[validate_email_lines],
+        help_text='По одній адресі в рядку. Лист іде, якщо Telegram не налаштовано чи не доставив. '
+                  'Порожньо → BROKER_NOTIFY_EMAIL з .env')
+    email_subject_template = models.CharField(
+        'Тема листа', max_length=200, blank=True, validators=[validate_template],
+        help_text='Ті самі плейсхолдери, що й у шаблоні Telegram, але без HTML. Переноси рядків видаляються.')
+    email_body_template = models.TextField(
+        'Текст листа', blank=True, validators=[validate_template],
+        help_text='Звичайний текст (без HTML), значення вставляються як є. Плейсхолдери як у шаблоні Telegram.')
 
     class Meta:
         verbose_name = 'Налаштування сповіщень про заявки'
@@ -218,6 +238,13 @@ class Lead(models.Model):
     telegram_sent_at = models.DateTimeField('Надіслано в Telegram', null=True, blank=True)
     telegram_error = models.CharField('Код помилки Telegram', max_length=200, blank=True)
     broker_in_app_sent = models.BooleanField(default=False, editable=False)
+    email_status = models.CharField(
+        'Email брокеру', max_length=32, choices=NotifyStatus.choices, default=NotifyStatus.PENDING)
+    email_sent_at = models.DateTimeField('Надіслано email', null=True, blank=True)
+    email_error = models.CharField('Код помилки email', max_length=200, blank=True)
+    notify_attempts = models.PositiveSmallIntegerField('Спроб сповіщення', default=0)
+    last_notify_attempt_at = models.DateTimeField('Остання спроба сповіщення', null=True, blank=True)
+    undelivered_alerted_at = models.DateTimeField('Адмінів попереджено', null=True, blank=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

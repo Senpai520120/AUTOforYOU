@@ -580,6 +580,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'leads.tasks.resend_journal',
         'schedule': _crontab(minute='*/5'),
     },
+    # Досыл неотправленных заявок брокеру (Telegram + email) и предупреждение админам (2.12)
+    'resend-undelivered-leads': {
+        'task': 'leads.tasks.resend_undelivered_leads',
+        'schedule': float(_positive_int_env('LEAD_NOTIFY_RETRY_MINUTES', 10) * 60),
+    },
 }
 
 # ─── Telegram-бот ─────────────────────────────────────────────────────────────
@@ -601,6 +606,10 @@ TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '')   # дл
 TELEGRAM_BROKER_CHAT_ID = os.environ.get('TELEGRAM_BROKER_CHAT_ID', '')
 # Журнал заявок в группу с партнёром (2.15): только AFY-ID, авто, бюджет, город, время; без ПДн.
 LEAD_JOURNAL_CHAT_ID = os.environ.get('LEAD_JOURNAL_CHAT_ID', '')
+# Надёжность доставки заявки брокеру (2.12): запасной email (основной - в админке), период и лимит досыла.
+BROKER_NOTIFY_EMAIL = os.environ.get('BROKER_NOTIFY_EMAIL', '')
+LEAD_NOTIFY_RETRY_MINUTES = _positive_int_env('LEAD_NOTIFY_RETRY_MINUTES', 10)
+LEAD_NOTIFY_MAX_ATTEMPTS = _positive_int_env('LEAD_NOTIFY_MAX_ATTEMPTS', 5)
 
 # URL сайта — используется в Telegram-постах (ссылки на листинги)
 SITE_URL = os.environ.get('SITE_URL', '') or 'http://localhost'
@@ -661,6 +670,9 @@ if _TESTING:
     TELEGRAM_BOT_TOKEN = ''
     TELEGRAM_BROKER_CHAT_ID = ''
     LEAD_JOURNAL_CHAT_ID = ''
+    BROKER_NOTIFY_EMAIL = ''
+    LEAD_NOTIFY_RETRY_MINUTES = 10
+    LEAD_NOTIFY_MAX_ATTEMPTS = 5
     LOT_PHOTO_ALLOWED_HOSTS = []
     PRIVATE_MEDIA_USE_X_ACCEL = False
     TURNSTILE_SITE_KEY = ''

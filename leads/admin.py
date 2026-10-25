@@ -21,6 +21,7 @@ from .models import (
 from .services import ALLOWED_TRANSITIONS, Q_FIELDS, change_status, qualify_lead, set_partner_status
 
 DIRECT = 'пряме'
+RESEND_ACTION_LIMIT = 20  # защита от случайного «выбрать все»: каждая заявка - Telegram и письмо
 
 
 class _ExportScope:
@@ -107,8 +108,9 @@ class LeadAdminForm(forms.ModelForm):
 @admin.register(Lead)
 class LeadAdmin(admin.ModelAdmin):
     list_display = ('public_id', 'created_at', 'name', 'phone', 'contact_method', 'source_display',
-                    'status', 'partner_status', 'qualification', 'total_uah', 'telegram_status', 'telegram_sent_at')
-    list_filter = ('status', 'partner_status', 'qualification', 'source', 'telegram_status', UtmSourceFilter)
+                    'status', 'partner_status', 'qualification', 'total_uah', 'telegram_status', 'email_status', 'telegram_sent_at')
+    list_filter = ('status', 'partner_status', 'qualification', 'source', 'telegram_status', 'email_status',
+                   UtmSourceFilter)
     actions = ['resend_to_broker', 'export_csv']
     search_fields = ('public_id', 'name', 'phone')
     date_hierarchy = 'created_at'
@@ -121,6 +123,8 @@ class LeadAdmin(admin.ModelAdmin):
         'utm', 'referrer', 'entry_page_url', 'page_url', 'first_response_at',
         'qualification', 'attribution_until', 'journal_message_id', 'journal_sent_at',
         'telegram_status', 'telegram_sent_at', 'telegram_error',
+        'email_status', 'email_sent_at', 'email_error', 'notify_attempts', 'last_notify_attempt_at',
+        'undelivered_alerted_at',
         'calculation', 'listing', 'snapshot_summary', 'calculation_snapshot', 'total_usd', 'total_uah',
         'consent_at', 'partner_name', 'partner_consent_at', 'partner_consent_text',
         'created_at', 'updated_at',
@@ -132,6 +136,8 @@ class LeadAdmin(admin.ModelAdmin):
         'source', 'landing_slug', 'vehicle_label', 'budget_usd', 'needed_when', 'city',
         'utm', 'referrer', 'entry_page_url', 'page_url',
         'telegram_status', 'telegram_sent_at', 'telegram_error',
+        'email_status', 'email_sent_at', 'email_error', 'notify_attempts', 'last_notify_attempt_at',
+        'undelivered_alerted_at',
         'calculation', 'listing', 'snapshot_summary', 'calculation_snapshot', 'total_usd', 'total_uah',
         'consent_at', 'partner_name', 'partner_consent_at', 'partner_consent_text',
         'created_at', 'updated_at',
@@ -139,9 +145,16 @@ class LeadAdmin(admin.ModelAdmin):
 
     @admin.action(description='Надіслати брокеру повторно', permissions=['change'])
     def resend_to_broker(self, request, queryset):
+        # force=True повторяє Telegram, а затем резервный email (оба канала).
         from .tasks import notify_broker_new_lead
+        ids = list(queryset.values_list('pk', flat=True)[:RESEND_ACTION_LIMIT + 1])
+        if len(ids) > RESEND_ACTION_LIMIT:
+            self.message_user(
+                request, f'Забагато заявок: повторно можна надіслати не більше {RESEND_ACTION_LIMIT} за раз.',
+                messages.ERROR)
+            return
         count = 0
-        for lead_id in queryset.values_list('pk', flat=True):
+        for lead_id in ids:
             notify_broker_new_lead.delay(lead_id, force=True)
             count += 1
         self.message_user(request, f'Поставлено в чергу: {count}', messages.SUCCESS)
@@ -176,10 +189,13 @@ class LeadAdmin(admin.ModelAdmin):
         return TemplateResponse(request, 'admin/leads/funnel.html', context)
 
     def changelist_view(self, request, extra_context=None):
-        from .notify import broker_chat_id
+        from .notify import broker_chat_id, email_channel_configured
         cfg = LeadNotificationSettings.get_solo()
-        if not (cfg.telegram_enabled and broker_chat_id() and settings.TELEGRAM_BOT_TOKEN):
+        tg_ok = bool(cfg.telegram_enabled and broker_chat_id() and settings.TELEGRAM_BOT_TOKEN)
+        if not tg_ok:
             messages.warning(request, 'Telegram для заявок не налаштовано')
+        if not tg_ok and not email_channel_configured():
+            messages.warning(request, 'Жоден канал сповіщення брокера не налаштовано')
         return super().changelist_view(request, extra_context)
 
     @admin.display(description='Джерело')

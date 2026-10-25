@@ -1,10 +1,14 @@
 """Сборка текста уведомления брокеру и in-app рассылка. Все значения от гостя экранируются."""
 import html
+import re
 from collections import defaultdict
 from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.db.models import Q
 from django.urls import reverse
 
 from notifications.models import Notification
@@ -115,5 +119,76 @@ def notify_brokers_in_app(title: str, link: str, text: str = '') -> int:
     count = 0
     for user_id in users.values_list('pk', flat=True):
         create_notification(user_id, Notification.Type.NEW_LEAD, title, text=text, link=link)
+        count += 1
+    return count
+
+
+# Запасные тексты письма, если шаблоны в админке очищены (основные - дефолты data-миграции).
+FALLBACK_EMAIL_SUBJECT = 'Нова заявка {id}'
+FALLBACK_EMAIL_BODY = (
+    'Нова заявка {id}\n\nІмʼя: {name}\nТелефон: {phone}\nСпосіб звʼязку: {contact_method} {contact_handle}\n'
+    'Авто: {car}\nПідсумок: ≈ ${total_usd} / {total_uah} грн\nДжерело: {source_details}\n'
+    'Коментар: {comment}\n\nЗаявка в адмінці: {admin_url}\n'
+)
+SUBJECT_MAX = 200
+# CR, LF, VT, FF, разделители строк Unicode: в теме им не место (инъекция заголовков).
+_LINE_BREAKS = re.compile(r'[\r\n\x0b\x0c\x1c-\x1e\x85\u2028\u2029]+')
+
+
+def broker_emails() -> list[str]:
+    """Адреса из настроек (по одному в строке), иначе BROKER_NOTIFY_EMAIL из .env. Невалидные отбрасываются."""
+    raw = LeadNotificationSettings.get_solo().broker_emails
+    if raw.strip():
+        candidates = raw.splitlines()
+    else:
+        candidates = re.split(r'[\s,;]+', str(getattr(settings, 'BROKER_NOTIFY_EMAIL', '') or ''))
+    result: list[str] = []
+    for item in candidates:
+        item = item.strip()
+        if not item or item.lower() in {e.lower() for e in result}:
+            continue
+        try:
+            validate_email(item)
+        except ValidationError:
+            continue
+        result.append(item)
+    return result
+
+
+def render_new_lead_email(lead: Lead, cfg: LeadNotificationSettings) -> tuple[str, str]:
+    """Тема и текст письма брокеру. Письмо текстовое: значения вставляются как есть, без html.escape.
+    Неизвестный плейсхолдер даёт пустую строку; переводы строк в теме заменяются пробелом."""
+    raw = defaultdict(str, raw_context(lead))
+    subject_tpl = cfg.email_subject_template if cfg.email_subject_template.strip() else FALLBACK_EMAIL_SUBJECT
+    body_tpl = cfg.email_body_template if cfg.email_body_template.strip() else FALLBACK_EMAIL_BODY
+    subject = _LINE_BREAKS.sub(' ', subject_tpl.format_map(raw)).strip()[:SUBJECT_MAX]
+    return subject, body_tpl.format_map(raw)
+
+
+def email_channel_configured() -> bool:
+    """Есть адрес и рабочая отправка писем (иначе канал «не налаштовано»)."""
+    from integrations.email import email_configured
+    return bool(broker_emails()) and email_configured()
+
+
+def telegram_channel_configured() -> bool:
+    return bool(LeadNotificationSettings.get_solo().telegram_enabled and broker_chat_id()
+                and getattr(settings, 'TELEGRAM_BOT_TOKEN', ''))
+
+
+def admin_recipient_ids() -> list[int]:
+    """Администраторы: роль admin со staff-доступом и суперпользователи (как User.is_admin_role)."""
+    return list(get_user_model().objects.filter(is_active=True).filter(
+        Q(is_superuser=True) | Q(role='admin', is_staff=True)).values_list('pk', flat=True))
+
+
+def alert_admins_undelivered(lead: Lead) -> int:
+    """Одно in-app уведомление каждому админу. Тело без ПДн: только номер заявки."""
+    count = 0
+    for user_id in admin_recipient_ids():
+        create_notification(
+            user_id, Notification.Type.LEAD_UNDELIVERED, f'Заявку {lead.public_id} не доставлено брокеру',
+            text='Telegram і email не спрацювали після всіх спроб. Перевірте налаштування або надішліть повторно.',
+            link=admin_url(lead))
         count += 1
     return count
