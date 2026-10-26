@@ -79,6 +79,11 @@ test('обхід: сміття і довгий рядок у sessionStorage — 
 test('без UTM: attribution не надсилається, реєстрація працює', async ({ page, uniqueEmail }) => {
   const password = e2ePassword();
   await page.goto('/register');
+  // AttributionCapture пише запис після гідратації (layout динамічний, 6.7): спершу чекаємо запис,
+  // інакше видалення може статися раніше й capture запише entry_page_url знову.
+  await expect
+    .poll(() => page.evaluate(() => window.sessionStorage.getItem('afy:attribution')))
+    .not.toBeNull();
   await page.evaluate(() => window.sessionStorage.removeItem('afy:attribution'));
   await fillRegister(page, uniqueEmail, password);
   const body = await submitRegister(page);
