@@ -1,6 +1,7 @@
 /**
  * E2E: закриті сторінки (23-P2).
- * Захист клієнтський (useRequireAuth, задача 1.4): гість → /login?next=<шлях>.
+ * Захист: серверний редірект proxy.ts за cookie has_session (6.2) + клієнтський useRequireAuth (1.4).
+ * Повний набір маршрутів proxy — e2e/states.spec.ts (PROXY_PATHS); тут — без заморожених /b2b, /dealers/apply.
  */
 import { test, expect, storageStatePath } from './fixtures';
 
@@ -50,10 +51,10 @@ test.describe('Гість на закритих сторінках', () => {
     expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin);
   });
 
-  test.fixme('08-S7 → задача 6.2: серверний редірект без JS (proxy.ts за cookie has_session)', async ({ request }) => {
+  test('08-S7: серверний редірект без JS (proxy.ts за cookie has_session)', async ({ request }) => {
     const resp = await request.get('/me', { maxRedirects: 0 });
-    expect([307, 308]).toContain(resp.status());
-    expect(resp.headers()['location']).toMatch(/\/login/);
+    expect(resp.status()).toBe(307);
+    expect(resp.headers()['location']).toBe('/login?next=%2Fme');
   });
 });
 

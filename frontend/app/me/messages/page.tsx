@@ -4,6 +4,10 @@ import { useRequireAuth } from '@/lib/use-require-auth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getConversations, getConversation, sendMessage } from '@/api/messages';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import { getErrorMessage } from '@/lib/errors';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { isEmailNotVerified } from '@/lib/email-verify';
 import type { ConversationSummary, ConversationDetail } from '@/lib/types';
@@ -31,15 +35,19 @@ export default function MessagesPage() {
   const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState('');
   const [notVerified, setNotVerified] = useState(false);
+  const [convError, setConvError] = useState<unknown>(null);
+  const [threadError, setThreadError] = useState<unknown>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadConversations = useCallback(async () => {
+    setLoadingConvs(true);
+    setConvError(null);
     try {
       const data = await getConversations();
       setConversations(data);
-    } catch {
-      // silently ignore
+    } catch (e) {
+      setConvError(e);
     } finally {
       setLoadingConvs(false);
     }
@@ -53,6 +61,7 @@ export default function MessagesPage() {
     setActiveId(id);
     setLoadingThread(true);
     setActive(null);
+    setThreadError(null);
     try {
       const data = await getConversation(id);
       setActive(data);
@@ -60,8 +69,8 @@ export default function MessagesPage() {
       setConversations(prev =>
         prev.map(c => (c.id === id ? { ...c, unread_count: 0 } : c))
       );
-    } catch {
-      setError('Не вдалось завантажити діалог.');
+    } catch (e) {
+      setThreadError(e);
     } finally {
       setLoadingThread(false);
     }
@@ -88,7 +97,9 @@ export default function MessagesPage() {
               : c
           )
         );
-      }).catch(() => {});
+      }).catch(() => {
+        // Фоновий опитувальник: помилку не показуємо, наступний цикл повторить запит.
+      });
     }, 15000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [activeId]);
@@ -113,7 +124,7 @@ export default function MessagesPage() {
       );
     } catch (err) {
       if (isEmailNotVerified(err)) setNotVerified(true);
-      else setError('Не вдалось надіслати повідомлення.');
+      else setError(getErrorMessage(err));
     } finally {
       setSending(false);
     }
@@ -130,7 +141,7 @@ export default function MessagesPage() {
     router.push('/me/messages');
   };
 
-  if (loading || !user) return null;
+  if (loading || !user) return <LoadingState />;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -156,10 +167,12 @@ export default function MessagesPage() {
             Діалоги
           </div>
           {loadingConvs ? (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Завантаження…</div>
+            <LoadingState size="md" />
+          ) : convError ? (
+            <div className="p-3"><ErrorState error={convError} onRetry={loadConversations} /></div>
           ) : conversations.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm px-4 text-center">
-              Немає діалогів.<br />Напишіть продавцю з картки оголошення.
+            <div className="flex-1 flex items-center justify-center px-4">
+              <EmptyState title="Немає діалогів." hint="Напишіть продавцю з картки оголошення." />
             </div>
           ) : (
             <ul className="flex-1 overflow-y-auto divide-y divide-slate-100">
@@ -196,8 +209,11 @@ export default function MessagesPage() {
               Оберіть діалог
             </div>
           ) : loadingThread ? (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-              Завантаження…
+            <LoadingState size="md" />
+          ) : threadError ? (
+            <div className="p-4">
+              <button type="button" onClick={backToList} className="md:hidden mb-3 text-sm text-blue-700 hover:underline">← Діалоги</button>
+              <ErrorState error={threadError} onRetry={() => openConversation(activeId)} />
             </div>
           ) : active ? (
             <>

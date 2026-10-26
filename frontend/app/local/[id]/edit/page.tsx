@@ -1,26 +1,43 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { localApi } from '@/api/local';
+import { ApiError } from '@/api/client';
 import { LocalListing } from '@/lib/types';
 import LocalListingForm from '@/components/local/LocalListingForm';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
 
 export default function EditLocalListingPage() {
-  const { loading } = useRequireAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const params = useParams();
   const id = Number(params.id);
 
   const [listing, setListing] = useState<LocalListing | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
-  useEffect(() => {
-    if (!id) return;
-    localApi.detail(id).then(setListing).catch(() => router.push('/ua')).finally(() => setFetching(false));
+  const load = useCallback(() => {
+    setFetching(true);
+    setError(null);
+    localApi.detail(id).then(setListing).catch(setError).finally(() => setFetching(false));
   }, [id]);
 
-  if (loading || fetching) return <div className="text-center py-20 text-slate-400">Завантаження...</div>;
+  useEffect(() => {
+    if (user && id) load();
+  }, [user, id, load]);
+
+  if (loading || !user || fetching) return <LoadingState />;
+
+  if (error instanceof ApiError && error.status === 404) {
+    return <EmptyState title="Оголошення не знайдено" action={{ label: 'До каталогу', href: '/ua' }} />;
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return <EmptyState title="Немає доступу" hint="Редагувати можна лише власні оголошення." action={{ label: 'Мої оголошення', href: '/me/local-listings' }} />;
+  }
+  if (error) return <ErrorState error={error} onRetry={load} />;
   if (!listing) return null;
 
   return (

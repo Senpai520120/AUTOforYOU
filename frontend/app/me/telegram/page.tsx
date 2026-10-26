@@ -3,6 +3,7 @@ import { useRequireAuth } from '@/lib/use-require-auth';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ApiError, apiFetch } from '@/api/client';
+import LoadingState from '@/components/ui/LoadingState';
 
 interface LinkTokenResponse {
   configured: boolean;
@@ -31,7 +32,7 @@ export default function TelegramPage() {
   const [unlinking, setUnlinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (loading || !user) return null;
+  if (loading || !user) return <LoadingState />;
 
   const isLinked = !!user.telegram_id;
 

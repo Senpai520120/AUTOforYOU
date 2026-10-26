@@ -1,11 +1,12 @@
 'use client';
 import { useRequireAuth } from '@/lib/use-require-auth';
+import LoadingState from '@/components/ui/LoadingState';
 import LocalListingForm from '@/components/local/LocalListingForm';
 
 export default function NewLocalListingPage() {
   const { user, loading } = useRequireAuth();
 
-  if (loading || !user) return null;
+  if (loading || !user) return <LoadingState />;
 
   return (
     <div className="max-w-2xl mx-auto">

@@ -67,7 +67,11 @@ test.describe('23-P8: вхід через форму', () => {
 
     const guest = await playwright.request.newContext({ baseURL, storageState: GUEST });
     try {
-      const html = await (await guest.get('/me')).text();
+      // Без has_session гостя відсікає proxy.ts (307), SSR сторінки не виконується взагалі.
+      const redirected = await guest.get('/me', { maxRedirects: 0 });
+      expect(redirected.status()).toBe(307);
+      // З однією лише міткою сесії (без токенів) SSR віддає гостьовий варіант, а не кеш чужого.
+      const html = await (await guest.get('/me', { headers: { Cookie: 'has_session=1' } })).text();
       expect(html).toContain('data-ssr-auth="guest"');
       expect(html).not.toContain('seller@e2e.test');
     } finally {

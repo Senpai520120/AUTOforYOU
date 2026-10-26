@@ -1,7 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { localApi } from '@/api/local';
 import { PromotionTariff } from '@/lib/types';
+import { getErrorMessage } from '@/lib/errors';
+import ErrorState from '@/components/ui/ErrorState';
+import LoadingState from '@/components/ui/LoadingState';
 
 interface Props {
   listingId: number;
@@ -28,17 +31,24 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState<unknown>(null);
 
-  useEffect(() => {
+  const loadTariffs = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     localApi.tariffs()
       .then(data => {
         setTariffs(data);
         const first = defaultType ? data.find(t => t.type === defaultType) : data[0];
         if (first) setSelected(first.code);
       })
-      .catch(() => setError('Не вдалося завантажити тарифи.'))
+      .catch(setLoadError)
       .finally(() => setLoading(false));
   }, [defaultType]);
+
+  useEffect(() => {
+    loadTariffs();
+  }, [loadTariffs]);
 
   async function handlePay() {
     if (!selected) return;
@@ -49,8 +59,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
       // Redirect to LiqPay hosted checkout page
       window.location.href = checkout.checkout_url;
     } catch (err: unknown) {
-      const e = err as { data?: { detail?: string } };
-      setError(e?.data?.detail ?? 'Помилка при створенні платежу.');
+      setError(getErrorMessage(err));
       setPaying(false);
     }
   }
@@ -74,7 +83,11 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
           </div>
 
           {loading ? (
-            <p className="text-slate-400 text-sm text-center py-4">Завантаження тарифів...</p>
+            <LoadingState size="md" />
+          ) : loadError ? (
+            <div className="mb-4"><ErrorState error={loadError} onRetry={loadTariffs} /></div>
+          ) : tariffs.length === 0 ? (
+            <p className="text-center text-sm text-slate-500 py-6">Просування тимчасово недоступне</p>
           ) : (
             <div className="space-y-2 mb-4">
               {tariffs.map(t => (

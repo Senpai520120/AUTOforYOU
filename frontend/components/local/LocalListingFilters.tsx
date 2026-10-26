@@ -1,14 +1,16 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { localApi } from '@/api/local';
 import { Region, City } from '@/lib/types';
+import ErrorState from '@/components/ui/ErrorState';
 
 export default function LocalListingFilters() {
   const router = useRouter();
   const sp = useSearchParams();
 
   const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsError, setRegionsError] = useState<unknown>(null);
   const [cities, setCities] = useState<City[]>([]);
 
   const [make, setMake] = useState(sp.get('make') ?? '');
@@ -26,9 +28,14 @@ export default function LocalListingFilters() {
   const [search, setSearch] = useState(sp.get('search') ?? '');
   const [ordering, setOrdering] = useState(sp.get('ordering') ?? '-created_at');
 
-  useEffect(() => {
-    localApi.regions().then(setRegions).catch(() => {});
+  const loadRegions = useCallback(() => {
+    setRegionsError(null);
+    localApi.regions().then(setRegions).catch(setRegionsError);
   }, []);
+
+  useEffect(() => {
+    loadRegions();
+  }, [loadRegions]);
 
   useEffect(() => {
     if (region) {
@@ -71,6 +78,7 @@ export default function LocalListingFilters() {
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4">
+      {regionsError ? <ErrorState error={regionsError} onRetry={loadRegions} /> : null}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div>
           <label className={labelCls}>Пошук</label>

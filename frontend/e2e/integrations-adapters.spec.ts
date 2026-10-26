@@ -114,7 +114,9 @@ test.describe('Просування: оплата LiqPay (3.4b)', () => {
     );
     const pay = await openPromoteModal(page);
     await pay.click();
-    await expect(page.getByText('Оплата тимчасово недоступна')).toBeVisible();
+    // getErrorMessage (6.2): текст сервера 5xx не показуємо, лише загальний.
+    await expect(page.getByText('Сервіс тимчасово недоступний')).toBeVisible();
+    await expect(page.getByText('Оплата тимчасово недоступна')).toHaveCount(0);
     await expect(page).toHaveURL(/\/me\/local-listings/);
     expect(liqpayRequests).toEqual([]);
   });

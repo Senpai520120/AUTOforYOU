@@ -1,10 +1,15 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { localApi } from '@/api/local';
 import { dealsApi } from '@/api/deals';
 import { LocalListing } from '@/lib/types';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import { getErrorMessage } from '@/lib/errors';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import PromoteModal from '@/components/local/PromoteModal';
 import { useC2C } from '@/components/c2c/C2CProvider';
 
@@ -42,23 +47,37 @@ export default function MyLocalListingsPage() {
   const [soldModal, setSoldModal] = useState<SoldModalState | null>(null);
   const [proposingTo, setProposingTo] = useState<number | null>(null);
   const [soldError, setSoldError] = useState('');
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<LocalListing | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
+  const load = useCallback(() => {
+    setFetching(true);
+    setLoadError(null);
     localApi
       .myListings()
       .then(data => setListings(data.results))
-      .catch(() => {})
+      .catch(setLoadError)
       .finally(() => setFetching(false));
-  }, [user]);
+  }, []);
 
-  async function handleDelete(id: number) {
-    if (!confirm('Видалити оголошення?')) return;
+  useEffect(() => {
+    if (user) load();
+  }, [user, load]);
+
+  async function confirmDelete() {
+    if (!toDelete) return;
+    const target = toDelete;
+    setActionError(null);
+    setNotice(null);
     try {
-      await localApi.remove(id);
-      setListings(prev => prev.filter(l => l.id !== id));
-    } catch {
-      alert('Не вдалося видалити.');
+      await localApi.remove(target.id);
+      setListings(prev => prev.filter(l => l.id !== target.id));
+    } catch (e) {
+      setActionError(getErrorMessage(e));
+    } finally {
+      setToDelete(null);
     }
   }
 
@@ -68,8 +87,9 @@ export default function MyLocalListingsPage() {
     try {
       const buyers = await dealsApi.listingBuyers(l.id);
       setSoldModal({ listing: l, buyers, loading: false });
-    } catch {
+    } catch (e) {
       setSoldModal(prev => prev ? { ...prev, loading: false } : null);
+      setSoldError(getErrorMessage(e));
     }
   }
 
@@ -80,10 +100,9 @@ export default function MyLocalListingsPage() {
     try {
       await dealsApi.propose(soldModal.listing.id, buyerId);
       setSoldModal(null);
-      alert('Пропозицію угоди надіслано покупцю!');
+      setNotice('Пропозицію угоди надіслано покупцю!');
     } catch (err: unknown) {
-      const e = err as { data?: { detail?: string } };
-      setSoldError(e?.data?.detail || 'Не вдалося запропонувати угоду.');
+      setSoldError(getErrorMessage(err));
     } finally {
       setProposingTo(null);
     }
@@ -93,11 +112,11 @@ export default function MyLocalListingsPage() {
     setModal({ listingId: l.id, listingTitle: `${l.make} ${l.model} ${l.year}`, defaultType: type });
   }
 
-  if (loading || fetching) return <div className="text-center py-20 text-slate-400">Завантаження...</div>;
+  if (loading || !user || fetching) return <LoadingState />;
 
   return (
     <div className="max-w-3xl mx-auto">
-      {modal && (
+      {payments && modal && (
         <PromoteModal
           listingId={modal.listingId}
           listingTitle={modal.listingTitle}
@@ -151,14 +170,13 @@ export default function MyLocalListingsPage() {
         </Link>
       </div>
 
-      {listings.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
-          <p className="text-4xl mb-3">📋</p>
-          <p className="font-medium text-slate-600">Оголошень ще немає</p>
-          <Link href="/local/new" className="mt-2 inline-block text-blue-600 underline text-sm">
-            Подати перше оголошення
-          </Link>
-        </div>
+      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+      {notice && <p role="status" className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{notice}</p>}
+
+      {loadError ? (
+        <ErrorState error={loadError} onRetry={load} />
+      ) : listings.length === 0 ? (
+        <EmptyState icon="📋" title="Оголошень ще немає" hint="Подайте перше оголошення — це безкоштовно." action={{ label: 'Подати перше оголошення', href: '/local/new' }} />
       ) : (
         <div className="space-y-4">
           {listings.map(l => {
@@ -240,7 +258,7 @@ export default function MyLocalListingsPage() {
                   ) : null}
 
                   {/* Кнопки просування */}
-                  {l.status === 'expired' && (
+                  {payments && l.status === 'expired' && (
                     <button
                       onClick={() => openPromote(l, 'renew')}
                       className="text-sm bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded-lg transition-colors"
@@ -285,7 +303,7 @@ export default function MyLocalListingsPage() {
 
                   {(l.status !== 'sold' && l.status !== 'expired') && (
                     <button
-                      onClick={() => handleDelete(l.id)}
+                      onClick={() => setToDelete(l)}
                       className="text-sm border border-red-200 hover:bg-red-50 text-red-600 px-3 py-1.5 rounded-lg transition-colors"
                     >
                       Видалити
@@ -297,6 +315,13 @@ export default function MyLocalListingsPage() {
           })}
         </div>
       )}
+      <ConfirmDialog
+        open={toDelete !== null}
+        title="Видалити оголошення?"
+        message={toDelete ? `${toDelete.make} ${toDelete.model} ${toDelete.year}` : undefined}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }

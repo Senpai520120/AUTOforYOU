@@ -1,10 +1,12 @@
 'use client';
-import { useRef, useEffect, useState } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { isEmailNotVerified } from '@/lib/email-verify';
 import { Region, City, LocalListing, LocalListingImage } from '@/lib/types';
+import ErrorState from '@/components/ui/ErrorState';
+import LoadingState from '@/components/ui/LoadingState';
 import PhotoUploadBlock from './PhotoUploadBlock';
 
 function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void }) {
@@ -73,6 +75,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const isEdit = !!listingId;
 
   const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsLoaded, setRegionsLoaded] = useState(false);
+  const [regionsError, setRegionsError] = useState<unknown>(null);
   const [cities, setCities] = useState<City[]>([]);
 
   const [make, setMake] = useState(initial?.make ?? '');
@@ -107,9 +111,15 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [photoError, setPhotoError] = useState('');
 
-  useEffect(() => {
-    localApi.regions().then(setRegions).catch(() => {});
+  const loadRegions = useCallback(() => {
+    setRegionsError(null);
+    setRegionsLoaded(false);
+    localApi.regions().then(setRegions).catch(setRegionsError).finally(() => setRegionsLoaded(true));
   }, []);
+
+  useEffect(() => {
+    loadRegions();
+  }, [loadRegions]);
 
   useEffect(() => {
     if (region) {
@@ -207,6 +217,10 @@ export default function LocalListingForm({ initial, listingId }: Props) {
       </div>
     );
   }
+
+  // Без списку областей форма не відправиться: показуємо помилку з повтором, а не порожній select.
+  if (regionsError) return <ErrorState error={regionsError} onRetry={loadRegions} />;
+  if (!regionsLoaded) return <LoadingState />;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">

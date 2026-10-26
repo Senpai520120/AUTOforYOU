@@ -1,8 +1,13 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
 import { getSavedSearches, deleteSavedSearch, patchSavedSearch } from '@/api/saved-searches';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import { getErrorMessage } from '@/lib/errors';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import type { SavedSearch } from '@/lib/types';
 
 function filtersLabel(filters: Record<string, string>) {
@@ -23,23 +28,45 @@ export default function SavedSearchesPage() {
   const { user, loading } = useRequireAuth();
   const [items, setItems] = useState<SavedSearch[]>([]);
   const [busy, setBusy] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<SavedSearch | null>(null);
+
+  const load = useCallback(() => {
+    setBusy(true);
+    setError(null);
+    getSavedSearches().then(setItems).catch(setError).finally(() => setBusy(false));
+  }, []);
 
   useEffect(() => {
-    if (!user) return;
-    getSavedSearches().then(setItems).catch(() => {}).finally(() => setBusy(false));
-  }, [user]);
+    if (user) load();
+  }, [user, load]);
 
-  const remove = async (id: number) => {
-    await deleteSavedSearch(id).catch(() => {});
-    setItems(prev => prev.filter(s => s.id !== id));
+  const confirmRemove = async () => {
+    if (!toDelete) return;
+    const target = toDelete;
+    setActionError(null);
+    try {
+      await deleteSavedSearch(target.id);
+      setItems(prev => prev.filter(s => s.id !== target.id));
+    } catch (e) {
+      setActionError(getErrorMessage(e));
+    } finally {
+      setToDelete(null);
+    }
   };
 
   const toggleNotify = async (item: SavedSearch) => {
-    await patchSavedSearch(item.id, { notify: !item.notify }).catch(() => {});
-    setItems(prev => prev.map(s => s.id === item.id ? { ...s, notify: !s.notify } : s));
+    setActionError(null);
+    try {
+      await patchSavedSearch(item.id, { notify: !item.notify });
+      setItems(prev => prev.map(s => s.id === item.id ? { ...s, notify: !s.notify } : s));
+    } catch (e) {
+      setActionError(getErrorMessage(e));
+    }
   };
 
-  if (loading || !user) return null;
+  if (loading || !user) return <LoadingState />;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -50,16 +77,14 @@ export default function SavedSearchesPage() {
       </div>
       <h1 className="text-xl font-bold text-slate-900 mb-4">Збережені пошуки</h1>
 
+      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+
       {busy ? (
-        <div className="text-slate-400 text-sm">Завантаження…</div>
+        <LoadingState />
+      ) : error ? (
+        <ErrorState error={error} onRetry={load} />
       ) : items.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-400">
-          <div className="text-4xl mb-2">🔍</div>
-          <p className="text-sm">Немає збережених пошуків.</p>
-          <Link href="/ua" className="mt-3 inline-block text-blue-600 hover:underline text-sm">
-            Перейти до каталогу →
-          </Link>
-        </div>
+        <EmptyState icon="🔍" title="Немає збережених пошуків." action={{ label: 'Перейти до каталогу →', href: '/ua' }} />
       ) : (
         <ul className="space-y-3">
           {items.map(item => (
@@ -87,7 +112,7 @@ export default function SavedSearchesPage() {
                     {item.notify ? '🔔 Алерти вкл.' : '🔕 Алерти вимк.'}
                   </button>
                   <button
-                    onClick={() => remove(item.id)}
+                    onClick={() => setToDelete(item)}
                     className="text-xs text-slate-400 hover:text-red-500 transition-colors"
                   >
                     Видалити
@@ -106,6 +131,13 @@ export default function SavedSearchesPage() {
           ))}
         </ul>
       )}
+      <ConfirmDialog
+        open={toDelete !== null}
+        title="Видалити збережений пошук?"
+        message={toDelete?.name}
+        onConfirm={confirmRemove}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }

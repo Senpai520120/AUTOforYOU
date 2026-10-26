@@ -20,6 +20,9 @@ export default function NotFound() {
       >
         Порахувати вартість
       </Link>
+      <Link href="/" className="mt-4 text-sm text-blue-700 hover:underline">
+        На головну
+      </Link>
     </div>
   );
 }

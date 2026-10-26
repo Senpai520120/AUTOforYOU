@@ -1,9 +1,14 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { dealsApi } from '@/api/deals';
 import { Deal } from '@/lib/types';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import { getErrorMessage } from '@/lib/errors';
+
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   proposed:  { label: 'Очікує підтвердження', cls: 'bg-amber-100 text-amber-800' },
@@ -26,17 +31,24 @@ export default function MyDealsPage() {
   const [reviewState, setReviewState] = useState<Record<number, { rating: number; text: string }>>({});
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState<unknown>(null);
 
-  useEffect(() => {
-    if (!user) return;
+  const load = useCallback(() => {
+    setFetching(true);
+    setLoadError(null);
     dealsApi.list()
       .then(setDeals)
-      .catch(() => {})
+      .catch(setLoadError)
       .finally(() => setFetching(false));
-  }, [user]);
+  }, []);
 
+  useEffect(() => {
+    if (user) load();
+  }, [user, load]);
+
+  // Тихе оновлення після дії: збій тут не підміняє список порожнім станом.
   const refresh = () => {
-    dealsApi.list().then(setDeals).catch(() => {});
+    dealsApi.list().then(setDeals).catch(e => setError(getErrorMessage(e)));
   };
 
   const handleConfirm = async (dealId: number) => {
@@ -44,8 +56,8 @@ export default function MyDealsPage() {
     try {
       await dealsApi.confirm(dealId);
       refresh();
-    } catch {
-      setError('Не вдалося підтвердити угоду.');
+    } catch (e) {
+      setError(getErrorMessage(e));
     }
   };
 
@@ -54,8 +66,8 @@ export default function MyDealsPage() {
     try {
       await dealsApi.cancel(dealId);
       refresh();
-    } catch {
-      setError('Не вдалося скасувати угоду.');
+    } catch (e) {
+      setError(getErrorMessage(e));
     }
   };
 
@@ -67,16 +79,14 @@ export default function MyDealsPage() {
     try {
       await dealsApi.review(dealId, { rating: r.rating, text: r.text || '' });
       refresh();
-    } catch {
-      setError('Не вдалося залишити відгук.');
+    } catch (e) {
+      setError(getErrorMessage(e));
     } finally {
       setSubmitting(null);
     }
   };
 
-  if (loading || fetching) {
-    return <div className="text-center py-16 text-slate-400">Завантаження...</div>;
-  }
+  if (loading || !user || fetching) return <LoadingState />;
 
   const asBuyer = deals.filter(d => d.buyer.id === user?.id);
   const asSeller = deals.filter(d => d.seller.id === user?.id);
@@ -175,8 +185,10 @@ export default function MyDealsPage() {
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm">{error}</div>
       )}
 
-      {deals.length === 0 && (
-        <p className="text-slate-500 text-center py-12">Угод поки немає.</p>
+      {loadError ? (
+        <ErrorState error={loadError} onRetry={load} />
+      ) : deals.length === 0 && (
+        <EmptyState title="Угод поки немає." hint="Угоди з'являться, коли продавець запропонує вам угоду за оголошенням." />
       )}
 
       {asBuyer.length > 0 && (

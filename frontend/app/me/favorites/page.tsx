@@ -1,10 +1,14 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getFavorites, removeFavorite } from '@/api/favorites';
 import type { FavoriteItem } from '@/lib/types';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import { getErrorMessage } from '@/lib/errors';
 import { useC2C } from '@/components/c2c/C2CProvider';
 
 const PLACEHOLDER =
@@ -15,22 +19,30 @@ export default function FavoritesPage() {
   const c2c = useC2C();
   const [items, setItems] = useState<FavoriteItem[]>([]);
   const [busy, setBusy] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setBusy(true);
+    setError(null);
+    getFavorites().then(setItems).catch(setError).finally(() => setBusy(false));
+  }, []);
 
   useEffect(() => {
-    if (!user) return;
-    getFavorites().then(setItems).catch(() => {}).finally(() => setBusy(false));
-  }, [user]);
+    if (user) load();
+  }, [user, load]);
 
   const remove = async (item: FavoriteItem) => {
+    setActionError(null);
     try {
       await removeFavorite(item.listing_type, item.listing_id);
       setItems(prev => prev.filter(f => f.id !== item.id));
-    } catch {
-      // ignore
+    } catch (e) {
+      setActionError(getErrorMessage(e));
     }
   };
 
-  if (loading || !user) return null;
+  if (loading || !user) return <LoadingState />;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -41,22 +53,20 @@ export default function FavoritesPage() {
       </div>
       <h1 className="text-xl font-bold text-slate-900 mb-4">Обране</h1>
 
+      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+
       {busy ? (
-        <div className="text-slate-400 text-sm">Завантаження…</div>
+        <LoadingState />
+      ) : error ? (
+        <ErrorState error={error} onRetry={load} />
       ) : items.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-400">
-          <div className="text-4xl mb-2">♡</div>
-          <p className="text-sm">Тут будуть збережені оголошення.</p>
-          {c2c.enabled ? (
-            <Link href="/ua" className="mt-3 inline-block text-blue-600 hover:underline text-sm">
-              Переглянути Каталог Україна →
-            </Link>
-          ) : (
-            <Link href="/calculator" className="mt-3 inline-block text-blue-600 hover:underline text-sm">
-              Перейти до калькулятора →
-            </Link>
-          )}
-        </div>
+        <EmptyState
+          icon="♡"
+          title="Тут будуть збережені оголошення."
+          action={c2c.enabled
+            ? { label: 'Переглянути Каталог Україна →', href: '/ua' }
+            : { label: 'Перейти до калькулятора →', href: '/calculator' }}
+        />
       ) : (
         <ul className="grid gap-4">
           {items.map(item => (

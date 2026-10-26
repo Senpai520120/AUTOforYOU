@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { resendErrorText, resendVerificationEmail } from '@/lib/email-verify';
 import { formatDeletionDate } from '@/lib/deletion';
+import LoadingState from '@/components/ui/LoadingState';
 import { useC2C } from '@/components/c2c/C2CProvider';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -63,7 +64,7 @@ export default function MeDashboard() {
   const { user, loading, logout } = useRequireAuth();
   const c2c = useC2C();
 
-  if (loading || !user) return null;
+  if (loading || !user) return <LoadingState />;
 
   // Плитки C2C (переписка, збережені пошуки, мої оголошення, угоди) — лише коли розділ і подача відкриті.
   const C2C_ONLY = ['/me/messages', '/me/saved-searches', '/me/local-listings', '/me/deals'];

@@ -1,9 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { meApi } from '@/api/me';
 import { Shipment } from '@/lib/types';
-import Spinner from '@/components/ui/Spinner';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
 import Badge from '@/components/ui/Badge';
 import Link from 'next/link';
 
@@ -26,12 +28,19 @@ export default function MyShipmentsPage() {
   const { user, loading } = useRequireAuth();
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(() => {
+    setFetching(true);
+    setError(null);
+    meApi.shipments().then(d => setShipments(d.results)).catch(setError).finally(() => setFetching(false));
+  }, []);
 
   useEffect(() => {
-    if (user) meApi.shipments().then(d => setShipments(d.results)).finally(() => setFetching(false));
-  }, [user, loading]);
+    if (user) load();
+  }, [user, load]);
 
-  if (loading || fetching) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (loading || !user || fetching) return <LoadingState />;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -40,11 +49,10 @@ export default function MyShipmentsPage() {
         <h1 className="text-xl font-bold text-slate-900">Мої контейнери</h1>
       </div>
 
-      {shipments.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-slate-400 text-lg">Відстежуваних контейнерів немає</p>
-          <p className="text-slate-400 text-sm mt-2">Зверніться до менеджера щоб додати контейнер</p>
-        </div>
+      {error ? (
+        <ErrorState error={error} onRetry={load} />
+      ) : shipments.length === 0 ? (
+        <EmptyState title="Відстежуваних контейнерів немає" hint="Зверніться до менеджера щоб додати контейнер" />
       ) : (
         <div className="space-y-4">
           {shipments.map(s => {

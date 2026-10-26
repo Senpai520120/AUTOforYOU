@@ -2,7 +2,7 @@
  * E2E: заморозка модулей (задача 2.8). Стек поднят с LOTS/B2B/DEALERS/SHIPMENTS/LEGACY_CARS = false (как прод).
  * Запускать из frontend/ на e2e-стеке (docker-compose.e2e.yml).
  */
-import { test, expect } from './fixtures';
+import { test, expect, storageStatePath } from './fixtures';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
 
@@ -57,11 +57,15 @@ test.describe('Модули заморожены: обход по прямой �
   // app/me/loading.tsx запускає стрим до layout сегмента shipments, тому статус уже 200:
   // notFound() посеред стриму дає сторінку 404 і noindex (next/dist/docs/01-app/02-guides/streaming.md,
   // «The HTTP contract»). Дані закриває API: /api/v1/auth/me/shipments/ → 404 (тест нижче).
-  test('/me/shipments → сторінка 404 з noindex', async ({ page }) => {
+  // Гостя до /me/* веде proxy.ts (6.2), тому 404 модуля перевіряємо під залогіненим користувачем.
+  test('/me/shipments → сторінка 404 з noindex', async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: storageStatePath('buyer') });
+    const page = await ctx.newPage();
     await page.addInitScript(consentInit);
     await page.goto('/me/shipments');
     await expect(page.getByRole('heading', { name: 'Сторінку не знайдено' })).toBeVisible();
     await expect(page.locator('meta[name="robots"][content*="noindex"]').first()).toBeAttached();
+    await ctx.close();
   });
 
   for (const path of [

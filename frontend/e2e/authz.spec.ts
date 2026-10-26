@@ -62,7 +62,7 @@ test.describe('Сторонній не бачить і не змінює чуж�
     const page = await ctx.newPage();
     await page.addInitScript(consentInit);
     await page.goto(`/me/messages?conv=${convId}`);
-    await expect(page.getByText('Не вдалось завантажити діалог.')).toBeVisible();
+    await expect(page.getByRole('alert').getByText('Не знайдено')).toBeVisible();
     await expect(page.getByText('[E2E] Здравствуйте!')).toHaveCount(0);
     await ctx.close();
   });

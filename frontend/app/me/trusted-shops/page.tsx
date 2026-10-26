@@ -1,9 +1,13 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { meApi } from '@/api/me';
 import { TrustedShop } from '@/lib/types';
-import Spinner from '@/components/ui/Spinner';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { getErrorMessage } from '@/lib/errors';
 import Link from 'next/link';
 
 const TYPE_LABELS: Record<string, string> = { service: 'СТО', painter: 'Маляр', parts: 'Запчасти', other: 'Інше' };
@@ -15,24 +19,52 @@ export default function TrustedShopsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'service', contacts: '', rating: 5, notes: '' });
 
+  const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [toDelete, setToDelete] = useState<TrustedShop | null>(null);
+
+  const load = useCallback(() => {
+    setFetching(true);
+    setError(null);
+    meApi.trustedShops.list().then(d => setShops(d.results)).catch(setError).finally(() => setFetching(false));
+  }, []);
+
   useEffect(() => {
-    if (user) meApi.trustedShops.list().then(d => setShops(d.results)).finally(() => setFetching(false));
-  }, [user, loading]);
+    if (user) load();
+  }, [user, load]);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    const shop = await meApi.trustedShops.create(form as TrustedShop);
-    setShops(s => [shop, ...s]);
-    setShowForm(false);
-    setForm({ name: '', type: 'service', contacts: '', rating: 5, notes: '' });
+    setActionError(null);
+    setSaving(true);
+    try {
+      const shop = await meApi.trustedShops.create(form as TrustedShop);
+      setShops(s => [shop, ...s]);
+      setShowForm(false);
+      setForm({ name: '', type: 'service', contacts: '', rating: 5, notes: '' });
+    } catch (err) {
+      setActionError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const remove = async (id: number) => {
-    await meApi.trustedShops.delete(id);
-    setShops(s => s.filter(x => x.id !== id));
+  const confirmRemove = async () => {
+    if (!toDelete) return;
+    const shop = toDelete;
+    setActionError(null);
+    try {
+      await meApi.trustedShops.delete(shop.id);
+      setShops(s => s.filter(x => x.id !== shop.id));
+    } catch (err) {
+      setActionError(getErrorMessage(err));
+    } finally {
+      setToDelete(null);
+    }
   };
 
-  if (loading || fetching) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (loading || !user || fetching) return <LoadingState />;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -46,6 +78,8 @@ export default function TrustedShopsPage() {
           + Додати
         </button>
       </div>
+
+      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
 
       {showForm && (
         <form onSubmit={create} className="bg-white border border-blue-200 rounded-xl p-5 mb-5 space-y-3">
@@ -66,14 +100,16 @@ export default function TrustedShopsPage() {
             value={form.contacts} onChange={e => setForm(f => ({ ...f, contacts: e.target.value }))} />
           <textarea placeholder="Нотатки" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
             value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-          <button type="submit" className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-6 py-2 rounded-lg text-sm">
+          <button type="submit" disabled={saving} className="disabled:opacity-50 bg-amber-500 hover:bg-amber-400 text-black font-bold px-6 py-2 rounded-lg text-sm">
             Зберегти
           </button>
         </form>
       )}
 
-      {shops.length === 0 ? (
-        <p className="text-center text-slate-400 py-16">Партнерів поки немає</p>
+      {error ? (
+        <ErrorState error={error} onRetry={load} />
+      ) : shops.length === 0 ? (
+        <EmptyState title="Партнерів поки немає" hint="Додайте СТО, маляра чи магазин запчастин, яким ви довіряєте." />
       ) : (
         <div className="space-y-3">
           {shops.map(s => (
@@ -84,13 +120,20 @@ export default function TrustedShopsPage() {
                 {s.contacts && <p className="text-sm text-slate-600 mt-1">{s.contacts}</p>}
                 {s.notes && <p className="text-xs text-slate-400 mt-0.5">{s.notes}</p>}
               </div>
-              <button onClick={() => remove(s.id)} className="text-red-400 hover:text-red-600 text-xs ml-4">
+              <button onClick={() => setToDelete(s)} className="text-red-400 hover:text-red-600 text-xs ml-4">
                 Видалити
               </button>
             </div>
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={toDelete !== null}
+        title="Видалити партнера?"
+        message={toDelete ? toDelete.name : undefined}
+        onConfirm={confirmRemove}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }
