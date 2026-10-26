@@ -33,7 +33,7 @@ def apply_for_dealer(user, company_name, full_name, contact_phone, documents='')
     нельзя, а сериализатор не пропустит её без agreed_to_processing=True.
     """
     if DealerApplication.objects.filter(user=user, status=DealerApplication.Status.PENDING).exists():
-        raise DuplicatePendingError('У вас уже есть заявка на рассмотрении.')
+        raise DuplicatePendingError('У вас уже є заявка на розгляді.')
     with transaction.atomic():
         application = DealerApplication.objects.create(
             user=user,

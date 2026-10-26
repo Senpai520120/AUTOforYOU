@@ -109,7 +109,7 @@ export default function SavedSearchesPage() {
                         : 'border-slate-200 text-slate-400 hover:border-slate-300'
                     }`}
                   >
-                    {item.notify ? '🔔 Алерти вкл.' : '🔕 Алерти вимк.'}
+                    {item.notify ? '🔔 Сповіщення увімк.' : '🔕 Сповіщення вимк.'}
                   </button>
                   <button
                     onClick={() => setToDelete(item)}

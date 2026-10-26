@@ -10,7 +10,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { getErrorMessage } from '@/lib/errors';
 import Link from 'next/link';
 
-const TYPE_LABELS: Record<string, string> = { service: 'СТО', painter: 'Маляр', parts: 'Запчасти', other: 'Інше' };
+const TYPE_LABELS: Record<string, string> = { service: 'СТО', painter: 'Маляр', parts: 'Запчастини', other: 'Інше' };
 
 export default function TrustedShopsPage() {
   const { user, loading } = useRequireAuth();

@@ -16,7 +16,7 @@ def can_view_wholesale(user):
 
 class IsVerifiedDealerOrAdmin(BasePermission):
     """Wholesale-контент видят только верифицированные дилеры и администраторы."""
-    message = 'Доступ только для верифицированных перекупщиков.'
+    message = 'Доступ лише для верифікованих перекупників.'
 
     def has_permission(self, request, view):
         return can_view_wholesale(request.user)

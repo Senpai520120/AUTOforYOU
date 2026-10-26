@@ -4,9 +4,10 @@
  */
 import type { Instrumentation } from 'next';
 import { buildReport } from './lib/reportError';
+import { INTERNAL_API_URL } from '@/lib/config';
 
 export const onRequestError: Instrumentation.onRequestError = async (err, request) => {
-  const api = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  const api = INTERNAL_API_URL;
   const error = err as { message?: string; digest?: string };
   try {
     await fetch(`${api}/api/v1/monitoring/client-errors/`, {

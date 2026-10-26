@@ -37,7 +37,6 @@ export default function Header() {
         <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight shrink-0">
           <span className="text-amber-400">AUTO</span>
           <span>forYOU</span>
-          <span className="text-xs font-normal text-blue-300 ml-1 hidden sm:inline">Перекупам UA</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">

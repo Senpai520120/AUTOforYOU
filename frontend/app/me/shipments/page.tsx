@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { meApi } from '@/api/me';
-import { Shipment } from '@/lib/types';
+import { Shipment, SiteSettings } from '@/lib/types';
+import { apiGet } from '@/api/client';
 import LoadingState from '@/components/ui/LoadingState';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
@@ -16,7 +17,7 @@ const STATUS_STEPS = [
 
 const STATUS_LABELS: Record<string, string> = {
   at_us_warehouse: 'Склад США',
-  loading: 'Погрузка',
+  loading: 'Завантаження',
   in_ocean: 'В морі 🌊',
   at_eu_port: 'Порт ЄС',
   on_truck_to_ua: 'Автовоз → UA',
@@ -28,6 +29,13 @@ export default function MyShipmentsPage() {
   const { user, loading } = useRequireAuth();
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [fetching, setFetching] = useState(true);
+  // 6.4 (08-C7): контакт менеджера — з налаштувань сайту; порожньо — текст без контакту, без вигаданого номера.
+  const [managerContact, setManagerContact] = useState('');
+  useEffect(() => {
+    apiGet<SiteSettings>('/api/v1/site-settings/')
+      .then((s) => setManagerContact(s.manager_contact || ''))
+      .catch(() => setManagerContact(''));
+  }, []);
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(() => {
@@ -52,7 +60,12 @@ export default function MyShipmentsPage() {
       {error ? (
         <ErrorState error={error} onRetry={load} />
       ) : shipments.length === 0 ? (
-        <EmptyState title="Відстежуваних контейнерів немає" hint="Зверніться до менеджера щоб додати контейнер" />
+        <EmptyState
+          title="Відстежуваних контейнерів немає"
+          hint={managerContact
+            ? `Щоб додати контейнер, зверніться до менеджера: ${managerContact}`
+            : 'Щоб додати контейнер, зверніться до менеджера.'}
+        />
       ) : (
         <div className="space-y-4">
           {shipments.map(s => {
@@ -68,7 +81,7 @@ export default function MyShipmentsPage() {
                     <Badge variant={s.status === 'delivered' ? 'success' : 'info'}>
                       {STATUS_LABELS[s.status] ?? s.status}
                     </Badge>
-                    {s.eta && <p className="text-xs text-slate-400 mt-1">ETA: {s.eta}</p>}
+                    {s.eta && <p className="text-xs text-slate-400 mt-1">Орієнтовне прибуття: {s.eta}</p>}
                   </div>
                 </div>
                 {/* Progress bar */}

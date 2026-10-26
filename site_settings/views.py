@@ -7,6 +7,7 @@ from core.c2c import c2c_enabled, c2c_public_posting_enabled, payments_enabled
 from core.modules import MODULE_FLAGS, module_enabled
 
 from .models import PUBLIC_CACHE_KEY, SiteSettings
+from .public_config import env_config
 from .serializers import PublicSiteSettingsSerializer, carvertical_partner_url
 
 CACHE_TTL = 300
@@ -30,4 +31,5 @@ class SiteSettingsView(APIView):
         data['c2c_public_posting_enabled'] = c2c_public_posting_enabled()
         data['payments_enabled'] = payments_enabled()
         data['carvertical_partner_url'] = carvertical_partner_url()
+        data.update(env_config())  # 6.4: лимиты, имя бота, признак демо-тарифов - не из кэша модели
         return Response(data)

@@ -484,6 +484,13 @@ export type OwnerLegalForm = 'fop' | 'tov' | 'other' | '';
 
 /** Публічні налаштування сайту (GET /api/v1/site-settings/). */
 export interface SiteSettings {
+  // 6.4: публічна конфігурація з .env і признак демо-тарифів (2.6)
+  local_listing_max_active?: number;
+  local_listing_expiry_days?: number;
+  local_listing_max_photos?: number;
+  local_listing_photo_max_size_mb?: number | null;
+  telegram_bot_username?: string;
+  tariffs_demo?: boolean;
   owner_legal_form: OwnerLegalForm;
   owner_legal_name: string;
   owner_code: string;

@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
+import { DEV_API_URL } from "./lib/config";
 
 const isDev = process.env.NODE_ENV === 'development';
 
 // Derive backend hostname/port from the env var so prod picks up the real domain without any changes here.
-const apiRaw = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const apiRaw = process.env.NEXT_PUBLIC_API_URL || DEV_API_URL;
 const apiUrl = new URL(apiRaw);
 const apiProtocol = apiUrl.protocol.replace(':', '') as 'http' | 'https';
 const apiHostname = apiUrl.hostname;
@@ -46,4 +48,18 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// 6.4 (11-C10): NEXT_PUBLIC_* вшиваються при збірці — production-збірка без них «мовчки» пішла б на localhost.
+const REQUIRED_AT_BUILD = ['NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_SITE_URL'] as const;
+
+export default function config(phase: string): NextConfig {
+  if (phase === PHASE_PRODUCTION_BUILD) {
+    const missing = REQUIRED_AT_BUILD.filter((name) => !process.env[name]);
+    if (missing.length > 0) {
+      throw new Error(
+        `Не задано ${missing.join(', ')}: production-збірка фронтенду потребує адрес API та сайту ` +
+        '(https://ваш-домен). Задайте їх у .env / build args і зберіть знову.',
+      );
+    }
+  }
+  return nextConfig;
+}

@@ -1,3 +1,4 @@
+import { INTERNAL_API_URL } from '@/lib/config';
 /**
  * Серверні запити до API — для рендера сторінок на сервері.
  *
@@ -9,7 +10,7 @@
  *
  * INTERNAL_API_URL задається в Docker (http://backend:8000).
  */
-const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const apiUrl = INTERNAL_API_URL;
 
 export type SearchParams = Record<string, string | string[] | undefined>;
 

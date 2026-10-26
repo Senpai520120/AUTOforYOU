@@ -1,3 +1,4 @@
+import { API_URL } from '@/lib/config';
 /**
  * Мінімальний звіт про помилку фронтенду в моніторинг (задача 7.6, 08-Q17).
  *
@@ -25,7 +26,7 @@ export function buildReport(error: { message?: string; digest?: string }, path: 
 
 export function reportError(error: { message?: string; digest?: string }) {
   if (typeof window === 'undefined') return;
-  const api = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  const api = API_URL;
   const body = JSON.stringify(buildReport(error, window.location.pathname));
   try {
     // keepalive: звіт іде, навіть якщо користувач одразу перейде на іншу сторінку.
