@@ -1,6 +1,6 @@
 /**
  * E2E: SEO (задача 6.3a): sitemap, robots, canonical, noindex, title юр. сторінок, редірект лота.
- * OG-картинки і блок «OG» - задача 6.3b.
+ * Блок «OG» (6.3b): og:image/twitter:image на всіх публічних сторінках, картинки 200 image/png, 404 для прихованих.
  * Режим стека (C2C, LOTS) читається з /api/v1/site-settings/; блоки чужих режимів пропускаються з причиною.
  */
 import type { APIRequestContext } from '@playwright/test';
@@ -212,5 +212,94 @@ test.describe('SEO: канонічна адреса лота (308)', () => {
     test.skip(lots, 'LOTS_ENABLED=true');
     const res = await request.get('/listings/1-toyota-camry-2020', { maxRedirects: 0 });
     expect(res.status()).toBe(404);
+  });
+});
+
+
+// ─── OG/Twitter-превʼю (задача 6.3b) ───────────────────────────────────────────
+
+async function expectOg(page: import('@playwright/test').Page, request: APIRequestContext, path: string) {
+  await page.goto(path);
+  const meta = (sel: string) => page.locator(sel).getAttribute('content');
+  for (const sel of ['meta[property="og:title"]', 'meta[property="og:description"]', 'meta[property="og:image:alt"]',
+    'meta[name="twitter:image"]']) {
+    await expect(page.locator(sel), `${path}: ${sel}`).toHaveCount(1);
+  }
+  await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute('content', 'AUTOforYOU');
+  await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute('content', 'uk_UA');
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+  // og:url = canonical, без query
+  const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
+  expect(await meta('meta[property="og:url"]')).toBe(canonical);
+  const ogImage = (await meta('meta[property="og:image"]'))!;
+  expect(ogImage, `${path}: og:image абсолютна`).toMatch(/^https?:\/\//);
+  for (const img of [ogImage, (await meta('meta[name="twitter:image"]'))!]) {
+    const res = await request.get(new URL(img).pathname + new URL(img).search);
+    expect(res.status(), img).toBe(200);
+    expect(res.headers()['content-type']).toBe('image/png');
+    expect((await res.body()).byteLength).toBeGreaterThan(1000);
+  }
+  return { ogImage, description: (await meta('meta[property="og:description"]'))! };
+}
+
+test.describe('SEO: OG-превʼю', () => {
+  test.use({ storageState: GUEST });
+  test.beforeEach(async ({ page }) => { await page.addInitScript(consentInit); });
+
+  for (const path of ['/', '/calculator', '/ua', '/privacy']) {
+    test(`${path}: og:image і twitter:image, картинка 200 image/png`, async ({ page, request }) => {
+      if (path === '/ua') test.skip(!c2c, 'C2C вимкнено');
+      const { ogImage } = await expectOg(page, request, path);
+      expect(new URL(ogImage).pathname).toBe('/opengraph-image');
+    });
+  }
+
+  test('/calculator: noindex і водночас OG', async ({ page, request }) => {
+    await expectOg(page, request, '/calculator');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+  });
+
+  test('регрес: og:url без query (/ua?make=bmw → /ua)', async ({ page }) => {
+    test.skip(!c2c, 'C2C вимкнено');
+    await page.goto('/ua?make=bmw');
+    expect(new URL((await page.locator('meta[property="og:url"]').getAttribute('content'))!).pathname).toBe('/ua');
+  });
+
+  test('місцеве оголошення: власна картка, опис ≤160', async ({ page, request }) => {
+    test.skip(!c2c || localIds.length === 0, 'C2C вимкнено або немає активних оголошень');
+    const { ogImage, description } = await expectOg(page, request, `/local/${localIds[0]}`);
+    expect(new URL(ogImage).pathname).toBe(`/local/${localIds[0]}/opengraph-image`);
+    expect(description.length).toBeLessThanOrEqual(160);
+  });
+
+  test('лот: картка без фото Copart/IAAI (режим фото off)', async ({ page, request }) => {
+    test.skip(!lots || lotSlugs.length === 0, 'каталог лотів заморожено (LOTS_ENABLED=false)');
+    const { ogImage } = await expectOg(page, request, `/listings/${lotSlugs[0].slug}`);
+    expect(new URL(ogImage).host).toBe(new URL(page.url()).host);
+    expect(ogImage).not.toMatch(/copart|iaai/i);
+  });
+
+  test('обхід: картинка невідомого оголошення — 404', async ({ request }) => {
+    expect((await request.get('/local/99999999/opengraph-image')).status()).toBe(404);
+    expect((await request.get('/local/abc/opengraph-image')).status()).toBe(404);
+  });
+
+  test('обхід: pending-оголошення — 404 на сторінку і на картинку, без og: з даними', async ({ api, page, request }) => {
+    test.skip(!c2c, 'C2C вимкнено');
+    const seller = await api('seller');
+    const mine = await (await seller.get('/api/v1/local/my-listings/')).json();
+    const pending = (mine.results ?? mine).find((l: { status: string }) => l.status === 'pending');
+    test.skip(!pending, 'у фікстурі немає pending-оголошення продавця');
+    expect((await page.goto(`/local/${pending.id}`))?.status()).toBe(404);
+    // У og:-тегах 404-сторінки немає даних оголошення (марка, модель); адреса картинки сама віддає 404.
+    const og = await page.locator('meta[property^="og:"], meta[name^="twitter:"]').evaluateAll(
+      (els) => els.map((e) => e.getAttribute('content') ?? '').join(' '));
+    expect(og).not.toContain(pending.model);
+    expect((await request.get(`/local/${pending.id}/opengraph-image`)).status()).toBe(404);
+  });
+
+  test('обхід: картинка лота при замороженому каталозі — 404', async ({ request }) => {
+    test.skip(lots, 'каталог лотів увімкнено');
+    expect((await request.get('/listings/1/opengraph-image')).status()).toBe(404);
   });
 });

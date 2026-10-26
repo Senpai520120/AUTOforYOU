@@ -3,6 +3,11 @@ import { SITE_NAME, absoluteUrl } from '@/lib/site';
 
 export const DESCRIPTION_MAX = 160;
 
+// 6.3b: бренд-картка з app/opengraph-image.tsx. openGraph сторінки замінює успадкований з layout разом
+// із файловою картинкою кореня, тож за замовчуванням підставляємо її тут. Сегменти з власним
+// opengraph-image.tsx (лот, оголошення) перекривають це файловими метаданими.
+const BRAND_IMAGE_ALT = `${SITE_NAME} — пригін авто з США під ключ`;
+
 /** Обрізає опис до 160 символів по межі слова, з «…». */
 export function truncateDescription(text: string, max = DESCRIPTION_MAX): string {
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -20,8 +25,11 @@ export interface SeoInput {
   description: string;
   /** Канонічний шлях без query ('/ua', '/local/5'). */
   path: string;
-  /** Абсолютна адреса картинки (OG-картинки — задача 6.3b). */
+  /** Абсолютна адреса картинки. Зазвичай не потрібна: og:image дає файл opengraph-image.tsx сегмента (6.3b). */
   image?: string;
+  /** У сегмента власний opengraph-image.tsx (лот, оголошення): бренд-картку за замовчуванням не підставляти,
+   *  інакше вона перекриє файлову (перевірено на Next 16). */
+  segmentImage?: boolean;
   /** noindex; follow лишається true, якщо followLinks не вимкнено. */
   noindex?: boolean;
   followLinks?: boolean;
@@ -50,13 +58,17 @@ export function buildMetadata(input: SeoInput): Metadata {
       siteName: SITE_NAME,
       locale: 'uk_UA',
       type: 'website',
-      ...(input.image ? { images: [{ url: input.image, width: 1200, height: 630, alt: input.title }] } : {}),
+      ...(input.segmentImage ? {} : {
+        images: [input.image
+          ? { url: input.image, width: 1200, height: 630, alt: input.title }
+          : { url: absoluteUrl('/opengraph-image'), width: 1200, height: 630, alt: BRAND_IMAGE_ALT, type: 'image/png' }],
+      }),
     },
     twitter: {
       card: 'summary_large_image',
       title: ogTitle,
       description,
-      ...(input.image ? { images: [input.image] } : {}),
+      ...(input.segmentImage ? {} : { images: [input.image ?? absoluteUrl('/twitter-image')] }),
     },
   };
 }

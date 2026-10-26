@@ -39,15 +39,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = `${v.year} ${v.make} ${v.model} — ${Number(listing.price).toLocaleString('uk-UA')} ${listing.currency}`;
   const description = `${v.make} ${v.model} ${v.year}, ${(v.engine_cc / 1000).toFixed(1)}л, ${v.fuel_type === 'petrol' ? 'бензин' : v.fuel_type === 'diesel' ? 'дизель' : v.fuel_type}. Купити авто з США: аукціон ${v.source_auction.toUpperCase()}, доставка під ключ в Україну.`;
 
-  const primaryImg = v.images.find(i => i.is_primary) ?? v.images[0];
-  const ogImage = primaryImg?.image || primaryImg?.source_url || null;
-
-  // Єдиний канонічний URL — slug-формат (11-Q2); картинки OG — задача 6.3b.
+  // Єдиний канонічний URL — slug-формат (11-Q2). og:image — згенерована картка з ./opengraph-image.tsx
+  // (6.3b): фото Copart/IAAI у превʼю не потрапляють, поки режим фото `off` (Q8).
   return buildMetadata({
     title,
     description,
     path: `/listings/${listingSlug(listing)}`,
-    ...(ogImage ? { image: ogImage } : {}),
+    segmentImage: true,
   });
 }
 

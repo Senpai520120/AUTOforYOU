@@ -22,14 +22,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const listing = await getListing(id);
   if (!listing) return { title: 'Оголошення не знайдено' };
-  const img = listing.images.find(i => i.is_primary) ?? listing.images[0];
-  const imgUrl = img?.image || img?.source_url;
   const price = Number(listing.price).toLocaleString('uk-UA');
   return buildMetadata({
     title: `${listing.make} ${listing.model} ${listing.year} — ${price} ${listing.currency}`,
     description: listing.description || `${listing.make} ${listing.model} ${listing.year}, ${listing.mileage_km} км · ${listing.city_name}`,
     path: `/local/${listing.id}`,
-    ...(imgUrl ? { image: imgUrl } : {}),
+    segmentImage: true,
+    // og:image/twitter:image — з ./opengraph-image.tsx (6.3b), файлові метадані мають пріоритет
   });
 }
 
