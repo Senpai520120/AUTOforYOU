@@ -7,7 +7,8 @@ export default async function Footer() {
   const s = await getSiteSettings();
   const owner = ownerTitle(s);
   const tgUrl = s?.telegram_channel_url && /^https:\/\/t\.me\//.test(s.telegram_channel_url) ? s.telegram_channel_url : '';
-  const contacts = [s?.support_email, s?.phone].filter(Boolean) as string[];
+  // 6.4 (08-C1): лише заповнені поля з налаштувань — без плейсхолдерів «[заповнити]».
+  const contacts = [s?.owner_address, s?.support_email, s?.phone].filter(Boolean) as string[];
 
   return (
     <footer className="bg-slate-900 text-slate-400 mt-auto py-8">
@@ -48,9 +49,12 @@ export default async function Footer() {
         <p className="mt-3 text-xs text-slate-500">
           Послугу пригону надає партнер, а не AUTOforYOU
         </p>
-        <p className="mt-1 text-xs text-slate-500">
-          Тестові тарифи — всі розрахунки є демонстраційними
-        </p>
+        {/* 6.4 (08-C2, 11-C11): той самий признак, що й демо-банер калькулятора (2.6); недоступні налаштування — показуємо */}
+        {s?.tariffs_demo !== false && (
+          <p className="mt-1 text-xs text-slate-500" data-testid="footer-demo-tariffs">
+            Тестові тарифи — всі розрахунки є демонстраційними
+          </p>
+        )}
       </div>
     </footer>
   );

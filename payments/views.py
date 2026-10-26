@@ -158,16 +158,16 @@ class LiqPayCallbackView(APIView):
             return Response({'detail': CALLBACK_NOT_CONFIGURED_DETAIL}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         if not data or not signature:
-            return Response({'error': 'data и signature обязательны.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'data і signature обовʼязкові.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             decoded = provider.decode_callback(data, signature)
         except LiqPaySignatureError as exc:
             logger.warning('LiqPay callback: неверная подпись (%s): %s', type(exc).__name__, exc)
-            return Response({'error': 'Неверная подпись.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Невірний підпис.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             logger.error('LiqPay callback decode error (%s): %s', type(exc).__name__, exc)
-            return Response({'error': 'Ошибка декодирования данных.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Помилка декодування даних.'}, status=status.HTTP_400_BAD_REQUEST)
 
         order_id = decoded.get('order_id', '')
         liqpay_status = decoded.get('status', '')
@@ -177,7 +177,7 @@ class LiqPayCallbackView(APIView):
             payment = Payment.objects.get(order_id=order_id)
         except Payment.DoesNotExist:
             logger.warning('LiqPay callback: платёж order_id=%s не найден', order_id)
-            return Response({'error': 'Платёж не найден.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Платіж не знайдено.'}, status=status.HTTP_400_BAD_REQUEST)
 
         new_status = provider.map_status(liqpay_status)
 

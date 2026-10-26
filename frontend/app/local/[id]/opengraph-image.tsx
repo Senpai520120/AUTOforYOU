@@ -1,5 +1,6 @@
 import { OG_CONTENT_TYPE, OG_SIZE, formatPrice, listingImage, notFoundImage, photoDataUri } from '@/lib/og';
 import type { LocalListing } from '@/lib/types';
+import { INTERNAL_API_URL } from '@/lib/config';
 
 // 6.3b: превʼю місцевого оголошення — марка, модель, рік, ціна у валюті оголошення, місто, перше фото.
 // API віддає лише активні оголошення: невідоме, pending, hidden, blocked, видалене — 404 (як сторінка).
@@ -8,7 +9,7 @@ export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const dynamic = 'force-dynamic';  // превʼю не старше самої сторінки (6.3b)
 
-const API = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const API = INTERNAL_API_URL;
 
 export async function renderLocalListingImage(id: string): Promise<Response> {
   if (!/^\d+$/.test(id)) return notFoundImage();

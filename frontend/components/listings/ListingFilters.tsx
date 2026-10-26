@@ -22,38 +22,38 @@ export default function ListingFilters() {
           value={params.get('status') ?? ''}
           onChange={e => update('status', e.target.value)}
         >
-          <option value="">Все</option>
-          <option value="in_transit">В пути</option>
-          <option value="in_stock">В наличии</option>
-          <option value="sold">Продан</option>
+          <option value="">Усі</option>
+          <option value="in_transit">У дорозі</option>
+          <option value="in_stock">В наявності</option>
+          <option value="sold">Продано</option>
         </select>
       </div>
       <div>
-        <label className="block text-xs font-semibold text-slate-600 mb-1">Топливо</label>
+        <label className="block text-xs font-semibold text-slate-600 mb-1">Паливо</label>
         <select
           className="border border-slate-300 rounded px-2 py-1.5 text-sm"
           value={params.get('fuel_type') ?? ''}
           onChange={e => update('fuel_type', e.target.value)}
         >
-          <option value="">Все</option>
+          <option value="">Усі</option>
           <option value="petrol">Бензин</option>
           <option value="diesel">Дизель</option>
-          <option value="electric">Электро</option>
-          <option value="hybrid">Гибрид</option>
+          <option value="electric">Електро</option>
+          <option value="hybrid">Гібрид</option>
         </select>
       </div>
       <div>
-        <label className="block text-xs font-semibold text-slate-600 mb-1">Макс. цена ($)</label>
+        <label className="block text-xs font-semibold text-slate-600 mb-1">Макс. ціна ($)</label>
         <input
           type="number"
           className="border border-slate-300 rounded px-2 py-1.5 text-sm w-28"
-          placeholder="без лимита"
+          placeholder="без обмежень"
           defaultValue={params.get('max_price') ?? ''}
           onBlur={e => update('max_price', e.target.value)}
         />
       </div>
       <div>
-        <label className="block text-xs font-semibold text-slate-600 mb-1">Поиск</label>
+        <label className="block text-xs font-semibold text-slate-600 mb-1">Пошук</label>
         <input
           type="text"
           className="border border-slate-300 rounded px-2 py-1.5 text-sm w-44"

@@ -223,7 +223,7 @@ class RealOpendatabotProvider(OpendatabotProvider):
                 'provider': 'opendatabot',
                 'vin': vin,
                 'plate': plate,
-                'note': '⚠ OPENDATABOT_API_KEY не задан — демо-режим.',
+                'note': '⚠ OPENDATABOT_API_KEY не задано — демо-режим.',
             }
 
         import httpx
@@ -234,7 +234,7 @@ class RealOpendatabotProvider(OpendatabotProvider):
             elif plate:
                 url = _ODB_NUMBER_URL.format(number=plate.upper())
             else:
-                return {'demo': True, 'provider': 'opendatabot', 'error': 'Ни VIN, ни номер не переданы.'}
+                return {'demo': True, 'provider': 'opendatabot', 'error': 'Не передано ні VIN, ні номер.'}
 
             # Ключ в query: передача заголовком в документации
             # https://opendatabot.ua/doc не подтверждена. URL с ключом наружу не отдаём (см. mask_secrets).
@@ -333,7 +333,7 @@ def _normalize_lot(raw: dict) -> dict:
     """Приводит сырые поля лота к каноническому виду. Не кидает исключений."""
     vin = (raw.get('vin') or '').strip().upper()
     if not vin or len(vin) != 17:
-        return {'error': 'VIN обязателен (ровно 17 символов)', 'demo': False}
+        return {'error': 'VIN обовʼязковий (рівно 17 символів)', 'demo': False}
 
     try:
         final_bid = Decimal(str(raw.get('final_bid') or '0'))
@@ -384,7 +384,7 @@ class ManualLotProvider(AuctionLotProvider):
 
     def fetch_lot(self, lot_url_or_data) -> dict:
         if not isinstance(lot_url_or_data, dict):
-            return {'error': 'ManualLotProvider ожидает dict с данными лота', 'demo': False}
+            return {'error': 'ManualLotProvider очікує dict з даними лота', 'demo': False}
         return _normalize_lot({**lot_url_or_data, 'provider': 'manual'})
 
 
@@ -405,7 +405,7 @@ class ApifyLotProvider(AuctionLotProvider):
             return {
                 'demo': True,
                 'provider': 'apify',
-                'note': '⚠ APIFY_TOKEN не задан — демо-режим. Подключите токен для реального импорта.',
+                'note': '⚠ APIFY_TOKEN не задано — демо-режим. Підключіть токен для реального імпорту.',
                 'vin': None,
             }
 
@@ -426,7 +426,7 @@ class ApifyLotProvider(AuctionLotProvider):
             resp.raise_for_status()
             items = resp.json()
             if not items:
-                return {'error': 'Apify актор вернул пустой результат', 'demo': False}
+                return {'error': 'Apify актор повернув порожній результат', 'demo': False}
             return _normalize_lot({**items[0], 'provider': 'apify'})
         except Exception as exc:
             logger.warning('Apify request failed: %s', mask_secrets(str(exc)))

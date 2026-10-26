@@ -15,6 +15,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function RulesPage() {
   const s = await getSiteSettings(0);
+  // 6.4 (11-C6, 11-C7, Q9): ліміти з .env через публічні налаштування; невідомо (API недоступне) — без числа.
+  const maxActive = s?.local_listing_max_active;
+  const expiryDays = s?.local_listing_expiry_days;
   return (
     <LegalPage title="Правила розміщення оголошень" settings={s}>
         <section>
@@ -31,7 +34,11 @@ export default async function RulesPage() {
           <ul className="list-disc list-inside space-y-1">
             <li>Легкові автомобілі, що перебувають у власності або законному розпорядженні продавця.</li>
             <li>Транспортні засоби, що відповідають технічним та правовим вимогам для продажу в Україні.</li>
-            <li>Один продавець може мати не більше {'{LOCAL_LISTING_MAX_ACTIVE}'} активних оголошень одночасно.</li>
+            <li data-testid="rules-max-active">
+              {maxActive
+                ? <>Один продавець може мати не більше {maxActive} активних оголошень одночасно.</>
+                : <>Кількість активних оголошень одного продавця обмежена.</>}
+            </li>
           </ul>
         </section>
 
@@ -93,8 +100,13 @@ export default async function RulesPage() {
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-3">7. Термін дії оголошення</h2>
           <p>
-            Оголошення активне протягом 30 днів з моменту публікації. Після закінчення терміну оголошення
-            автоматично знімається з публікації. Продовження доступне через особистий кабінет.
+            <span data-testid="rules-expiry">
+              {expiryDays
+                ? <>Оголошення діє {expiryDays} днів з моменту схвалення модератором.</>
+                : <>Оголошення діє обмежений строк з моменту схвалення модератором.</>}
+            </span>{' '}
+            Після закінчення терміну оголошення автоматично знімається з публікації. Продовження безкоштовне,
+            через особистий кабінет.
           </p>
         </section>
 

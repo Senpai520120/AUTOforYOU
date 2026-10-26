@@ -15,7 +15,7 @@ class LotImportRequestSerializer(serializers.Serializer):
     def validate(self, attrs):
         source = attrs.get('source', 'manual')
         if source == 'manual' and not attrs.get('lot_data'):
-            raise serializers.ValidationError({'lot_data': 'Обязателен при source=manual'})
+            raise serializers.ValidationError({'lot_data': 'Обовʼязкове при source=manual'})
         if source == 'apify' and not attrs.get('lot_url'):
-            raise serializers.ValidationError({'lot_url': 'Обязателен при source=apify'})
+            raise serializers.ValidationError({'lot_url': 'Обовʼязкове при source=apify'})
         return attrs

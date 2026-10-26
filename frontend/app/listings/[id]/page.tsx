@@ -6,9 +6,10 @@ import type { Listing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
 import { requireModule } from '@/lib/site-settings';
 import { listingSlug } from '@/lib/utils';
+import { INTERNAL_API_URL } from '@/lib/config';
 
 // INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
-const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const apiUrl = INTERNAL_API_URL;
 
 // cache() deduplicates the fetch — called once for metadata + once for the page = 1 request
 const getListing = cache(async (id: number): Promise<Listing | null> => {

@@ -35,7 +35,7 @@ class LiqPayCheckoutSerializer(serializers.Serializer):
 
     def validate_order_id(self, value):
         if Payment.objects.filter(order_id=value).exists():
-            raise serializers.ValidationError(f'Платёж с order_id={value!r} уже существует.')
+            raise serializers.ValidationError(f'Платіж з order_id={value!r} уже існує.')
         return value
 
     def validate_listing_id(self, value):
@@ -44,5 +44,5 @@ class LiqPayCheckoutSerializer(serializers.Serializer):
         from listings.models import Listing
 
         if not Listing.objects.filter(pk=value).exists():
-            raise serializers.ValidationError(f'Листинг #{value} не найден.')
+            raise serializers.ValidationError(f'Оголошення #{value} не знайдено.')
         return value

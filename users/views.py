@@ -609,5 +609,5 @@ class DealerApplicationStatusView(APIView):
             DealerApplication.objects.filter(user=request.user).order_by('-created_at').first()
         )
         if not application:
-            return Response({'detail': 'Заявка не найдена.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Заявку не знайдено.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(DealerApplicationSerializer(application).data)

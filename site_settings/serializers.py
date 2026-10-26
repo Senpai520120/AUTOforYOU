@@ -8,6 +8,7 @@ from core.modules import module_enabled
 from integrations.base import is_placeholder
 
 from .models import SiteSettings
+from .public_config import ENV_FIELDS, env_config
 
 
 def carvertical_partner_url() -> str:
@@ -38,6 +39,31 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
     payments_enabled = serializers.SerializerMethodField()
     # Задача 3.2a: партнёрская ссылка carVertical из .env; пусто - фронт ссылку не показывает.
     carvertical_partner_url = serializers.SerializerMethodField()
+    # Задача 6.4: лимиты объявлений и имя бота из .env, признак демо-тарифов (2.6) - для текстов сайта.
+    local_listing_max_active = serializers.SerializerMethodField()
+    local_listing_expiry_days = serializers.SerializerMethodField()
+    local_listing_max_photos = serializers.SerializerMethodField()
+    local_listing_photo_max_size_mb = serializers.SerializerMethodField()
+    telegram_bot_username = serializers.SerializerMethodField()
+    tariffs_demo = serializers.SerializerMethodField()
+
+    def get_local_listing_max_active(self, obj) -> int:
+        return env_config()['local_listing_max_active']
+
+    def get_local_listing_expiry_days(self, obj) -> int:
+        return env_config()['local_listing_expiry_days']
+
+    def get_local_listing_max_photos(self, obj) -> int:
+        return env_config()['local_listing_max_photos']
+
+    def get_local_listing_photo_max_size_mb(self, obj) -> int | None:
+        return env_config()['local_listing_photo_max_size_mb']
+
+    def get_telegram_bot_username(self, obj) -> str:
+        return env_config()['telegram_bot_username']
+
+    def get_tariffs_demo(self, obj) -> bool:
+        return env_config()['tariffs_demo']
 
     def get_c2c_enabled(self, obj) -> bool:
         return c2c_enabled()
@@ -84,5 +110,6 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled', 'vin_reports_enabled',
             'c2c_enabled', 'c2c_public_posting_enabled', 'payments_enabled',
             'carvertical_partner_url',
+            *ENV_FIELDS,
         ]
         read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

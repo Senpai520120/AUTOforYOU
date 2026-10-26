@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getC2CFlags } from '@/lib/c2c';
+import { getSiteSettings } from '@/lib/site-settings';
 import { buildMetadata } from '@/lib/seo';
+import { INTERNAL_API_URL } from '@/lib/config';
 
 // INTERNAL_API_URL задається в Docker (http://backend:8000) для SSR.
-const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const apiUrl = INTERNAL_API_URL;
 
 /**
  * Рендер на кожен запит, а не на етапі збірки.
@@ -57,24 +59,25 @@ const STEPS = [
   {
     n: '4',
     title: 'Розмитнення',
-    text: 'Акциз, мито, ПДВ і пенсійний збір. Контейнер відстежується в особистому кабінеті.',
+    text: 'Акциз, мито, ПДВ і пенсійний збір — орієнтовну суму показує калькулятор.',
   },
 ];
 
+// 6.4 (08-C3): без чисел ставок і конкретних портів — цифри лише в калькуляторі (з адмінки).
 const COST_ITEMS = [
   'Ставка на аукціоні',
-  'Аукціонний збір: buyer fee, gate, environmental, virtual bid',
+  'Аукціонний збір і супутні збори аукціону',
   'Доставка до порту США',
-  'Морський фрахт до Клайпеди або Гданська',
+  'Морський фрахт до порту ЄС',
   'Доставка ЄС → Україна',
-  'Акциз: 50–150 €/л залежно від палива й об’єму',
-  'Мито 10% від митної вартості',
-  'ПДВ 20%',
+  'Акциз — залежить від палива та обʼєму двигуна',
+  'Мито та ПДВ',
   'Пенсійний збір',
 ];
 
 export default async function Home() {
-  const [usdRate, c2c] = await Promise.all([fetchUsdRate(), getC2CFlags()]);
+  const [usdRate, c2c, settings] = await Promise.all([fetchUsdRate(), getC2CFlags(), getSiteSettings(30)]);
+  const tariffsDemo = settings?.tariffs_demo !== false;
 
   return (
     <div className="space-y-14">
@@ -92,9 +95,12 @@ export default async function Home() {
             Порахувати вартість
           </Link>
         </div>
-        <p className="mt-6 text-xs text-amber-300">
-          ⚠ Тестові тарифи — всі розрахунки є демонстраційними
-        </p>
+        {/* 6.4: пометка — за даними (2.6), зникає, коли власник позначить тарифи перевіреними */}
+        {tariffsDemo && (
+          <p className="mt-6 text-xs text-amber-300" data-testid="home-demo-tariffs">
+            ⚠ Тестові тарифи — всі розрахунки є демонстраційними
+          </p>
+        )}
       </section>
 
       {/* Два напрямки — прибирає плутанину між імпортом і локальним каталогом */}

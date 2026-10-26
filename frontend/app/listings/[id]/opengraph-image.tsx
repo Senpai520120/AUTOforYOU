@@ -1,5 +1,6 @@
 import { OG_CONTENT_TYPE, OG_SIZE, formatPrice, listingImage, notFoundImage } from '@/lib/og';
 import type { Listing } from '@/lib/types';
+import { INTERNAL_API_URL } from '@/lib/config';
 
 // 6.3b: превʼю лота — марка, модель, рік, ціна у валюті лота. Фото Copart/IAAI не використовуються:
 // режим фото за замовчуванням `off` (Q8), режими partner/auction з’являться з задачею 2.11 (shareable_images).
@@ -9,7 +10,7 @@ export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const dynamic = 'force-dynamic';  // превʼю не старше самої сторінки (6.3b)
 
-const API = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const API = INTERNAL_API_URL;
 
 export async function renderLotImage(rawId: string): Promise<Response> {
   const id = parseInt(rawId, 10);

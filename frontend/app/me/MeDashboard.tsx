@@ -70,10 +70,10 @@ export default function MeDashboard() {
   const C2C_ONLY = ['/me/messages', '/me/saved-searches', '/me/local-listings', '/me/deals'];
   const allItems = [
     { href: '/me/profile', icon: '👤', title: 'Профіль', desc: 'Ім\'я, прізвище, телефон' },
-    { href: '/me/notifications', icon: '🔔', title: 'Сповіщення', desc: 'Алерти про оголошення, повідомлення' },
+    { href: '/me/notifications', icon: '🔔', title: 'Сповіщення', desc: 'Сповіщення про оголошення, повідомлення' },
     { href: '/me/messages', icon: '💬', title: 'Повідомлення', desc: 'Переписка по оголошеннях' },
     { href: '/me/favorites', icon: '♥', title: 'Обране', desc: 'Збережені оголошення' },
-    { href: '/me/saved-searches', icon: '🔍', title: 'Збережені пошуки', desc: 'Алерти про нові авто' },
+    { href: '/me/saved-searches', icon: '🔍', title: 'Збережені пошуки', desc: 'Сповіщення про нові авто' },
     { href: '/me/local-listings', icon: '📋', title: 'Мої оголошення', desc: 'Каталог Україна — мої авто' },
     { href: '/me/deals', icon: '🤝', title: 'Угоди та відгуки', desc: 'Підтвердження продажу і відгуки' },
     { href: '/me/leads', icon: '📨', title: 'Мої заявки', desc: 'Заявки брокеру та їх статус' },

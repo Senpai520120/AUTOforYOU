@@ -137,7 +137,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-LANGUAGE_CODE = 'ru-ru'
+LANGUAGE_CODE = 'uk'  # 6.4: стандартні повідомлення DRF і валідаторів — українською (01-C14)
 TIME_ZONE = 'Europe/Kyiv'
 USE_I18N = True
 USE_TZ = True
