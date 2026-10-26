@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import LegalPage, { EmailOrMissing } from '@/components/legal/LegalPage';
 import { getSiteSettings, supportContact } from '@/lib/site-settings';
 
-export const metadata: Metadata = {
-  title: 'Політика повернення коштів | AUTOforYOU',
-};
+export const metadata: Metadata = buildMetadata({
+  title: 'Політика повернення коштів',
+  description:
+    'Політика повернення коштів за платні послуги просування оголошень на AUTOforYOU.',
+  path: '/refund',
+});
 
 export const dynamic = 'force-dynamic';
 

@@ -5,6 +5,7 @@ import LocalListingFilters from '@/components/local/LocalListingFilters';
 import LocalCatalogGrid from './LocalCatalogGrid';
 import SaveSearchButton from '@/components/local/SaveSearchButton';
 import { getC2CFlags } from '@/lib/c2c';
+import { buildMetadata, hasFilters } from '@/lib/seo';
 import { buildQuery, serverGet, type SearchParams } from '@/lib/server-api';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
 
@@ -12,16 +13,20 @@ import type { LocalListing, PaginatedResponse } from '@/lib/types';
 // запит. Дані самі кешуються на рівні fetch.
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Каталог Україна',
-  description:
-    'Місцеві оголошення про продаж авто по всій Україні. Фільтри за маркою, регіоном, паливом, ціною.',
-  openGraph: {
-    title: 'Каталог Україна — AUTOforYOU',
-    description: 'Купити авто в Україні: оголошення від власників і дилерів.',
-    type: 'website',
-  },
-};
+/** Canonical — базовий шлях без query; сторінки з фільтрами не індексуються (задача 6.3). */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}): Promise<Metadata> {
+  return buildMetadata({
+    title: 'Каталог Україна',
+    description:
+      'Місцеві оголошення про продаж авто по всій Україні. Фільтри за маркою, регіоном, паливом, ціною.',
+    path: '/ua',
+    noindex: hasFilters(await searchParams),
+  });
+}
 
 /**
  * Білий список фільтрів. Має збігатися з тим, що читає

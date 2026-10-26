@@ -8,15 +8,14 @@ import AttributionCapture from '@/components/layout/AttributionCapture';
 import FlashMessage from '@/components/ui/FlashMessage';
 import { C2CProvider } from '@/components/c2c/C2CProvider';
 import { getC2CFlags } from '@/lib/c2c';
+import { SITE_URL } from '@/lib/site';
 
 // Шапка/меню залежать від прапорців C2C (задача 6.7): рендер на кожен запит,
 // інакше під час збірки (backend недоступний) запечеться «розділ закрито».
 export const dynamic = 'force-dynamic';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'AUTOforYOU — авто з США під ключ',
     template: '%s | AUTOforYOU',

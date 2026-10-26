@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import CookieSettings from '@/components/ui/CookieSettings';
 import LegalPage from '@/components/legal/LegalPage';
 import { getSiteSettings } from '@/lib/site-settings';
 
-export const metadata: Metadata = {
-  title: 'Політика щодо файлів cookie та сховища браузера | AUTOforYOU',
-};
+export const metadata: Metadata = buildMetadata({
+  title: 'Політика щодо файлів cookie та сховища браузера',
+  description:
+    'Які cookie та дані браузера використовує AUTOforYOU, навіщо вони потрібні та як керувати згодою.',
+  path: '/cookies',
+});
 
 export const dynamic = 'force-dynamic';
 

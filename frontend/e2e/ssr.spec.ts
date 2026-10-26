@@ -46,11 +46,12 @@ test.describe('Серверний рендер каталогів @smoke', () =>
     expect(resp.status()).toBe(200);
 
     const xml = await resp.text();
-    // /ua раніше в sitemap не потрапляв, хоча це єдиний розділ з реальними
-    // оголошеннями.
-    expect(xml).toContain('/ua');
+    // Точні елементи <loc>, а не підрядок (13-Q16): '/ua' як підрядок збігся б з будь-яким '/ua…'.
+    const paths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]).pathname);
+    // /ua - єдиний розділ з реальними оголошеннями.
+    expect(paths).toContain('/ua');
     // /listings заморожен флагом (2.8): в sitemap его нет.
-    expect(xml).not.toContain('/listings');
-    expect(xml).toContain('/refund');
+    expect(paths.filter((p) => p.startsWith('/listings'))).toEqual([]);
+    expect(paths).toContain('/refund');
   });
 });

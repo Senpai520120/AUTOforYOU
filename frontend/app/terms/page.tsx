@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import LegalPage, { EmailOrMissing } from '@/components/legal/LegalPage';
 import { getSiteSettings, supportContact } from '@/lib/site-settings';
 
-export const metadata: Metadata = {
-  title: 'Умови використання | AUTOforYOU',
-};
+export const metadata: Metadata = buildMetadata({
+  title: 'Умови використання',
+  description:
+    'Умови використання сервісу AUTOforYOU: послуги платформи, права й обовʼязки користувачів, відповідальність.',
+  path: '/terms',
+});
 
 export const dynamic = 'force-dynamic';
 

@@ -1,12 +1,14 @@
 import { cache } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import ListingDetail from '@/components/listings/ListingDetail';
 import type { Listing } from '@/lib/types';
+import { buildMetadata } from '@/lib/seo';
+import { requireModule } from '@/lib/site-settings';
+import { listingSlug } from '@/lib/utils';
 
 // INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
 const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua';
 
 // cache() deduplicates the fetch — called once for metadata + once for the page = 1 request
 const getListing = cache(async (id: number): Promise<Listing | null> => {
@@ -40,26 +42,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const primaryImg = v.images.find(i => i.is_primary) ?? v.images[0];
   const ogImage = primaryImg?.image || primaryImg?.source_url || null;
 
-  const canonicalUrl = `${siteUrl}/listings/${id}`;
-
-  return {
+  // Єдиний канонічний URL — slug-формат (11-Q2); картинки OG — задача 6.3b.
+  return buildMetadata({
     title,
     description,
-    alternates: { canonical: canonicalUrl },
-    openGraph: {
-      title,
-      description,
-      url: canonicalUrl,
-      type: 'website',
-      ...(ogImage ? { images: [{ url: ogImage, width: 1200, height: 630, alt: title }] } : {}),
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      ...(ogImage ? { images: [ogImage] } : {}),
-    },
-  };
+    path: `/listings/${listingSlug(listing)}`,
+    ...(ogImage ? { image: ogImage } : {}),
+  });
 }
 
 export default async function ListingDetailPage({ params }: Props) {
@@ -67,8 +56,14 @@ export default async function ListingDetailPage({ params }: Props) {
   const id = parseInt(rawId, 10);
   if (isNaN(id)) notFound();
 
+  // Модуль заморожено — 404, а не редірект (layout робить те саме, але рендериться паралельно).
+  await requireModule('lots');
   const listing = await getListing(id);
   if (!listing) notFound();
+
+  // Неканонічні адреси (/listings/42, /listings/42-мусор) → 308 на slug-URL.
+  const canonical = listingSlug(listing);
+  if (rawId !== canonical) permanentRedirect(`/listings/${canonical}`);
 
   return <ListingDetail listing={listing} />;
 }

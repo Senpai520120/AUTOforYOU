@@ -1,13 +1,17 @@
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import LegalPage, { EmailOrMissing, OwnerDetails } from '@/components/legal/LegalPage';
 import { NOT_FILLED, getSiteSettings, privacyContact } from '@/lib/site-settings';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Політика конфіденційності | AUTOforYOU',
-};
+export const metadata: Metadata = buildMetadata({
+  title: 'Політика конфіденційності',
+  description:
+    'Які персональні дані збирає AUTOforYOU, навіщо, як довго зберігає та як користувач може реалізувати свої права.',
+  path: '/privacy',
+});
 
 const H2 = 'text-xl font-semibold text-slate-800 mb-2';
 const UL = 'list-disc list-inside space-y-1 ml-4';

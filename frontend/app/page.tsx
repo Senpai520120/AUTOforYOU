@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getC2CFlags } from '@/lib/c2c';
+import { buildMetadata } from '@/lib/seo';
 
 // INTERNAL_API_URL задається в Docker (http://backend:8000) для SSR.
 const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -15,16 +16,13 @@ const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?
  */
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: 'AUTOforYOU — авто з США під ключ',
+  absoluteTitle: true,
   description:
     'Маркетплейс автомобілів з аукціонів США Copart та IAAI. Калькулятор вартості під ключ з розмитненням, доставка в Україну, каталог місцевих оголошень.',
-  openGraph: {
-    title: 'AUTOforYOU — авто з США під ключ',
-    description: 'Авто з аукціонів Copart та IAAI, калькулятор розмитнення, каталог оголошень по Україні.',
-    type: 'website',
-  },
-};
+  path: '/',
+});
 
 type ExchangeRate = { from_currency: string; to_currency: string; rate: number; date: string };
 

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import LocalListingDetail from './LocalListingDetail';
 import { LocalListing } from '@/lib/types';
+import { buildMetadata } from '@/lib/seo';
 
 // INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
 // NEXT_PUBLIC_API_URL is baked at build time and used by browser JS.
@@ -23,15 +24,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!listing) return { title: 'Оголошення не знайдено' };
   const img = listing.images.find(i => i.is_primary) ?? listing.images[0];
   const imgUrl = img?.image || img?.source_url;
-  return {
-    title: `${listing.make} ${listing.model} ${listing.year} — ${listing.price} ${listing.currency}`,
-    description: `${listing.make} ${listing.model} ${listing.year}, ${listing.mileage_km} км, ${listing.city_name}`,
-    openGraph: {
-      title: `${listing.make} ${listing.model} ${listing.year}`,
-      description: listing.description || `${listing.mileage_km} км · ${listing.city_name}`,
-      ...(imgUrl ? { images: [imgUrl] } : {}),
-    },
-  };
+  const price = Number(listing.price).toLocaleString('uk-UA');
+  return buildMetadata({
+    title: `${listing.make} ${listing.model} ${listing.year} — ${price} ${listing.currency}`,
+    description: listing.description || `${listing.make} ${listing.model} ${listing.year}, ${listing.mileage_km} км · ${listing.city_name}`,
+    path: `/local/${listing.id}`,
+    ...(imgUrl ? { image: imgUrl } : {}),
+  });
 }
 
 export default async function LocalListingPage({ params }: { params: Promise<{ id: string }> }) {

@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import LegalPage, { EmailOrMissing } from '@/components/legal/LegalPage';
 import { getSiteSettings, supportContact } from '@/lib/site-settings';
 
-export const metadata: Metadata = {
-  title: 'Правила розміщення оголошень | AUTOforYOU',
-};
+export const metadata: Metadata = buildMetadata({
+  title: 'Правила розміщення оголошень',
+  description:
+    'Правила розміщення оголошень про продаж авто на AUTOforYOU: що можна публікувати, обмеження, модерація.',
+  path: '/rules',
+});
 
 export const dynamic = 'force-dynamic';
 
