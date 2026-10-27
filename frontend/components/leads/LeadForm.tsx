@@ -20,6 +20,8 @@ interface Props {
   listingId?: number;
   landingSlug?: string;
   vehicleLabel?: string;
+  /** Бюджет, що підставляється у поле (лендінг моделі); клієнт може змінити. */
+  defaultBudgetUsd?: string;
   /** Кнопка на екрані успіху (напр. «Новий розрахунок»); без неї кнопки немає. */
   onNew?: () => void;
   newLabel?: string;
@@ -67,7 +69,7 @@ function parseFieldErrors(data: unknown): { fields: Errors; general: string[] } 
 }
 
 export default function LeadForm({
-  source, calculationId, listingId, landingSlug, vehicleLabel, onNew, newLabel,
+  source, calculationId, listingId, landingSlug, vehicleLabel, defaultBudgetUsd, onNew, newLabel,
 }: Props) {
   const { user } = useAuth();
   const { config } = useAuthConfig();
@@ -81,8 +83,8 @@ export default function LeadForm({
   const [method, setMethod] = useState<LeadContactMethod>('phone');
   const [handle, setHandle] = useState('');
   const [comment, setComment] = useState('');
-  const [more, setMore] = useState(false);
-  const [budget, setBudget] = useState('');
+  const [more, setMore] = useState(!!defaultBudgetUsd);
+  const [budget, setBudget] = useState(defaultBudgetUsd ?? '');
   const [needed, setNeeded] = useState<LeadNeededWhen | ''>('');
   const [city, setCity] = useState('');
   const [consent, setConsent] = useState(false);
@@ -178,6 +180,11 @@ export default function LeadForm({
     <form onSubmit={submit} noValidate data-testid="lead-form"
       className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
       <h3 className="font-bold text-slate-900 text-lg">Залишити заявку брокеру</h3>
+      {vehicleLabel && landingSlug && (
+        <p data-testid="lead-vehicle" className="text-sm text-slate-700">
+          Авто: <span className="font-semibold">{vehicleLabel}</span>
+        </p>
+      )}
 
       <div>
         <label htmlFor="lead-name" className="block text-xs font-semibold text-slate-600 mb-1">Ім&apos;я *</label>

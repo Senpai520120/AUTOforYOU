@@ -73,6 +73,7 @@ class Command(BaseCommand):
             self._leads(users['buyer'])
             self._ua_delivery_and_broker()
             self._content()
+            self._landings()
 
         self.stdout.write('E2E seed: сводка (создано / уже было)')
         for key in sorted(set(self.created) | set(self.existing)):
@@ -267,6 +268,37 @@ class Command(BaseCommand):
                 defaults={'order': order, 'answer': f'[E2E] Відповідь {order}', 'is_active': True,
                           'show_on_calculator': on_calc})
             self._note('faq_item', created)
+
+    def _landings(self):
+        """Страницы моделей для landing.spec.ts (2.16): опубликованная с расчётом и черновик без цены.
+
+        Расчёт берётся из ставок, которые засеяли seed_rates / seed_auction_fees выше: цифр здесь нет.
+        """
+        from decimal import Decimal
+
+        from landings.models import ModelLandingPage
+        from landings.services import can_publish
+
+        inputs = {
+            'year_from': 2015, 'year_to': 2020, 'calc_year': 2018, 'auction_price_usd': Decimal('5000'),
+            'fuel_type': 'petrol', 'engine_cc': 2000, 'auction': 'copart', 'auction_location': 'general',
+            'us_port': 'houston', 'eu_port': 'klaipeda',
+        }
+        texts = {
+            'intro': f'{E2E_PREFIX} Вступ сторінки моделі.',
+            'included_text': f'{E2E_PREFIX} Аукціонний збір, доставка, розмитнення.',
+            'typical_term_text': f'{E2E_PREFIX} 2-3 місяці',
+        }
+        page, created = ModelLandingPage.objects.get_or_create(
+            slug='e2e-toyota-camry',
+            defaults={'make': E2E_PREFIX, 'model': 'Toyota Camry', 'sort_order': 9990, **inputs, **texts})
+        self._note('landing_page', created)
+        if created and can_publish(page):
+            page.is_published = True
+            page.save()
+        draft, created = ModelLandingPage.objects.get_or_create(
+            slug='e2e-draft', defaults={'make': E2E_PREFIX, 'model': 'Чернетка', 'sort_order': 9991})
+        self._note('landing_page', created)
 
     def _site_settings(self):
         """Реквизиты и документы для legal.spec.ts (синглтон pk=1)."""

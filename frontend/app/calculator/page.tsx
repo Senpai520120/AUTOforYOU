@@ -28,13 +28,20 @@ function pick(options: CalcOption[], wanted: string | null | undefined): string 
 // Приклад для прямого входу. Зі сторінки лота (є ?listing) ціна порожня: ціни аукціону в лота немає (09-Q3).
 const EXAMPLE = { auction_price_usd: '10000', engine_cc: '2000', vehicle_year: '2020' };
 
+/** Ціна з query: число > 0 і не більше 1 000 000, інакше ігнорується (порожньо = типове значення). */
+function priceFromQuery(raw: string | null): string | null {
+  if (!raw || !/^\d{1,7}(\.\d{1,2})?$/.test(raw)) return null;
+  const n = Number(raw);
+  return n > 0 && n <= 1_000_000 ? String(n) : null;
+}
+
 function initialForm(data: CalcRatesResponse, params: URLSearchParams): CalcForm {
   const o = data.options;
   const fromListing = params.has('listing');
   const usPort = pick(o.us_ports, params.get('us_port'));
   const euChoices = o.eu_ports.filter(p => o.us_ports.find(u => u.value === usPort)?.eu_ports.includes(p.value));
   return {
-    auction_price_usd: fromListing ? '' : EXAMPLE.auction_price_usd,
+    auction_price_usd: priceFromQuery(params.get('auction_price_usd')) ?? (fromListing ? '' : EXAMPLE.auction_price_usd),
     engine_cc: params.get('engine_cc') ?? (fromListing ? '' : EXAMPLE.engine_cc),
     fuel_type: pick(o.fuel_types, params.get('fuel_type')),
     vehicle_year: params.get('year') ?? (fromListing ? '' : EXAMPLE.vehicle_year),

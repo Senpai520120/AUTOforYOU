@@ -22,6 +22,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         require_e2e_allowed()
+        from landings.models import ModelLandingPage
         from listings.models import Listing
         from local_listings.models import LocalListing
         from messaging.models import Conversation
@@ -48,6 +49,7 @@ class Command(BaseCommand):
                 # Демо-тарифы калькулятора из e2e_seed (2.7): иначе держат демо-баннер на стенде
                 (UaDeliveryRate, Q(destination__startswith=E2E_PREFIX)),
                 (BrokerServiceFee, Q(title__startswith=E2E_PREFIX)),
+                (ModelLandingPage, Q(make__startswith=E2E_PREFIX)),
             )
             counts = {}
             for model, cond in plan:

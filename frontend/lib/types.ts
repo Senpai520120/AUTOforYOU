@@ -681,3 +681,54 @@ export interface HowItWorksData {
   steps: ImportStepItem[];
   faq: FaqEntry[];
 }
+
+// Сторінки моделей «Пригон з США» (задача 2.16). Суми — рядки Decimal, фронт нічого не рахує.
+export interface LandingListItem {
+  slug: string;
+  make: string;
+  model: string;
+  total_usd: string;
+  total_uah: string;
+  updated_at: string;
+}
+
+export interface LandingCalculation {
+  is_estimate: boolean;
+  is_demo: boolean;
+  rules_confirmed: boolean;
+  rates_valid_from: string | null;
+  rates_date: string;
+  currency: string;
+  local_currency: string;
+  usd_to_uah: string;
+  exchange_rate_date: string;
+  total_usd: string;
+  total_uah: string;
+  breakdown: CalcBreakdown;
+  applied_rates: CalcResult['applied_rates'];
+  inputs: {
+    auction_price_usd?: string;
+    engine_cc?: number;
+    fuel_type?: string;
+    vehicle_year?: number;
+    auction?: string;
+    us_port?: string;
+  } & Record<string, unknown>;
+}
+
+export interface LandingDetail {
+  slug: string;
+  make: string;
+  model: string;
+  year_from: number | null;
+  year_to: number | null;
+  h1: string;
+  intro: string;
+  description: string;
+  included_text: string;
+  typical_term_text: string;
+  meta_title: string;
+  meta_description: string;
+  updated_at: string;
+  calculation: LandingCalculation;
+}

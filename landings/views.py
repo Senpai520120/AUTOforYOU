@@ -19,7 +19,7 @@ class _PublicView(APIView):
 
 
 @extend_schema(
-    tags=['landings'], summary='Опубликованные страницы моделей',
+    tags=['landings'], operation_id='landings_list', summary='Опубликованные страницы моделей',
     description='Только страницы, у которых расчёт получается при активных ставках. Поля: slug, make, model, '
                 'total_usd, total_uah, updated_at. Ничего не пишет в БД.',
     responses={200: inline_serializer('LandingListResponse', {'results': serializers.ListField()})},
@@ -30,7 +30,7 @@ class LandingListView(_PublicView):
 
 
 @extend_schema(
-    tags=['landings'], summary='Страница модели «Пригон з США» с расчётом',
+    tags=['landings'], operation_id='landings_detail', summary='Страница модели «Пригон з США» с расчётом',
     description='Расчёт - чистая функция по ставкам из БД, `is_estimate: true`, суммы - Decimal-строки. '
                 '404, если страница не опубликована или расчёт не получается. Не создаёт Calculation.',
     responses={200: LandingDetailSerializer, 404: OpenApiResponse(description='Нет страницы или расчёта')},

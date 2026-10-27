@@ -4,6 +4,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import ErrorState from '@/components/ui/ErrorState';
 import FaqBlock from '@/components/content/FaqBlock';
 import { getHowItWorks } from '@/lib/content';
+import { getLandingList } from '@/lib/landings';
 import { HOW_IT_WORKS_LABEL, HOW_IT_WORKS_SOON, CALC_COST_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
 
@@ -26,6 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function HowItWorksPage() {
   const data = await getHowItWorks();
+  const models = data?.published ? await getLandingList() : null;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
@@ -58,7 +60,21 @@ export default async function HowItWorksPage() {
 
           <FaqBlock items={data.faq} testId="faq-block" />
 
-          {/* Місце під блок популярних моделей: його додає задача 2.16; посилань на неіснуючі сторінки тут немає. */}
+          {models && models.length > 0 && (
+            <section className="mt-10" data-testid="popular-models" aria-labelledby="popular-models-title">
+              <h2 id="popular-models-title" className="font-semibold text-slate-900 mb-3">Популярні моделі</h2>
+              <ul className="flex flex-wrap gap-2">
+                {models.map(m => (
+                  <li key={m.slug}>
+                    <Link href={`/prigon/${m.slug}`} data-testid="popular-model"
+                      className="inline-block text-sm bg-white border border-slate-200 rounded-full px-3 py-1 text-blue-700 hover:border-blue-400">
+                      {m.make} {m.model}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <div className="mt-10 bg-blue-50 border border-blue-200 rounded-xl p-5 text-center">
             <Link

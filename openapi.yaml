@@ -1084,6 +1084,46 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/landings/:
+    get:
+      operationId: landings_list
+      description: 'Только страницы, у которых расчёт получается при активных ставках.
+        Поля: slug, make, model, total_usd, total_uah, updated_at. Ничего не пишет
+        в БД.'
+      summary: Опубликованные страницы моделей
+      tags:
+      - landings
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandingListResponse'
+          description: ''
+  /api/v1/landings/{slug}/:
+    get:
+      operationId: landings_detail
+      description: 'Расчёт - чистая функция по ставкам из БД, `is_estimate: true`,
+        суммы - Decimal-строки. 404, если страница не опубликована или расчёт не получается.
+        Не создаёт Calculation.'
+      summary: Страница модели «Пригон з США» с расчётом
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - landings
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+        '404':
+          description: Нет страницы или расчёта
   /api/v1/leads/:
     post:
       operationId: v1_leads_create
@@ -3151,6 +3191,14 @@ components:
       - calculator_visit
       - mobile_bar_click
       type: string
+    LandingListResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items: {}
+      required:
+      - results
     LeadCreateRequest:
       type: object
       properties:

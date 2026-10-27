@@ -99,6 +99,10 @@ class E2ESeedTests(TestCase):
         )
         buyer = User.objects.get(email='buyer@e2e.test')
         self.assertEqual(Shipment.objects.get().watchers.get(), buyer)
+        # Страницы моделей (2.16): опубликована та, у которой считается расчёт; черновик остаётся черновиком.
+        from landings.models import ModelLandingPage
+        self.assertTrue(ModelLandingPage.objects.get(slug='e2e-toyota-camry').is_published)
+        self.assertFalse(ModelLandingPage.objects.get(slug='e2e-draft').is_published)
 
     def test_cleanup_removes_only_e2e(self):
         real = User.objects.create_user(email='real@example.com', password='p')
@@ -120,5 +124,7 @@ class E2ESeedTests(TestCase):
         self.assertEqual(Listing.objects.count(), 0)
         self.assertEqual(Shipment.objects.count(), 0)
         self.assertEqual(Conversation.objects.count(), 0)
+        from landings.models import ModelLandingPage
+        self.assertEqual(ModelLandingPage.objects.count(), 0)
         # справочники остаются
         self.assertTrue(Region.objects.filter(pk=region.pk).exists())
