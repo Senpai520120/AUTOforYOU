@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useState } from 'react';
+import { Suspense, useId, useState } from 'react';
 import { LoginError, useAuth } from '@/lib/auth-context';
 import Captcha from '@/components/ui/Captcha';
 import { useAuthConfig, useCaptchaState } from '@/lib/captcha';
@@ -18,6 +18,8 @@ export default function LoginPage() {
 
 function LoginForm() {
   const { login } = useAuth();
+  const emailId = useId();
+  const passwordId = useId();
   const router = useRouter();
   // Повернення тільки на шлях цього сайту (08-S7, 10-S7).
   const next = safeNext(useSearchParams().get('next'));
@@ -52,20 +54,20 @@ function LoginForm() {
         <h1 className="text-2xl font-bold text-slate-900 mb-6">Вхід</h1>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
-            <input type="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
+            <label htmlFor={emailId} className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
+            <input id={emailId} type="email" autoComplete="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
               value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Пароль</label>
-            <input type="password" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
+            <label htmlFor={passwordId} className="block text-sm font-semibold text-slate-700 mb-1">Пароль</label>
+            <input id={passwordId} type="password" autoComplete="current-password" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
               value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           {showCaptcha && (
             <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
               resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
           )}
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
           <button type="submit" disabled={loading || (showCaptcha && !captcha.ready)}
             className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors">
             {loading ? 'Вхід...' : 'Увійти'}
@@ -75,7 +77,7 @@ function LoginForm() {
           <Link href="/password-reset" className="text-blue-600 hover:underline">Забули пароль?</Link>
         </p>
         <p className="mt-2 text-sm text-center text-slate-500">
-          Немає акаунту? <Link href="/register" className="text-blue-600 hover:underline">Реєстрація</Link>
+          Немає акаунту? <Link href="/register" className="text-blue-600 underline">Реєстрація</Link>
         </p>
       </div>
     </div>

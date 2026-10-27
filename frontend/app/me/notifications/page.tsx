@@ -9,6 +9,7 @@ import LoadingState from '@/components/ui/LoadingState';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
 import { getErrorMessage } from '@/lib/errors';
+import { timeAgo } from '@/lib/format';
 import type { AppNotification } from '@/lib/types';
 
 const TYPE_ICON: Record<string, string> = {
@@ -18,15 +19,6 @@ const TYPE_ICON: Record<string, string> = {
   listing_expiring: '⏰',
   saved_search_match: '🔔',
 };
-
-function timeAgo(iso: string) {
-  const d = new Date(iso);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return 'щойно';
-  if (diff < 3600) return `${Math.floor(diff / 60)} хв тому`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} год тому`;
-  return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-}
 
 export default function NotificationsPage() {
   const { user, loading } = useRequireAuth();

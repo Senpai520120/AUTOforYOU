@@ -10,16 +10,9 @@ import EmptyState from '@/components/ui/EmptyState';
 import { getErrorMessage } from '@/lib/errors';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { isEmailNotVerified } from '@/lib/email-verify';
+import { useVisibleInterval } from '@/lib/useVisibleInterval';
+import { timeAgo } from '@/lib/format';
 import type { ConversationSummary, ConversationDetail } from '@/lib/types';
-
-function timeAgo(iso: string) {
-  const d = new Date(iso);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return 'щойно';
-  if (diff < 3600) return `${Math.floor(diff / 60)} хв тому`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} год тому`;
-  return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-}
 
 export default function MessagesPage() {
   const { user, loading } = useRequireAuth();
@@ -38,7 +31,6 @@ export default function MessagesPage() {
   const [convError, setConvError] = useState<unknown>(null);
   const [threadError, setThreadError] = useState<unknown>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadConversations = useCallback(async () => {
     setLoadingConvs(true);
@@ -84,25 +76,23 @@ export default function MessagesPage() {
     }
   }, [searchParams, user, openConversation]);
 
-  // poll active thread every 15s
-  useEffect(() => {
+  // poll active thread every 15s (пауза на прихованій вкладці, негайний запит при поверненні)
+  const pollThread = useCallback(() => {
     if (!activeId) return;
-    pollRef.current = setInterval(() => {
-      getConversation(activeId).then(data => {
-        setActive(data);
-        setConversations(prev =>
-          prev.map(c =>
-            c.id === activeId
-              ? { ...c, unread_count: 0, last_message_at: data.last_message_at, last_message_text: data.messages.at(-1)?.text.slice(0, 100) ?? c.last_message_text }
-              : c
-          )
-        );
-      }).catch(() => {
-        // Фоновий опитувальник: помилку не показуємо, наступний цикл повторить запит.
-      });
-    }, 15000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    getConversation(activeId).then(data => {
+      setActive(data);
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === activeId
+            ? { ...c, unread_count: 0, last_message_at: data.last_message_at, last_message_text: data.messages.at(-1)?.text.slice(0, 100) ?? c.last_message_text }
+            : c
+        )
+      );
+    }).catch(() => {
+      // Фоновий опитувальник: помилку не показуємо, наступний цикл повторить запит.
+    });
   }, [activeId]);
+  useVisibleInterval(pollThread, 15000, !!activeId);
 
   // scroll to bottom when messages change
   useEffect(() => {
@@ -236,8 +226,9 @@ export default function MessagesPage() {
                   onClick={() => openConversation(activeId)}
                   className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition-colors"
                   title="Оновити"
+                  aria-label="Оновити діалог"
                 >
-                  ↻
+                  <span aria-hidden="true">↻</span>
                 </button>
               </div>
 
@@ -273,7 +264,7 @@ export default function MessagesPage() {
                   value={text}
                   onChange={e => setText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Написати повідомлення… (Enter — надіслати)"
+                  aria-label="Повідомлення" placeholder="Написати повідомлення… (Enter — надіслати)"
                   rows={2}
                   className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
                 />

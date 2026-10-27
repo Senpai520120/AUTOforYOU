@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/api/client';
 import Captcha from '@/components/ui/Captcha';
@@ -9,6 +9,7 @@ import { getAttribution } from '@/lib/attribution';
 
 export default function RegisterPage() {
   const { config } = useAuthConfig();
+  const idPrefix = useId();
   const captcha = useCaptchaState();
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [isAdult, setIsAdult] = useState(false);
@@ -79,8 +80,8 @@ export default function RegisterPage() {
             { label: 'Підтвердити пароль', key: 'password2', type: 'password' },
           ].map(f => (
             <div key={f.key}>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">{f.label}</label>
-              <input type={f.type} className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              <label htmlFor={`${idPrefix}-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-1">{f.label}</label>
+              <input id={`${idPrefix}-${f.key}`} type={f.type} className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
                 value={form[f.key as keyof typeof form]} onChange={e => set(f.key, e.target.value)}
                 required={f.key !== 'first_name' && f.key !== 'phone'} />
             </div>
@@ -123,14 +124,14 @@ export default function RegisterPage() {
           <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
             resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
           <button type="submit" disabled={loading || !captcha.ready}
             className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400">
             {loading ? 'Реєстрація...' : 'Зареєструватися'}
           </button>
         </form>
         <p className="mt-4 text-sm text-center text-slate-500">
-          Вже є акаунт? <Link href="/login" className="text-blue-600 hover:underline">Увійти</Link>
+          Вже є акаунт? <Link href="/login" className="text-blue-600 underline">Увійти</Link>
         </p>
       </div>
     </div>

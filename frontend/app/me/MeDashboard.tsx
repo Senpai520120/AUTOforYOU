@@ -98,7 +98,7 @@ export default function MeDashboard() {
             {user.email[0].toUpperCase()}
           </div>
           <div>
-            <p className="font-bold text-slate-900 text-lg">{user.first_name || user.email}</p>
+            <h1 className="font-bold text-slate-900 text-lg">{user.first_name || user.email}</h1>
             <p className="text-slate-500 text-sm">{user.email}</p>
             <div className="flex gap-2 mt-1">
               <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-semibold">
@@ -116,7 +116,7 @@ export default function MeDashboard() {
         {menuItems.map(item => (
           <Link key={item.href} href={item.href}
             className="bg-white border border-slate-200 rounded-xl p-5 flex items-center gap-4 hover:shadow-md hover:border-blue-300 transition-all group">
-            <span className="text-3xl">{item.icon}</span>
+            <span className="text-3xl" aria-hidden="true">{item.icon}</span>
             <div>
               <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">{item.title}</p>
               <p className="text-sm text-slate-500">{item.desc}</p>

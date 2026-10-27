@@ -73,7 +73,7 @@ const labelCls = 'block text-xs font-semibold text-slate-600 mb-1';
 
 function FieldError({ name, errors }: { name: string; errors: Record<string, string> }) {
   if (!errors[name]) return null;
-  return <p className="text-xs text-red-600 mt-1" data-testid={`error-${name}`}>{errors[name]}</p>;
+  return <p id={`err-${name}`} role="alert" className="text-xs text-red-600 mt-1" data-testid={`error-${name}`}>{errors[name]}</p>;
 }
 
 function Select({ id, label, value, options, onChange, errors, disabledValues = [] }: {
@@ -83,7 +83,7 @@ function Select({ id, label, value, options, onChange, errors, disabledValues = 
   return (
     <div>
       <label htmlFor={id} className={labelCls}>{label}</label>
-      <select id={id} name={id} className={inputCls} value={value} onChange={e => onChange(e.target.value)}>
+      <select id={id} name={id} aria-invalid={!!errors[id]} aria-describedby={errors[id] ? `err-${id}` : undefined} className={inputCls} value={value} onChange={e => onChange(e.target.value)}>
         {options.map(o => (
           <option key={o.value} value={o.value} disabled={disabledValues.includes(o.value)}>{o.label}</option>
         ))}
@@ -143,7 +143,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="auction_price_usd" className={labelCls}>Ціна аукціону ($)</label>
-            <input id="auction_price_usd" name="auction_price_usd" type="number" required min={0} className={inputCls}
+            <input id="auction_price_usd" name="auction_price_usd" aria-invalid={!!fieldErrors.auction_price_usd} aria-describedby={fieldErrors.auction_price_usd ? "err-auction_price_usd" : undefined} type="number" required min={0} className={inputCls}
               placeholder="Наприклад, 8500"
               value={form.auction_price_usd} onChange={e => set('auction_price_usd', e.target.value)} />
             <p className="text-xs text-slate-500 mt-1">Вкажіть ставку на аукціоні в USD.</p>
@@ -151,7 +151,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
           </div>
           <div>
             <label htmlFor="engine_cc" className={labelCls}>Об&apos;єм двигуна (см³)</label>
-            <input id="engine_cc" name="engine_cc" type="number" required min={0} max={10000} className={inputCls}
+            <input id="engine_cc" name="engine_cc" aria-invalid={!!fieldErrors.engine_cc} aria-describedby={fieldErrors.engine_cc ? "err-engine_cc" : undefined} type="number" required min={0} max={10000} className={inputCls}
               value={form.engine_cc} onChange={e => set('engine_cc', e.target.value)} />
             <FieldError name="engine_cc" errors={fieldErrors} />
           </div>
@@ -160,7 +160,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
           {requiresBattery && (
             <div>
               <label htmlFor="battery_capacity_kwh" className={labelCls}>Ємність батареї (кВт·год)</label>
-              <input id="battery_capacity_kwh" name="battery_capacity_kwh" type="number" required min={1} max={300} step="0.1"
+              <input id="battery_capacity_kwh" name="battery_capacity_kwh" aria-invalid={!!fieldErrors.battery_capacity_kwh} aria-describedby={fieldErrors.battery_capacity_kwh ? "err-battery_capacity_kwh" : undefined} type="number" required min={1} max={300} step="0.1"
                 className={inputCls}
                 value={form.battery_capacity_kwh} onChange={e => set('battery_capacity_kwh', e.target.value)} />
               <p className="text-xs text-slate-500 mt-1">Акциз електро й PHEV рахується від ємності батареї.</p>
@@ -169,7 +169,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
           )}
           <div>
             <label htmlFor="vehicle_year" className={labelCls}>Рік випуску</label>
-            <input id="vehicle_year" name="vehicle_year" type="number" required min={1990} max={2030} className={inputCls}
+            <input id="vehicle_year" name="vehicle_year" aria-invalid={!!fieldErrors.vehicle_year} aria-describedby={fieldErrors.vehicle_year ? "err-vehicle_year" : undefined} type="number" required min={1990} max={2030} className={inputCls}
               value={form.vehicle_year} onChange={e => set('vehicle_year', e.target.value)} />
             <FieldError name="vehicle_year" errors={fieldErrors} />
           </div>

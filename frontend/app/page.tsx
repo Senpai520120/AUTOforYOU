@@ -3,9 +3,7 @@ import Link from 'next/link';
 import { getC2CFlags } from '@/lib/c2c';
 import { getDemoStatus } from '@/lib/site-config';
 import { buildMetadata } from '@/lib/seo';
-import { INTERNAL_API_URL } from '@/lib/config';
-
-const apiUrl = INTERNAL_API_URL;
+import { serverGet } from '@/lib/server-api';
 
 /**
  * Рендер на кожен запит, а не на етапі збірки.
@@ -28,16 +26,10 @@ export const metadata: Metadata = buildMetadata({
 
 type ExchangeRate = { from_currency: string; to_currency: string; rate: number; date: string };
 
-/** Актуальний курс НБУ. null — блок покаже формулу без конкретної цифри. */
+/** Актуальний курс НБУ через спільний serverGet (кеш 1 год). null — блок покаже формулу без цифри. */
 async function fetchUsdRate(): Promise<ExchangeRate | null> {
-  try {
-    const res = await fetch(`${apiUrl}/api/v1/pricing/rates/`, { next: { revalidate: 3600 } });
-    if (!res.ok) return null;
-    const data: { exchange_rates?: ExchangeRate[] } = await res.json();
-    return data.exchange_rates?.find(r => r.from_currency === 'USD' && r.to_currency === 'UAH') ?? null;
-  } catch {
-    return null;
-  }
+  const data = await serverGet<{ exchange_rates?: ExchangeRate[] }>('/api/v1/pricing/rates/', 3600);
+  return data?.exchange_rates?.find(r => r.from_currency === 'USD' && r.to_currency === 'UAH') ?? null;
 }
 
 const STEPS = [
@@ -133,7 +125,7 @@ export default async function Home() {
               </p>
             </Link>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-xl p-6 opacity-70" data-testid="home-ua-soon">
+            <div className="bg-white border border-slate-200 rounded-xl p-6" data-testid="home-ua-soon">
               <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
               <h3 className="font-bold text-lg text-slate-900 mb-1">Оголошення по Україні — незабаром</h3>
               <p className="text-sm text-slate-500">Каталог авто від власників і дилерів готується до запуску.</p>

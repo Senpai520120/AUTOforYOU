@@ -14,7 +14,8 @@ const FUEL_LABELS: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид',
 };
 
-export default function ListingCard({ listing }: { listing: Listing }) {
+/** priority — перше зображення сторінки: вантажиться одразу, без lazy (LCP). */
+export default function ListingCard({ listing, priority = false }: { listing: Listing; priority?: boolean }) {
   const v = listing.vehicle_detail;
   const st = STATUS_LABELS[listing.status] ?? { label: listing.status, variant: 'default' as const };
   const primaryImg = v.images.find(i => i.is_primary) ?? v.images[0];
@@ -32,6 +33,7 @@ export default function ListingCard({ listing }: { listing: Listing }) {
               src={imgSrc}
               alt={altText}
               fill
+              {...(priority ? { loading: 'eager', fetchPriority: 'high' } as const : {})}
               className="object-cover"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             />

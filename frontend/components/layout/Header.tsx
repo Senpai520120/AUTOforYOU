@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getUnreadCount as getMsgUnread } from '@/api/messages';
 import { getUnreadCount as getNotifUnread } from '@/api/notifications';
+import { useVisibleInterval } from '@/lib/useVisibleInterval';
 import { useC2C } from '@/components/c2c/C2CProvider';
 import MobileNav, { getNavLinks } from '@/components/layout/MobileNav';
 
@@ -15,18 +16,19 @@ export default function Header() {
   const [msgUnread, setMsgUnread] = useState(0);
   const [notifUnread, setNotifUnread] = useState(0);
 
+  const loadCounts = useCallback(() => {
+    if (chatOpen) getMsgUnread().then(d => setMsgUnread(d.unread_count)).catch(() => {});
+    getNotifUnread().then(d => setNotifUnread(d.unread_count)).catch(() => {});
+  }, [chatOpen]);
+
   useEffect(() => {
     if (!user) { setMsgUnread(0); setNotifUnread(0); return; }
     if (!chatOpen) setMsgUnread(0);
-    let cancelled = false;
-    const load = () => {
-      if (chatOpen) getMsgUnread().then(d => { if (!cancelled) setMsgUnread(d.unread_count); }).catch(() => {});
-      getNotifUnread().then(d => { if (!cancelled) setNotifUnread(d.unread_count); }).catch(() => {});
-    };
-    load();
-    const interval = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [user, chatOpen]);
+    loadCounts();
+  }, [user, chatOpen, loadCounts]);
+
+  // Опит кожні 30 с; на прихованій вкладці пауза, при поверненні — одразу.
+  useVisibleInterval(loadCounts, 30000, !!user);
 
   const navLinks = getNavLinks(user, c2c);
   const handleLogout = () => { void logout(); };

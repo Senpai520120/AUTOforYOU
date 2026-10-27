@@ -9,6 +9,7 @@ import LoadingState from '@/components/ui/LoadingState';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
 import { getErrorMessage } from '@/lib/errors';
+import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import PromoteModal from '@/components/local/PromoteModal';
 import { useC2C } from '@/components/c2c/C2CProvider';
@@ -127,9 +128,8 @@ export default function MyLocalListingsPage() {
 
       {/* Sold / Propose Deal Modal */}
       {soldModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-1">Позначити як продано</h3>
+        <Modal title="Позначити як продано" onClose={() => setSoldModal(null)}>
+          <div>
             <p className="text-sm text-slate-500 mb-4">
               {soldModal.listing.make} {soldModal.listing.model} {soldModal.listing.year} — оберіть покупця:
             </p>
@@ -137,7 +137,7 @@ export default function MyLocalListingsPage() {
             {!soldModal.loading && soldModal.buyers.length === 0 && (
               <p className="text-slate-500 text-sm py-3 text-center">Ніхто ще не писав по цьому оголошенню.</p>
             )}
-            {soldError && <p className="text-red-600 text-sm mb-2">{soldError}</p>}
+            {soldError && <p role="alert" className="text-red-600 text-sm mb-2">{soldError}</p>}
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {soldModal.buyers.map(b => (
                 <button
@@ -157,7 +157,7 @@ export default function MyLocalListingsPage() {
               Закрити
             </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       <div className="flex items-center justify-between mb-6">

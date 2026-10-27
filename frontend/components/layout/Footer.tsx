@@ -21,7 +21,7 @@ export default async function Footer() {
         <p className="font-semibold text-white mb-1">AUTOforYOU</p>
         <p>Авто з аукціонів США під ключ{s?.c2c_enabled === true ? ' · Оголошення по Україні' : ''}</p>
         {(owner || contacts.length > 0 || tgUrl || botUrl) && (
-          <p className="mt-2 text-xs text-slate-500" data-testid="footer-requisites">
+          <p className="mt-2 text-xs text-slate-400" data-testid="footer-requisites">
             {owner && <span>{owner}{s?.owner_code ? `, код ${s.owner_code}` : ''}</span>}
             {contacts.map((c) => (
               <span key={c}>{owner || c !== contacts[0] ? ' · ' : ''}{c}</span>
@@ -55,12 +55,12 @@ export default async function Footer() {
           </p>
         )}
         {trustPages && (
-          <nav aria-label="Інформація про пригон" className="mt-4 flex justify-center gap-5 text-xs text-slate-500 flex-wrap">
+          <nav aria-label="Інформація про пригон" className="mt-4 flex justify-center gap-5 text-xs text-slate-400 flex-wrap">
             <Link href="/how-it-works" className="hover:text-slate-300 transition-colors">{HOW_IT_WORKS_LABEL}</Link>
             <Link href="/how-it-works#faq-block-title" className="hover:text-slate-300 transition-colors">{FAQ_LABEL}</Link>
           </nav>
         )}
-        <nav aria-label="Юридичні документи" className="mt-4 flex justify-center gap-5 text-xs text-slate-500 flex-wrap">
+        <nav aria-label="Юридичні документи" className="mt-4 flex justify-center gap-5 text-xs text-slate-400 flex-wrap">
           <Link href="/terms" className="hover:text-slate-300 transition-colors">Умови використання</Link>
           <Link href="/rules" className="hover:text-slate-300 transition-colors">Правила розміщення</Link>
           <Link href="/refund" className="hover:text-slate-300 transition-colors">Повернення коштів</Link>
@@ -68,11 +68,11 @@ export default async function Footer() {
           <Link href="/cookies" className="hover:text-slate-300 transition-colors">Cookie</Link>
           <CookieSettingsLink />
         </nav>
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-slate-400">
           Послугу пригону надає партнер, а не AUTOforYOU
         </p>
         {isDemo === true && (
-          <p className="mt-1 text-xs text-slate-500" data-testid="footer-demo-note">
+          <p className="mt-1 text-xs text-slate-400" data-testid="footer-demo-note">
             Тестові тарифи — всі розрахунки є демонстраційними
           </p>
         )}

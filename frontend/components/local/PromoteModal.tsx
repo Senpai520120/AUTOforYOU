@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { localApi } from '@/api/local';
 import { PromotionTariff } from '@/lib/types';
 import { getErrorMessage } from '@/lib/errors';
+import Modal from '@/components/ui/Modal';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingState from '@/components/ui/LoadingState';
 
@@ -67,13 +68,9 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
   const selectedTariff = tariffs.find(t => t.code === selected);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-slate-900">Просування оголошення</h2>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
-          </div>
+    <Modal title="Просування оголошення" onClose={onClose} showClose>
+      <div>
+        <div>
           <p className="text-sm text-slate-500 mb-4 truncate">{listingTitle}</p>
 
           {/* Sandbox notice */}
@@ -107,7 +104,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span>{TYPE_ICONS[t.type]}</span>
+                      <span aria-hidden="true">{TYPE_ICONS[t.type]}</span>
                       <span className="font-medium text-slate-900 text-sm">{t.name}</span>
                       <span className="ml-auto text-sm font-bold text-blue-700 whitespace-nowrap">
                         {Number(t.price).toLocaleString('uk-UA')} {t.currency}
@@ -124,7 +121,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
             </div>
           )}
 
-          {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+          {error && <p role="alert" className="text-xs text-red-600 mb-3">{error}</p>}
 
           <div className="flex gap-2">
             <button
@@ -143,6 +140,6 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -84,21 +84,21 @@ export default function TrustedShopsPage() {
       {showForm && (
         <form onSubmit={create} className="bg-white border border-blue-200 rounded-xl p-5 mb-5 space-y-3">
           <h2 className="font-semibold text-slate-800">Новий партнер</h2>
-          <input required placeholder="Назва" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+          <input required aria-label="Назва" placeholder="Назва" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
             value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           <div className="grid grid-cols-2 gap-3">
-            <select className="border border-slate-300 rounded px-3 py-2 text-sm"
+            <select aria-label="Тип" className="border border-slate-300 rounded px-3 py-2 text-sm"
               value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
               {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-            <select className="border border-slate-300 rounded px-3 py-2 text-sm"
+            <select aria-label="Рейтинг" className="border border-slate-300 rounded px-3 py-2 text-sm"
               value={form.rating} onChange={e => setForm(f => ({ ...f, rating: Number(e.target.value) }))}>
               {[5, 4, 3, 2, 1].map(r => <option key={r} value={r}>{'★'.repeat(r)}</option>)}
             </select>
           </div>
-          <textarea placeholder="Контакти" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+          <textarea aria-label="Контакти" placeholder="Контакти" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
             value={form.contacts} onChange={e => setForm(f => ({ ...f, contacts: e.target.value }))} />
-          <textarea placeholder="Нотатки" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+          <textarea aria-label="Нотатки" placeholder="Нотатки" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
             value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           <button type="submit" disabled={saving} className="disabled:opacity-50 bg-amber-500 hover:bg-amber-400 text-black font-bold px-6 py-2 rounded-lg text-sm">
             Зберегти

@@ -118,7 +118,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                 >
                   <Image
                     src={img.image || img.source_url || PLACEHOLDER_SVG}
-                    alt={`Фото ${i + 1}`}
+                    alt={`Фото ${i + 1} з ${images.length} — ${listing.make} ${listing.model} ${listing.year}`}
                     fill
                     className="object-cover"
                     sizes="64px"

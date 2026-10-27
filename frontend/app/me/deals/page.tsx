@@ -24,6 +24,110 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
+interface DealCardProps {
+  deal: Deal;
+  role: 'buyer' | 'seller';
+  review?: { rating: number; text: string };
+  submitting: boolean;
+  onConfirm: (id: number) => void;
+  onCancel: (id: number) => void;
+  onRating: (id: number, rating: number) => void;
+  onText: (id: number, text: string) => void;
+  onSubmitReview: (id: number) => void;
+}
+
+// На рівні модуля: інакше компонент перемонтовується на кожен рендер і поле відгуку втрачає фокус.
+function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRating, onText, onSubmitReview }: DealCardProps) {
+  const badge = STATUS_BADGE[deal.status];
+  const isBuyer = role === 'buyer';
+
+  return (
+    <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <Link href={`/local/${deal.listing.id}`} className="font-semibold text-blue-700 hover:underline">
+            {deal.listing.make} {deal.listing.model} {deal.listing.year}
+          </Link>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {isBuyer ? `Продавець: ${deal.seller.display_name}` : `Покупець: ${deal.buyer.display_name}`}
+          </p>
+        </div>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
+          {badge.label}
+        </span>
+      </div>
+
+      {deal.status === 'proposed' && isBuyer && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => onConfirm(deal.id)}
+            className="flex-1 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+          >
+            Підтвердити угоду
+          </button>
+          <button
+            onClick={() => onCancel(deal.id)}
+            className="flex-1 border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold py-2 rounded-lg transition-colors"
+          >
+            Відхилити
+          </button>
+        </div>
+      )}
+
+      {deal.status === 'proposed' && !isBuyer && (
+        <button
+          onClick={() => onCancel(deal.id)}
+          className="w-full border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm py-1.5 rounded-lg"
+        >
+          Скасувати пропозицію
+        </button>
+      )}
+
+      {deal.status === 'confirmed' && isBuyer && !deal.review && (
+        <div className="border-t border-slate-100 pt-3 space-y-2">
+          <p className="text-sm font-medium text-slate-700">Залишити відгук про продавця:</p>
+          <div role="radiogroup" aria-label="Оцінка" className="flex gap-1">
+            {[1,2,3,4,5].map(star => (
+              <button
+                key={star}
+                type="button"
+                role="radio"
+                aria-checked={(review?.rating || 0) === star}
+                aria-label={`${star} з 5`}
+                onClick={() => onRating(deal.id, star)}
+                className={`text-2xl transition-colors ${(review?.rating || 0) >= star ? 'text-amber-400' : 'text-slate-300 hover:text-amber-300'}`}
+              ><span aria-hidden="true">★</span></button>
+            ))}
+          </div>
+          <textarea
+            aria-label="Відгук про продавця"
+            placeholder="Напишіть відгук (необов'язково)..."
+            rows={2}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none"
+            value={review?.text || ''}
+            onChange={e => onText(deal.id, e.target.value)}
+          />
+          <button
+            onClick={() => onSubmitReview(deal.id)}
+            disabled={!review?.rating || submitting}
+            className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg"
+          >
+            {submitting ? 'Надсилаємо...' : 'Надіслати відгук'}
+          </button>
+        </div>
+      )}
+
+      {deal.review && (
+        <div className="border-t border-slate-100 pt-3">
+          <p className="text-xs text-slate-500 mb-1">Ваш відгук:</p>
+          <StarRating rating={deal.review.rating} />
+          {deal.review.text && <p className="text-sm text-slate-700 mt-1">{deal.review.text}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MyDealsPage() {
   const { user, loading } = useRequireAuth();
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -86,103 +190,22 @@ export default function MyDealsPage() {
     }
   };
 
+  const handleRating = (id: number, rating: number) =>
+    setReviewState(s => ({ ...s, [id]: { text: s[id]?.text ?? '', rating } }));
+  const handleText = (id: number, text: string) =>
+    setReviewState(s => ({ ...s, [id]: { rating: s[id]?.rating ?? 0, text } }));
+
   if (loading || !user || fetching) return <LoadingState />;
 
   const asBuyer = deals.filter(d => d.buyer.id === user?.id);
   const asSeller = deals.filter(d => d.seller.id === user?.id);
-
-  const DealCard = ({ deal, role }: { deal: Deal; role: 'buyer' | 'seller' }) => {
-    const badge = STATUS_BADGE[deal.status];
-    const isBuyer = role === 'buyer';
-
-    return (
-      <div className="border border-slate-200 rounded-xl p-4 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <Link href={`/local/${deal.listing.id}`} className="font-semibold text-blue-700 hover:underline">
-              {deal.listing.make} {deal.listing.model} {deal.listing.year}
-            </Link>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isBuyer ? `Продавець: ${deal.seller.display_name}` : `Покупець: ${deal.buyer.display_name}`}
-            </p>
-          </div>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
-            {badge.label}
-          </span>
-        </div>
-
-        {deal.status === 'proposed' && isBuyer && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleConfirm(deal.id)}
-              className="flex-1 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
-            >
-              Підтвердити угоду
-            </button>
-            <button
-              onClick={() => handleCancel(deal.id)}
-              className="flex-1 border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold py-2 rounded-lg transition-colors"
-            >
-              Відхилити
-            </button>
-          </div>
-        )}
-
-        {deal.status === 'proposed' && !isBuyer && (
-          <button
-            onClick={() => handleCancel(deal.id)}
-            className="w-full border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm py-1.5 rounded-lg"
-          >
-            Скасувати пропозицію
-          </button>
-        )}
-
-        {deal.status === 'confirmed' && isBuyer && !deal.review && (
-          <div className="border-t border-slate-100 pt-3 space-y-2">
-            <p className="text-sm font-medium text-slate-700">Залишити відгук про продавця:</p>
-            <div className="flex gap-1">
-              {[1,2,3,4,5].map(star => (
-                <button
-                  key={star}
-                  onClick={() => setReviewState(s => ({ ...s, [deal.id]: { ...s[deal.id], rating: star } }))}
-                  className={`text-2xl transition-colors ${(reviewState[deal.id]?.rating || 0) >= star ? 'text-amber-400' : 'text-slate-300 hover:text-amber-300'}`}
-                >★</button>
-              ))}
-            </div>
-            <textarea
-              placeholder="Напишіть відгук (необов'язково)..."
-              rows={2}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none"
-              value={reviewState[deal.id]?.text || ''}
-              onChange={e => setReviewState(s => ({ ...s, [deal.id]: { ...s[deal.id], text: e.target.value } }))}
-            />
-            <button
-              onClick={() => handleReview(deal.id)}
-              disabled={!reviewState[deal.id]?.rating || submitting === deal.id}
-              className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg"
-            >
-              {submitting === deal.id ? 'Надсилаємо...' : 'Надіслати відгук'}
-            </button>
-          </div>
-        )}
-
-        {deal.review && (
-          <div className="border-t border-slate-100 pt-3">
-            <p className="text-xs text-slate-500 mb-1">Ваш відгук:</p>
-            <StarRating rating={deal.review.rating} />
-            {deal.review.text && <p className="text-sm text-slate-700 mt-1">{deal.review.text}</p>}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-slate-900 mb-6">Мої угоди</h1>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm">{error}</div>
+        <div role="alert" className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm">{error}</div>
       )}
 
       {loadError ? (
@@ -195,7 +218,16 @@ export default function MyDealsPage() {
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-slate-800 mb-3">Я — покупець</h2>
           <div className="space-y-3">
-            {asBuyer.map(d => <DealCard key={d.id} deal={d} role="buyer" />)}
+            {asBuyer.map(d => <DealCard
+              key={d.id} deal={d} role="buyer"
+              review={reviewState[d.id]}
+              submitting={submitting === d.id}
+              onConfirm={handleConfirm}
+              onCancel={handleCancel}
+              onRating={handleRating}
+              onText={handleText}
+              onSubmitReview={handleReview}
+            />)}
           </div>
         </section>
       )}
@@ -204,7 +236,16 @@ export default function MyDealsPage() {
         <section>
           <h2 className="text-lg font-semibold text-slate-800 mb-3">Я — продавець</h2>
           <div className="space-y-3">
-            {asSeller.map(d => <DealCard key={d.id} deal={d} role="seller" />)}
+            {asSeller.map(d => <DealCard
+              key={d.id} deal={d} role="seller"
+              review={reviewState[d.id]}
+              submitting={submitting === d.id}
+              onConfirm={handleConfirm}
+              onCancel={handleCancel}
+              onRating={handleRating}
+              onText={handleText}
+              onSubmitReview={handleReview}
+            />)}
           </div>
         </section>
       )}

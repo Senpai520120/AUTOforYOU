@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useRef, useEffect, useState } from 'react';
+import { useCallback, useId, useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
@@ -8,6 +8,20 @@ import { Region, City, LocalListing, LocalListingImage } from '@/lib/types';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingState from '@/components/ui/LoadingState';
 import PhotoUploadBlock from './PhotoUploadBlock';
+
+/** Превью файлу: URL створюється один раз на файл і звільняється при видаленні/розмонтуванні. */
+function FileThumb({ file, alt }: { file: File; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} width={160} height={160} className="object-cover w-full h-full" />;
+}
 
 function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void }) {
   const [files, setFiles] = useState<File[]>([]);
@@ -37,15 +51,14 @@ function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void
         >
           + Вибрати фото
         </button>
-        <span className="text-xs text-slate-400">{files.length}/15 · jpg/png/webp · до 8 МБ</span>
+        <span className="text-xs text-slate-600">{files.length}/15 · jpg/png/webp · до 8 МБ</span>
         <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={handleChange} />
       </div>
       {files.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {files.map((f, i) => (
             <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={URL.createObjectURL(f)} alt={f.name} className="object-cover w-full h-full" />
+              <FileThumb file={f} alt={`Фото ${i + 1} з ${files.length}`} />
               {i === 0 && (
                 <span className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Головне</span>
               )}
@@ -72,6 +85,8 @@ interface Props {
 
 export default function LocalListingForm({ initial, listingId }: Props) {
   const router = useRouter();
+  const baseId = useId();
+  const fid = (k: string) => `${baseId}-${k}`;
   const isEdit = !!listingId;
 
   const [regions, setRegions] = useState<Region[]>([]);
@@ -231,6 +246,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           <div className="flex gap-2">
             <input
               className={inputCls + ' flex-1 font-mono uppercase'}
+              aria-label="VIN"
               placeholder="Введіть 17-значний VIN"
               value={vin}
               onChange={e => setVin(e.target.value.toUpperCase())}
@@ -245,7 +261,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
               {vinLoading ? 'Завантаження...' : 'Заповнити за VIN'}
             </button>
           </div>
-          {vinError && <p className={errCls}>{vinError}</p>}
+          {vinError && <p role="alert" className={errCls}>{vinError}</p>}
         </div>
       )}
 
@@ -259,32 +275,32 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Марка *</label>
-          <input className={inputCls} value={make} onChange={e => setMake(e.target.value)} required placeholder="Toyota" />
-          {errors.make && <p className={errCls}>{errors.make}</p>}
+          <label htmlFor={fid('make')} className={labelCls}>Марка *</label>
+          <input id={fid('make')} aria-invalid={!!errors.make} aria-describedby={errors.make ? fid('err-make') : undefined} className={inputCls} value={make} onChange={e => setMake(e.target.value)} required placeholder="Toyota" />
+          {errors.make && <p id={fid('err-make')} role="alert" className={errCls}>{errors.make}</p>}
         </div>
         <div>
-          <label className={labelCls}>Модель *</label>
-          <input className={inputCls} value={model} onChange={e => setModel(e.target.value)} required placeholder="Camry" />
-          {errors.model && <p className={errCls}>{errors.model}</p>}
+          <label htmlFor={fid('model')} className={labelCls}>Модель *</label>
+          <input id={fid('model')} aria-invalid={!!errors.model} aria-describedby={errors.model ? fid('err-model') : undefined} className={inputCls} value={model} onChange={e => setModel(e.target.value)} required placeholder="Camry" />
+          {errors.model && <p id={fid('err-model')} role="alert" className={errCls}>{errors.model}</p>}
         </div>
         <div>
-          <label className={labelCls}>Рік *</label>
-          <input className={inputCls} type="number" value={year} onChange={e => setYear(e.target.value)} required placeholder="2020" min={1900} max={2026} />
-          {errors.year && <p className={errCls}>{errors.year}</p>}
+          <label htmlFor={fid('year')} className={labelCls}>Рік *</label>
+          <input id={fid('year')} aria-invalid={!!errors.year} aria-describedby={errors.year ? fid('err-year') : undefined} className={inputCls} type="number" value={year} onChange={e => setYear(e.target.value)} required placeholder="2020" min={1900} max={2026} />
+          {errors.year && <p id={fid('err-year')} role="alert" className={errCls}>{errors.year}</p>}
         </div>
         <div>
-          <label className={labelCls}>Пробіг, км *</label>
-          <input className={inputCls} type="number" value={mileageKm} onChange={e => setMileageKm(e.target.value)} required placeholder="50000" min={0} />
-          {errors.mileage_km && <p className={errCls}>{errors.mileage_km}</p>}
+          <label htmlFor={fid('mileage_km')} className={labelCls}>Пробіг, км *</label>
+          <input id={fid('mileage_km')} aria-invalid={!!errors.mileage_km} aria-describedby={errors.mileage_km ? fid('err-mileage_km') : undefined} className={inputCls} type="number" value={mileageKm} onChange={e => setMileageKm(e.target.value)} required placeholder="50000" min={0} />
+          {errors.mileage_km && <p id={fid('err-mileage_km')} role="alert" className={errCls}>{errors.mileage_km}</p>}
         </div>
         <div>
-          <label className={labelCls}>Об&apos;єм двигуна, куб.см</label>
-          <input className={inputCls} type="number" value={engineCc} onChange={e => setEngineCc(e.target.value)} placeholder="2000" min={0} />
+          <label htmlFor={fid('engine_cc')} className={labelCls}>Об&apos;єм двигуна, куб.см</label>
+          <input id={fid('engine_cc')} className={inputCls} type="number" value={engineCc} onChange={e => setEngineCc(e.target.value)} placeholder="2000" min={0} />
         </div>
         <div>
-          <label className={labelCls}>Тип палива *</label>
-          <select className={inputCls} value={fuelType} onChange={e => setFuelType(e.target.value as typeof fuelType)} required>
+          <label htmlFor={fid('fuel_type')} className={labelCls}>Тип палива *</label>
+          <select id={fid('fuel_type')} className={inputCls} value={fuelType} onChange={e => setFuelType(e.target.value as typeof fuelType)} required>
             <option value="petrol">Бензин</option>
             <option value="diesel">Дизель</option>
             <option value="electric">Електро</option>
@@ -293,8 +309,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </select>
         </div>
         <div>
-          <label className={labelCls}>КПП *</label>
-          <select className={inputCls} value={transmission} onChange={e => setTransmission(e.target.value as typeof transmission)} required>
+          <label htmlFor={fid('transmission')} className={labelCls}>КПП *</label>
+          <select id={fid('transmission')} className={inputCls} value={transmission} onChange={e => setTransmission(e.target.value as typeof transmission)} required>
             <option value="auto">Автомат</option>
             <option value="manual">Механіка</option>
             <option value="cvt">Варіатор</option>
@@ -302,8 +318,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Тип кузова *</label>
-          <select className={inputCls} value={bodyType} onChange={e => setBodyType(e.target.value as typeof bodyType)} required>
+          <label htmlFor={fid('body_type')} className={labelCls}>Тип кузова *</label>
+          <select id={fid('body_type')} className={inputCls} value={bodyType} onChange={e => setBodyType(e.target.value as typeof bodyType)} required>
             <option value="sedan">Седан</option>
             <option value="suv">Позашляховик</option>
             <option value="hatchback">Хетчбек</option>
@@ -316,8 +332,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Стан *</label>
-          <select className={inputCls} value={condition} onChange={e => setCondition(e.target.value as typeof condition)} required>
+          <label htmlFor={fid('condition')} className={labelCls}>Стан *</label>
+          <select id={fid('condition')} className={inputCls} value={condition} onChange={e => setCondition(e.target.value as typeof condition)} required>
             <option value="used">Вживаний</option>
             <option value="new">Новий</option>
             <option value="damaged">Пошкоджений</option>
@@ -327,21 +343,21 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="sm:col-span-2">
-          <label className={labelCls}>Ціна *</label>
-          <input className={inputCls} type="number" value={price} onChange={e => setPrice(e.target.value)} required placeholder="500000" min={0} />
-          {errors.price && <p className={errCls}>{errors.price}</p>}
+          <label htmlFor={fid('price')} className={labelCls}>Ціна *</label>
+          <input id={fid('price')} aria-invalid={!!errors.price} aria-describedby={errors.price ? fid('err-price') : undefined} className={inputCls} type="number" value={price} onChange={e => setPrice(e.target.value)} required placeholder="500000" min={0} />
+          {errors.price && <p id={fid('err-price')} role="alert" className={errCls}>{errors.price}</p>}
         </div>
         <div>
-          <label className={labelCls}>Валюта</label>
-          <select className={inputCls} value={currency} onChange={e => setCurrency(e.target.value as typeof currency)}>
+          <label htmlFor={fid('currency')} className={labelCls}>Валюта</label>
+          <select id={fid('currency')} className={inputCls} value={currency} onChange={e => setCurrency(e.target.value as typeof currency)}>
             <option value="UAH">UAH</option>
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
           </select>
         </div>
         <div className="sm:col-span-3">
-          <label className={labelCls}>Тип ціни</label>
-          <div className="flex gap-4">
+          <span id={fid('price_type')} className={labelCls}>Тип ціни</span>
+          <div role="radiogroup" aria-labelledby={fid('price_type')} className="flex gap-4">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="radio" value="fixed" checked={priceType === 'fixed'} onChange={() => setPriceType('fixed')} /> Фіксована
             </label>
@@ -354,26 +370,26 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Область *</label>
-          <select className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }} required>
+          <label htmlFor={fid('region')} className={labelCls}>Область *</label>
+          <select id={fid('region')} aria-invalid={!!errors.region} aria-describedby={errors.region ? fid('err-region') : undefined} className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }} required>
             <option value="">Оберіть область</option>
             {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
-          {errors.region && <p className={errCls}>{errors.region}</p>}
+          {errors.region && <p id={fid('err-region')} role="alert" className={errCls}>{errors.region}</p>}
         </div>
         <div>
-          <label className={labelCls}>Місто *</label>
-          <select className={inputCls} value={city} onChange={e => setCity(e.target.value)} required disabled={!region}>
+          <label htmlFor={fid('city')} className={labelCls}>Місто *</label>
+          <select id={fid('city')} aria-invalid={!!errors.city} aria-describedby={errors.city ? fid('err-city') : undefined} className={inputCls} value={city} onChange={e => setCity(e.target.value)} required disabled={!region}>
             <option value="">Оберіть місто</option>
             {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          {errors.city && <p className={errCls}>{errors.city}</p>}
+          {errors.city && <p id={fid('err-city')} role="alert" className={errCls}>{errors.city}</p>}
         </div>
       </div>
 
       {/* Photo block — edit mode: immediate upload; create mode: buffer until submit */}
       <div>
-        <label className={labelCls}>Фото</label>
+        <span className={labelCls}>Фото</span>
         {isEdit && createdListingId ? (
           <PhotoUploadBlock
             listingId={createdListingId}
@@ -382,12 +398,12 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         ) : (
           <CreateModePhotoPicker onChange={setPendingFiles} />
         )}
-        {photoError && <p className="text-xs text-red-600 mt-1">{photoError}</p>}
+        {photoError && <p role="alert" className="text-xs text-red-600 mt-1">{photoError}</p>}
       </div>
 
       <div>
-        <label className={labelCls}>Опис</label>
-        <textarea
+        <label htmlFor={fid('description')} className={labelCls}>Опис</label>
+        <textarea id={fid('description')}
           className={inputCls}
           rows={5}
           value={description}
@@ -397,15 +413,15 @@ export default function LocalListingForm({ initial, listingId }: Props) {
       </div>
 
       <div>
-        <label className={labelCls}>Контактний телефон</label>
-        <input
+        <label htmlFor={fid('contact_phone')} className={labelCls}>Контактний телефон</label>
+        <input id={fid('contact_phone')}
           className={inputCls}
           type="tel"
           value={contactPhone}
           onChange={e => setContactPhone(e.target.value)}
           placeholder="+38 050 123 45 67"
         />
-        <p className="text-xs text-slate-400 mt-1">Показується тільки авторизованим покупцям</p>
+        <p className="text-xs text-slate-600 mt-1">Показується тільки авторизованим покупцям</p>
       </div>
 
       {!isEdit && (
@@ -429,7 +445,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
               </a>
             </span>
           </label>
-          {errors.agreed_to_rules && <p className={errCls}>{errors.agreed_to_rules}</p>}
+          {errors.agreed_to_rules && <p id={fid('err-agreed_to_rules')} role="alert" className={errCls}>{errors.agreed_to_rules}</p>}
         </div>
       )}
 
