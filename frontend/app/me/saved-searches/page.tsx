@@ -95,21 +95,21 @@ export default function SavedSearchesPage() {
                   <div className="text-xs text-slate-500 mt-0.5 truncate">{filtersLabel(item.filters)}</div>
                   {item.last_notified_at && (
                     <div className="text-xs text-slate-400 mt-0.5">
-                      Останній алерт: {new Date(item.last_notified_at).toLocaleDateString('uk-UA')}
+                      Останнє сповіщення: {new Date(item.last_notified_at).toLocaleDateString('uk-UA')}
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <button
                     onClick={() => toggleNotify(item)}
-                    title={item.notify ? 'Вимкнути алерти' : 'Увімкнути алерти'}
+                    title={item.notify ? 'Вимкнути сповіщення' : 'Увімкнути сповіщення'}
                     className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
                       item.notify
                         ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
                         : 'border-slate-200 text-slate-400 hover:border-slate-300'
                     }`}
                   >
-                    {item.notify ? '🔔 Алерти вкл.' : '🔕 Алерти вимк.'}
+                    {item.notify ? '🔔 Сповіщення увімк.' : '🔕 Сповіщення вимк.'}
                   </button>
                   <button
                     onClick={() => setToDelete(item)}

@@ -327,7 +327,7 @@ class TestLiqPayPaymentFlow(TestCase):
 
         resp = self.anon.post(CALLBACK_URL, payload, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST,
-                         'Неверная подпись должна давать 400')
+                         'Невірний підпис має давати 400')
 
     def test_invalid_signature_does_not_change_payment_status(self):
         self._checkout('e2e-badsig-002')

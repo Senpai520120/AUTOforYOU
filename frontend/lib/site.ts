@@ -1,8 +1,7 @@
-/**
- * Базова адреса сайту — єдине місце (задача 6.3).
- * NEXT_PUBLIC_SITE_URL вшивається при збірці: після зміни фронтенд треба пересібрати.
- */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://autoforyou.ua').replace(/\/+$/, '');
+import { SITE_URL } from '@/lib/config';
+
+// Адреса сайту живе в lib/config.ts (задача 6.4); тут лишається для сумісності імпортів.
+export { SITE_URL };
 
 export const SITE_NAME = 'AUTOforYOU';
 

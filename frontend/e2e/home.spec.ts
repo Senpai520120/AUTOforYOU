@@ -48,9 +48,10 @@ test.describe('Головна сторінка @smoke', () => {
     const section = page.getByRole('region', { name: 'Що входить у розрахунок' });
     await expect(section).toBeVisible();
 
-    // Ключові статті розмитнення мають бути названі явно.
-    await expect(section).toContainText('Мито 10% від митної вартості');
-    await expect(section).toContainText('ПДВ 20%');
+    // Ключові статті названі без цифр ставок і портів (6.4, 08-C3): цифри — тільки в калькуляторі.
+    await expect(section).toContainText('Мито та ПДВ');
+    await expect(section).not.toContainText('10%');
+    await expect(section).not.toContainText('20%');
     await expect(section).toContainText('Пенсійний збір');
 
     await section.getByRole('link', { name: 'Відкрити калькулятор' }).click();

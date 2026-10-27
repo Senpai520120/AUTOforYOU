@@ -518,6 +518,13 @@ export interface SiteSettings {
   payments_enabled: boolean;
   /** Партнерське посилання carVertical (3.2a); порожній рядок — посилання немає. */
   carvertical_partner_url: string;
+  /** Публічна конфігурація (задача 6.4): лімити оголошень і ім'я бота з .env бекенда. */
+  local_listing_max_active: number;
+  local_listing_expiry_days: number;
+  local_listing_max_photos: number;
+  local_listing_photo_max_size_mb: number;
+  /** Ім'я бота без @; порожній рядок — бот не налаштований. */
+  telegram_bot_username: string;
 }
 
 // Заявки брокеру (задача 2.3)

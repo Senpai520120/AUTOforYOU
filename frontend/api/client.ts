@@ -12,7 +12,7 @@
 import { getCsrfToken } from '@/lib/csrf';
 import { hasSessionHint } from '@/lib/session-hint';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+import { API_URL as API } from '@/lib/config';
 const REFRESH_PATH = '/api/v1/auth/token/refresh/';
 // 401 від входу/виходу — відповідь по суті (невірний пароль, сесії вже немає), не протухший access.
 const NO_REFRESH_PATHS = new Set(['/api/v1/auth/token/', REFRESH_PATH, '/api/v1/auth/token/logout/']);

@@ -1850,7 +1850,7 @@ paths:
         '200':
           description: OK
         '400':
-          description: Неверная подпись или данные
+          description: Невірний підпис або дані
         '503':
           description: Оплата не налаштована (нет ключа или LIQPAY_MODE=off)
   /api/v1/payments/liqpay/checkout/:
@@ -4702,11 +4702,11 @@ components:
       properties:
         first_name:
           type: string
-          title: Имя
+          title: Ім'я
           maxLength: 150
         last_name:
           type: string
-          title: Фамилия
+          title: Прізвище
           maxLength: 150
         phone:
           type: string
@@ -4829,11 +4829,11 @@ components:
           maxLength: 254
         first_name:
           type: string
-          title: Имя
+          title: Ім'я
           maxLength: 150
         last_name:
           type: string
-          title: Фамилия
+          title: Прізвище
           maxLength: 150
         phone:
           type: string
@@ -4860,11 +4860,11 @@ components:
           title: Підтвердження пароля
         first_name:
           type: string
-          title: Имя
+          title: Ім'я
           maxLength: 150
         last_name:
           type: string
-          title: Фамилия
+          title: Прізвище
           maxLength: 150
         phone:
           type: string
@@ -5305,11 +5305,11 @@ components:
           readOnly: true
         first_name:
           type: string
-          title: Имя
+          title: Ім'я
           maxLength: 150
         last_name:
           type: string
-          title: Фамилия
+          title: Прізвище
           maxLength: 150
         phone:
           type: string
@@ -5328,9 +5328,8 @@ components:
         is_staff:
           type: boolean
           readOnly: true
-          title: Статус персонала
-          description: Отметьте, если пользователь может входить в административную
-            часть сайта.
+          title: Статус персоналу
+          description: Визначає, чи може користувач увійти до цього сайту адміністрування.
         is_admin_role:
           type: boolean
           readOnly: true
@@ -5366,11 +5365,11 @@ components:
       properties:
         first_name:
           type: string
-          title: Имя
+          title: Ім'я
           maxLength: 150
         last_name:
           type: string
-          title: Фамилия
+          title: Прізвище
           maxLength: 150
         phone:
           type: string

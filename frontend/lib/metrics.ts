@@ -1,3 +1,4 @@
+import { API_URL } from '@/lib/config';
 /**
  * Клієнтські лічильники без ПДн (задача 8.7): POST /api/v1/metrics/event/ з одним полем key.
  * Без cookie і ідентифікаторів, fire-and-forget: помилки глушаться, на UX не впливають.
@@ -9,7 +10,7 @@ export type ClientMetricKey = 'calculator_visit' | 'mobile_bar_click';
 
 export function sendMetric(key: ClientMetricKey): void {
   if (typeof window === 'undefined') return;
-  const api = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  const api = API_URL;
   try {
     void fetch(`${api}${ENDPOINT}`, {
       method: 'POST',

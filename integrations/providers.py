@@ -234,7 +234,7 @@ class RealOpendatabotProvider(OpendatabotProvider):
             elif plate:
                 url = _ODB_NUMBER_URL.format(number=plate.upper())
             else:
-                return {'demo': True, 'provider': 'opendatabot', 'error': 'Ни VIN, ни номер не переданы.'}
+                return {'demo': True, 'provider': 'opendatabot', 'error': 'Не передано ні VIN, ні номер.'}
 
             # Ключ в query: передача заголовком в документации
             # https://opendatabot.ua/doc не подтверждена. URL с ключом наружу не отдаём (см. mask_secrets).
@@ -384,7 +384,7 @@ class ManualLotProvider(AuctionLotProvider):
 
     def fetch_lot(self, lot_url_or_data) -> dict:
         if not isinstance(lot_url_or_data, dict):
-            return {'error': 'ManualLotProvider ожидает dict с данными лота', 'demo': False}
+            return {'error': 'ManualLotProvider очікує dict з даними лота', 'demo': False}
         return _normalize_lot({**lot_url_or_data, 'provider': 'manual'})
 
 

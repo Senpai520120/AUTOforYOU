@@ -13,8 +13,20 @@ export const metadata: Metadata = buildMetadata({
 
 export const dynamic = 'force-dynamic';
 
+/** 1 день, 2–4 дні, 5+ днів (з урахуванням 11–14). */
+function daysWord(n: number): string {
+  const m100 = n % 100;
+  const m10 = n % 10;
+  if (m100 >= 11 && m100 <= 14) return 'днів';
+  if (m10 === 1) return 'день';
+  if (m10 >= 2 && m10 <= 4) return 'дні';
+  return 'днів';
+}
+
 export default async function RulesPage() {
   const s = await getSiteSettings(0);
+  const maxActive = s ? s.local_listing_max_active : null;
+  const expiryDays = s ? s.local_listing_expiry_days : null;
   return (
     <LegalPage title="Правила розміщення оголошень" settings={s}>
         <section>
@@ -31,7 +43,9 @@ export default async function RulesPage() {
           <ul className="list-disc list-inside space-y-1">
             <li>Легкові автомобілі, що перебувають у власності або законному розпорядженні продавця.</li>
             <li>Транспортні засоби, що відповідають технічним та правовим вимогам для продажу в Україні.</li>
-            <li>Один продавець може мати не більше {'{LOCAL_LISTING_MAX_ACTIVE}'} активних оголошень одночасно.</li>
+            {maxActive !== null && (
+              <li>Один продавець може мати не більше {maxActive} активних оголошень одночасно.</li>
+            )}
           </ul>
         </section>
 
@@ -93,8 +107,11 @@ export default async function RulesPage() {
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-3">7. Термін дії оголошення</h2>
           <p>
-            Оголошення активне протягом 30 днів з моменту публікації. Після закінчення терміну оголошення
-            автоматично знімається з публікації. Продовження доступне через особистий кабінет.
+            {expiryDays !== null ? `Оголошення діє ${expiryDays} ${daysWord(expiryDays)} з моменту схвалення модератором. ` : 'Оголошення діє обмежений термін з моменту схвалення модератором. '}
+            Після закінчення терміну оголошення автоматично знімається з публікації.{' '}
+            {s?.payments_enabled === true
+              ? 'Продовження доступне через особистий кабінет.'
+              : 'Продовження безкоштовне й доступне через особистий кабінет.'}
           </p>
         </section>
 

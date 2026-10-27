@@ -3,6 +3,7 @@ import type {
   BrokerLeadDetail, BrokerLeadList, Lead, LeadCreate, LeadCreated, LeadPartnerStatus, LeadQuestionKey, LeadStatus,
   PaginatedResponse,
 } from '@/lib/types';
+import { API_URL } from '@/lib/config';
 
 export const leadsApi = {
   create: (payload: LeadCreate) => apiPost<LeadCreated>('/api/v1/leads/', payload),
@@ -22,7 +23,7 @@ export const brokerLeadsApi = {
     apiPost<BrokerLeadDetail>(`/api/v1/broker/leads/${id}/qualification/`, answers),
   exportUrl: (status: string) => {
     const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-    return `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/api/v1/broker/leads/export.csv${qs}`;
+    return `${API_URL}/api/v1/broker/leads/export.csv${qs}`;
   },
   setPartnerStatus: (id: number, partner_status: LeadPartnerStatus) =>
     apiPost<BrokerLeadDetail>(`/api/v1/broker/leads/${id}/partner-status/`, { partner_status }),

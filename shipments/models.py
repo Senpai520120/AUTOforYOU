@@ -67,8 +67,8 @@ class Shipment(models.Model):
     def advance_status(self, new_status: str, note: str = '', photo=None) -> 'TrackingEvent':
         if not self.can_transition_to(new_status):
             raise ValueError(
-                f'Переход {self.status} → {new_status} недопустим. '
-                f'Возможные: {self.VALID_TRANSITIONS.get(self.status, [])}'
+                f'Перехід {self.status} → {new_status} неприпустимий. '
+                f'Можливі: {self.VALID_TRANSITIONS.get(self.status, [])}'
             )
         self.status = new_status
         self.save(update_fields=['status', 'updated_at'])

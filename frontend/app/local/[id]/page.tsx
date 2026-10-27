@@ -4,10 +4,9 @@ import LocalListingDetail from './LocalListingDetail';
 import { LocalListing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
 import { isC2CEnabled } from '@/lib/c2c';
+import { INTERNAL_API_URL } from '@/lib/config';
 
-// INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
-// NEXT_PUBLIC_API_URL is baked at build time and used by browser JS.
-const API = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const API = INTERNAL_API_URL;
 
 async function getListing(id: string): Promise<LocalListing | null> {
   try {

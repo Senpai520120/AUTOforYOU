@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -19,6 +20,34 @@ def carvertical_partner_url() -> str:
     return url if parsed.scheme == 'https' and parsed.netloc else ''
 
 
+_BOT_USERNAME_RE = re.compile(r'^[A-Za-z0-9_]{5,32}$')
+
+# Задача 6.4: лимиты и имя бота для текстов фронта. Значения из окружения, не из модели и не из кэша.
+PUBLIC_CONFIG_FIELDS = (
+    'local_listing_max_active', 'local_listing_expiry_days', 'local_listing_max_photos',
+    'local_listing_photo_max_size_mb', 'telegram_bot_username',
+)
+
+
+def telegram_bot_username() -> str:
+    """Публичное имя бота без @; пусто, если не задано или не похоже на username Telegram."""
+    name = str(getattr(settings, 'TELEGRAM_BOT_USERNAME', '') or '').strip().lstrip('@')
+    return name if _BOT_USERNAME_RE.match(name) else ''
+
+
+def public_config() -> dict:
+    """Не секретные настройки из окружения (лимиты объявлений, имя бота). Токенов и ключей здесь нет."""
+    return {
+        'local_listing_max_active': int(settings.LOCAL_LISTING_MAX_ACTIVE),
+        'local_listing_expiry_days': int(settings.LOCAL_LISTING_EXPIRY_DAYS),
+        'local_listing_max_photos': int(settings.LOCAL_LISTING_MAX_PHOTOS),
+        'local_listing_photo_max_size_mb': int(
+            settings.LOCAL_LISTING_PHOTO_MAX_SIZE_MB or settings.UPLOAD_IMAGE_MAX_SIZE_MB
+        ),
+        'telegram_bot_username': telegram_bot_username(),
+    }
+
+
 class PublicSiteSettingsSerializer(serializers.ModelSerializer):
     """Белый список публичных полей. 6.7 добавит сюда read-only поле (c2c_enabled) не из модели."""
 
@@ -38,6 +67,27 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
     payments_enabled = serializers.SerializerMethodField()
     # Задача 3.2a: партнёрская ссылка carVertical из .env; пусто - фронт ссылку не показывает.
     carvertical_partner_url = serializers.SerializerMethodField()
+
+    local_listing_max_active = serializers.SerializerMethodField()
+    local_listing_expiry_days = serializers.SerializerMethodField()
+    local_listing_max_photos = serializers.SerializerMethodField()
+    local_listing_photo_max_size_mb = serializers.SerializerMethodField()
+    telegram_bot_username = serializers.SerializerMethodField()
+
+    def get_local_listing_max_active(self, obj) -> int:
+        return public_config()['local_listing_max_active']
+
+    def get_local_listing_expiry_days(self, obj) -> int:
+        return public_config()['local_listing_expiry_days']
+
+    def get_local_listing_max_photos(self, obj) -> int:
+        return public_config()['local_listing_max_photos']
+
+    def get_local_listing_photo_max_size_mb(self, obj) -> int:
+        return public_config()['local_listing_photo_max_size_mb']
+
+    def get_telegram_bot_username(self, obj) -> str:
+        return telegram_bot_username()
 
     def get_c2c_enabled(self, obj) -> bool:
         return c2c_enabled()
@@ -84,5 +134,6 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled', 'vin_reports_enabled',
             'c2c_enabled', 'c2c_public_posting_enabled', 'payments_enabled',
             'carvertical_partner_url',
+            *PUBLIC_CONFIG_FIELDS,
         ]
         read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

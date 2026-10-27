@@ -43,7 +43,7 @@ test.describe('Покупець без прив\'язки', () => {
     await page.getByRole('button', { name: 'Прив\'язати Telegram' }).click();
     const link = page.getByRole('link', { name: /Відкрити @e2e_demo_bot у Telegram/ });
     await expect(link).toHaveAttribute('href', /^https:\/\/t\.me\/e2e_demo_bot\?start=link_/);
-    await expect(page.getByText(/Посилання діє \d+ хв/)).toBeVisible();
+    await expect(page.getByText(/Посилання діє до \d{2}:\d{2}/)).toBeVisible();
   });
 
   test('помилка: бот не налаштований — повідомлення, посилання t.me немає', async ({ page }) => {

@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import CookieSettingsLink from '@/components/ui/CookieSettingsLink';
-import { getSiteSettings, ownerTitle } from '@/lib/site-settings';
+import { getSiteConfig, getDemoStatus } from '@/lib/site-config';
+import { ownerTitle } from '@/lib/site-settings';
 
 /** Серверний підвал: реквізити з налаштувань сайту; при недоступному API — без них. */
 export default async function Footer() {
-  const s = await getSiteSettings();
+  const [s, isDemo] = await Promise.all([getSiteConfig(60), getDemoStatus()]);
   const owner = ownerTitle(s);
   const tgUrl = s?.telegram_channel_url && /^https:\/\/t\.me\//.test(s.telegram_channel_url) ? s.telegram_channel_url : '';
-  const contacts = [s?.support_email, s?.phone].filter(Boolean) as string[];
+  const botUrl = s?.telegram_bot_username ? `https://t.me/${s.telegram_bot_username}` : '';
+  const contacts = [s?.support_email, s?.phone, s?.owner_address].filter(Boolean) as string[];
 
   return (
     <footer className="bg-slate-900 text-slate-400 mt-auto py-8">
@@ -16,7 +18,7 @@ export default async function Footer() {
             покриває обидва напрямки, а не тільки імпорт. */}
         <p className="font-semibold text-white mb-1">AUTOforYOU</p>
         <p>Авто з аукціонів США під ключ{s?.c2c_enabled === true ? ' · Оголошення по Україні' : ''}</p>
-        {(owner || contacts.length > 0 || tgUrl) && (
+        {(owner || contacts.length > 0 || tgUrl || botUrl) && (
           <p className="mt-2 text-xs text-slate-500" data-testid="footer-requisites">
             {owner && <span>{owner}{s?.owner_code ? `, код ${s.owner_code}` : ''}</span>}
             {contacts.map((c) => (
@@ -35,6 +37,19 @@ export default async function Footer() {
                 </a>
               </>
             )}
+            {botUrl && (
+              <>
+                {' · '}
+                <a
+                  href={botUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-slate-300 transition-colors"
+                >
+                  Telegram-бот
+                </a>
+              </>
+            )}
           </p>
         )}
         <nav aria-label="Юридичні документи" className="mt-4 flex justify-center gap-5 text-xs text-slate-500 flex-wrap">
@@ -48,9 +63,11 @@ export default async function Footer() {
         <p className="mt-3 text-xs text-slate-500">
           Послугу пригону надає партнер, а не AUTOforYOU
         </p>
-        <p className="mt-1 text-xs text-slate-500">
-          Тестові тарифи — всі розрахунки є демонстраційними
-        </p>
+        {isDemo === true && (
+          <p className="mt-1 text-xs text-slate-500" data-testid="footer-demo-note">
+            Тестові тарифи — всі розрахунки є демонстраційними
+          </p>
+        )}
       </div>
     </footer>
   );

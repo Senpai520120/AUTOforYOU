@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 import { SITE_NAME } from '@/lib/site';
+import { INTERNAL_API_URL } from '@/lib/config';
 
 /**
  * Генерація OG-картинок (задача 6.3b).
@@ -19,7 +20,7 @@ export type OgVariant = 'brand' | 'item' | 'photo';
 // Не довше, ніж живе сама сторінка (revalidate <= 60 с).
 export const ITEM_CACHE = 'public, max-age=60, s-maxage=60';
 
-const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const apiUrl = INTERNAL_API_URL;
 
 // Окрема змінна: /media/ у проді віддає nginx (том media), а не Django (там лише при DEBUG).
 const mediaUrl = process.env.INTERNAL_MEDIA_URL ?? 'http://nginx';

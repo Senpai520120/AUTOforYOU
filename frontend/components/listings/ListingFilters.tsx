@@ -38,7 +38,7 @@ export default function ListingFilters() {
           <option value="">Все</option>
           <option value="petrol">Бензин</option>
           <option value="diesel">Дизель</option>
-          <option value="electric">Электро</option>
+          <option value="electric">Електро</option>
           <option value="hybrid">Гибрид</option>
         </select>
       </div>

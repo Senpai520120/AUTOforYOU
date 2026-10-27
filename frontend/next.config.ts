@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
+import { API_URL } from './lib/config';
 
 const isDev = process.env.NODE_ENV === 'development';
 
 // Derive backend hostname/port from the env var so prod picks up the real domain without any changes here.
-const apiRaw = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-const apiUrl = new URL(apiRaw);
+const apiUrl = new URL(API_URL);
 const apiProtocol = apiUrl.protocol.replace(':', '') as 'http' | 'https';
 const apiHostname = apiUrl.hostname;
 const apiPort = apiUrl.port; // empty string when default (80/443)

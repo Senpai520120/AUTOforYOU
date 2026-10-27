@@ -5,7 +5,7 @@
  * значення cookie `csrftoken` (не httpOnly) треба повернути в заголовку X-CSRFToken.
  * Cookie щоразу читається заново: після входу бекенд її оновлює (rotate_token).
  */
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+import { API_URL as API } from '@/lib/config';
 const CSRF_COOKIE = 'csrftoken';
 
 /** Значення не-httpOnly cookie за назвою (httpOnly JS не бачить узагалі). */

@@ -14,10 +14,12 @@ interface LinkTokenResponse {
   note: string | null;
 }
 
-// Срок действия ссылки: из expires_at ответа API, а не константа на фронте.
-function minutesLeft(expiresAt: string | null): number | null {
+// Термін дії посилання: з expires_at відповіді API, а не константа на фронті. «HH:MM» за київським часом.
+function validUntil(expiresAt: string | null): string | null {
   if (!expiresAt) return null;
-  return Math.max(1, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60000));
+  const d = new Date(expiresAt);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Kyiv' });
 }
 
 export default function TelegramPage() {
@@ -27,7 +29,7 @@ export default function TelegramPage() {
   const [generating, setGenerating] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string | null>(null);
-  const [ttlMinutes, setTtlMinutes] = useState<number | null>(null);
+  const [until, setUntil] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function TelegramPage() {
       }
       setLink(data.link);
       setBotUsername(data.bot_username);
-      setTtlMinutes(minutesLeft(data.expires_at));
+      setUntil(validUntil(data.expires_at));
     } catch (e) {
       const status = e instanceof ApiError ? e.status : undefined;
       setError(
@@ -133,7 +135,7 @@ export default function TelegramPage() {
                 >
                   Відкрити @{botUsername} у Telegram →
                 </a>
-                <p className="text-xs text-slate-400 text-center">{ttlMinutes ? `Посилання діє ${ttlMinutes} хв. ` : ''}Після прив'язки оновіть сторінку.</p>
+                <p className="text-xs text-slate-400 text-center">{until ? `Посилання діє до ${until}. ` : ''}Після прив'язки оновіть сторінку.</p>
                 <button
                   onClick={handleGenerateLink}
                   className="w-full text-sm text-slate-500 hover:text-slate-700 underline"

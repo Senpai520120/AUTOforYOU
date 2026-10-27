@@ -192,3 +192,57 @@ class CarverticalPartnerUrlTests(CleanCacheTestCase):
             self.assertEqual(self._url(), 'https://partner.example/a')
         with override_settings(CARVERTICAL_PARTNER_URL=''):
             self.assertEqual(self._url(), '')
+
+
+class PublicConfigTests(CleanCacheTestCase):
+    """Задача 6.4: лимиты объявлений и имя бота для текстов фронта; без секретов, не залипают в кэше."""
+
+    def _get(self):
+        r = APIClient().get(URL)
+        self.assertEqual(r.status_code, 200)
+        return r.json()
+
+    @override_settings(LOCAL_LISTING_MAX_ACTIVE=7, LOCAL_LISTING_EXPIRY_DAYS=45,
+                       LOCAL_LISTING_MAX_PHOTOS=9, LOCAL_LISTING_PHOTO_MAX_SIZE_MB=4)
+    def test_limits_from_settings(self):
+        data = self._get()
+        self.assertEqual(data['local_listing_max_active'], 7)
+        self.assertEqual(data['local_listing_expiry_days'], 45)
+        self.assertEqual(data['local_listing_max_photos'], 9)
+        self.assertEqual(data['local_listing_photo_max_size_mb'], 4)
+
+    @override_settings(LOCAL_LISTING_PHOTO_MAX_SIZE_MB=None, UPLOAD_IMAGE_MAX_SIZE_MB=6)
+    def test_photo_size_falls_back_to_common_limit(self):
+        self.assertEqual(self._get()['local_listing_photo_max_size_mb'], 6)
+
+    def test_limits_not_stuck_in_cache(self):
+        with override_settings(LOCAL_LISTING_MAX_ACTIVE=3):
+            self.assertEqual(self._get()['local_listing_max_active'], 3)
+        with override_settings(LOCAL_LISTING_MAX_ACTIVE=12):
+            self.assertEqual(self._get()['local_listing_max_active'], 12)
+
+    @override_settings(TELEGRAM_BOT_USERNAME='@test_bot')
+    def test_bot_username_without_at(self):
+        self.assertEqual(self._get()['telegram_bot_username'], 'test_bot')
+
+    @override_settings(TELEGRAM_BOT_USERNAME='')
+    def test_bot_username_empty_when_not_set(self):
+        self.assertEqual(self._get()['telegram_bot_username'], '')
+
+    @override_settings(TELEGRAM_BOT_USERNAME='bad name!')
+    def test_bot_username_invalid_is_dropped(self):
+        self.assertEqual(self._get()['telegram_bot_username'], '')
+
+    @override_settings(PAYMENTS_ENABLED=False)
+    def test_payments_enabled_false(self):
+        self.assertIs(self._get()['payments_enabled'], False)
+
+    @override_settings(PAYMENTS_ENABLED=True)
+    def test_payments_enabled_true(self):
+        self.assertIs(self._get()['payments_enabled'], True)
+
+    @override_settings(TELEGRAM_BOT_TOKEN='1234:placeholder', LIQPAY_PRIVATE_KEY='placeholder')
+    def test_no_secret_keys_in_response(self):
+        for key in self._get():
+            for bad in ('token', 'secret', 'private', 'password', 'api_key'):
+                self.assertNotIn(bad, key)

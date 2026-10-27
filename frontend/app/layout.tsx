@@ -8,7 +8,7 @@ import AttributionCapture from '@/components/layout/AttributionCapture';
 import FlashMessage from '@/components/ui/FlashMessage';
 import { C2CProvider } from '@/components/c2c/C2CProvider';
 import { getC2CFlags } from '@/lib/c2c';
-import { SITE_URL } from '@/lib/site';
+import { SITE_URL } from '@/lib/config';
 
 // Шапка/меню залежать від прапорців C2C (задача 6.7): рендер на кожен запит,
 // інакше під час збірки (backend недоступний) запечеться «розділ закрито».

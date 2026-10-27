@@ -1279,7 +1279,7 @@ class CookieAuthTests(CleanCacheTestCase):
         self._login()
         resp = self.client.post('/api/v1/payments/liqpay/callback/', {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(resp.data, {'error': 'data и signature обязательны.'})
+        self.assertEqual(resp.data, {'error': 'data і signature обов’язкові.'})
 
 
 class CookieAuthAllowAnyTests(CleanCacheTestCase):
@@ -1527,3 +1527,37 @@ class PublicDisplayNameTest(TestCase):
         gone = SimpleNamespace(first_name='Олена', last_name='Коваль', deleted_at=object())
         self.assertEqual(public_display_name(gone), 'Користувач видалений')
         self.assertEqual(public_display_name(None), 'Користувач видалений')
+
+
+# ── Задача 6.4: мова повідомлень (LANGUAGE_CODE = 'uk') ───────────────────────
+
+_RU_LETTERS = '[ыэъё]'
+
+
+class UkrainianMessagesTests(APITestCase):
+    def test_weak_password_error_is_ukrainian(self):
+        resp = self.client.post(
+            REGISTER_URL,
+            {**_REG_BASE, 'password': '12345678', 'agreed_to_terms': True, 'confirmed_age_18': True},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        text = str(resp.data['password'])
+        self.assertRegex(text, '[іїєґ]')
+        self.assertNotRegex(text, _RU_LETTERS)
+
+    def test_logout_without_refresh_is_ukrainian(self):
+        resp = self.client.post(LOGOUT_URL, {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data['detail'], 'Сесію вже завершено.')
+
+    def test_drf_401_is_ukrainian(self):
+        resp = self.client.get(PROFILE_URL)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertRegex(str(resp.data['detail']), '[іїєґ]')
+        self.assertNotRegex(str(resp.data['detail']), _RU_LETTERS)
+
+    def test_drf_405_is_ukrainian(self):
+        resp = self.client.put(LOGOUT_URL, {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(str(resp.data['detail']), 'Метод "PUT" не дозволений.')
