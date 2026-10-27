@@ -1,6 +1,6 @@
 /**
  * E2E: SEO (задача 6.3a): sitemap, robots, canonical, noindex, title юр. сторінок, редірект лота.
- * OG-картинки і блок «OG» - задача 6.3b.
+ * Блок «OG» (задача 6.3b): теги превью, картинки opengraph-image, закриті об-єкти.
  * Режим стека (C2C, LOTS) читається з /api/v1/site-settings/; блоки чужих режимів пропускаються з причиною.
  */
 import type { APIRequestContext } from '@playwright/test';
@@ -212,5 +212,150 @@ test.describe('SEO: канонічна адреса лота (308)', () => {
     test.skip(lots, 'LOTS_ENABLED=true');
     const res = await request.get('/listings/1-toyota-camry-2020', { maxRedirects: 0 });
     expect(res.status()).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// OG (задача 6.3b): теги превью і картинки. Картинку тягнемо за path з og:image на baseURL стека:
+// SITE_URL у збірці може бути бойовим доменом, якого з тест-середовища не видно.
+// ---------------------------------------------------------------------------------------------
+test.describe('OG: теги і картинки превью', () => {
+  test.use({ storageState: GUEST });
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(consentInit);
+  });
+
+  type Pg = import('@playwright/test').Page;
+  const meta = (page: Pg, sel: string) => page.locator(`meta[${sel}]`).first().getAttribute('content');
+
+  async function expectFullPreview(page: Pg, request: APIRequestContext, path: string) {
+    const resp = await page.goto(path);
+    expect(resp?.status(), path).toBe(200);
+    const canonical = (await page.locator('link[rel="canonical"]').getAttribute('href'))!;
+    expect(await meta(page, 'property="og:title"'), path).toBeTruthy();
+    const desc = await meta(page, 'property="og:description"');
+    expect((desc ?? '').length).toBeGreaterThan(0);
+    expect((desc ?? '').length).toBeLessThanOrEqual(160);
+    expect(await meta(page, 'property="og:url"')).toBe(canonical);
+    expect(canonical).not.toContain('?');
+    // Не втрачені при перевизначенні openGraph сторінкою (пастка злиття з layout).
+    expect(await meta(page, 'property="og:site_name"')).toBe('AUTOforYOU');
+    expect(await meta(page, 'property="og:locale"')).toBe('uk_UA');
+    expect(await meta(page, 'property="og:image:alt"')).toBeTruthy();
+    expect(await meta(page, 'name="twitter:card"')).toBe('summary_large_image');
+    const image = (await meta(page, 'property="og:image"'))!;
+    expect(image, path).toMatch(/^https?:\/\//);
+    expect(new URL(image).protocol).toBe(new URL(canonical).protocol);
+    expect(await meta(page, 'name="twitter:image"')).toBe(image);
+    const url = new URL(image);
+    const img = await request.get(url.pathname + url.search);
+    expect(img.status(), image).toBe(200);
+    expect(img.headers()['content-type']).toBe('image/png');
+    expect((await img.body()).length).toBeGreaterThan(1000);
+    // Бренд-картинку (/, /calculator, юр. сторінки) від картки з даними відрізняє службовий заголовок.
+    const expectedVariant = /^\/(local|listings)\/[^/]+/.test(path) ? undefined : 'brand';
+    if (expectedVariant) expect(img.headers()['x-og-variant'], path).toBe(expectedVariant);
+    else expect(['item', 'photo'], path).toContain(img.headers()['x-og-variant']);
+    return image;
+  }
+
+  for (const path of ['/', '/calculator', '/privacy']) {
+    test(`${path}: повний набір OG/Twitter, картинка 200 image/png @smoke`, async ({ page, request }) => {
+      await expectFullPreview(page, request, path);
+    });
+  }
+
+  test('/ua: OG-набір; з фільтром og:url лишається /ua', async ({ page, request }) => {
+    test.skip(!c2c, 'C2C вимкнено: /ua віддає «Скоро»');
+    await expectFullPreview(page, request, '/ua');
+    await page.goto('/ua?fuel_type=diesel');
+    expect(new URL((await meta(page, 'property="og:url"'))!).pathname).toBe('/ua');
+  });
+
+  test('/listings: OG-набір; з фільтром og:url = /listings', async ({ page, request }) => {
+    test.skip(!lots, 'LOTS_ENABLED=false (ВОЛНА-1): /listings віддає 404');
+    await expectFullPreview(page, request, '/listings');
+    await page.goto('/listings?make=bmw');
+    expect(new URL((await meta(page, 'property="og:url"'))!).pathname).toBe('/listings');
+  });
+
+  test('/calculator: одночасно noindex і OG-картинка', async ({ page }) => {
+    await page.goto('/calculator');
+    await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute('content', /noindex/);
+    await expect(page.locator('meta[property="og:image"]')).toHaveCount(1);
+  });
+
+  test('місцеве оголошення: повний OG-набір, картка 200 image/png', async ({ page, request }) => {
+    test.skip(!c2c || localIds.length === 0, 'C2C вимкнено або немає активних оголошень (e2e_seed)');
+    await expectFullPreview(page, request, `/local/${localIds[0]}`);
+  });
+
+  test('лот: повний OG-набір; режим фото off - в og:image немає фото Copart/IAAI і зовнішніх хостів', async ({ page, request }) => {
+    test.skip(!lots || lotSlugs.length === 0, 'LOTS_ENABLED=false (ВОЛНА-1) або лотів немає');
+    const image = await expectFullPreview(page, request, `/listings/${lotSlugs[0].slug}`);
+    // og:image - генерована картка цього ж сайту, а не фото аукціону.
+    expect(new URL(image).pathname).toMatch(/^\/listings\/[^/]+\/opengraph-image/);
+    for (const host of ['copart', 'iaai']) expect(image.toLowerCase()).not.toContain(host);
+    expect(await page.content()).not.toMatch(/<meta[^>]+(og:image|twitter:image)[^>]+(copart|iaai)/i);
+  });
+
+  test('неіснуюче або некоректне оголошення: картинка 404', async ({ request }) => {
+    test.skip(!c2c, 'C2C вимкнено: покриває тест нижче');
+    expect((await request.get('/local/99999999/opengraph-image')).status()).toBe(404);
+    expect((await request.get('/local/abc/opengraph-image')).status()).toBe(404);
+  });
+
+  test('/local: картинка існуючого активного оголошення - 200 при C2C, 404 при вимкненому розділі', async ({ api, request }) => {
+    // Існуючий id беремо з API (або з кабінету продавця, якщо розділ закрито), щоб 404 не міг бути просто «немає запису».
+    let id = localIds[0];
+    if (!c2c) {
+      const mine = await (await (await api('seller')).get('/api/v1/local/my-listings/')).json();
+      id = (mine.results ?? mine).find((l: { status: string }) => l.status === 'active')?.id;
+    }
+    test.skip(!id, 'у фікстурі немає активного оголошення (e2e_seed)');
+    const res = await request.get(`/local/${id}/opengraph-image`);
+    expect(res.status()).toBe(c2c ? 200 : 404);
+  });
+
+  test('/listings: картинка існуючого лота - 200 при LOTS_ENABLED, 404 при вимкненому модулі', async ({ api, request }) => {
+    let slug: string | undefined = lotSlugs[0]?.slug;
+    if (!lots) {
+      // Лотів у публічному API при вимкненому модулі немає: беремо id напряму з кабінету персоналу.
+      const res = await (await api('staff')).get('/api/v1/listings/?page=1');
+      const first = res.status() === 200 ? ((await res.json()).results ?? [])[0] : undefined;
+      slug = first ? slugOf(first) : undefined;
+    }
+    test.skip(!slug, 'у фікстурі немає лота (e2e_seed)');
+    const res = await request.get(`/listings/${slug}/opengraph-image`);
+    expect(res.status()).toBe(lots ? 200 : 404);
+    if (lots) expect(res.headers()['x-og-variant']).toBe('item');
+  });
+
+  test('pending/приховане оголошення: 404 на сторінку і на картинку, у HTML немає og з даними', async ({ api, request }) => {
+    test.skip(!c2c, 'C2C вимкнено');
+    const seller = await api('seller');
+    const mine = await (await seller.get('/api/v1/local/my-listings/')).json();
+    const closed = (mine.results ?? mine).filter((l: { status: string }) => ['pending', 'hidden', 'rejected'].includes(l.status));
+    test.skip(closed.length === 0, 'у фікстурі немає pending/hidden-оголошень продавця');
+    for (const l of closed) {
+      const page = await request.get(`/local/${l.id}`);
+      expect(page.status(), `page ${l.id}`).toBe(404);
+      expect(await page.text()).not.toMatch(/property="og:title" content="[^"]*(Toyota|Camry)/);
+      expect((await request.get(`/local/${l.id}/opengraph-image`)).status(), `image ${l.id}`).toBe(404);
+    }
+  });
+
+  test('картка активного оголошення віддається як image/png (кирилиця - пікселі вручну)', async ({ api, request }) => {
+    test.skip(!c2c || localIds.length === 0, 'C2C вимкнено або немає активних оголошень');
+    const seller = await api('seller');
+    const mine = await (await seller.get('/api/v1/local/my-listings/')).json();
+    const active = (mine.results ?? mine).find((l: { status: string }) => l.status === 'active');
+    test.skip(!active, 'немає активного оголошення продавця');
+    // Фікстури з «ЇЄІҐ» у e2e_seed поки немає: перевіряємо код і тип, вигляд літер - вручну (LAUNCH_CHECKLIST).
+    const res = await request.get(`/local/${active.id}/opengraph-image`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()['content-type']).toBe('image/png');
+    // У seed у активного оголошення є фото (e2e_seed кладе FIXTURE_PHOTOS); якщо файл не знайдено, seed створює без фото.
+    expect(['photo', 'item']).toContain(res.headers()['x-og-variant']);
   });
 });

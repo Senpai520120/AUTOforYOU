@@ -7,6 +7,7 @@ export const metadata: Metadata = buildMetadata({
   description: 'Розрахуйте повну вартість авто з аукціонів США під ключ: аукціонний збір, доставка, розмитнення, акциз, мито, ПДВ, пенсійний збір.',
   path: '/calculator',
   noindex: true,
+  ownImage: true,
 });
 
 export default function CalculatorLayout({ children }: { children: React.ReactNode }) {

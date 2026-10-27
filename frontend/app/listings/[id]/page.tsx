@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import ListingDetail from '@/components/listings/ListingDetail';
 import type { Listing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
-import { requireModule } from '@/lib/site-settings';
+import { isModuleEnabled, requireModule } from '@/lib/site-settings';
 import { listingSlug } from '@/lib/utils';
 
 // INTERNAL_API_URL is set at runtime in Docker (http://backend:8000) for SSR.
@@ -32,6 +32,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const id = parseInt(rawId, 10);
   if (isNaN(id)) return { title: 'Оголошення не знайдено' };
 
+  // Модуль лотів вимкнено: метадані не розкривають дані лота.
+  if (!(await isModuleEnabled('lots'))) return { title: 'Оголошення не знайдено' };
   const listing = await getListing(id);
   if (!listing) return { title: 'Оголошення не знайдено' };
 
@@ -39,15 +41,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = `${v.year} ${v.make} ${v.model} — ${Number(listing.price).toLocaleString('uk-UA')} ${listing.currency}`;
   const description = `${v.make} ${v.model} ${v.year}, ${(v.engine_cc / 1000).toFixed(1)}л, ${v.fuel_type === 'petrol' ? 'бензин' : v.fuel_type === 'diesel' ? 'дизель' : v.fuel_type}. Купити авто з США: аукціон ${v.source_auction.toUpperCase()}, доставка під ключ в Україну.`;
 
-  const primaryImg = v.images.find(i => i.is_primary) ?? v.images[0];
-  const ogImage = primaryImg?.image || primaryImg?.source_url || null;
-
-  // Єдиний канонічний URL — slug-формат (11-Q2); картинки OG — задача 6.3b.
+  // Єдиний канонічний URL — slug-формат (11-Q2). og:image дає opengraph-image.tsx (генерована картка
+  // без фото Copart/IAAI: режим фото Q8 = off; partner/auction потребують shareable_images з 2.11).
   return buildMetadata({
     title,
     description,
     path: `/listings/${listingSlug(listing)}`,
-    ...(ogImage ? { image: ogImage } : {}),
+    ownImage: true,
   });
 }
 

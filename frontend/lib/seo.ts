@@ -3,6 +3,9 @@ import { SITE_NAME, absoluteUrl } from '@/lib/site';
 
 export const DESCRIPTION_MAX = 160;
 
+// Той самий alt, що в app/opengraph-image.tsx.
+export const BRAND_IMAGE_ALT = 'AUTOforYOU - авто з США під ключ';
+
 /** Обрізає опис до 160 символів по межі слова, з «…». */
 export function truncateDescription(text: string, max = DESCRIPTION_MAX): string {
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -20,8 +23,14 @@ export interface SeoInput {
   description: string;
   /** Канонічний шлях без query ('/ua', '/local/5'). */
   path: string;
-  /** Абсолютна адреса картинки (OG-картинки — задача 6.3b). */
+  /** Абсолютна адреса картинки; без неї підставляється бренд-картинка `/opengraph-image`. */
   image?: string;
+  /**
+   * Сегмент має власний файл opengraph-image (головна, калькулятор, лот, оголошення): Next додасть
+   * його сам. Без цього прапорця додається бренд-картинка: openGraph сторінки не успадковує
+   * файлову картинку кореневого сегмента (пастка Next), і /privacy, /ua лишалися б без og:image.
+   */
+  ownImage?: boolean;
   /** noindex; follow лишається true, якщо followLinks не вимкнено. */
   noindex?: boolean;
   followLinks?: boolean;
@@ -35,6 +44,12 @@ export interface SeoInput {
  * Сторінки не пишуть openGraph/twitter вручну.
  */
 export function buildMetadata(input: SeoInput): Metadata {
+  const brandImage = { url: absoluteUrl('/opengraph-image'), width: 1200, height: 630, alt: BRAND_IMAGE_ALT };
+  const ogImage = input.image
+    ? { url: input.image, width: 1200, height: 630, alt: input.title }
+    : input.ownImage
+      ? undefined
+      : brandImage;
   const description = truncateDescription(input.description);
   const url = absoluteUrl(input.path);
   const ogTitle = input.absoluteTitle ? input.title : `${input.title} | ${SITE_NAME}`;
@@ -50,13 +65,13 @@ export function buildMetadata(input: SeoInput): Metadata {
       siteName: SITE_NAME,
       locale: 'uk_UA',
       type: 'website',
-      ...(input.image ? { images: [{ url: input.image, width: 1200, height: 630, alt: input.title }] } : {}),
+      ...(ogImage ? { images: [ogImage] } : {}),
     },
     twitter: {
       card: 'summary_large_image',
       title: ogTitle,
       description,
-      ...(input.image ? { images: [input.image] } : {}),
+      ...(ogImage ? { images: [ogImage] } : {}),
     },
   };
 }

@@ -22,6 +22,7 @@ export const metadata: Metadata = buildMetadata({
   description:
     'Маркетплейс автомобілів з аукціонів США Copart та IAAI. Калькулятор вартості під ключ з розмитненням, доставка в Україну, каталог місцевих оголошень.',
   path: '/',
+  ownImage: true,
 });
 
 type ExchangeRate = { from_currency: string; to_currency: string; rate: number; date: string };

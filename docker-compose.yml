@@ -77,6 +77,8 @@ services:
       NODE_ENV: production
       # Runtime env for Next.js SSR calls — uses Docker internal network
       INTERNAL_API_URL: http://backend:8000
+      # Фото для OG-картинок: /media/ в проді віддає nginx (том media), не Django (задача 6.3b).
+      INTERNAL_MEDIA_URL: ${INTERNAL_MEDIA_URL:-http://nginx}
     restart: unless-stopped
 
   # ─── Telegram bot (disabled if TELEGRAM_BOT_TOKEN is not set) ────────────────
