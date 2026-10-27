@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from core.modules import module_enabled
+from landings.services import get_published_page
 from listings.models import Listing
 from listings.permissions import can_view_wholesale
 from pricing.models import Calculation
@@ -15,6 +16,7 @@ from .validators import clean_attribution, normalize_ua_phone
 # Чужой и несуществующий объект неразличимы: нет утечки существования.
 _INVALID_CALCULATION = 'Розрахунок не знайдено.'
 _INVALID_LISTING = 'Лот не знайдено.'
+_INVALID_LANDING = 'Сторінку не знайдено.'
 _CONTROL = re.compile(r'[\x00-\x1f\x7f]')
 _CONTROL_MULTILINE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')  # comment: tab, LF, CR allowed
 _CONTROL_MESSAGE = 'Недопустимі керуючі символи.'
@@ -102,6 +104,19 @@ class LeadCreateSerializer(serializers.Serializer):
                 )
             ):
                 raise serializers.ValidationError({'listing_id': _INVALID_LISTING})
+
+        landing = None
+        slug = (attrs.get('landing_slug') or '').strip()
+        if slug:
+            landing = get_published_page(slug)
+            if landing is None:
+                raise serializers.ValidationError({'landing_slug': _INVALID_LANDING})
+            if calculation is not None or listing is not None:
+                raise serializers.ValidationError({'landing_slug': 'Не поєднується з розрахунком чи лотом.'})
+            attrs['source'] = LeadSource.LANDING  # точка входу задана сторінкою, а не клієнтом
+            attrs['landing_slug'] = slug
+            attrs['entry_page_url'] = f'/prigon/{slug}'
+        attrs['landing'] = landing
 
         source = attrs.get('source')
         if source is None:

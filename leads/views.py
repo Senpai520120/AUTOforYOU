@@ -91,6 +91,7 @@ class LeadCreateView(APIView):
             lead = create_lead(
                 user=request.user, data=validated,
                 calculation=validated['calculation'], listing=validated['listing'],
+                landing=validated['landing'],
             )
         except PartnerNotConfigured:
             return Response(PARTNER_NOT_CONFIGURED, status=status.HTTP_503_SERVICE_UNAVAILABLE)

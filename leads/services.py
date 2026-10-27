@@ -10,6 +10,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from landings.services import lead_calculation_snapshot
 from metrics import services as metrics_services
 from metrics.models import MetricKey
 from site_settings.models import SiteSettings
@@ -122,7 +123,7 @@ def build_calculation_snapshot(calculation) -> dict:
     }
 
 
-def create_lead(*, user, data: dict, calculation=None, listing=None) -> Lead:
+def create_lead(*, user, data: dict, calculation=None, listing=None, landing=None) -> Lead:
     """Создаёт заявку. data уже провалидирован сериализатором; телефон и атрибуция
     нормализуются повторно (идемпотентно). Бросает PartnerNotConfigured при пустом partner_name."""
     if calculation is not None and calculation.user_id is not None and (
@@ -150,6 +151,18 @@ def create_lead(*, user, data: dict, calculation=None, listing=None) -> Lead:
         vehicle = listing.vehicle
         fields['vehicle_label'] = f'{vehicle.make} {vehicle.model}'.strip()[:150]
 
+    snapshot = build_calculation_snapshot(calculation)
+    total_usd = calculation.total_usd if calculation else None
+    total_uah = calculation.total_uah if calculation else None
+    if landing is not None:
+        # landing = (страница, расчёт): суммы считает сервер по входам страницы, клиентским не доверяем.
+        page, calc = landing
+        snapshot = lead_calculation_snapshot(page, calc)
+        total_usd, total_uah = Decimal(calc['total_usd']), Decimal(calc['total_uah'])
+        fields['landing_slug'] = page.slug
+        fields['vehicle_label'] = page.title[:150]
+        source = LeadSource.LANDING
+
     now = timezone.now()
     journal_cfg = LeadJournalSettings.get_solo()
     budget = fields.get('budget_usd')
@@ -165,9 +178,9 @@ def create_lead(*, user, data: dict, calculation=None, listing=None) -> Lead:
             source=source,
             calculation=calculation,
             listing=listing,
-            calculation_snapshot=build_calculation_snapshot(calculation),
-            total_usd=calculation.total_usd if calculation else None,
-            total_uah=calculation.total_uah if calculation else None,
+            calculation_snapshot=snapshot,
+            total_usd=total_usd,
+            total_uah=total_uah,
             status=LeadStatus.NEW,
             consent_at=now,
             partner_name=partner_name,

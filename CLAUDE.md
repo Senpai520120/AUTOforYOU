@@ -25,6 +25,7 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 | `deals`      | Сделки                                               |
 | `task_ledger` | Учёт упавших Celery-задач (`FailedTask`), только просмотр в админке |
 | `content` | Тексты «Як працює пригон» и FAQ (`ImportStep`, `FaqItem`), правятся в админке |
+| `landings` | SEO-страницы «Пригон [модель] з США»: `ModelLandingPage`, расчёт через калькулятор (`landings/services.py`), публикация только с расчётом |
 | `metrics` | Щоденні лічильники без ПДн (`DailyMetric`, `record_metric`) |
 
 `core` — проект (настройки, celery); в `INSTALLED_APPS` только ради management-команд (`monitoring_test`), моделей нет. Базовый класс сетевых задач с повторами — `core.tasks.ResilientTask` (`base=ResilientTask`).

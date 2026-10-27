@@ -33,7 +33,7 @@ OPEN_ALL = dict(C2C_ENABLED=True, C2C_PUBLIC_POSTING_ENABLED=True)
 
 # Третий явный список: всё остальное под /api/. Новый маршрут вне трёх списков валит test_every_route_is_classified.
 OPEN_API = (
-    '/api/v1/auth/', '/api/v1/b2b/', '/api/v1/broker/', '/api/v1/content/', '/api/v1/dealers/', '/api/v1/leads/', '/api/v1/listings/',
+    '/api/v1/auth/', '/api/v1/b2b/', '/api/v1/broker/', '/api/v1/content/', '/api/v1/dealers/', '/api/v1/landings/', '/api/v1/leads/', '/api/v1/listings/',
     '/api/v1/lots/', '/api/v1/metrics/', '/api/v1/monitoring/', '/api/v1/notifications/', '/api/v1/pricing/',
     '/api/v1/shipments/', '/api/v1/site-settings/', '/api/v1/telegram/', '/api/v1/vehicles/',
     '/api/docs/', '/api/redoc/', '/api/schema/',

@@ -42,6 +42,8 @@ KEYS = {
     'settings': 'pricing:calculator_settings',
     'ua_delivery': 'pricing:ua_delivery_rates',
     'broker_fees': 'pricing:broker_service_fees',
+    # Версия кэша расчётов страниц моделей (landings): любая правка тарифов сбрасывает её вместе с тарифами.
+    'landings_version': 'landings:version',
 }
 
 
@@ -146,7 +148,7 @@ def invalidate(key_name: str):
     не применялись, и никто об этом не узнавал.
     """
     try:
-        cache.delete(KEYS[key_name])
+        cache.delete_many([KEYS[key_name], KEYS['landings_version']])
     except Exception:
         logger.warning('pricing.cache: инвалидация %s не удалась', key_name, exc_info=True)
 

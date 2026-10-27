@@ -18,7 +18,7 @@ class _PublicView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
     # Публічний кешований GET без ПДн. Throttle вимкнено: SSR Next ходить з однієї IP (підвал і сторінки
-    # на кожному рендері), навантаження тримає кеш, а загальний ліміт запитів стоїть в nginx.
+    # на кожному рендері), навантаження тримає кеш (TTL нижче). Ліміту запитів на цих адресах ні в Django, ні в nginx немає.
     throttle_classes = []
 
 
