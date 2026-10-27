@@ -72,6 +72,7 @@ class Command(BaseCommand):
             self._site_settings()
             self._leads(users['buyer'])
             self._ua_delivery_and_broker()
+            self._content()
 
         self.stdout.write('E2E seed: сводка (создано / уже было)')
         for key in sorted(set(self.created) | set(self.existing)):
@@ -250,6 +251,22 @@ class Command(BaseCommand):
         _, created = BrokerServiceFee.objects.get_or_create(
             title='[E2E] Послуги брокера', valid_from=start, defaults={'amount_usd': Decimal('500')})
         self._note('broker_service_fee', created)
+
+    def _content(self):
+        """Активные записи для trust-pages.spec.ts (2.13); чернетки из миграции остаются неактивными."""
+        from content.models import FaqItem, ImportStep
+
+        for order, title in enumerate(('[E2E] Етап перший', '[E2E] Етап другий', '[E2E] Етап третій'), start=1):
+            _, created = ImportStep.objects.get_or_create(
+                title=title, defaults={'order': order, 'description': f'[E2E] Опис етапу {order}', 'is_active': True})
+            self._note('import_step', created)
+        for order, (question, on_calc) in enumerate((('[E2E] Питання для сторінки?', False),
+                                                      ('[E2E] Питання для калькулятора?', True)), start=1):
+            _, created = FaqItem.objects.get_or_create(
+                question=question,
+                defaults={'order': order, 'answer': f'[E2E] Відповідь {order}', 'is_active': True,
+                          'show_on_calculator': on_calc})
+            self._note('faq_item', created)
 
     def _site_settings(self):
         """Реквизиты и документы для legal.spec.ts (синглтон pk=1)."""

@@ -7,6 +7,7 @@ import { CalcErrorView, describeCalcError } from '@/lib/calc-errors';
 import { trackCalculatorVisitOnce } from '@/lib/metrics';
 import CalcBreakdown from '@/components/calculator/CalcBreakdown';
 import PartnerVinLink from '@/components/calculator/PartnerVinLink';
+import CalculatorFaq from '@/components/content/CalculatorFaq';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
 
@@ -253,6 +254,7 @@ export default function CalculatorPage() {
         <CalculatorLoader />
       </Suspense>
       <PartnerVinLink />
+      <CalculatorFaq />
     </div>
   );
 }

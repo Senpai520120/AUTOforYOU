@@ -2,10 +2,12 @@ import Link from 'next/link';
 import CookieSettingsLink from '@/components/ui/CookieSettingsLink';
 import { getSiteConfig, getDemoStatus } from '@/lib/site-config';
 import { ownerTitle } from '@/lib/site-settings';
+import { isHowItWorksPublished } from '@/lib/content';
+import { FAQ_LABEL, HOW_IT_WORKS_LABEL } from '@/lib/labels';
 
 /** Серверний підвал: реквізити з налаштувань сайту; при недоступному API — без них. */
 export default async function Footer() {
-  const [s, isDemo] = await Promise.all([getSiteConfig(60), getDemoStatus()]);
+  const [s, isDemo, trustPages] = await Promise.all([getSiteConfig(60), getDemoStatus(), isHowItWorksPublished()]);
   const owner = ownerTitle(s);
   const tgUrl = s?.telegram_channel_url && /^https:\/\/t\.me\//.test(s.telegram_channel_url) ? s.telegram_channel_url : '';
   const botUrl = s?.telegram_bot_username ? `https://t.me/${s.telegram_bot_username}` : '';
@@ -51,6 +53,12 @@ export default async function Footer() {
               </>
             )}
           </p>
+        )}
+        {trustPages && (
+          <nav aria-label="Інформація про пригон" className="mt-4 flex justify-center gap-5 text-xs text-slate-500 flex-wrap">
+            <Link href="/how-it-works" className="hover:text-slate-300 transition-colors">{HOW_IT_WORKS_LABEL}</Link>
+            <Link href="/how-it-works#faq-block-title" className="hover:text-slate-300 transition-colors">{FAQ_LABEL}</Link>
+          </nav>
         )}
         <nav aria-label="Юридичні документи" className="mt-4 flex justify-center gap-5 text-xs text-slate-500 flex-wrap">
           <Link href="/terms" className="hover:text-slate-300 transition-colors">Умови використання</Link>

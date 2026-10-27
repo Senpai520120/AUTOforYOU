@@ -867,6 +867,29 @@ paths:
           description: Не broker и не admin
         '429':
           description: Лимит выгрузок
+  /api/v1/content/faq/:
+    get:
+      operationId: v1_content_faq_retrieve
+      description: GET /api/v1/content/faq/?place=calculator - FAQ з прапорцем show_on_calculator.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/content/how-it-works/:
+    get:
+      operationId: v1_content_how_it_works_retrieve
+      description: GET /api/v1/content/how-it-works/ - активні етапи й FAQ; published=false,
+        якщо етапів немає.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/v1/dealers/application/:
     get:
       operationId: v1_dealers_application_retrieve

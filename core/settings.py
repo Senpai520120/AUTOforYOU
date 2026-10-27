@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'leads',
     'task_ledger',
     'metrics',
+    'content',
     # Проект, не приложение: подключён только ради management-команд (monitoring_test, 7.6). Моделей нет.
     'core',
 

@@ -21,3 +21,9 @@ export function leadStatusLabel(status: string, fallback = ''): string {
 export const COOKIE_SETTINGS_LABEL = 'Налаштування cookie';
 export const AGE_18_LABEL = 'Мені виповнилося 18 років';
 export const AGE_18_REQUIRED = 'Підтвердіть, що вам виповнилося 18 років';
+
+/** Сторінки довіри (задача 2.13). */
+export const HOW_IT_WORKS_LABEL = 'Як працює пригон';
+export const FAQ_LABEL = 'Питання та відповіді';
+export const HOW_IT_WORKS_SOON = "Інформація скоро з'явиться";
+export const CALC_COST_LABEL = 'Розрахувати вартість';

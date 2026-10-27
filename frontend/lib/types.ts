@@ -663,3 +663,21 @@ export interface BrokerLeadDetail extends BrokerLeadRow {
 export interface BrokerLeadList extends PaginatedResponse<BrokerLeadRow> {
   new_count: number;
 }
+
+/** Сторінки довіри (задача 2.13): GET /api/v1/content/how-it-works/ і /faq/. Усе — звичайний текст. */
+export interface ImportStepItem {
+  title: string;
+  description: string;
+  duration: string;
+}
+
+export interface FaqEntry {
+  question: string;
+  answer: string;
+}
+
+export interface HowItWorksData {
+  published: boolean;
+  steps: ImportStepItem[];
+  faq: FaqEntry[];
+}
