@@ -1,8 +1,15 @@
 .git
 node_modules
 .next
-.env.local
+# Секреты и локальные окружения (шаблоны *.example не нужны образу)
 .env
+.env.*
+!.env.example
 e2e/
 playwright.config.ts
+# Артефакты тестов и сборки
+test-results/
+playwright-report/
+tsconfig.tsbuildinfo
+*.log
 *.md

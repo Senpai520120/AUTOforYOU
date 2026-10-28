@@ -23,8 +23,5 @@ function fromEnv(name: string, value: string | undefined, devFallback: string): 
 /** Адреса API для браузера. */
 export const API_URL = fromEnv('NEXT_PUBLIC_API_URL', process.env.NEXT_PUBLIC_API_URL, 'http://localhost:8000');
 
-/** Адреса API для рендеру на сервері (у Docker — http://backend:8000), інакше та сама, що й для браузера. */
-export const INTERNAL_API_URL = (process.env.INTERNAL_API_URL ?? '').trim().replace(/\/+$/, '') || API_URL;
-
 /** Публічна адреса сайту (canonical, sitemap, Open Graph). */
 export const SITE_URL = fromEnv('NEXT_PUBLIC_SITE_URL', process.env.NEXT_PUBLIC_SITE_URL, 'http://localhost:3000');

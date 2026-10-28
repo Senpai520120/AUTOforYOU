@@ -17,6 +17,8 @@ const imageHosts = (process.env.NEXT_PUBLIC_IMAGE_HOSTS ?? '')
   .filter((h) => /^[a-z0-9.-]+$/.test(h) && !h.startsWith('*'));
 
 const nextConfig: NextConfig = {
+  // Мінімальний runtime-образ без dev-залежностей і node_modules (задача 7.3, Dockerfile.frontend).
+  output: 'standalone',
   async headers() {
     // Токен скидання пароля не має потрапляти в Referer при переході зі сторінки (задача 1.7).
     return [

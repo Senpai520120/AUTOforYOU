@@ -83,6 +83,20 @@ class DjangoStartupTests(SimpleTestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn('DEBUG=true недопустим', r.stderr)
 
+    def test_entrypoint_refuses_debug_for_localhost_stack_without_flag(self):
+        # Шаблон .env.example: DOMAIN=localhost, TLS_MODE=off. nginx с default_server пропускает Host: localhost снаружи.
+        env = {'PATH': os.environ.get('PATH', ''), 'DEBUG': 'true', 'DOMAIN': 'localhost', 'TLS_MODE': 'off'}
+        r = subprocess.run(['bash', str(ROOT / 'docker' / 'entrypoint.sh')], env=env, capture_output=True,
+                           text=True, timeout=30, cwd='/')
+        self.assertEqual(r.returncode, 1)
+        self.assertIn('DEBUG=true недопустим', r.stderr)
+
+    def test_debug_hosts_refuse_wildcard_and_ip(self):
+        for hosts in (['*'], ['203.0.113.5']):
+            with self.subTest(hosts=hosts):
+                with self.assertRaisesMessage(ImproperlyConfigured, 'DEBUG=true при публичном хосте'):
+                    check_debug_hosts({}, debug=True, allowed_hosts=hosts)
+
     def test_debug_without_key_generates_persistent_dev_key(self):
         with tempfile.TemporaryDirectory() as tmp:
             key_file = os.path.join(tmp, 'dev_key')

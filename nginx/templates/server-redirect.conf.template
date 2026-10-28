@@ -7,6 +7,22 @@ server {
         root /var/www/certbot;
     }
 
+    # Живость по http (healthcheck контейнера, задача 7.3): без редиректа; для Django запрос "https".
+    # proxy-common.conf не подключаем: он ставит X-Forwarded-Proto из $forwarded_proto (здесь нужен https).
+    location = /healthz {
+        limit_req zone=health burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Strict-Transport-Security;
+        add_header Cache-Control "no-store" always;
+    }
+
     location / {
         return 301 https://${DOMAIN}$request_uri;
     }

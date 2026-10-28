@@ -6,7 +6,7 @@ import type { Listing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
 import { isModuleEnabled, requireModule } from '@/lib/site-settings';
 import { listingSlug } from '@/lib/utils';
-import { INTERNAL_API_URL } from '@/lib/config';
+import { INTERNAL_API_URL } from '@/lib/config.server';
 
 const apiUrl = INTERNAL_API_URL;
 

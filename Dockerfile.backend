@@ -1,5 +1,5 @@
 # ─── Stage 1: build dependencies ──────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+FROM python:3.12.16-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # ─── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.12.16-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,15 +21,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy project source (frontend excluded via .dockerignore)
+# Непривілейований користувач (задача 7.3, 12-S5). UID/GID фіксовані: за ними
+# docker-compose (volume_init) виставляє власника на старих томах, створених від root.
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+
+# Код принадлежит root и доступен app только на чтение: при RCE в процессе app код нельзя переписать
+# (ревью безопасности 7.3). Писать app может только в /app/staticfiles, /app/media, /app/private_media.
 COPY . .
 
-# Ensure dirs for static/media exist
-RUN mkdir -p /app/staticfiles /app/media
+# Ensure dirs for static/media exist; нові named volumes успадковують власника з образу.
+# private_media в образі НЕ створюється (аудит C6: CI перевіряє її відсутність); власника тому
+# виставляє volume_init у docker-compose.yml.
+RUN mkdir -p /app/staticfiles /app/media \
+    && chown app:app /app/staticfiles /app/media
+
+# Ключ разработчика (DEBUG=true) пишется не в /app (read-only для app), а во временный каталог.
+ENV DEV_SECRET_KEY_FILE=/tmp/.dev_secret_key
 
 # Make startup scripts executable
 # \r снимаем на случай старых рабочих копий с CRLF (иначе shebang `#!/bin/bash\r` не находится)
 RUN sed -i 's/\r$//' /app/docker/*.sh \
     && chmod +x /app/docker/entrypoint.sh /app/docker/bot_entrypoint.sh
 
+USER app
 EXPOSE 8000

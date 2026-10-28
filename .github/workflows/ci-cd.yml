@@ -103,7 +103,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
@@ -134,7 +134,11 @@ jobs:
           {
             echo "SECRET_KEY=$(head -c 50 /dev/urandom | base64 | tr -d '\n/+=' | head -c 50)"
             echo "POSTGRES_PASSWORD=ci_$(head -c 12 /dev/urandom | base64 | tr -d '\n/+=')"
+            echo "REDIS_PASSWORD=ci_$(head -c 18 /dev/urandom | base64 | tr -d '\n/+=')"
           } >> .env.e2e
+          # Пароль Redis (7.3, C9): REDIS_URL пересобираем под сгенерированный, как DATABASE_URL.
+          R_PASS=$(grep '^REDIS_PASSWORD=' .env.e2e | tail -1 | cut -d= -f2)
+          echo "REDIS_URL=redis://:${R_PASS}@redis:6379/0" >> .env.e2e
           # DATABASE_URL из шаблона содержит пароль по умолчанию — пересобираем
           # его под сгенерированный.
           PG_PASS=$(grep '^POSTGRES_PASSWORD=' .env.e2e | tail -1 | cut -d= -f2)
@@ -161,23 +165,76 @@ jobs:
         run: |
           for mode in off external selfsigned letsencrypt; do
             for cf in false; do
-              docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1                 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE="$mode" -e CLOUDFLARE_PROXY="$cf" -e TRUSTED_PROXY_IPS=10.0.0.0/8                 nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t'
+              docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1                 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE="$mode" -e CLOUDFLARE_PROXY="$cf" -e TRUSTED_PROXY_IPS=10.0.0.0/8                 nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t'
             done
           done
           # CAPTCHA_PROVIDER=turnstile: домен Turnstile сам попадает в CSP (иначе капча не загрузится).
           docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e CAPTCHA_PROVIDER=turnstile \
-            nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && grep -rq "challenges.cloudflare.com" /etc/nginx/'
+            nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && grep -rq "challenges.cloudflare.com" /etc/nginx/'
           # Аналитика (3.5): домены GA4 и Cloudflare WA попадают в CSP только при заданных ID, без ID их нет.
-          docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID=G-TEST000000 -e CLOUDFLARE_ANALYTICS_TOKEN=CFTEST0000000000             nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t && grep -rq "www.googletagmanager.com" /etc/nginx/ && grep -rq "static.cloudflareinsights.com" /etc/nginx/'
-          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off             nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics|cloudflareinsights" /etc/nginx/'
-          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID='G-"><script>'             nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics" /etc/nginx/'
+          docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID=G-TEST000000 -e CLOUDFLARE_ANALYTICS_TOKEN=CFTEST0000000000             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t && grep -rq "www.googletagmanager.com" /etc/nginx/ && grep -rq "static.cloudflareinsights.com" /etc/nginx/'
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics|cloudflareinsights" /etc/nginx/'
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID='G-"><script>'             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics" /etc/nginx/'
           # Cloudflare без файла диапазонов: nginx обязан не стартовать с понятной ошибкой.
-          if docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e CLOUDFLARE_PROXY=true               nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh'; then
+          if docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e CLOUDFLARE_PROXY=true               nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh'; then
             echo "CLOUDFLARE_PROXY=true without ranges file must fail" >&2; exit 1
           fi
 
+      - name: Compose config fails without secrets (C9, C13, 6.4)
+        run: |
+          # Положительный контроль: с четырьмя переменными конфиг валиден (иначе отказы ниже могли быть по другой причине).
+          POSTGRES_PASSWORD=x REDIS_PASSWORD=x NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x docker compose --env-file /dev/null config -q
+          if POSTGRES_PASSWORD= REDIS_PASSWORD=x NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x docker compose --env-file /dev/null config -q 2>/dev/null; then
+            echo "empty POSTGRES_PASSWORD must fail docker compose config" >&2; exit 1
+          fi
+          if POSTGRES_PASSWORD=x REDIS_PASSWORD= NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x docker compose --env-file /dev/null config -q 2>/dev/null; then
+            echo "empty REDIS_PASSWORD must fail docker compose config" >&2; exit 1
+          fi
+          if POSTGRES_PASSWORD=x REDIS_PASSWORD=x docker compose --env-file /dev/null config -q 2>/dev/null; then
+            echo "missing NEXT_PUBLIC_* must fail docker compose config" >&2; exit 1
+          fi
+
+      - name: Backend image has no secrets or dumps (C6, 7.3)
+        run: |
+          # Приманки: без них проверка зелёная и тогда, когда .dockerignore пуст (файлов просто нет в рабочей копии CI).
+          # .env и .env.e2e уже созданы шагами выше.
+          touch dump.sql .dev_secret_key .coverage
+          mkdir -p pgdata private_media .claude
+          touch private_media/x pgdata/x .claude/x
+          docker build -f Dockerfile.backend -t afy-backend-check .
+          test "$(docker run --rm afy-backend-check id -u)" = "10001"
+          docker run --rm afy-backend-check sh -c 'test ! -e /app/dump.sql && test ! -e /app/pgdata && test ! -e /app/private_media && test ! -e /app/.env && test ! -e /app/.env.e2e && test ! -e /app/.claude && test ! -e /app/.coverage && test ! -e /app/.dev_secret_key'
+          # Положительный контроль: тома и /tmp для app доступны на запись.
+          docker run --rm afy-backend-check sh -c 'touch /app/media/x && touch /app/staticfiles/x && touch /tmp/x'
+          # Код образа только для чтения: при RCE процесс app не должен переписать исходники. Проверяем весь /app.
+          writable=$(docker run --rm afy-backend-check sh -c 'find /app -path /app/media -prune -o -path /app/staticfiles -prune -o -writable -print')
+          if [ -n "$writable" ]; then
+            echo "app can write inside /app:" >&2; echo "$writable" >&2; exit 1
+          fi
+          rm -rf dump.sql .dev_secret_key .coverage pgdata private_media .claude
+
       - name: Start the stack
-        run: $DC up -d --build
+        # --wait: ждём healthy у сервисов с healthcheck. bot без токена завершается кодом 0 - его не ждём.
+        run: $DC up -d --build --wait --wait-timeout 300 backend frontend nginx celery_worker celery_beat
+
+      - name: Containers are non-root, Redis requires a password (7.3)
+        run: |
+          test "$($DC exec -T backend id -u)" = "10001"
+          test "$($DC exec -T frontend id -u)" != "0"
+          # Без пароля: именно AuthenticationError (NOAUTH). Любое другое исключение (сеть, опечатка) - провал.
+          $DC exec -T backend python -c "
+          import sys, redis
+          try:
+              redis.Redis(host='redis').ping()
+          except redis.exceptions.AuthenticationError:
+              sys.exit(0)
+          sys.exit(1)
+          "
+          # Положительный контроль: с паролем из REDIS_URL ping проходит (иначе проверка выше могла бы пройти по другой причине).
+          $DC exec -T backend python -c "
+          import os, sys, redis
+          sys.exit(0 if redis.Redis.from_url(os.environ['REDIS_URL']).ping() is True else 1)
+          "
 
       - name: Check production .env is not visible in the stack
         run: |
@@ -221,7 +278,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 

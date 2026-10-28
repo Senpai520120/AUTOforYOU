@@ -9,7 +9,7 @@
  *
  * INTERNAL_API_URL задається в Docker (http://backend:8000).
  */
-import { INTERNAL_API_URL as apiUrl } from '@/lib/config';
+import { INTERNAL_API_URL as apiUrl } from '@/lib/config.server';
 
 export type SearchParams = Record<string, string | string[] | undefined>;
 

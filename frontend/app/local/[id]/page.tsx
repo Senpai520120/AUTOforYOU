@@ -4,7 +4,7 @@ import LocalListingDetail from './LocalListingDetail';
 import { LocalListing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
 import { isC2CEnabled } from '@/lib/c2c';
-import { INTERNAL_API_URL } from '@/lib/config';
+import { INTERNAL_API_URL } from '@/lib/config.server';
 
 const API = INTERNAL_API_URL;
 

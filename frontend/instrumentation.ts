@@ -4,7 +4,7 @@
  */
 import type { Instrumentation } from 'next';
 import { buildReport } from './lib/reportError';
-import { INTERNAL_API_URL } from './lib/config';
+import { INTERNAL_API_URL } from './lib/config.server';
 
 export const onRequestError: Instrumentation.onRequestError = async (err, request) => {
   const api = INTERNAL_API_URL;

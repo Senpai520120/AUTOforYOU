@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext } from 'react';
-import { C2C_CLOSED, type C2CFlags } from '@/lib/c2c';
+import { C2C_CLOSED, type C2CFlags } from '@/lib/c2c-flags';
 
 const C2CContext = createContext<C2CFlags>(C2C_CLOSED);
 

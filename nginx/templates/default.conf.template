@@ -21,6 +21,14 @@ map $uri $admin_login_key {
 }
 limit_req_zone $admin_login_key zone=admin_login:10m rate=${NGINX_AUTH_RATE};
 
+# /healthz (задача 7.3): 30 запросов в минуту с IP; loopback (healthcheck контейнера) без лимита - пустой ключ.
+map $remote_addr $health_key {
+    127.0.0.1  "";
+    ::1        "";
+    default    $binary_remote_addr;
+}
+limit_req_zone $health_key zone=health:1m rate=30r/m;
+
 # Connection: upgrade только при наличии заголовка Upgrade (12-Q12).
 map $http_upgrade $connection_upgrade {
     default  upgrade;

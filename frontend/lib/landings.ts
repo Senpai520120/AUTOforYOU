@@ -4,7 +4,7 @@
  * Різниця між «немає сторінки» (404) і «API недоступне» важлива: у першому випадку сторінка 404,
  * у другому чесна помилка, а не порожній розрахунок. Кеш fetch — LANDING_REVALIDATE_SECONDS (.env).
  */
-import { INTERNAL_API_URL } from '@/lib/config';
+import { INTERNAL_API_URL } from '@/lib/config.server';
 import type { LandingDetail, LandingListItem } from '@/lib/types';
 
 const DEFAULT_REVALIDATE = 60;

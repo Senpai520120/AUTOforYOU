@@ -5,11 +5,14 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.permissions import AllowAny
 
+from core.health import healthz
 from integrations.views import LotImportView, RegistryReportView, VinDecodeView, VinReportView
 from listings.urls import b2b_urlpatterns
 from users.urls import dealer_urlpatterns
 
 urlpatterns = [
+    # Живость для healthcheck и uptime-монитора (задача 7.3): без /api, аутентификации и троттлинга.
+    path('healthz', healthz, name='healthz'),
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('users.urls')),
     path('api/v1/vehicles/', include('vehicles.urls')),

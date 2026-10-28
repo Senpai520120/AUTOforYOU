@@ -5,12 +5,48 @@ x-logging: &default-logging
     max-size: "${LOG_MAX_SIZE:-10m}"
     max-file: "${LOG_MAX_FILES:-5}"
 
+# Healthcheck Python-процессов без curl (в slim-образе его нет). Запрос идёт на сам gunicorn: Host берётся
+# из ALLOWED_HOSTS (первый хост, без ведущей точки), X-Forwarded-Proto=https - чтобы SECURE_SSL_REDIRECT
+# (пустой TLS_MODE) не отвечал 301. Так /healthz проходит ALLOWED_HOSTS без добавления "backend" в список.
+x-backend-health: &backend-health
+  test:
+    - CMD
+    - python
+    - -c
+    - "import os,sys,urllib.request as u; h=(os.environ.get('ALLOWED_HOSTS','localhost').split(',')[0].strip().lstrip('.') or 'localhost'); r=u.Request('http://127.0.0.1:8000/healthz',headers={'Host':h,'X-Forwarded-Proto':'https'}); sys.exit(0 if u.urlopen(r,timeout=4).status==200 else 1)"
+  interval: 10s
+  timeout: 6s
+  retries: 30
+  # Миграции, сиды и collectstatic идут до старта gunicorn: healthy = БД готова, можно стартовать воркер/beat/бот.
+  start_period: 60s
+
 services:
+
+  # ─── Однократная смена владельца томов (задача 7.3) ──────────────────────────
+  # Backend теперь работает от app (UID/GID 10001), а тома media/private_media/static старого
+  # стека созданы от root. Контейнер запускается от root, меняет владельца только у чужих файлов
+  # (повторный запуск почти мгновенный) и завершается; backend ждёт его завершения. Тома не удаляются.
+  volume_init:
+    logging: *default-logging
+    image: nginx:1.31-alpine
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        for d in /app/media /app/private_media /app/staticfiles; do
+        find "$$d" -xdev \( ! -user 10001 -o ! -group 10001 \) -exec chown -h 10001:10001 {} + ;
+        done
+    volumes:
+      - media:/app/media
+      - private_media:/app/private_media
+      - static:/app/staticfiles
+    restart: "no"
+    mem_limit: ${MEM_LIMIT_VOLUME_INIT:-64m}
 
   # ─── PostgreSQL database ─────────────────────────────────────────────────────
   db:
     logging: *default-logging
-    image: postgres:18-alpine
+    image: postgres:18.4-alpine
     ports:
       # Только на localhost — внешний доступ через SSH-туннель; снаружи не видно.
       - "127.0.0.1:5433:5432"
@@ -22,6 +58,15 @@ services:
       # PG18+ требует монтировать /var/lib/postgresql (без /data)
       # и сам создаёт подпапку 18/main/ внутри volume.
       - postgres_data:/var/lib/postgresql
+    # Память под лимит контейнера (задача 7.3). ПРОВЕРИТЬ замером под нагрузкой (docker stats).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-128MB}
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-50}
+    mem_limit: ${MEM_LIMIT_DB:-768m}
+    memswap_limit: ${MEM_LIMIT_DB:-768m}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-autoforyou}"]
       interval: 5s
@@ -33,7 +78,34 @@ services:
   # ─── Redis (cache + Celery broker) ───────────────────────────────────────────
   redis:
     logging: *default-logging
-    image: redis:7-alpine
+    image: redis:7.4-alpine
+    # Пароль обязателен (аудит C9): без него любой контейнер сети читает кэш и очередь Celery.
+    # volatile-lru: вытесняются только ключи с TTL (кэш); очередь Celery без TTL не страдает.
+    # maxmemory держать ниже mem_limit. appendonly: очередь переживает перезапуск контейнера.
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required - set it in .env}
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-128mb}
+      - --maxmemory-policy
+      - volatile-lru
+      - --appendonly
+      - "yes"
+    environment:
+      # redis-cli внутри контейнера читает пароль из этой переменной (healthcheck, `exec redis redis-cli`).
+      # Из других контейнеров без пароля ответ: NOAUTH.
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD is required - set it in .env}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    mem_limit: ${MEM_LIMIT_REDIS:-192m}
+    memswap_limit: ${MEM_LIMIT_REDIS:-192m}
     restart: unless-stopped
 
   # ─── Django backend (Gunicorn) ────────────────────────────────────────────────
@@ -53,18 +125,18 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+      volume_init:
+        condition: service_completed_successfully
     volumes:
       - media:/app/media
       - private_media:/app/private_media
       - static:/app/staticfiles
-    # Gunicorn starts only after migrate+collectstatic finish; nginx waits for this.
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('localhost',8000),2); s.close()\""]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
+    # Gunicorn starts only after migrate+collectstatic finish; nginx и воркеры ждут этого (service_healthy).
+    # GET /healthz: БД (SELECT 1) и кэш. Параметры gunicorn - GUNICORN_* в .env (docker/entrypoint.sh).
+    healthcheck: *backend-health
+    mem_limit: ${MEM_LIMIT_BACKEND:-640m}
+    memswap_limit: ${MEM_LIMIT_BACKEND:-640m}
     restart: unless-stopped
 
   # ─── Next.js frontend ─────────────────────────────────────────────────────────
@@ -75,8 +147,9 @@ services:
       dockerfile: ../Dockerfile.frontend
       args:
         # Baked into client-side JS at build time (browser uses nginx on port 80)
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost}
+        # Без значений по умолчанию: lib/config.ts должен падать, если адрес не задан (задача 6.4/7.3).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required - set it in .env}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?NEXT_PUBLIC_SITE_URL is required - set it in .env}
         NEXT_PUBLIC_IMAGE_HOSTS: ${NEXT_PUBLIC_IMAGE_HOSTS:-}
     environment:
       NODE_ENV: production
@@ -84,6 +157,19 @@ services:
       INTERNAL_API_URL: http://backend:8000
       # Фото для OG-картинок: /media/ в проді віддає nginx (том media), не Django (задача 6.3b).
       INTERNAL_MEDIA_URL: ${INTERNAL_MEDIA_URL:-http://nginx}
+      # Потолок heap Node под mem_limit (ПРОВЕРИТЬ замером).
+      NODE_OPTIONS: ${FRONTEND_NODE_OPTIONS:---max-old-space-size=384}
+    # PID 1 = tini: SIGTERM доходит до node, зомби-процессы убираются.
+    init: true
+    # /health отвечает без обращения к backend (frontend/app/health/route.ts).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: ${MEM_LIMIT_FRONTEND:-512m}
+    memswap_limit: ${MEM_LIMIT_FRONTEND:-512m}
     restart: unless-stopped
 
   # ─── Telegram bot (disabled if TELEGRAM_BOT_TOKEN is not set) ────────────────
@@ -95,12 +181,20 @@ services:
     entrypoint: ["/app/docker/bot_entrypoint.sh"]
     env_file: .env
     depends_on:
-      db:
+      backend:
         condition: service_healthy
-      redis:
-        condition: service_started
     # on-failure: не перезапускается при exit 0 (нет токена или TELEGRAM_UPDATES_MODE=webhook:
     # webhook установлен, апдейты принимает backend). Падение (ненулевой код) - перезапуск.
+    # Живость: PID 1 - `python manage.py run_bot` (bot_entrypoint.sh делает exec). Если процесс подменён или
+    # завершился, /proc/1/cmdline его не содержит. Без токена контейнер выходит с кодом 0 и healthcheck не нужен.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if b'run_bot' in open('/proc/1/cmdline','rb').read() else 1)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: ${MEM_LIMIT_BOT:-256m}
+    memswap_limit: ${MEM_LIMIT_BOT:-256m}
     restart: on-failure
 
   # ─── Celery worker ────────────────────────────────────────────────────────────
@@ -109,16 +203,23 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    command: ["celery", "-A", "core", "worker", "-l", "info"]
+    command: ["celery", "-A", "core", "worker", "-l", "info", "--concurrency", "${CELERY_CONCURRENCY:-2}"]
     env_file: .env
     environment:
       # Force DEBUG=false so settings.py uses Redis broker (not memory://).
       - DEBUG=false
     depends_on:
-      db:
+      backend:
         condition: service_healthy
-      redis:
-        condition: service_started
+    # ping именно этого воркера (имя узла celery@<hostname контейнера>); интервал >= 60 с: каждая проверка стартует Python.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core inspect ping -t 10 -d celery@$$HOSTNAME"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
+    mem_limit: ${MEM_LIMIT_CELERY_WORKER:-512m}
+    memswap_limit: ${MEM_LIMIT_CELERY_WORKER:-512m}
     restart: unless-stopped
 
   # ─── Celery beat (scheduler) ──────────────────────────────────────────────────
@@ -141,16 +242,24 @@ services:
       # Force DEBUG=false so settings.py uses Redis broker (not memory://).
       - DEBUG=false
     depends_on:
-      db:
+      backend:
         condition: service_healthy
-      redis:
-        condition: service_started
+    # У beat с DatabaseScheduler нет API проверки и heartbeat-файла. Живость: PID 1 - именно `celery ... beat`
+    # (при падении процесса контейнер и так завершается, restart его поднимает).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if b'beat' in open('/proc/1/cmdline','rb').read() else 1)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: ${MEM_LIMIT_CELERY_BEAT:-256m}
+    memswap_limit: ${MEM_LIMIT_CELERY_BEAT:-256m}
     restart: unless-stopped
 
   # ─── Nginx reverse proxy ──────────────────────────────────────────────────────
   nginx:
     logging: *default-logging
-    image: nginx:alpine
+    image: nginx:1.31-alpine
     # Конфиг собирается из шаблонов nginx/templates по .env (задача 7.1): TLS_MODE, DOMAIN, CSP_*, HSTS_*.
     # Скрипт подключается через `.`, а не через /docker-entrypoint.d: не зависит от бита исполнения файла.
     entrypoint: ["/bin/sh", "-c", ". /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && exec /docker-entrypoint.sh \"$$@\"", "--"]
@@ -192,7 +301,17 @@ services:
       backend:
         condition: service_healthy
       frontend:
-        condition: service_started
+        condition: service_healthy
+    # /healthz проксируется на backend (БД + кэш). Host = $DOMAIN: проходит ALLOWED_HOSTS и серверный блок
+    # nginx в любом TLS_MODE (при редиректе :80 /healthz отвечает без 301, см. server-redirect.conf.template).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null --header \"Host: $$DOMAIN\" http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${MEM_LIMIT_NGINX:-128m}
+    memswap_limit: ${MEM_LIMIT_NGINX:-128m}
     restart: unless-stopped
 
   # ─── Certbot: автопродление сертификата (профиль letsencrypt) ────────────────────
@@ -209,6 +328,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   static:
   media:
   private_media:

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 import { SITE_NAME } from '@/lib/site';
-import { INTERNAL_API_URL } from '@/lib/config';
+import { INTERNAL_API_URL } from '@/lib/config.server';
 
 /**
  * Генерація OG-картинок (задача 6.3b).

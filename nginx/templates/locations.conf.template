@@ -32,6 +32,16 @@ location @json_503 {
     return 503 '{"detail": "Сервіс тимчасово недоступний"}';
 }
 
+# ─── Живость (задача 7.3): healthcheck nginx и внешний uptime-монитор. Тело - только статусы. ──
+location = /healthz {
+    limit_req zone=health burst=10 nodelay;
+    limit_req_status 429;
+    proxy_pass http://backend;
+    include /nginx-src/snippets/proxy-common.conf;
+    error_page 502 503 504 =503 @json_503;
+    add_header Cache-Control "no-store" always;
+}
+
 # ─── Django static files (collectstatic output) ──────────────────────────────
 location /static/ {
     alias /static/;
