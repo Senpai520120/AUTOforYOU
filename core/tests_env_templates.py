@@ -296,6 +296,8 @@ class ChecklistDocumentTests(SimpleTestCase):
     NOT_REPO_PATHS = ('etc/', 'var/', 'usr/', 'opt/', 'tmp/', 'app/', 'root/', 'home/')
     # Файлы, которых нет в репозитории по замыслу: создаются на сервере; скрипт-создатель обязан существовать.
     GENERATED = {'nginx/cloudflare-ips.conf': 'scripts/update-cloudflare-ips.sh'}
+    # Локальные файлы вне git (личные настройки и неотслеживаемый аудит владельца): в CI их нет.
+    LOCAL_ONLY = {'.claude/settings.local.json', 'docs/audit/SECURITY_AUDIT_2026-10-25.md'}
 
     def paths(self):
         found = set()
@@ -308,7 +310,7 @@ class ChecklistDocumentTests(SimpleTestCase):
     def test_every_path_in_checklist_exists(self):
         paths = self.paths()
         self.assertGreater(len(paths), 10)  # регулярка действительно что-то находит
-        missing = [p for p in paths if not (ROOT / p).exists() and not (
+        missing = [p for p in paths if p not in self.LOCAL_ONLY and not (ROOT / p).exists() and not (
             p in self.GENERATED and (ROOT / self.GENERATED[p]).exists())]
         self.assertEqual(missing, [], f'В docs/LAUNCH_CHECKLIST.md пути к несуществующим файлам: {missing}')
 
