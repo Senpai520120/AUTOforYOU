@@ -246,3 +246,32 @@ class PublicConfigTests(CleanCacheTestCase):
         for key in self._get():
             for bad in ('token', 'secret', 'private', 'password', 'api_key'):
                 self.assertNotIn(bad, key)
+
+
+class PublicAnalyticsTests(CleanCacheTestCase):
+    """Задача 3.5: публичный объект analytics содержит только непустые валидные ID."""
+
+    def _analytics(self):
+        return APIClient().get(URL).json()['analytics']
+
+    @override_settings(GA4_MEASUREMENT_ID='', CLOUDFLARE_ANALYTICS_TOKEN='')
+    def test_empty_by_default(self):
+        self.assertEqual(self._analytics(), {})
+
+    @override_settings(GA4_MEASUREMENT_ID='G-TEST000000', CLOUDFLARE_ANALYTICS_TOKEN='')
+    def test_only_ga4(self):
+        self.assertEqual(self._analytics(), {'ga4_id': 'G-TEST000000'})
+
+    @override_settings(GA4_MEASUREMENT_ID='', CLOUDFLARE_ANALYTICS_TOKEN='CFTEST0000000000')
+    def test_only_cloudflare(self):
+        self.assertEqual(self._analytics(), {'cloudflare_token': 'CFTEST0000000000'})
+
+    @override_settings(GA4_MEASUREMENT_ID='G-"><script>', CLOUDFLARE_ANALYTICS_TOKEN='bad token"')
+    def test_invalid_format_is_dropped(self):
+        self.assertEqual(self._analytics(), {})
+
+    @override_settings(GA4_MEASUREMENT_ID='G-TEST000000')
+    def test_not_stuck_in_cache(self):
+        self.assertEqual(self._analytics(), {'ga4_id': 'G-TEST000000'})
+        with override_settings(GA4_MEASUREMENT_ID=''):
+            self.assertEqual(self._analytics(), {})

@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable
 
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 from core.modules import module_enabled
@@ -16,6 +17,7 @@ from core.modules import module_enabled
 from .base import (
     ENV_SET,
     MODE_OFF,
+    MODE_REAL,
     ProviderStatus,
     env_state,
     mode_setting_name,
@@ -178,6 +180,39 @@ def _telegram():
     return TelegramProvider().status()
 
 
+def _analytics_status(key, title, value, var, note_on) -> ProviderStatus:
+    from core.analytics import mask
+
+    raw = str(getattr(settings, var, '') or '').strip()
+    configured = bool(value)
+    if configured:
+        reason = note_on
+    elif raw:
+        reason = f'{var}: неправильний формат, провайдер вимкнено'
+    else:
+        reason = 'не налаштовано'
+    notes = [f'ID: {mask(value)}'] if configured else []
+    return ProviderStatus(
+        key=key, title=title, mode=MODE_REAL if configured else MODE_OFF, configured=configured,
+        reason=reason, env_vars=(var,), env_states={var: env_state(var)}, notes=notes,
+        checklist_anchor='3.5',
+    )
+
+
+def _ga4():
+    from core.analytics import ga4_measurement_id
+
+    return _analytics_status('ga4', 'Google Analytics 4', ga4_measurement_id(), 'GA4_MEASUREMENT_ID',
+                             'налаштовано (вмикається лише після згоди)')
+
+
+def _cloudflare_analytics():
+    from core.analytics import cloudflare_analytics_token
+
+    return _analytics_status('cloudflare_analytics', 'Cloudflare Web Analytics', cloudflare_analytics_token(),
+                             'CLOUDFLARE_ANALYTICS_TOKEN', 'налаштовано (без cookies)')
+
+
 def register_builtin_providers():
     register_provider('nbu', 'Курс НБУ', _nbu, (), '2.5')
     register_provider('vin_decode', 'VIN-декодер (NHTSA)', _vin_decode, (), '2.5')
@@ -187,3 +222,6 @@ def register_builtin_providers():
     register_provider('liqpay', 'LiqPay (платежі)', _liqpay, ('LIQPAY_PUBLIC_KEY', 'LIQPAY_PRIVATE_KEY'), '2.6')
     register_provider('email', 'Пошта (SMTP)', _email, ('EMAIL_BACKEND', 'EMAIL_HOST', 'DEFAULT_FROM_EMAIL'), '2.4')
     register_provider('telegram', 'Telegram', _telegram, ('TELEGRAM_BOT_TOKEN',), '2.7')
+    register_provider('ga4', 'Google Analytics 4', _ga4, ('GA4_MEASUREMENT_ID',), '3.5')
+    register_provider('cloudflare_analytics', 'Cloudflare Web Analytics', _cloudflare_analytics,
+                      ('CLOUDFLARE_ANALYTICS_TOKEN',), '3.5')

@@ -167,6 +167,10 @@ jobs:
           # CAPTCHA_PROVIDER=turnstile: домен Turnstile сам попадает в CSP (иначе капча не загрузится).
           docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e CAPTCHA_PROVIDER=turnstile \
             nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && grep -rq "challenges.cloudflare.com" /etc/nginx/'
+          # Аналитика (3.5): домены GA4 и Cloudflare WA попадают в CSP только при заданных ID, без ID их нет.
+          docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID=G-TEST000000 -e CLOUDFLARE_ANALYTICS_TOKEN=CFTEST0000000000             nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t && grep -rq "www.googletagmanager.com" /etc/nginx/ && grep -rq "static.cloudflareinsights.com" /etc/nginx/'
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off             nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics|cloudflareinsights" /etc/nginx/'
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID='G-"><script>'             nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics" /etc/nginx/'
           # Cloudflare без файла диапазонов: nginx обязан не стартовать с понятной ошибкой.
           if docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e CLOUDFLARE_PROXY=true               nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh'; then
             echo "CLOUDFLARE_PROXY=true without ranges file must fail" >&2; exit 1

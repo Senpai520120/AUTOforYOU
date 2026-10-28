@@ -1,4 +1,5 @@
 'use client';
+import { trackEvent } from '@/lib/analytics';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { pricingApi, CalcInputs } from '@/api/pricing';
@@ -129,6 +130,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
     setResult(null);
     try {
       setResult(await pricingApi.calculate(toInputs({ ...form, ua_delivery_rate: cityValue }, requiresBattery)));
+      trackEvent('calculator_calculate', { source: 'calculator' });
     } catch (err: unknown) {
       setError(describeCalcError(err));
     } finally {

@@ -1,4 +1,5 @@
 'use client';
+import { trackEvent } from '@/lib/analytics';
 import { useCallback, useId, useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
@@ -184,6 +185,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
       } else {
         const created = await localApi.create(payload);
         setCreatedListingId(created.id);
+        trackEvent('listing_submit', { source: 'listing' });
         if (pendingFiles.length > 0) {
           try {
             await localApi.uploadImages(created.id, pendingFiles);

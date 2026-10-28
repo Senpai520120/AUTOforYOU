@@ -4,6 +4,7 @@ import { AuthProvider } from '@/lib/auth-context';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import CookieBanner from '@/components/ui/CookieBanner';
+import AnalyticsLoader from '@/components/analytics/AnalyticsLoader';
 import AttributionCapture from '@/components/layout/AttributionCapture';
 import FlashMessage from '@/components/ui/FlashMessage';
 import { C2CProvider } from '@/components/c2c/C2CProvider';
@@ -50,6 +51,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </main>
           <Footer />
           <CookieBanner />
+          <AnalyticsLoader />
           </C2CProvider>
         </AuthProvider>
       </body>

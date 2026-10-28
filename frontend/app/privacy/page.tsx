@@ -100,7 +100,7 @@ export default async function PrivacyPage() {
           <li>Telegram — для сповіщень і каналу; сервіс розташований за межами України;</li>
           <li>сховищу зображень (S3-сумісне, наприклад Cloudflare R2), якщо підключено — за межами України;</li>
           <li>Cloudflare Turnstile (захист форм від ботів, обробляє IP відвідувача), якщо підключено;</li>
-          <li>Google Analytics, Meta Pixel, TikTok Pixel — якщо підключено, і лише після вашої згоди на cookie;</li>
+          <li>Google Analytics, Meta Pixel, TikTok Pixel — якщо підключено, і лише після вашої згоди на cookie; Cloudflare Web Analytics — якщо підключено (без cookie; обробляє IP-адресу та адресу сторінки);</li>
           <li>сервісам перевірки VIN і державних реєстрів (NHTSA — лише VIN; carVertical, Opendatabot — VIN і номерний знак за вашим запитом);</li>
           <li>державним органам на законну вимогу.</li>
         </ul>

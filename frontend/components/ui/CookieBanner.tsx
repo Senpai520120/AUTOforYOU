@@ -26,6 +26,8 @@ export default function CookieBanner() {
   const raw = useSyncExternalStore<Snapshot>(subscribeConsent, getRawConsent, getServerSnapshot);
   const [legal, setLegal] = useState<{ version: string; reconsent: boolean }>({ version: '', reconsent: false });
   const [forceOpen, setForceOpen] = useState(false);
+  const [hasGa4, setHasGa4] = useState(false);
+  const [hasCf, setHasCf] = useState(false);
 
   // Публічні налаштування: версія документів і прапор повторної згоди. Недоступне API
   // (або помилка) -> без версії, банер поводиться як раніше.
@@ -38,6 +40,8 @@ export default function CookieBanner() {
         const reconsent = s?.legal_docs_reconsent_required === true;
         registerLegalVersion(version, reconsent);
         setLegal({ version, reconsent });
+        setHasGa4(!!s?.analytics?.ga4_id);
+        setHasCf(!!s?.analytics?.cloudflare_token);
       })
       .catch(() => { if (alive) registerLegalVersion(''); });
     return () => { alive = false; };
@@ -64,8 +68,10 @@ export default function CookieBanner() {
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <p className="text-sm flex-1">
           Ми використовуємо файли cookie, потрібні для входу в акаунт і захисту від підроблених
-          запитів. Аналітичні та
-          рекламні сервіси зараз не використовуються — вони не запрацюють без вашої згоди.{' '}
+          запитів.
+          {hasGa4 && ' Аналітику Google Analytics ми вмикаємо лише з вашої згоди («Прийняти всі»).'}
+          {hasCf && ' Статистику відвідувань Cloudflare Web Analytics збираємо без cookie.'}
+          {!hasGa4 && !hasCf && ' Інших (аналітичних чи рекламних) cookie ми не використовуємо.'}{' '}
           <Link href="/cookies" className="underline hover:text-amber-400 transition-colors">
             Що саме зберігається
           </Link>

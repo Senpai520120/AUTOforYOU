@@ -17,8 +17,11 @@ export default function VerifyEmailPage() {
 
 function VerifyEmail() {
   const params = useSearchParams();
-  const uid = params.get('uid');
-  const token = params.get('token');
+  // uid/token читаємо один раз і прибираємо з адреси: токен не лишається в історії, Referer і аналітиці.
+  const [{ uid, token }] = useState(() => ({ uid: params.get('uid'), token: params.get('token') }));
+  useEffect(() => {
+    window.history.replaceState(null, '', '/verify-email');
+  }, []);
   const { user, refreshUser } = useAuth();
   const [state, setState] = useState<'loading' | 'ok' | 'error'>(uid && token ? 'loading' : 'error');
   // Посилання одноразове: у StrictMode (dev) ефект запускається двічі, другий запит дав би помилку.

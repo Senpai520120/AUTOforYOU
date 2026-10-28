@@ -1,4 +1,5 @@
 'use client';
+import { trackEvent } from '@/lib/analytics';
 import { useId, useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/api/client';
@@ -42,6 +43,7 @@ export default function RegisterPage() {
         }),
       });
       setRegisteredEmail(form.email);
+      trackEvent('sign_up', { source: 'register' });
     } catch (err: unknown) {
       setError(apiErrorText(err, 'Помилка реєстрації'));
     } finally {

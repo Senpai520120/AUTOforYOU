@@ -30,8 +30,12 @@ let currentVersion = '';
 let currentReconsentRequired = false;
 
 export function registerLegalVersion(version: string | null | undefined, reconsentRequired = false): void {
-  currentVersion = version ?? '';
+  const next = version ?? '';
+  const changed = next !== currentVersion || reconsentRequired !== currentReconsentRequired;
+  currentVersion = next;
   currentReconsentRequired = reconsentRequired;
+  // hasAnalyticsConsent() залежить від версії: підписники (завантажувач аналітики) мають перерахувати стан.
+  if (changed && typeof window !== 'undefined') window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 // localStorage кидает исключение в приватном режиме и при отключённом хранилище.

@@ -3,6 +3,7 @@
  * Форма заявки брокеру (задача 2.3). Одна форма для калькулятора, лота і (далі) лендінгів.
  * Гість не втрачає введене: 401 тут не веде на /login (api/client не редиректить).
  */
+import { trackEvent } from '@/lib/analytics';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiGet, ApiError } from '@/api/client';
@@ -154,6 +155,7 @@ export default function LeadForm({
     try {
       const created = await leadsApi.create(payload);
       setPublicId(created.public_id);
+      trackEvent('lead_submit', { source }); // лише категорія джерела, без ПДн
     } catch (err) {
       if (err instanceof ApiError && err.status === 400) {
         if (isCaptchaFailed(err)) {

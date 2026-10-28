@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from rest_framework import serializers
 
+from core.analytics import public_analytics
 from core.c2c import c2c_enabled, c2c_public_posting_enabled, payments_enabled
 from core.modules import module_enabled
 from integrations.base import is_placeholder
@@ -68,6 +69,9 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
     # Задача 3.2a: партнёрская ссылка carVertical из .env; пусто - фронт ссылку не показывает.
     carvertical_partner_url = serializers.SerializerMethodField()
 
+    # Задача 3.5: публичные ID аналитики (только непустые). Секретов нет.
+    analytics = serializers.SerializerMethodField()
+
     local_listing_max_active = serializers.SerializerMethodField()
     local_listing_expiry_days = serializers.SerializerMethodField()
     local_listing_max_photos = serializers.SerializerMethodField()
@@ -88,6 +92,9 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
 
     def get_telegram_bot_username(self, obj) -> str:
         return telegram_bot_username()
+
+    def get_analytics(self, obj) -> dict:
+        return public_analytics()
 
     def get_c2c_enabled(self, obj) -> bool:
         return c2c_enabled()
@@ -133,7 +140,7 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'owner_configured', 'partner_consent_text',
             'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled', 'vin_reports_enabled',
             'c2c_enabled', 'c2c_public_posting_enabled', 'payments_enabled',
-            'carvertical_partner_url',
+            'carvertical_partner_url', 'analytics',
             *PUBLIC_CONFIG_FIELDS,
         ]
         read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

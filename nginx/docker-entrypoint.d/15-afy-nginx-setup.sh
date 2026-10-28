@@ -56,6 +56,17 @@ if [ "$(printf '%s' "${CAPTCHA_PROVIDER:-}" | tr 'A-Z' 'a-z')" = "turnstile" ]; 
     CSP_SCRIPT_SRC_EXTRA="$(join "$CSP_SCRIPT_SRC_EXTRA" "https://challenges.cloudflare.com")"
     CSP_FRAME_SRC_EXTRA="$(join "$CSP_FRAME_SRC_EXTRA" "https://challenges.cloudflare.com")"
 fi
+# Веб-аналитика (задача 3.5): домены добавляются только при заданном ID правильного формата
+# (тот же шаблон, что в core/analytics.py). Без ID или с битым значением доменов в политике нет.
+case "${GA4_MEASUREMENT_ID:-}${CLOUDFLARE_ANALYTICS_TOKEN:-}" in *"$NL"*|*"$CR"*) fail "GA4_MEASUREMENT_ID/CLOUDFLARE_ANALYTICS_TOKEN содержат перевод строки";; esac
+if printf '%s\n' "${GA4_MEASUREMENT_ID:-}" | grep -Eq '^G-[A-Z0-9]{4,20}$'; then
+    CSP_SCRIPT_SRC_EXTRA="$(join "$CSP_SCRIPT_SRC_EXTRA" "https://www.googletagmanager.com")"
+    CSP_CONNECT_SRC_EXTRA="$(join "$CSP_CONNECT_SRC_EXTRA" "https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com")"
+fi
+if printf '%s\n' "${CLOUDFLARE_ANALYTICS_TOKEN:-}" | grep -Eq '^[A-Za-z0-9]{16,64}$'; then
+    CSP_SCRIPT_SRC_EXTRA="$(join "$CSP_SCRIPT_SRC_EXTRA" "https://static.cloudflareinsights.com")"
+    CSP_CONNECT_SRC_EXTRA="$(join "$CSP_CONNECT_SRC_EXTRA" "https://cloudflareinsights.com")"
+fi
 CSP_VALUE="default-src 'self'"
 CSP_VALUE="$CSP_VALUE; script-src $(join "'self' 'unsafe-inline'" "$CSP_SCRIPT_SRC_EXTRA")"
 CSP_VALUE="$CSP_VALUE; style-src 'self' 'unsafe-inline'"

@@ -518,6 +518,8 @@ export interface SiteSettings {
   payments_enabled: boolean;
   /** Партнерське посилання carVertical (3.2a); порожній рядок — посилання немає. */
   carvertical_partner_url: string;
+  /** Публічні ID аналітики (3.5): лише непорожні. GA4 — після згоди, Cloudflare WA — без cookie. */
+  analytics?: { ga4_id?: string; cloudflare_token?: string };
   /** Публічна конфігурація (задача 6.4): лімити оголошень і ім'я бота з .env бекенда. */
   local_listing_max_active: number;
   local_listing_expiry_days: number;

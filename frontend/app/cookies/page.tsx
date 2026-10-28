@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function CookiesPage() {
   const s = await getSiteSettings(0);
+  const ga4 = !!s?.analytics?.ga4_id;
+  const cf = !!s?.analytics?.cloudflare_token;
   return (
     <LegalPage title="Політика щодо файлів cookie та сховища браузера" settings={s}>
         <section>
@@ -113,12 +115,49 @@ export default async function CookiesPage() {
           <h3 className="font-semibold text-slate-700 mt-6 mb-1">
             Аналітичні та рекламні (потребують згоди)
           </h3>
-          <p className="text-sm">
-            <strong>Наразі не використовуються.</strong> На сайті немає систем веб-аналітики,
-            рекламних пікселів і сторонніх скриптів відстеження. Якщо ми їх підключимо, вони
-            запрацюють лише після того, як ви оберете «Прийняти всі» — до цього моменту вони
-            заблоковані на рівні коду.
-          </p>
+          {ga4 ? (
+            <>
+              <p className="text-sm">
+                <strong>Аналітичні (Google Analytics 4)</strong> вмикаються лише після того, як ви
+                оберете «Прийняти всі». Вони рахують відвідування та дії на сайті (розрахунок,
+                заявка, реєстрація) без передачі імені, телефону чи email. До вашого вибору і
+                після «Лише необхідні» скрипт Google не завантажується.
+              </p>
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-sm border-collapse border border-slate-200 rounded">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border border-slate-200 px-3 py-2 text-left">Назва</th>
+                      <th className="border border-slate-200 px-3 py-2 text-left">Мета</th>
+                      <th className="border border-slate-200 px-3 py-2 text-left">Термін</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 font-mono">_ga, _ga_*</td>
+                      <td className="border border-slate-200 px-3 py-2">Відрізняє відвідувачів у статистиці (Google)</td>
+                      <td className="border border-slate-200 px-3 py-2">до 2 років</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-sm text-slate-500 mt-2">
+                Після відкликання згоди ці cookie видаляються, а відправка даних припиняється.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm">
+              <strong>Наразі не використовуються.</strong> Аналітичні cookie на сайті не
+              встановлюються. Якщо ми їх підключимо, вони запрацюють лише після вашого вибору
+              «Прийняти всі».
+            </p>
+          )}
+          {cf && (
+            <p className="text-sm mt-3">
+              <strong>Cloudflare Web Analytics</strong> — статистика відвідувань без cookie та
+              без збереження даних у браузері. Згоди на cookie не потребує, але Cloudflare обробляє вашу IP-адресу та адресу сторінки, щоб порахувати відвідування.
+            </p>
+          )}
         </section>
 
         <section>

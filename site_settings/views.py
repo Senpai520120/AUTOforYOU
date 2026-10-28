@@ -3,6 +3,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.analytics import public_analytics
 from core.c2c import c2c_enabled, c2c_public_posting_enabled, payments_enabled
 from core.modules import MODULE_FLAGS, module_enabled
 
@@ -30,5 +31,6 @@ class SiteSettingsView(APIView):
         data['c2c_public_posting_enabled'] = c2c_public_posting_enabled()
         data['payments_enabled'] = payments_enabled()
         data['carvertical_partner_url'] = carvertical_partner_url()
+        data['analytics'] = public_analytics()
         data.update(public_config())
         return Response(data)

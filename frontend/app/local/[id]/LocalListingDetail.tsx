@@ -1,5 +1,6 @@
 'use client';
 import Image from 'next/image';
+import { trackEvent } from '@/lib/analytics';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { LocalListing } from '@/lib/types';
@@ -73,6 +74,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
     try {
       const data = await localApi.getContact(listing.id);
       setPhone(data.contact_phone || 'Номер не вказано');
+      trackEvent('phone_reveal', { source: 'listing' });
     } catch {
       setPhoneError('Не вдалося завантажити номер. Спробуйте ще раз.');
     } finally {

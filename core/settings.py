@@ -453,6 +453,11 @@ CARVERTICAL_API_KEY = os.environ.get('CARVERTICAL_API_KEY', '')
 # Партнёрская ссылка carVertical (выдаёт программа партнёров). Пусто - ссылка на сайте не показывается.
 CARVERTICAL_PARTNER_URL = os.environ.get('CARVERTICAL_PARTNER_URL', '').strip()
 
+# Веб-аналитика (задача 3.5). ID публичны; пусто или неверный формат = провайдер выключен.
+# GA4 грузится только после согласия, Cloudflare Web Analytics работает без cookies.
+GA4_MEASUREMENT_ID = os.environ.get('GA4_MEASUREMENT_ID', '').strip()
+CLOUDFLARE_ANALYTICS_TOKEN = os.environ.get('CLOUDFLARE_ANALYTICS_TOKEN', '').strip()
+
 # Режимы провайдеров (задача 3.1): auto | real | demo | off. auto: ключ задан и не плейсхолдер -> real,
 # иначе off («не налаштовано»). Недопустимое значение -> ошибка manage.py check (integrations.E001).
 NBU_MODE = os.environ.get('NBU_MODE', '').strip().lower() or 'auto'
@@ -666,6 +671,8 @@ if _TESTING:
     C2C_PUBLIC_POSTING_ENABLED = True
     PAYMENTS_ENABLED = True
     CARVERTICAL_PARTNER_URL = ''
+    GA4_MEASUREMENT_ID = ''
+    CLOUDFLARE_ANALYTICS_TOKEN = ''
     LEGACY_CARS_API_ENABLED = False
     OPENDATABOT_API_KEY = ''
     APIFY_TOKEN = ''

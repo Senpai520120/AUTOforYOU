@@ -1542,3 +1542,35 @@ class OpendatabotModeOffTests(APITestCase):
     def test_report_rejects_forbidden_letters(self):
         client = auth_client(make_user('rep_vin@test.com'))
         self.assertEqual(client.get('/api/v1/vehicles/1HGBH41JXMN10918Q/report/').status_code, 400)
+
+
+class AnalyticsRegistryTests(TestCase):
+    """Задача 3.5: строки ga4 и cloudflare_analytics, ID в статусе замаскирован."""
+
+    def _status(self, key):
+        return next(s for s in registry.get_statuses(with_health=False) if s.key == key)
+
+    @override_settings(**{**EMPTY_ENV, 'GA4_MEASUREMENT_ID': '', 'CLOUDFLARE_ANALYTICS_TOKEN': ''})
+    def test_not_configured(self):
+        for key in ('ga4', 'cloudflare_analytics'):
+            st = self._status(key)
+            self.assertFalse(st.configured)
+            self.assertEqual(st.reason, 'не налаштовано')
+            self.assertFalse(st.needs_attention)
+
+    @override_settings(**{**EMPTY_ENV, 'GA4_MEASUREMENT_ID': 'G-TEST000000',
+                          'CLOUDFLARE_ANALYTICS_TOKEN': 'CFTEST0000000000'})
+    def test_configured_and_masked(self):
+        ga4 = self._status('ga4')
+        self.assertTrue(ga4.configured)
+        self.assertEqual(ga4.reason, 'налаштовано (вмикається лише після згоди)')
+        self.assertTrue(self._status('cloudflare_analytics').configured)
+        blob = repr(registry.get_statuses(with_health=False))
+        self.assertNotIn('G-TEST000000', blob)
+        self.assertNotIn('CFTEST0000000000', blob)
+
+    @override_settings(**{**EMPTY_ENV, 'GA4_MEASUREMENT_ID': 'G-"><script>'})
+    def test_invalid_id_not_configured(self):
+        st = self._status('ga4')
+        self.assertFalse(st.configured)
+        self.assertIn('неправильний формат', st.reason)
