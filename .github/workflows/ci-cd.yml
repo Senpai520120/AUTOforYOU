@@ -278,9 +278,12 @@ jobs:
         run: |
           cd ..
           # AUTH_COOKIE_SECURE=false (стенд без TLS) несовместим с TLS_MODE != off: backend не стартует.
-          sed -i '/^TLS_MODE=/d;/^AUTH_COOKIE_SECURE=/d' .env.e2e
-          { echo "TLS_MODE=selfsigned"; echo "AUTH_COOKIE_SECURE=true"; } >> .env.e2e
-          $DC up -d --force-recreate nginx backend
+          # NEXT_PUBLIC_* вшиваються при збірці: для https-стенду фронт перезбираємо з https-адресами,
+          # інакше браузер іде на http://localhost (mixed content + CSP connect-src 'self').
+          sed -i '/^TLS_MODE=/d;/^AUTH_COOKIE_SECURE=/d;/^NEXT_PUBLIC_API_URL=/d;/^NEXT_PUBLIC_SITE_URL=/d' .env.e2e
+          { echo "TLS_MODE=selfsigned"; echo "AUTH_COOKIE_SECURE=true";
+            echo "NEXT_PUBLIC_API_URL=https://localhost"; echo "NEXT_PUBLIC_SITE_URL=https://localhost"; } >> .env.e2e
+          $DC up -d --build --force-recreate nginx backend frontend
           for i in $(seq 1 40); do
             code=$(curl -sk -o /dev/null -w '%{http_code}' -m 5 https://localhost/ || true)
             if [ "$code" = "200" ]; then break; fi
