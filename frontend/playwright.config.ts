@@ -42,7 +42,7 @@ export default defineConfig({
 
   // TLS-стенд (TLS_MODE=selfsigned, задача 7.1): только security-headers.spec.ts, без логина
   // (NEXT_PUBLIC_API_URL собран под http), самоподписанный сертификат разрешён.
-  projects: process.env.E2E_TLS_STAND === '1'
+  projects: (process.env.E2E_TLS_STAND === '1'
     ? [
         {
           name: 'tls',
@@ -52,10 +52,18 @@ export default defineConfig({
       ]
     : [
     { name: 'setup', testMatch: /.*\.setup\.ts/ },
+    // Smoke после деплоя (задача 7.5): только чтение, без логина (нет зависимости от setup) - годится и для боевого сайта
+    // (E2E_BASE_URL=https://... E2E_ALLOW_REMOTE=1 npx playwright test --project=smoke).
+    {
+      name: 'smoke',
+      testMatch: /(^|[\/])smoke\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       grepInvert: /@mobile/,
+      testIgnore: /(^|[\/])smoke\.spec\.ts$/, // этот файл гоняет проект smoke
       dependencies: ['setup'],
     },
     {
@@ -76,5 +84,8 @@ export default defineConfig({
       grep: /@smoke/,
       dependencies: ['setup'],
     },
-  ],
+  ]
+  // Против чужого хоста (E2E_ALLOW_REMOTE=1, например боевой сайт после деплоя) запускается только read-only проект smoke:
+  // остальные проекты логинятся тестовыми пользователями и пишут данные.
+  ).filter((project) => process.env.E2E_ALLOW_REMOTE !== '1' || project.name === 'smoke'),
 });

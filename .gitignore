@@ -77,3 +77,6 @@ frontend/e2e/.auth/
 private_media/
 # Локальный SECRET_KEY разработчика (задача 7.2)
 .dev_secret_key
+
+# Состояние деплоя (теги образов для отката, задача 7.5)
+.deploy/

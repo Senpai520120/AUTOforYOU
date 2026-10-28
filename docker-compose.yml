@@ -20,6 +20,8 @@ x-backend-health: &backend-health
   # Миграции, сиды и collectstatic идут до старта gunicorn: healthy = БД готова, можно стартовать воркер/beat/бот.
   start_period: 60s
 
+# Образы тегируются IMAGE_TAG (deploy.sh ставит git short sha, .deploy/previous_tag нужен для отката, задача 7.5).
+# backend, bot, celery_worker и celery_beat - один образ autoforyou-backend; секция build только у backend (остальные берут готовый образ).
 services:
 
   # ─── Однократная смена владельца томов (задача 7.3) ──────────────────────────
@@ -81,6 +83,7 @@ services:
   # Образ собирается из docker/backup (та же версия Postgres, что у db). Бэкап содержит ПДн: каталог не в git и не в образах.
   backup:
     logging: *default-logging
+    image: autoforyou-backup:${IMAGE_TAG:-local}
     build:
       context: ./docker/backup
     init: true
@@ -176,6 +179,7 @@ services:
   # ─── Django backend (Gunicorn) ────────────────────────────────────────────────
   backend:
     logging: *default-logging
+    image: autoforyou-backend:${IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -207,6 +211,7 @@ services:
   # ─── Next.js frontend ─────────────────────────────────────────────────────────
   frontend:
     logging: *default-logging
+    image: autoforyou-frontend:${IMAGE_TAG:-local}
     build:
       context: ./frontend
       dockerfile: ../Dockerfile.frontend
@@ -240,9 +245,7 @@ services:
   # ─── Telegram bot (disabled if TELEGRAM_BOT_TOKEN is not set) ────────────────
   bot:
     logging: *default-logging
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+    image: autoforyou-backend:${IMAGE_TAG:-local}
     entrypoint: ["/app/docker/bot_entrypoint.sh"]
     env_file: .env
     depends_on:
@@ -265,9 +268,7 @@ services:
   # ─── Celery worker ────────────────────────────────────────────────────────────
   celery_worker:
     logging: *default-logging
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+    image: autoforyou-backend:${IMAGE_TAG:-local}
     command: ["celery", "-A", "core", "worker", "-l", "info", "--concurrency", "${CELERY_CONCURRENCY:-2}"]
     env_file: .env
     environment:
@@ -290,9 +291,7 @@ services:
   # ─── Celery beat (scheduler) ──────────────────────────────────────────────────
   celery_beat:
     logging: *default-logging
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+    image: autoforyou-backend:${IMAGE_TAG:-local}
     command:
       - celery
       - -A
