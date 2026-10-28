@@ -106,7 +106,7 @@ load_env() {
 }
 
 if [ ! -f "$ENV_FILE" ]; then
-    die "$ENV_FILE не найден. Создайте его: cp .env.docker.example .env и заполните (см. DEPLOY_NOTES.md, docs/LAUNCH_CHECKLIST.md)."
+    die "$ENV_FILE не найден. Создайте его: cp .env.example .env (прод-шаблон) и заполните (см. DEPLOY_NOTES.md, docs/LAUNCH_CHECKLIST.md)."
 fi
 load_env
 

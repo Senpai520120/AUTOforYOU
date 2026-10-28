@@ -255,6 +255,7 @@ AUTOforYOU/
 | [`docs/TEST_CASES.md`](docs/TEST_CASES.md) | Розбір E2E-тестів на happy і negative path |
 | [`docs/BACKEND_TESTS.md`](docs/BACKEND_TESTS.md) | Розбір backend-тестів |
 | [`docs/DEMO.md`](docs/DEMO.md) | Сценарій демонстрації |
+| [`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md) | Чек-лист запуску для власника (змінні `.env`, адмінка, перевірки, `launch_check`) |
 | [`DEPLOY_NOTES.md`](DEPLOY_NOTES.md) | Розгортання простою мовою |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Журнал архітектурних рішень |
 | [`PROGRESS.md`](PROGRESS.md) | Журнал прогресу |

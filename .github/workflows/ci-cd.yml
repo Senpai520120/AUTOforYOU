@@ -146,6 +146,8 @@ jobs:
         run: ./scripts/tests/test_backup_rotation.sh
       - name: deploy.sh and server-setup.sh tests
         run: ./scripts/tests/test_deploy.sh
+      - name: check-memory.sh tests (7.7a)
+        run: ./scripts/tests/test_check_memory.sh
 
   # ─── Аудит зависимостей (C5). Необязательная: не добавлять в required checks до задачи 1.16 ───
   dependency-audit:

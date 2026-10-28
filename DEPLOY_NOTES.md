@@ -46,7 +46,7 @@ sudo ./scripts/server-setup.sh
 Под пользователем `deploy`:
 ```
 git clone <адрес репозитория> autoforyou && cd autoforyou
-cp .env.docker.example .env
+cp .env.example .env   # прод-шаблон; .env.docker.example — только для локального стека
 ```
 Заполните `.env` по `docs/LAUNCH_CHECKLIST.md` (раздел 2). Минимум для старта:
 `SECRET_KEY` (случайный, от 50 символов), `POSTGRES_PASSWORD` и тот же пароль в `DATABASE_URL`, `REDIS_PASSWORD` и в `REDIS_URL`,
@@ -179,7 +179,7 @@ restrict,command="cd /путь/к/проекту && ./deploy.sh --pull --build" 
 
 | Симптом | Причина и решение |
 |---------|-------------------|
-| `.env не найден` | Не создан `.env`: `cp .env.docker.example .env` и заполните |
+| `.env не найден` | Не создан `.env`: `cp .env.example .env` (прод-шаблон) и заполните |
 | `SECRET_KEY looks like a placeholder` | В `.env` остался текст из шаблона: сгенерируйте ключ (раздел 4) |
 | `ALLOWED_HOSTS … не содержит DOMAIN` | Впишите домен в `ALLOWED_HOSTS`, иначе Django отвечает 400 на всё, включая `/healthz` |
 | `SITE_URL … не начинается с https://` | При `TLS_MODE` не `off` адрес сайта должен быть https |

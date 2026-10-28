@@ -123,6 +123,6 @@ sysctl -w "vm.swappiness=$SWAP_SWAPPINESS" > /dev/null
 # ─── Итог ────────────────────────────────────────────────────────────────────
 step "готово. Дальше:"
 step "  1) добавьте публичный SSH-ключ в ~$DEPLOY_USER/.ssh/authorized_keys (chmod 700 .ssh, 600 authorized_keys)"
-step "  2) войдите как $DEPLOY_USER: git clone <репозиторий>, cp .env.docker.example .env, заполните .env"
+step "  2) войдите как $DEPLOY_USER: git clone <репозиторий>, cp .env.example .env, заполните .env"
 step "  3) ./deploy.sh --build ; затем ./scripts/init-letsencrypt.sh (если TLS_MODE=letsencrypt)"
 step "  Отключите вход по паролю и root в /etc/ssh/sshd_config только после проверки входа по ключу (скрипт SSH не меняет)."
