@@ -118,6 +118,20 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost
           NEXT_PUBLIC_SITE_URL: http://localhost
 
+  # ─── Скрипты бэкапа (7.4): shellcheck, LF, ротация и поведение backup.sh на заглушках ───
+  backup-scripts:
+    name: Backup scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck docker/backup/*.sh scripts/backup.sh scripts/restore.sh scripts/backup-verify.sh scripts/tests/test_backup_rotation.sh
+      - name: Only LF in shell scripts
+        run: |
+          if grep -lI $'\r' docker/backup/*.sh scripts/*.sh scripts/tests/*.sh; then echo "CRLF found in *.sh" >&2; exit 1; fi
+      - name: Rotation and backup.sh tests
+        run: ./scripts/tests/test_backup_rotation.sh
+
   # ─── E2E: Playwright против полного стека в Docker ───
   e2e:
     name: E2E tests
@@ -274,6 +288,56 @@ jobs:
           done
           echo "frontend did not come back after restart" >&2
           exit 1
+
+      - name: Backup, restore, verify (7.4)
+        run: |
+          set -euo pipefail
+          export COMPOSE_CMD="$DC"
+          BKP_PASS="e2e_$(head -c 18 /dev/urandom | base64 | tr -d '[:space:]/+=')"
+          {
+            echo "BACKUP_S3_BUCKET=e2e-backups"
+            echo "BACKUP_S3_ENDPOINT_URL=http://s3mock:9000"
+            echo "BACKUP_S3_ACCESS_KEY_ID=test"
+            echo "BACKUP_S3_SECRET_ACCESS_KEY=testtesttest"
+            echo "BACKUP_ENCRYPTION_PASSPHRASE=${BKP_PASS}"
+          } >> .env.e2e
+          # Эмуляция S3 (moto) в сети стека. MinIO не используем: его образы больше не публикуются в Docker Hub.
+          docker run -d --name afy-s3mock --network autoforyou-e2e_default --network-alias s3mock python:3.12-slim             sh -c "pip install -q 'moto[server]' && moto_server -H 0.0.0.0 -p 9000"
+          for i in $(seq 1 90); do
+            if $DC run --rm -T --no-deps --entrypoint sh backup -c 'wget -S -q -O /dev/null http://s3mock:9000/ 2>&1 | grep -q HTTP'; then break; fi
+            sleep 2
+          done
+          $DC run --rm -T --no-deps -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=testtesttest -e AWS_DEFAULT_REGION=auto             --entrypoint aws backup --endpoint-url http://s3mock:9000 s3 mb s3://e2e-backups
+
+          $DC exec -T backend python manage.py shell -c "from django.contrib.auth import get_user_model as g; g().objects.create_user(email='backup-check@e2e.test', password='x-Backup-check-1')"
+          ./scripts/backup.sh --now
+          # Каталог бэкапов создаёт контейнер (root, 700): на runner отдаём его пользователю, на сервере скрипты запускают через sudo.
+          sudo chown -R "$(id -u):$(id -g)" backups
+          dump=$(ls -1 backups/autoforyou_*.dump | tail -n 1)
+          test -n "$dump"
+          $DC exec -T backend python manage.py shell -c "from django.contrib.auth import get_user_model as g; g().objects.filter(email='backup-check@e2e.test').delete()"
+          ./scripts/restore.sh "$dump" --yes
+          test "$($DC exec -T backend python manage.py shell -c "from django.contrib.auth import get_user_model as g; print(g().objects.filter(email='backup-check@e2e.test').count())" | tail -n 1 | tr -d '[:space:]')" = "1"
+          # Проверка на временной БД (рабочая не затрагивается) и из «облака»; чужая passphrase - отказ, метка не обновляется.
+          ./scripts/backup-verify.sh --file "$dump"
+          rm -f backups/.last_verify
+          ./scripts/backup-verify.sh --from-remote
+          test -f backups/.last_verify
+          rm -f backups/.last_verify
+          sed -i 's/^BACKUP_ENCRYPTION_PASSPHRASE=.*/BACKUP_ENCRYPTION_PASSPHRASE=wrong-passphrase/' .env.e2e
+          if ./scripts/backup-verify.sh --from-remote 2> verify_err.log; then echo "wrong passphrase must fail" >&2; exit 1; fi
+          grep -q "расшифровка не удалась" verify_err.log   # причина отказа - именно расшифровка, а не сеть или bucket
+          test ! -e backups/.last_verify
+          # Пароль шифрования не задан при заданном bucket: код != 0, в лог попадает «шифрование не настроено».
+          sed -i 's/^BACKUP_ENCRYPTION_PASSPHRASE=.*/BACKUP_ENCRYPTION_PASSPHRASE=/' .env.e2e
+          if ./scripts/backup.sh --now 2> err.log; then echo "no passphrase must fail" >&2; exit 1; fi
+          grep -q "шифрование не настроено" err.log
+          # Healthcheck: свежая метка = healthy; метка старше 26 часов = unhealthy.
+          $DC run --rm -T --no-deps --entrypoint sh backup -c 'touch /backups/.last_success && /usr/local/bin/healthcheck.sh'
+          if $DC run --rm -T --no-deps --entrypoint sh backup -c 'touch -t 202001010000 /backups/.last_success && /usr/local/bin/healthcheck.sh'; then
+            echo "stale marker must be unhealthy" >&2; exit 1
+          fi
+          docker rm -f afy-s3mock
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

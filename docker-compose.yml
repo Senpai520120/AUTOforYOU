@@ -75,6 +75,70 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # ─── Резервные копии Postgres (задача 7.4, 12-S6) ────────────────────────────
+  # Ночной pg_dump -Fc в BACKUP_DIR (права 600/700), архив media/private_media (если не S3), шифрованная (gpg AES256)
+  # копия в S3-совместимое хранилище (BACKUP_S3_*), ротация. Ручной запуск: ./scripts/backup.sh --now.
+  # Образ собирается из docker/backup (та же версия Postgres, что у db). Бэкап содержит ПДн: каталог не в git и не в образах.
+  backup:
+    logging: *default-logging
+    build:
+      context: ./docker/backup
+    init: true
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - set it in .env}
+      PGDATABASE: ${POSTGRES_DB:-autoforyou}
+      TZ: ${BACKUP_TZ:-Europe/Kyiv}
+      HOME: /tmp
+      BACKUP_TIME: ${BACKUP_TIME:-03:30}
+      BACKUP_ON_START: ${BACKUP_ON_START:-false}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-3}
+      # Если медиа в S3, их архив не делается (в томах пусто / не используются).
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      PRIVATE_S3_BUCKET_NAME: ${PRIVATE_S3_BUCKET_NAME:-}
+      # Копия вне сервера: включается, когда задан BACKUP_S3_BUCKET. Без BACKUP_ENCRYPTION_PASSPHRASE не отправляется.
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-autoforyou/}
+      BACKUP_S3_ENDPOINT_URL: ${BACKUP_S3_ENDPOINT_URL:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-auto}
+      BACKUP_S3_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+      - media:/media:ro
+      - private_media:/private_media:ro
+    # В образе postgres объявлен VOLUME /var/lib/postgresql: tmpfs не даёт Docker плодить анонимные тома.
+    tmpfs:
+      - /var/lib/postgresql
+      - /tmp
+    # Усиление (проверено: pg_dump, tar, gpg, aws работают): корень read-only, HOME=/tmp для gpg/aws.
+    # root без capabilities: DAC_READ_SEARCH нужен только чтобы читать private_media (владелец UID 10001, права 700).
+    # Каталог BACKUP_DIR должен принадлежать root (его создаёт Docker); чужой владелец потребовал бы DAC_OVERRIDE.
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+    # unhealthy, если последний успешный бэкап старше 26 часов (метка BACKUP_DIR/.last_success).
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 10m
+      timeout: 10s
+      retries: 1
+      start_period: 30s
+    mem_limit: ${MEM_LIMIT_BACKUP:-256m}
+    memswap_limit: ${MEM_LIMIT_BACKUP:-256m}
+    restart: unless-stopped
+
   # ─── Redis (cache + Celery broker) ───────────────────────────────────────────
   redis:
     logging: *default-logging
