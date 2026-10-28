@@ -62,6 +62,7 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 - `is_staff` — только доступ в Django Admin. Модерация — `user.has_perm('local_listings.moderate_locallisting')` (группы «Модератори», «Адміністратори»).
 - Хелперы и классы: `users/permissions.py` (`IsBroker`, `IsBrokerOrAdmin`, `IsModerator`, `IsAdminRole`), `user.is_broker/is_moderator/is_admin_role`.
 - `DEFAULT_PERMISSION_CLASSES = IsAuthenticated`: у публичного view — явный `AllowAny`. Тест-аудит: `core/tests.py`.
+- SSO (Keycloak, `OIDC_ENABLED`): `users/oidc.py` + `users/oidc_views.py`, связь `OidcIdentity` (sub). Привязка по email — только при `email_verified`, привилегированные — только `link_oidc_user`, пользователей не создаёт. Dev: `docker-compose.sso.yml` после стека Users & Roles (README, «Вхід через SSO»).
 
 ## Именование
 - Модели: CamelCase, в единственном числе (`Vehicle`, `Listing`, `Calculation`).

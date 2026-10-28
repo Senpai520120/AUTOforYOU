@@ -229,6 +229,8 @@ AUTH_COOKIE_REFRESH_NAME = os.environ.get('AUTH_COOKIE_REFRESH_NAME', 'refresh')
 # Метка «есть сессия» для фронта (не httpOnly, без токена; задача 1.4). Имя жёстко
 # совпадает с frontend/lib/session-hint.ts.
 AUTH_COOKIE_HINT_NAME = 'has_session'
+# Метка «вход через SSO» (SSO-1): фронт после выхода ведёт на logout Keycloak. Имя - как в session-hint.ts.
+AUTH_COOKIE_SSO_HINT_NAME = 'afy_sso'
 AUTH_COOKIE_SECURE = os.environ.get(
     'AUTH_COOKIE_SECURE', 'false' if DEBUG else 'true',
 ).lower() in ('true', '1', 'yes')
@@ -298,6 +300,28 @@ CAPTCHA_MIN_FILL_SECONDS = int(os.environ.get('CAPTCHA_MIN_FILL_SECONDS', '3'))
 CAPTCHA_LOGIN_AFTER_FAILURES = int(os.environ.get('CAPTCHA_LOGIN_AFTER_FAILURES', '3'))
 CAPTCHA_ON_LOGIN = os.environ.get('CAPTCHA_ON_LOGIN', 'false').lower() in _TRUE
 IS_TESTING = _TESTING
+
+# ─── Вход через SSO: Keycloak, учётки AD (задача SSO-1) ──────────────────────
+# Keycloak отвечает «кто ты»; роли, бан и удаление остаются здесь. false - маршрутов oidc/ нет (404), кнопки нет.
+OIDC_ENABLED = os.environ.get('OIDC_ENABLED', 'false').strip().lower() in _TRUE
+OIDC_CLIENT_ID = os.environ.get('OIDC_CLIENT_ID', '')
+OIDC_CLIENT_SECRET = os.environ.get('OIDC_CLIENT_SECRET', '')
+# Realm URL, который видит браузер (auth, logout), и тот, что видит backend (token, certs).
+OIDC_BROWSER_URL = os.environ.get('OIDC_BROWSER_URL', '').rstrip('/')
+OIDC_BACKEND_URL = os.environ.get('OIDC_BACKEND_URL', '').rstrip('/') or OIDC_BROWSER_URL
+# С ним сверяется `iss` id_token. У Keycloak с KC_HOSTNAME это браузерный realm URL.
+OIDC_ISSUER = os.environ.get('OIDC_ISSUER', '').rstrip('/') or OIDC_BROWSER_URL
+OIDC_REDIRECT_URI = os.environ.get('OIDC_REDIRECT_URI', '')
+OIDC_POST_LOGOUT_REDIRECT_URI = os.environ.get('OIDC_POST_LOGOUT_REDIRECT_URI', '')
+# false: нет аккаунта с этим email - отказ (согласия пишутся только при регистрации).
+OIDC_CREATE_USERS = os.environ.get('OIDC_CREATE_USERS', 'false').strip().lower() in _TRUE
+if OIDC_CREATE_USERS:
+    raise ImproperlyConfigured('OIDC_CREATE_USERS=true не реализовано: нужен экран согласий (отдельная задача).')
+if OIDC_ENABLED:
+    _oidc_missing = [name for name in ('OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'OIDC_BROWSER_URL', 'OIDC_REDIRECT_URI')
+                     if not globals()[name]]
+    if _oidc_missing:
+        raise ImproperlyConfigured(f'OIDC_ENABLED=true, но не заданы: {", ".join(_oidc_missing)}')
 
 # ─── DRF ──────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
@@ -702,6 +726,16 @@ if _TESTING:
     PRIVATE_MEDIA_USE_X_ACCEL = False
     TURNSTILE_SITE_KEY = ''
     TURNSTILE_SECRET_KEY = ''
+    # SSO-1: тесты включают SSO через override_settings, сеть мокается.
+    OIDC_ENABLED = False
+    OIDC_CLIENT_ID = 'autoforyou'
+    OIDC_CLIENT_SECRET = 'test-oidc-secret'
+    OIDC_BROWSER_URL = 'http://kc-browser.test/realms/myapp'
+    OIDC_BACKEND_URL = 'http://kc-backend.test/realms/myapp'
+    OIDC_ISSUER = 'http://kc-browser.test/realms/myapp'
+    OIDC_REDIRECT_URI = 'http://testserver/api/v1/auth/oidc/callback/'
+    OIDC_POST_LOGOUT_REDIRECT_URI = 'http://testserver/'
+    OIDC_CREATE_USERS = False
     CAPTCHA_PROVIDER = 'off'
     CAPTCHA_ON_LOGIN = False
     EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'

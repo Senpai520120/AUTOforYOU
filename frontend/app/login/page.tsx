@@ -16,13 +16,25 @@ export default function LoginPage() {
   );
 }
 
+// Відмова входу через SSO: бекенд повертає на /login?sso_error=<код> без подробиць (users/oidc_views.py).
+const SSO_ERRORS: Record<string, string> = {
+  no_account: 'Акаунта з цим email ще немає. Спочатку зареєструйтеся з цим email, потім входьте через SSO.',
+  not_allowed: 'Вхід через SSO для цього акаунта недоступний. Увійдіть паролем або зверніться до підтримки.',
+  cancelled: 'Вхід через SSO скасовано.',
+  throttled: 'Забагато спроб. Спробуйте пізніше.',
+  failed: 'Не вдалося увійти через SSO. Спробуйте ще раз.',
+};
+
 function LoginForm() {
   const { login } = useAuth();
   const emailId = useId();
   const passwordId = useId();
   const router = useRouter();
+  const params = useSearchParams();
   // Повернення тільки на шлях цього сайту (08-S7, 10-S7).
-  const next = safeNext(useSearchParams().get('next'));
+  const next = safeNext(params.get('next'));
+  const ssoErrorCode = params.get('sso_error');
+  const ssoError = ssoErrorCode ? (SSO_ERRORS[ssoErrorCode] ?? SSO_ERRORS.failed) : '';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -52,6 +64,7 @@ function LoginForm() {
     <div className="max-w-md mx-auto mt-10">
       <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900 mb-6">Вхід</h1>
+        {ssoError && <p role="alert" className="mb-4 text-red-600 text-sm">{ssoError}</p>}
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label htmlFor={emailId} className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
@@ -73,6 +86,13 @@ function LoginForm() {
             {loading ? 'Вхід...' : 'Увійти'}
           </button>
         </form>
+        {config?.oidc_enabled && config.oidc_start_url && (
+          // Звичайне посилання, не fetch: далі редіректи на Keycloak і назад (задача SSO-1).
+          <a href={`${config.oidc_start_url}?${new URLSearchParams({ next })}`}
+            className="mt-3 block w-full text-center border border-slate-300 hover:border-blue-400 text-slate-700 font-semibold py-2.5 rounded-xl transition-colors">
+            Увійти через SSO
+          </a>
+        )}
         <p className="mt-4 text-sm text-center text-slate-500">
           <Link href="/password-reset" className="text-blue-600 hover:underline">Забули пароль?</Link>
         </p>

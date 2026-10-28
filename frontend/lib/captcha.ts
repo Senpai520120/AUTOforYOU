@@ -20,6 +20,9 @@ export interface CaptchaConfig {
 export interface AuthConfig {
   captcha: CaptchaConfig;
   email_verification_required: boolean;
+  /** Вхід через SSO (Keycloak, задача SSO-1); старий бекенд поля не віддає → кнопки немає. */
+  oidc_enabled?: boolean;
+  oidc_start_url?: string | null;
 }
 
 /** config === null — ще вантажиться; error — конфіг не отримано. */

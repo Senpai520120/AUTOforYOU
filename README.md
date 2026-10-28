@@ -129,6 +129,37 @@ docker compose -p autoforyou-e2e down -v
 
 ---
 
+## Вхід через SSO (Keycloak + AD)
+
+Кнопка «Увійти через SSO» на `/login` (задача SSO-1). Keycloak відповідає лише «хто ти»; ролі, бан і видалення лишаються в AUTOforYOU. Вимкнено за замовчуванням (`OIDC_ENABLED=false`): тоді маршрутів `oidc/` немає (404) і кнопки немає.
+
+**Запуск для розробки.** Спершу стек Users & Roles (він створює мережу `sso-shared` і Keycloak у ній), потім AUTOforYOU з overlay:
+
+```powershell
+cd D:\Django-application-e2e   # гілка feature/active-directory
+docker compose -f docker-compose.yml -f docker-compose.sso.yml -f docker-compose.ad.yml up -d --build --wait
+cd D:\pyCharm\AUTOforYOU
+# у .env: OIDC_CLIENT_SECRET=dev-only-autoforyou-secret (лише для dev)
+docker compose -f docker-compose.yml -f docker-compose.sso.yml up -d --build
+```
+
+Браузер ходить у Keycloak на `http://localhost:8080`, backend — на `http://keycloak:8080` (token, certs); `iss` у токенах завжди `http://localhost:8080/realms/myapp`. Консоль Keycloak: `http://localhost:8080/admin` (`admin` / `admin`).
+
+**Тестові учётки** (пароль у всіх `demo-password-123`): з AD — `ad_alice`, `ad_bob`, вимкнений `ad_disabled`; власні учётки Keycloak — `demo_user`, `demo_admin`. На формі Keycloak можна вводити логін або email.
+
+**Правила прив'язки** (`users/oidc.py`):
+- Спершу за `sub` (модель `OidcIdentity`), потім за email — лише якщо Keycloak підтвердив адресу (`email_verified: true`), без урахування регістру, рівно один користувач.
+- Нових користувачів SSO не створює: немає акаунта з цим email — `/login?sso_error=no_account` («спершу зареєструйтеся»), бо згоди з умовами пишуться лише при реєстрації.
+- Привілейовані (`is_staff`, `is_superuser`, роль `broker`/`moderator`/`admin`) за email не прив'язуються. Їх зв'язують вручну: `python manage.py link_oidc_user <email>=<sub>` (`sub` — ID користувача в консолі Keycloak; `--replace` замінює наявну прив'язку).
+- Не пускає `is_active=False`, бан, видалений або запланований до видалення акаунт. Роль і групи вхід через SSO не змінює.
+- Вихід користувача, що зайшов через SSO, завершує і сесію Keycloak (мітка-cookie `afy_sso`); Keycloak попросить підтвердити вихід.
+
+**Ловушка cookie.** Cookie не розрізняють порти: Users & Roles на `localhost:8000` і AUTOforYOU на `localhost` ділять `csrftoken`. Для ручної перевірки відкривайте Users & Roles на `http://127.0.0.1:8000`.
+
+**E2E.** Сценарій `@sso` (`frontend/e2e/sso.spec.ts`) пропускається без `E2E_SSO=1`. Потрібен користувач `ad_alice@corp.example.test` (його створює `e2e_seed`, коли `OIDC_ENABLED=true`): `cd frontend && E2E_SSO=1 npx playwright test e2e/sso.spec.ts --project=chromium --no-deps`.
+
+---
+
 ## Захист від витоку секретів
 
 Перед комітом працює gitleaks (конфіг `.gitleaks.toml`, той самий у CI):

@@ -77,6 +77,10 @@ PUBLIC = {
     'token-logout': 'выход идемпотентен, чужой refresh не отзывается (01-S13)',
     'auth-password-reset': 'запрос сброса, всегда одинаковый ответ',
     'auth-password-reset-confirm': 'токен из письма',
+    # SSO-1 (Keycloak): переходы браузера гостя; защита - state/nonce/PKCE в подписанной cookie, лимит login
+    'auth-oidc-start': 'начало входа через Keycloak, ничего не выдаёт',
+    'auth-oidc-callback': 'возврат из Keycloak; без cookie start и верного id_token - отказ (users/tests_oidc.py)',
+    'auth-oidc-logout': 'выход идемпотентен, только свои cookie',
     # публичный каталог и расчёт
     'vehicle-list': 'каталог',
     'vehicle-detail': 'каталог',

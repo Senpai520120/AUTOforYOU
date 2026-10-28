@@ -9,3 +9,12 @@ import { readCookie } from './csrf';
 export function hasSessionHint(): boolean {
   return readCookie('has_session') === '1';
 }
+
+/**
+ * Мітка «вхід через SSO» (задача SSO-1): `afy_sso=1`, ставить callback Keycloak
+ * (AUTH_COOKIE_SSO_HINT_NAME). Після виходу такого користувача ведемо на logout Keycloak,
+ * інакше SSO одразу впустить його знову.
+ */
+export function hasSsoHint(): boolean {
+  return readCookie('afy_sso') === '1';
+}

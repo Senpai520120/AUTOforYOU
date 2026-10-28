@@ -257,6 +257,47 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/auth/oidc/callback/:
+    get:
+      operationId: v1_auth_oidc_callback_retrieve
+      description: Ставит httpOnly-cookie access/refresh и ведёт на next; при отказе
+        - на /login?sso_error=<код>.
+      summary: 'SSO: возврат из Keycloak'
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '302':
+          description: No response body
+        '404':
+          description: No response body
+  /api/v1/auth/oidc/logout/:
+    get:
+      operationId: v1_auth_oidc_logout_retrieve
+      summary: 'SSO: выйти и из Keycloak'
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '302':
+          description: No response body
+        '404':
+          description: No response body
+  /api/v1/auth/oidc/start/:
+    get:
+      operationId: v1_auth_oidc_start_retrieve
+      summary: 'SSO: перейти на вход Keycloak'
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '302':
+          description: No response body
+        '404':
+          description: No response body
   /api/v1/auth/password-change/:
     post:
       operationId: v1_auth_password_change_create

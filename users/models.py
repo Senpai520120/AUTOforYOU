@@ -104,6 +104,22 @@ class CustomUser(AbstractUser):
         return self.role == self.Role.MODERATOR
 
 
+class OidcIdentity(models.Model):
+    """Связь пользователя с учёткой Keycloak (SSO-1): `sub` не меняется, даже если сменился email."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='oidc_identity', verbose_name='Користувач',
+    )
+    sub = models.CharField('Keycloak sub', max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Вхід через SSO'
+        verbose_name_plural = 'Входи через SSO'
+
+    def __str__(self):
+        return f'{self.user} ↔ {self.sub}'
+
+
 class TrustedShop(models.Model):
     class ShopType(models.TextChoices):
         SERVICE = 'service', 'СТО'

@@ -104,6 +104,16 @@ class E2ESeedTests(TestCase):
         self.assertTrue(ModelLandingPage.objects.get(slug='e2e-toyota-camry').is_published)
         self.assertFalse(ModelLandingPage.objects.get(slug='e2e-draft').is_published)
 
+    def test_sso_user_only_with_oidc_enabled(self):
+        # SSO-1: ad_alice - исключение из @e2e.test (email как в AD), без пароля.
+        _run('e2e_seed', ENV_OK)
+        self.assertFalse(User.objects.filter(email='ad_alice@corp.example.test').exists())
+        with override_settings(OIDC_ENABLED=True):
+            _run('e2e_seed', ENV_OK)
+        user = User.objects.get(email='ad_alice@corp.example.test')
+        self.assertEqual(user.role, 'buyer')
+        self.assertFalse(user.has_usable_password())
+
     def test_cleanup_removes_only_e2e(self):
         real = User.objects.create_user(email='real@example.com', password='p')
         region = Region.objects.create(name='R', slug='r')

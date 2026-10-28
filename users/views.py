@@ -8,6 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
+from django.urls import reverse
 from django.middleware.csrf import rotate_token
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -428,6 +429,10 @@ class AuthConfigView(APIView):
         response = Response({
             'captcha': captcha_public_config(request),
             'email_verification_required': settings.EMAIL_VERIFICATION_REQUIRED,
+            # SSO-1: кнопка «Увійти через SSO» - обычная ссылка на start (не fetch).
+            'oidc_enabled': settings.OIDC_ENABLED,
+            'oidc_start_url': reverse('auth-oidc-start') if settings.OIDC_ENABLED else None,
+            'oidc_logout_url': reverse('auth-oidc-logout') if settings.OIDC_ENABLED else None,
         })
         response['Cache-Control'] = 'no-store'
         return response
