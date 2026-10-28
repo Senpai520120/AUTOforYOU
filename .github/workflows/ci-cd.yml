@@ -135,6 +135,8 @@ jobs:
       - name: docker compose config
         run: |
           export POSTGRES_PASSWORD=x REDIS_PASSWORD=x NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x
+          # docker-compose.yml требует .env (env_file, required): в чистом checkout его нет, для проверки конфига - пустой.
+          : > .env
           docker compose --env-file /dev/null config --quiet
           # e2e-override тоже должен собираться (нужен .env.e2e: required: true).
           cp .env.e2e.example .env.e2e
