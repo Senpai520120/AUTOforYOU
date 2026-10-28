@@ -26,14 +26,14 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$file" ] || usage
 
-[ -f "$file" ] && [ -r "$file" ] || { echo "ОШИБКА: файл не найден или не читается: $file (каталог бэкапов принадлежит root с правами 700: запустите через sudo)" >&2; exit 2; }
+if [ ! -f "$file" ] || [ ! -r "$file" ]; then echo "ОШИБКА: файл не найден или не читается: $file (каталог бэкапов принадлежит root с правами 700: запустите через sudo)" >&2; exit 2; fi
 case "$file" in
     *.dump) mode=dump ;;
     *.dump.gpg) mode=dump-gpg ;;
     *) echo "ОШИБКА: ожидается файл *.dump или *.dump.gpg, получено: $file" >&2; exit 2 ;;
 esac
 if [ -n "$media" ]; then
-    [ -f "$media" ] && [ -r "$media" ] || { echo "ОШИБКА: архив медиа не найден: $media" >&2; exit 2; }
+    if [ ! -f "$media" ] || [ ! -r "$media" ]; then echo "ОШИБКА: архив медиа не найден: $media" >&2; exit 2; fi
     case "$media" in *.tar.gz) ;; *) echo "ОШИБКА: архив медиа должен быть *.tar.gz" >&2; exit 2 ;; esac
     # Защита от выхода за пределы томов: внутри только media/ и private_media/, без '..'.
     entries=$(tar -tzf "$media") || { echo "ОШИБКА: архив медиа повреждён: $media" >&2; exit 2; }
@@ -57,7 +57,9 @@ for f in "$file" "$media"; do
     if [ -f "$f.sha256" ]; then
         expected=$(cut -d' ' -f1 "$f.sha256" | head -n 1)
         actual=$(sha256sum "$f" | cut -d' ' -f1)
-        [ -n "$expected" ] && [ "$expected" = "$actual" ]             || { echo "ОШИБКА: контрольная сумма не совпала: $f" >&2; exit 2; }
+        if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+            echo "ОШИБКА: контрольная сумма не совпала: $f" >&2; exit 2
+        fi
         echo "Контрольная сумма совпала: $f"
     else
         echo "ПРЕДУПРЕЖДЕНИЕ: нет файла $f.sha256, целостность файла не проверена" >&2

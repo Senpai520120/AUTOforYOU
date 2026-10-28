@@ -311,7 +311,7 @@ jobs:
 
           $DC exec -T backend python manage.py shell -c "from django.contrib.auth import get_user_model as g; g().objects.create_user(email='backup-check@e2e.test', password='x-Backup-check-1')"
           ./scripts/backup.sh --now
-          # Каталог бэкапов создаёт контейнер (root, 700): на runner отдаём его пользователю, на сервере скрипты запускают через sudo.
+          # Файлы бэкапа создаёт контейнер (root, 600): чтобы читать их на runner, отдаём каталог пользователю. Контейнер пишет в такой каталог благодаря DAC_OVERRIDE; на сервере скрипты запускают через sudo.
           sudo chown -R "$(id -u):$(id -g)" backups
           dump=$(ls -1 backups/autoforyou_*.dump | tail -n 1)
           test -n "$dump"

@@ -11,7 +11,9 @@ usage() {
     exit 2
 }
 
-[ "$#" -eq 1 ] && [ "$1" = "--now" ] || usage
+if [ "$#" -ne 1 ] || [ "$1" != "--now" ]; then
+    usage
+fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 read -r -a DC <<< "${COMPOSE_CMD:-docker compose}"

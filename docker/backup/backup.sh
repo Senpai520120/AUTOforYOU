@@ -33,11 +33,15 @@ case "$BACKUP_DIR" in
 esac
 
 mkdir -p "$BACKUP_DIR"
-chmod 700 "$BACKUP_DIR"
+# Каталог на хосте мог создать не root (деплой-пользователь): без FOWNER chmod чужого каталога не пройдёт - это не ошибка.
+chmod 700 "$BACKUP_DIR" 2> /dev/null || log "предупреждение: не удалось выставить права 700 на $BACKUP_DIR (владелец другой); файлы внутри всё равно 600"
 stamp=$(date '+%Y-%m-%d_%H%M')
 work="$BACKUP_DIR/.tmp.$$"
-mkdir -p "$work"
-# shellcheck disable=SC2329  # вызывается через trap
+if ! mkdir -p "$work"; then
+    err "нет прав записи в $BACKUP_DIR (владелец: $(stat -c '%u:%g' "$BACKUP_DIR" 2> /dev/null || echo '?')). Контейнеру нужна capability DAC_OVERRIDE (см. docker-compose.yml) или каталог, принадлежащий root"
+    exit 1
+fi
+# shellcheck disable=SC2329,SC2317  # cleanup вызывается косвенно, через trap EXIT
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 trap 'err "прервано сигналом"; exit 1' INT TERM

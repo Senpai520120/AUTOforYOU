@@ -119,13 +119,14 @@ services:
       - /var/lib/postgresql
       - /tmp
     # Усиление (проверено: pg_dump, tar, gpg, aws работают): корень read-only, HOME=/tmp для gpg/aws.
-    # root без capabilities: DAC_READ_SEARCH нужен только чтобы читать private_media (владелец UID 10001, права 700).
-    # Каталог BACKUP_DIR должен принадлежать root (его создаёт Docker); чужой владелец потребовал бы DAC_OVERRIDE.
+    # root без capabilities, кроме DAC_OVERRIDE: нужен, чтобы читать private_media (владелец UID 10001, права 700)
+    # и писать в BACKUP_DIR, если каталог на хосте создал не root (деплой-пользователь, runner CI). Писать контейнеру
+    # можно только в /backups и tmpfs (остальное read-only), владельца файлов он не меняет.
     read_only: true
     cap_drop:
       - ALL
     cap_add:
-      - DAC_READ_SEARCH
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     # unhealthy, если последний успешный бэкап старше 26 часов (метка BACKUP_DIR/.last_success).

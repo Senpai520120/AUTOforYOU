@@ -38,8 +38,10 @@ env_value() {  # значение из переменной окружения �
 
 backup_dir=$(env_value BACKUP_DIR ./backups)
 # Каталог создаёт контейнер backup (root, права 700): с хоста читать его нужно от root (sudo) или владельца.
-[ -d "$backup_dir" ] && [ -r "$backup_dir" ] && [ -x "$backup_dir" ] \
-    || { echo "ОШИБКА: каталог бэкапов не найден или недоступен: $backup_dir (создан контейнером от root с правами 700: запустите через sudo)" >&2; exit 2; }
+if [ ! -d "$backup_dir" ] || [ ! -r "$backup_dir" ] || [ ! -x "$backup_dir" ]; then
+    echo "ОШИБКА: каталог бэкапов не найден или недоступен: $backup_dir (создан контейнером от root с правами 700: запустите через sudo)" >&2
+    exit 2
+fi
 
 case "$mode" in
     latest)
@@ -47,7 +49,7 @@ case "$mode" in
         [ -n "$file" ] || { echo "ОШИБКА: в $backup_dir нет ни одного autoforyou_*.dump. Сначала ./scripts/backup.sh --now" >&2; exit 2; }
         ;;
     file)
-        [ -f "$file" ] && [ -r "$file" ] || { echo "ОШИБКА: файл не найден: $file" >&2; exit 2; }
+        if [ ! -f "$file" ] || [ ! -r "$file" ]; then echo "ОШИБКА: файл не найден: $file" >&2; exit 2; fi
         case "$file" in *.dump) ;; *) echo "ОШИБКА: ожидается *.dump (для .gpg используйте --from-remote)" >&2; exit 2 ;; esac
         ;;
 esac

@@ -12,7 +12,9 @@ usage() {
     exit 2
 }
 
-[ "$#" -eq 4 ] && [ "$1" = "plan" ] || usage
+if [ "$#" -ne 4 ] || [ "$1" != "plan" ]; then
+    usage
+fi
 for n in "$2" "$3" "$4"; do
     case "$n" in
         '' | *[!0-9]*) echo "rotate.sh: срок хранения должен быть неотрицательным числом, получено '$n'" >&2; exit 2 ;;
