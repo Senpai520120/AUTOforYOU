@@ -182,6 +182,11 @@ test.describe('Капча: обхід і сервер (23-P12)', () => {
 });
 
 test.describe('Капча: скидання віджета і блокування скрипта (Н-33)', () => {
+  // Провайдер turnstile тут підмінено лише на клієнті (page.route), а CSP стенду зібрана для
+  // CAPTCHA_PROVIDER без turnstile й не пускає challenges.cloudflare.com. Перевіряємо поведінку
+  // віджета, тому CSP вимикаємо; домен Turnstile у CSP перевіряє nginx-шаблон (7.1) і security-headers.
+  test.use({ bypassCSP: true });
+
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem('cookie_consent', 'necessary'));
     await mockTurnstileConfig(page);

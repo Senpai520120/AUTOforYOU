@@ -777,7 +777,8 @@ class InfraExposureTests(CleanCacheTestCase):
                 in_ports = False
         self.assertTrue(mappings, 'в docker-compose.yml не найдено ни одного проброса портов')
         public = [m for m in mappings if not m.startswith('127.0.0.1:')]
-        self.assertEqual(public, ['${NGINX_PORT:-80}:80'], 'наружу должен смотреть только nginx')
+        self.assertEqual(public, ['${NGINX_PORT:-80}:80', '${NGINX_HTTPS_PORT:-443}:443'],
+                         'наружу должен смотреть только nginx (80 и 443, задача 7.1)')
 
 
 class ErrorTextsNotLeakedTests(CleanCacheTestCase):

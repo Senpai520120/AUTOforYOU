@@ -49,17 +49,10 @@ services:
     ports: !reset []
   # Весь набор Playwright логинится с одного IP: боевой limit_req (20r/m, 12-S10) даёт 429 и делает
   # тесты входа зависимыми от порядка прогона. В e2e-стеке поднимаем только лимит; остальное - боевой конфиг.
+  # Заголовки безопасности, CSP и страница 50x в e2e - боевые (задача 7.1).
   nginx:
-    volumes: !override
-      - ./nginx/nginx.conf:/etc/nginx/nginx.src.conf:ro
-      - static:/static:ro
-      - media:/media:ro
-      # Приватные файлы (X-Accel-Redirect, задача 1.10): в e2e PRIVATE_MEDIA_USE_X_ACCEL=true.
-      - private_media:/private_media:ro
-    command:
-      - /bin/sh
-      - -c
-      - sed 's/rate=20r\/m/rate=6000r\/m/' /etc/nginx/nginx.src.conf > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'
+    environment:
+      NGINX_AUTH_RATE: 6000r/m
   # Перехват писем (задача 1.7): SMTP :1025 для backend и celery_worker, HTTP API :8025 для Playwright.
   # Письма сброса пароля уходят из Celery-воркера, поэтому SMTP-настройки нужны обоим сервисам.
   mailpit:

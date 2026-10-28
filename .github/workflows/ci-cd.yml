@@ -141,9 +141,9 @@ jobs:
           echo "DATABASE_URL=postgres://autoforyou:${PG_PASS}@db:5432/autoforyou" >> .env.e2e
           echo "POSTGRES_USER=autoforyou" >> .env.e2e
           echo "POSTGRES_DB=autoforyou" >> .env.e2e
-          # Стек поднимается с DEBUG=false — как в проде. Но TLS здесь нет,
-          # и без этого Django редиректил бы весь HTTP на HTTPS.
-          echo "SECURE_SSL_REDIRECT=false" >> .env.e2e
+          # Стек поднимается с DEBUG=false — как в проде. TLS здесь нет: TLS_MODE=off
+          # (nginx только :80, Django без SSL-редиректа и HSTS; задача 7.1).
+          echo "TLS_MODE=off" >> .env.e2e
           # Только для тестового стека: разрешение e2e_seed и случайный пароль
           # тестовых пользователей (маскируем в логах).
           E2E_PASS="e2e_$(head -c 18 /dev/urandom | base64 | tr -d '[:space:]/+=')"
@@ -156,6 +156,21 @@ jobs:
 
       - name: Fake production .env (override must ignore it)
         run: echo "TELEGRAM_BOT_TOKEN=ci-fake-prod-token" > .env
+
+      - name: nginx -t for every TLS_MODE (7.1)
+        run: |
+          for mode in off external selfsigned letsencrypt; do
+            for cf in false; do
+              docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1                 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE="$mode" -e CLOUDFLARE_PROXY="$cf" -e TRUSTED_PROXY_IPS=10.0.0.0/8                 nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t'
+            done
+          done
+          # CAPTCHA_PROVIDER=turnstile: домен Turnstile сам попадает в CSP (иначе капча не загрузится).
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e CAPTCHA_PROVIDER=turnstile \
+            nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && grep -rq "challenges.cloudflare.com" /etc/nginx/'
+          # Cloudflare без файла диапазонов: nginx обязан не стартовать с понятной ошибкой.
+          if docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e CLOUDFLARE_PROXY=true               nginx:alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh'; then
+            echo "CLOUDFLARE_PROXY=true without ranges file must fail" >&2; exit 1
+          fi
 
       - name: Start the stack
         run: $DC up -d --build
@@ -217,6 +232,62 @@ jobs:
       - name: Run Playwright
         working-directory: frontend
         run: npx playwright test
+        env:
+          E2E_PASSWORD: ${{ env.E2E_PASSWORD }}
+
+      - name: Resilience pages (7.1)
+        run: |
+          # Frontend остановлен: оформленная страница 503, без внешних хостов.
+          $DC stop frontend
+          code=$(curl -s -o /tmp/50x.html -w '%{http_code}' http://localhost/)
+          test "$code" = "503"
+          grep -q "Сервіс тимчасово недоступний" /tmp/50x.html
+          if grep -Eq 'https?://' /tmp/50x.html; then echo "50x page has external links" >&2; exit 1; fi
+          $DC start frontend
+          # Backend остановлен: для /api/ JSON, не HTML-страница.
+          $DC stop backend
+          code=$(curl -s -o /tmp/api503.json -w '%{http_code}' http://localhost/api/v1/auth/csrf/)
+          test "$code" = "503"
+          grep -q '"detail"' /tmp/api503.json
+          $DC start backend
+
+      - name: Admin IP allow-list (C10, 7.1)
+        run: |
+          # Без ADMIN_ALLOWED_IPS /admin/ открыт (302 на логин), с чужим списком - 403.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/admin/)
+          test "$code" != "403"
+          sed -i '/^ADMIN_ALLOWED_IPS=/d' .env.e2e && echo "ADMIN_ALLOWED_IPS=203.0.113.1" >> .env.e2e
+          $DC up -d --force-recreate --no-deps nginx
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/admin/ || true)
+            if [ "$code" = "403" ]; then break; fi
+            sleep 2
+          done
+          test "$code" = "403"
+          # Подделка XFF адрес не подменяет: nginx смотрит на адрес соединения.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-For: 203.0.113.1' http://localhost/admin/)
+          test "$code" = "403"
+          # Публичные страницы список не затрагивает.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)
+          test "$code" = "200"
+          sed -i '/^ADMIN_ALLOWED_IPS=/d' .env.e2e
+          $DC up -d --force-recreate --no-deps nginx
+
+      - name: Security headers on the TLS stand (selfsigned, 7.1)
+        working-directory: frontend
+        run: |
+          cd ..
+          # AUTH_COOKIE_SECURE=false (стенд без TLS) несовместим с TLS_MODE != off: backend не стартует.
+          sed -i '/^TLS_MODE=/d;/^AUTH_COOKIE_SECURE=/d' .env.e2e
+          { echo "TLS_MODE=selfsigned"; echo "AUTH_COOKIE_SECURE=true"; } >> .env.e2e
+          $DC up -d --force-recreate nginx backend
+          for i in $(seq 1 40); do
+            code=$(curl -sk -o /dev/null -w '%{http_code}' -m 5 https://localhost/ || true)
+            if [ "$code" = "200" ]; then break; fi
+            sleep 3
+          done
+          cd frontend
+          E2E_BASE_URL=https://localhost E2E_TLS_STAND=1 npx playwright test security-headers --project=tls
         env:
           E2E_PASSWORD: ${{ env.E2E_PASSWORD }}
 

@@ -1,0 +1,9 @@
+# Заголовки безопасности (задача 7.1). add_header из server-блока не наследуется в location,
+# где есть свой add_header, поэтому этот файл подключается include в КАЖДОМ location.
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy $referrer_policy_value always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+# HSTS только по https (карта по $forwarded_proto); пустое значение заголовок не добавляет.
+add_header Strict-Transport-Security $hsts_value always;
+add_header ${CSP_HEADER_NAME} "${CSP_VALUE}" always;

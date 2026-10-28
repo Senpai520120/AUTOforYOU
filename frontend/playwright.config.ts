@@ -40,7 +40,17 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [
+  // TLS-стенд (TLS_MODE=selfsigned, задача 7.1): только security-headers.spec.ts, без логина
+  // (NEXT_PUBLIC_API_URL собран под http), самоподписанный сертификат разрешён.
+  projects: process.env.E2E_TLS_STAND === '1'
+    ? [
+        {
+          name: 'tls',
+          testMatch: /security-headers\.spec\.ts/,
+          use: { ...devices['Desktop Chrome'], ignoreHTTPSErrors: true },
+        },
+      ]
+    : [
     { name: 'setup', testMatch: /.*\.setup\.ts/ },
     {
       name: 'chromium',

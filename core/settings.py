@@ -635,24 +635,16 @@ SITE_URL = os.environ.get('SITE_URL', '') or 'http://localhost'
 
 # ─── Заголовки безопасности (только в продакшене) ─────────────────────────────
 # В dev (DEBUG=True) и в тест-раннере не включаем — тесты работают по HTTP.
-if not DEBUG and not _TESTING:
-    # Отключается только осознанно: стенд без TLS (CI, локальный прогон
-    # E2E по HTTP) или TLS, терминируемый балансировщиком, который уже
-    # делает редирект сам. По умолчанию включено.
-    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'true').lower() in ('true', '1', 'yes')
-    SECURE_HSTS_SECONDS = 31_536_000 if SECURE_SSL_REDIRECT else 0
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SESSION_COOKIE_SECURE = True
-    # csrftoken живёт в паре с auth-cookie (задача 1.4): один флаг на оба. Выключать
-    # только на стенде без TLS (локальный e2e по HTTP), по умолчанию на проде true.
-    CSRF_COOKIE_SECURE = AUTH_COOKIE_SECURE
-    if SECURE_SSL_REDIRECT and not AUTH_COOKIE_SECURE:
-        # Флаг стенда без TLS (.env.e2e) не должен попасть на прод с HTTPS.
-        raise ImproperlyConfigured('AUTH_COOKIE_SECURE=false допустим только при SECURE_SSL_REDIRECT=false.')
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    X_FRAME_OPTIONS = 'DENY'
-    SECURE_CONTENT_TYPE_NOSNIFF = True
+# Логика вынесена в core/security_settings.py (задача 7.1): TLS_MODE, HSTS_*, явный
+# SECURE_SSL_REDIRECT важнее режима. Стенд без TLS (CI, e2e) - TLS_MODE=off.
+from core.security_settings import build_security_settings, csrf_origins_from_site  # noqa: E402
+
+_security = build_security_settings(os.environ, debug=DEBUG, testing=_TESTING, auth_cookie_secure=AUTH_COOKIE_SECURE)
+globals().update(_security)
+# CSRF_TRUSTED_ORIGINS не задан явно - собираем из DOMAIN/SITE_URL (нужно /admin/ по https за прокси).
+if not DEBUG and not _TESTING and not os.environ.get('CSRF_TRUSTED_ORIGINS', '').strip():
+    CSRF_TRUSTED_ORIGINS = csrf_origins_from_site(
+        os.environ.get('DOMAIN', ''), SITE_URL, os.environ.get('TLS_MODE', '')) or CSRF_TRUSTED_ORIGINS
 
 
 # ─── Изоляция тестов от внешнего мира (задача 0.2) ────────────────────────────

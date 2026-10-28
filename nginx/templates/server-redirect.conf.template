@@ -1,0 +1,33 @@
+# Режимы selfsigned и letsencrypt: :80 отдаёт только ACME-challenge и 301 на https.
+server {
+    listen 80 default_server;
+    server_name ${SERVER_NAMES};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://${DOMAIN}$request_uri;
+    }
+}
+
+# Внутренний хост docker-сети (INTERNAL_MEDIA_URL, фото для OG-картинок, задача 6.3b):
+# только /media/ по http, без редиректа. Остальное снаружи с этим Host недоступно.
+server {
+    listen 80;
+    server_name ${INTERNAL_HOST};
+
+    # Только loopback и частные сети docker; снаружи (публичный IP) - 403.
+    allow 127.0.0.1;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
+    deny all;
+
+    include /etc/nginx/generated/media-location.conf;
+
+    location / {
+        return 404;
+    }
+}

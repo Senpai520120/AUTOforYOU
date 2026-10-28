@@ -44,6 +44,11 @@ services:
       dockerfile: Dockerfile.backend
     entrypoint: ["/app/docker/entrypoint.sh"]
     env_file: .env
+    environment:
+      # Тот же режим TLS, что у nginx (задача 7.1). Пусто (старый .env без TLS_MODE) = прежнее поведение
+      # Django: SSL-редирект и HSTS включены. Принудительного off по умолчанию нет.
+      TLS_MODE: ${TLS_MODE:-}
+      DOMAIN: ${DOMAIN:-}
     depends_on:
       db:
         condition: service_healthy
@@ -146,14 +151,41 @@ services:
   nginx:
     logging: *default-logging
     image: nginx:alpine
+    # Конфиг собирается из шаблонов nginx/templates по .env (задача 7.1): TLS_MODE, DOMAIN, CSP_*, HSTS_*.
+    # Скрипт подключается через `.`, а не через /docker-entrypoint.d: не зависит от бита исполнения файла.
+    entrypoint: ["/bin/sh", "-c", ". /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && exec /docker-entrypoint.sh \"$$@\"", "--"]
+    command: ["nginx", "-g", "daemon off;"]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      DOMAIN_WWW: ${DOMAIN_WWW:-false}
+      TLS_MODE: ${TLS_MODE:-off}
+      HSTS_MAX_AGE: ${HSTS_MAX_AGE:-31536000}
+      HSTS_INCLUDE_SUBDOMAINS: ${HSTS_INCLUDE_SUBDOMAINS:-false}
+      HSTS_PRELOAD: ${HSTS_PRELOAD:-false}
+      CSP_REPORT_ONLY: ${CSP_REPORT_ONLY:-false}
+      CSP_SCRIPT_SRC_EXTRA: ${CSP_SCRIPT_SRC_EXTRA:-}
+      CSP_CONNECT_SRC_EXTRA: ${CSP_CONNECT_SRC_EXTRA:-}
+      CSP_FRAME_SRC_EXTRA: ${CSP_FRAME_SRC_EXTRA:-}
+      CSP_IMG_SRC_EXTRA: ${CSP_IMG_SRC_EXTRA:-}
+      NGINX_MAX_BODY_SIZE: ${NGINX_MAX_BODY_SIZE:-20M}
+      NGINX_AUTH_RATE: ${NGINX_AUTH_RATE:-20r/m}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-}
+      CLOUDFLARE_PROXY: ${CLOUDFLARE_PROXY:-false}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-honeypot}
     ports:
       - "${NGINX_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Шаблоны, сниппеты, страница 50x, список IP Cloudflare: всё из каталога nginx/.
+      - ./nginx:/nginx-src:ro
       - static:/static:ro
       - media:/media:ro
       # Приватные файлы (internal-location /protected-media/, задача 1.10).
       - private_media:/private_media:ro
+      # Сертификаты Let's Encrypt (переживают `docker compose down`) и webroot для ACME-challenge.
+      - letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
     depends_on:
       backend:
         condition: service_healthy
@@ -161,8 +193,22 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # ─── Certbot: автопродление сертификата (профиль letsencrypt) ────────────────────
+  # Первый сертификат получает scripts/init-letsencrypt.sh. Запуск: docker compose --profile letsencrypt up -d
+  certbot:
+    logging: *default-logging
+    image: certbot/certbot
+    profiles: ["letsencrypt"]
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   static:
   media:
   private_media:
+  letsencrypt:
+  certbot_www:
