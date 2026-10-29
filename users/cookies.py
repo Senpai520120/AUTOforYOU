@@ -58,4 +58,18 @@ def clear_auth_cookies(response):
         settings.AUTH_COOKIE_HINT_NAME, path='/',
         domain=common['domain'], samesite=common['samesite'],
     )
+    response.delete_cookie(
+        settings.AUTH_COOKIE_SSO_HINT_NAME, path='/',
+        domain=common['domain'], samesite=common['samesite'],
+    )
+    return response
+
+
+def set_sso_hint_cookie(response):
+    """Метка SSO-1: вход был через Keycloak. Без токена, не httpOnly - её читает фронт при выходе."""
+    response.set_cookie(
+        settings.AUTH_COOKIE_SSO_HINT_NAME, '1',
+        max_age=_lifetime_seconds('REFRESH_TOKEN_LIFETIME'), path='/',
+        **{**_common(), 'httponly': False},
+    )
     return response

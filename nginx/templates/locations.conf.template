@@ -64,7 +64,8 @@ location /protected-media/ {
 }
 
 # ─── Вход/регистрация: limit_req по IP (12-S10). 429 вместо дефолтного 503 ─────
-location ~ ^/api/v1/auth/(token|register)/$ {
+# oidc/start и oidc/callback (SSO-1) - тот же вход, тот же лимит.
+location ~ ^/api/v1/auth/(token|register|oidc/start|oidc/callback)/$ {
     limit_req zone=auth burst=10 nodelay;
     limit_req_status 429;
     proxy_pass http://backend;

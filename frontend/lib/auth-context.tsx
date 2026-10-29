@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { User } from './types';
 import { useRouter } from 'next/navigation';
 import { ApiError, AUTH_EXPIRED_EVENT, AUTH_REFRESHED_EVENT, apiGet, apiPost } from '@/api/client';
-import { hasSessionHint } from './session-hint';
+import { hasSessionHint, hasSsoHint } from './session-hint';
 
 /** Помилка входу; captchaRequired — сервер вимагає капчу (після N невдач або CAPTCHA_ON_LOGIN). */
 export class LoginError extends Error {
@@ -112,6 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile]);
 
   const logout = useCallback(async () => {
+    // Читаємо до запиту: сервер видаляє мітку разом з cookie сесії.
+    const viaSso = hasSsoHint();
     try {
       // Сервер відкликає refresh і видаляє обидві cookie (08-S2).
       await apiPost('/api/v1/auth/token/logout/');
@@ -125,7 +127,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     // Повне перезавантаження на головну: з пам'яті вкладки зникають особисті дані,
     // а захищена сторінка не встигає перекинути на /login?next=… (08-S2).
-    window.location.assign('/');
+    // Вхід через SSO: ще й завершити сесію Keycloak (він поверне на головну).
+    window.location.assign(viaSso ? '/api/v1/auth/oidc/logout/' : '/');
   }, []);
 
   const logoutAll = useCallback(async () => {

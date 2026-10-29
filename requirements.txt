@@ -6,6 +6,8 @@ django-cors-headers==4.9.0
 Pillow==12.2.0
 psycopg2-binary==2.9.12
 PyJWT==2.13.0
+# RS256 для PyJWT: проверка подписи id_token Keycloak (SSO-1).
+cryptography==50.0.2
 drf-spectacular==0.29.0
 httpx==0.28.1
 liqpay==1.0

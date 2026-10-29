@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .oidc_views import OidcCallbackView, OidcLogoutView, OidcStartView
 from .views import (
     AuthConfigView,
     CancelDeletionView,
@@ -34,6 +35,10 @@ urlpatterns = [
     path('token/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('token/logout/', LogoutView.as_view(), name='token-logout'),
     path('token/logout-all/', LogoutAllView.as_view(), name='token-logout-all'),
+    # SSO-1: при OIDC_ENABLED=false view отдают 404 (флаг читается на запрос, а не при импорте urls).
+    path('oidc/start/', OidcStartView.as_view(), name='auth-oidc-start'),
+    path('oidc/callback/', OidcCallbackView.as_view(), name='auth-oidc-callback'),
+    path('oidc/logout/', OidcLogoutView.as_view(), name='auth-oidc-logout'),
     path('password-reset/', PasswordResetRequestView.as_view(), name='auth-password-reset'),
     path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='auth-password-reset-confirm'),
     path('password-change/', PasswordChangeView.as_view(), name='auth-password-change'),

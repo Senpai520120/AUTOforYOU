@@ -16,6 +16,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 E2E_DOMAIN = '@e2e.test'
+# SSO-1: учётка ad_alice из Active Directory стека Users & Roles (не @e2e.test - см. _sso_user).
+SSO_E2E_EMAIL = 'ad_alice@corp.example.test'
 E2E_PREFIX = '[E2E]'
 E2E_VIN_PREFIX = 'E2E'
 E2E_CONTAINER_PREFIX = 'E2E-'
@@ -74,6 +76,7 @@ class Command(BaseCommand):
             self._ua_delivery_and_broker()
             self._content()
             self._landings()
+            self._sso_user()
 
         self.stdout.write('E2E seed: сводка (создано / уже было)')
         for key in sorted(set(self.created) | set(self.existing)):
@@ -106,6 +109,22 @@ class Command(BaseCommand):
             self._note('users', created)
             result[name] = user
         return result
+
+    def _sso_user(self):
+        """Пользователь для сценария @sso (frontend/e2e/sso.spec.ts), только при OIDC_ENABLED.
+
+        Исключение из правила `@e2e.test`: email обязан совпасть с учёткой ad_alice в AD, иначе SSO
+        его не найдёт. Пароля нет (вход только через Keycloak); e2e_cleanup его не трогает.
+        """
+        if not settings.OIDC_ENABLED:
+            return
+        user, created = get_user_model().objects.get_or_create(
+            email=SSO_E2E_EMAIL, defaults={'role': 'buyer', 'is_email_verified': True},
+        )
+        if created:
+            user.set_unusable_password()
+            user.save(update_fields=['password'])
+        self._note('sso_users', created)
 
     def _photo_bytes(self, name):
         path = settings.BASE_DIR / 'frontend' / 'e2e' / 'fixtures' / name
