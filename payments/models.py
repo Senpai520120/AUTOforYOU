@@ -62,6 +62,11 @@ class Payment(models.Model):
     liqpay_payment_id = models.CharField(max_length=100, blank=True, verbose_name='ID платежу LiqPay')
     liqpay_status = models.CharField(max_length=50, blank=True, verbose_name='Статус LiqPay')
     liqpay_raw = models.JSONField(null=True, blank=True, verbose_name='Сира відповідь LiqPay')
+    applied_at = models.DateTimeField(
+        null=True, blank=True, editable=False,
+        verbose_name='Ефект застосовано',
+        help_text='Коли після оплати застосовано ефект (тариф, розблокування). Порожньо = ще не застосовано; ефект один раз.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -74,6 +79,14 @@ class Payment(models.Model):
         return f'Платіж #{self.order_id} — {self.amount} {self.currency} [{self.status}]'
 
     def unlock_listing(self):
-        if self.listing and self.status == self.Status.COMPLETED:
-            self.listing.status = 'in_stock'
-            self.listing.save(update_fields=['status'])
+        """Перевести лістинг в наявність після оплати. Тільки власнику-платнику і лише з `in_transit` (F2)."""
+        listing = self.listing
+        if not listing or self.status != self.Status.COMPLETED:
+            return False
+        if self.user_id is None or listing.seller_id != self.user_id:
+            return False
+        if listing.status != 'in_transit':
+            return False
+        listing.status = 'in_stock'
+        listing.save(update_fields=['status'])
+        return True

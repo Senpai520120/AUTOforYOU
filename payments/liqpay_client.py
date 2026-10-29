@@ -16,12 +16,18 @@ import hashlib
 import hmac
 import json
 
+from integrations.base import is_placeholder
+
 LIQPAY_CHECKOUT_URL = 'https://www.liqpay.com/api/3/checkout'
 LIQPAY_API_URL = 'https://www.liqpay.com/api/3/request'
 
 
 class LiqPaySignatureError(Exception):
     pass
+
+
+class LiqPayNotConfigured(Exception):
+    """Ключ пустой или плейсхолдер: подпись с таким ключом подделывается кем угодно (F1, 1.15)."""
 
 
 class LiqPayClient:
@@ -36,7 +42,7 @@ class LiqPayClient:
         return cls(
             public_key=getattr(django_settings, 'LIQPAY_PUBLIC_KEY', ''),
             private_key=getattr(django_settings, 'LIQPAY_PRIVATE_KEY', ''),
-            sandbox=getattr(django_settings, 'LIQPAY_SANDBOX', True),
+            sandbox=getattr(django_settings, 'LIQPAY_SANDBOX', False),
         )
 
     # ── Подпись ───────────────────────────────────────────────────────────────
@@ -93,8 +99,11 @@ class LiqPayClient:
     def decode_callback(self, data: str, signature: str) -> dict:
         """
         Проверяет подпись колбэка LiqPay и возвращает распакованные данные.
-        Поднимает LiqPaySignatureError при несовпадении подписи.
+        Поднимает LiqPaySignatureError при несовпадении подписи и LiqPayNotConfigured при пустом/плейсхолдерном
+        приватном ключе (подпись пустым ключом = base64(sha1(data)) доступна любому).
         """
+        if is_placeholder(self.private_key):
+            raise LiqPayNotConfigured('LIQPAY_PRIVATE_KEY не задан.')
         expected = self._sign(data)
         if not hmac.compare_digest(expected.encode('utf-8'), str(signature).encode('utf-8')):
             raise LiqPaySignatureError(
@@ -108,7 +117,7 @@ class LiqPayClient:
     def map_status(liqpay_status: str) -> str:
         _MAP = {
             'success': 'completed',
-            'sandbox': 'completed',
+            'sandbox': 'completed',  # засчитывается только при LIQPAY_SANDBOX=true: см. LiqPayProvider.map_status
             'wait_accept': 'pending',
             'processing': 'pending',
             'failure': 'failed',

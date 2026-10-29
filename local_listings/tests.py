@@ -938,7 +938,7 @@ class TestPromoteEndpoint(APITestCase):
         self.assertGreaterEqual(len(r.data), 4)
 
 
-@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
+@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv', LIQPAY_SANDBOX=True)
 class TestCallbackAppliesTariff(APITestCase):
     def setUp(self):
 
@@ -961,6 +961,7 @@ class TestCallbackAppliesTariff(APITestCase):
             'order_id': payment.order_id,
             'status': liqpay_status,
             'payment_id': '12345',
+            'action': 'pay',
             'amount': str(payment.amount),
             'currency': payment.currency,
         }

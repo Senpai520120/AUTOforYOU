@@ -1901,9 +1901,9 @@ paths:
       description: |-
         Принимает POST-колбэк от LiqPay после оплаты.
 
-        Проверяет подпись (SHA1 от private_key + data + private_key).
+        Проверяет подпись (SHA1 от private_key + data + private_key, сравнение `hmac.compare_digest`).
 
-        При успешной оплате обновляет Payment.status и разблокирует связанный листинг.
+        Платёж блокируется на время обработки; `amount`, `currency`, `action` сверяются с заказом (расхождение - `failed`). `completed` - конечный статус, эффект применяется один раз.
 
         **csrf_exempt** — LiqPay не шлёт CSRF-токен, защита — подпись.
       summary: LiqPay webhook (callback)
@@ -1911,21 +1911,19 @@ paths:
       - payments
       responses:
         '200':
-          description: OK
+          description: 'OK; неизвестный order_id -> {"ok": false}'
         '400':
-          description: Невірний підпис або дані
+          description: '{"detail": "invalid"}: неверная подпись или данные'
         '503':
           description: Оплата не налаштована (нет ключа или LIQPAY_MODE=off)
   /api/v1/payments/liqpay/checkout/:
     post:
       operationId: v1_payments_liqpay_checkout_create
       description: |-
-        Создаёт платёж через LiqPay и возвращает checkout URL + HTML-форму.
-
-        Требует авторизации. `order_id` должен быть уникальным.
+        Старый общий checkout. Закрыт `PAYMENTS_LEGACY_CHECKOUT_ENABLED=false` (404). При включённом флаге: листинг только свой, цена и валюта определяются сервером по `purpose` (сейчас цен нет, ответ 400), `amount`, `currency`, `server_url`, `result_url` из запроса игнорируются.
 
         Режим задаёт `LIQPAY_MODE` (auto/real/sandbox/off); без ключей ответ 503.
-      summary: Создать LiqPay checkout
+      summary: Создать LiqPay checkout (старый, закрыт флагом)
       tags:
       - payments
       security:
@@ -1935,7 +1933,9 @@ paths:
         '200':
           description: checkout_url и form_data для HTML-формы
         '400':
-          description: Ошибка валидации
+          description: Ошибка валидации или purpose без серверной цены
+        '404':
+          description: Checkout закрыт флагом, листинг не найден или чужой
         '503':
           description: Оплата не налаштована или выключена (LIQPAY_MODE)
   /api/v1/pricing/calculate/:

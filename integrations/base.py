@@ -40,7 +40,7 @@ ENV_UNSET = 'не задано'
 ENV_PLACEHOLDER = 'плейсхолдер'
 
 _PLACEHOLDER_RE = re.compile(
-    r'^(your[_-].*|changeme|change[_-]me|x{3,}|<.*>|test|dummy|placeholder|none|null|todo)$', re.IGNORECASE,
+    r'^(your[_-].*|changeme.*|change[_-]?me.*|x{3,}|<.*>|test|dummy|placeholder|none|null|todo)$', re.IGNORECASE,
 )
 
 

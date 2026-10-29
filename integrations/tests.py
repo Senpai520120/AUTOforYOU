@@ -937,8 +937,14 @@ class IsPlaceholderTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertTrue(base.is_placeholder(value))
 
+    def test_change_me_prefixed_values_are_placeholders(self):
+        for value in ('changeme_xxx', 'CHANGE_ME_PRIVATE', 'change-me-key', 'changeme'):
+            with self.subTest(value=value):
+                self.assertTrue(base.is_placeholder(value))
+
     def test_real_value_is_not_placeholder(self):
         self.assertFalse(base.is_placeholder('a1b2c3d4e5f6a7b8'))
+        self.assertFalse(base.is_placeholder('exchange-key-1'))
 
 
 class ResolveModeTests(SimpleTestCase):

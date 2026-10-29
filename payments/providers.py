@@ -2,7 +2,7 @@
 
 `PaymentProvider` - интерфейс, `LiqPayProvider` - реализация поверх протокола из `liqpay_client.py`
 (подпись и формат не менялись). Режим - `LIQPAY_MODE`:
-- auto: ключи заданы и не плейсхолдеры -> режим по `LIQPAY_SANDBOX` (по умолчанию sandbox); иначе «не налаштовано»;
+- auto: ключи заданы и не плейсхолдеры -> режим по `LIQPAY_SANDBOX` (по умолчанию real: LIQPAY_SANDBOX=false); иначе «не налаштовано»;
 - sandbox: тестовые ключи кабинета LiqPay, реальные деньги не списываются (`sandbox=1`);
 - real: боевой режим (`sandbox=0`);
 - off: оплата выключена.
@@ -10,6 +10,8 @@
 Адаптер НЕ читает `PAYMENTS_ENABLED` (создание оплат закрывают views через core.c2c.payments_enabled, 6.7).
 Отказ callback при пустом ключе/режиме off (503) делает view до `decode_callback` (6.7, минимум от 06-S1).
 """
+import logging
+
 from django.conf import settings
 from rest_framework import status as http_status
 from rest_framework.response import Response
@@ -29,7 +31,9 @@ from integrations.base import (
     mode_setting_name,
 )
 
-from .liqpay_client import LiqPayClient
+from .liqpay_client import LiqPayClient, LiqPayNotConfigured
+
+logger = logging.getLogger(__name__)
 
 SANDBOX_KEY_PREFIX = 'sandbox_'   # так начинаются тестовые ключи кабинета LiqPay
 PAYMENT_UNAVAILABLE_DETAIL = 'Оплата тимчасово недоступна'
@@ -96,7 +100,7 @@ class LiqPayProvider(PaymentProvider):
                 mode, False, f'Помилка конфігурації: {setting}={value}, але немає LIQPAY_PUBLIC_KEY, LIQPAY_PRIVATE_KEY',
             )
         if value == MODE_AUTO:
-            value = MODE_SANDBOX if getattr(settings, 'LIQPAY_SANDBOX', True) else MODE_REAL
+            value = MODE_SANDBOX if getattr(settings, 'LIQPAY_SANDBOX', False) else MODE_REAL
         if value == MODE_SANDBOX:
             return ModeResolution(MODE_DEMO, True, 'Налаштовано: sandbox (реальні гроші не списуються)')
         if self._public_key().startswith(SANDBOX_KEY_PREFIX):
@@ -140,10 +144,20 @@ class LiqPayProvider(PaymentProvider):
         )
 
     def decode_callback(self, data: str, signature: str) -> dict:
-        # Проверка режима и ключей - во view (503 до БД); подпись сравнивается через hmac.compare_digest (06-S10).
+        # 503 до БД делает view; здесь вторая линия защиты (F1): режим off/невалидный/без ключей - исключение.
+        # Подпись сравнивается через hmac.compare_digest (06-S10).
+        if not self.is_configured():
+            raise LiqPayNotConfigured(self.resolution().reason)
         return self._client().decode_callback(data, signature)
 
     def map_status(self, provider_status: str) -> str:
+        # F6: «sandbox» - тестовая оплата; засчитывается только в реально выбранном режиме sandbox
+        # (resolution: LIQPAY_MODE=sandbox или auto + LIQPAY_SANDBOX=true), в боевом режиме - нет.
+        if provider_status == 'sandbox':
+            res = self.resolution()
+            if not (res.configured and res.mode == MODE_DEMO):
+                logger.warning('LiqPay: статус sandbox вне режима sandbox - оплата не засчитана')
+                return 'failed'
         return LiqPayClient.map_status(provider_status)
 
 

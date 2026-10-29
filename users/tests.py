@@ -1279,7 +1279,7 @@ class CookieAuthTests(CleanCacheTestCase):
         self._login()
         resp = self.client.post('/api/v1/payments/liqpay/callback/', {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(resp.data, {'error': 'data і signature обов’язкові.'})
+        self.assertEqual(resp.data, {'detail': 'invalid'})
 
 
 class CookieAuthAllowAnyTests(CleanCacheTestCase):

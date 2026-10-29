@@ -14,7 +14,7 @@ from tests.factories import auth_client, make_local_listing, make_user
 
 from .models import Payment
 
-PUB, PRIV = 'test_pub', 'test_priv'
+PUB, PRIV = 'test-only-public-key', 'test-only-private-key'
 KEYS = dict(LIQPAY_PUBLIC_KEY=PUB, LIQPAY_PRIVATE_KEY=PRIV, LIQPAY_MODE='sandbox')
 CHECKOUT = '/api/v1/payments/liqpay/checkout/'
 CALLBACK = '/api/v1/payments/liqpay/callback/'
@@ -22,12 +22,14 @@ SECTION_OFF = dict(C2C_ENABLED=False, C2C_PUBLIC_POSTING_ENABLED=False)
 
 
 def _signed(order_id, key=PRIV, status_='success'):
-    data = base64.b64encode(json.dumps({'order_id': order_id, 'status': status_, 'payment_id': 7}).encode()).decode()
+    payload = {'order_id': order_id, 'status': status_, 'payment_id': 7, 'action': 'pay', 'amount': '10.00',
+               'currency': 'USD'}
+    data = base64.b64encode(json.dumps(payload).encode()).decode()
     sign = base64.b64encode(hashlib.sha1((key + data + key).encode()).digest()).decode()
     return {'data': data, 'signature': sign}
 
 
-@override_settings(PAYMENTS_ENABLED=False, **KEYS)
+@override_settings(PAYMENTS_ENABLED=False, PAYMENTS_LEGACY_CHECKOUT_ENABLED=True, **KEYS)
 class TestCreationClosedByFlag(APITestCase):
     def setUp(self):
         self.user = make_user()
@@ -48,11 +50,12 @@ class TestCreationClosedByFlag(APITestCase):
     def test_site_settings_reports_payments_disabled(self):
         self.assertIs(APIClient().get('/api/v1/site-settings/').json()['payments_enabled'], False)
 
-    @override_settings(PAYMENTS_ENABLED=True)
-    def test_flag_on_checkout_creates_payment(self):
+    @override_settings(PAYMENTS_ENABLED=True, PAYMENTS_LEGACY_CHECKOUT_ENABLED=False)
+    def test_flag_on_legacy_checkout_still_404_without_its_own_flag(self):
+        # 1.15 (F2): PAYMENTS_ENABLED=true не открывает старый checkout, нужен PAYMENTS_LEGACY_CHECKOUT_ENABLED.
         resp = self.client.post(CHECKOUT, {'order_id': 'o-2', 'amount': '10.00', 'currency': 'USD'}, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertTrue(Payment.objects.filter(order_id='o-2').exists())
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(Payment.objects.exists())
 
     @override_settings(PAYMENTS_ENABLED=True)
     def test_flag_on_promote_creates_payment(self):

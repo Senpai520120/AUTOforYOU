@@ -417,7 +417,12 @@ SPECTACULAR_SETTINGS = {
 # ─── Платёжный шлюз LiqPay ────────────────────────────────────────────────────
 LIQPAY_PUBLIC_KEY = os.environ.get('LIQPAY_PUBLIC_KEY', '')
 LIQPAY_PRIVATE_KEY = os.environ.get('LIQPAY_PRIVATE_KEY', '')
-LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'true').lower() == 'true'
+# 1.15 (F6): дефолт false. Статус callback «sandbox» засчитывается как оплата только при LIQPAY_SANDBOX=true,
+# поэтому забытая переменная на проде не открывает оплату тестовой картой. Для тестовых ключей задать true явно.
+LIQPAY_SANDBOX = os.environ.get('LIQPAY_SANDBOX', 'false').strip().lower() in ('true', '1', 'yes')
+# 1.15 (F2): старый общий checkout (сумма и purpose от клиента) закрыт; включать только после серверных цен.
+PAYMENTS_LEGACY_CHECKOUT_ENABLED = os.environ.get(
+    'PAYMENTS_LEGACY_CHECKOUT_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 
 # ─── Аукционные сборы ─────────────────────────────────────────────────────────
 AUCTION_DEFAULT_MEMBER_TYPE = os.environ.get('AUCTION_DEFAULT_MEMBER_TYPE', 'broker')
@@ -689,6 +694,8 @@ if _TESTING:
     INTEGRATIONS_HTTP_TIMEOUT = 10
     LIQPAY_PUBLIC_KEY = ''
     LIQPAY_PRIVATE_KEY = ''
+    LIQPAY_SANDBOX = False  # 1.15: тесты не зависят от .env; sandbox-сценарии - override_settings
+    PAYMENTS_LEGACY_CHECKOUT_ENABLED = False
     TELEGRAM_BOT_TOKEN = ''
     TELEGRAM_BOT_USERNAME = ''
     TELEGRAM_UPDATES_MODE = 'polling'

@@ -435,6 +435,7 @@ class LocalListingPromoteView(APIView):
 
         from payments.models import Payment
         from payments.providers import get_payment_provider, unavailable_response
+        from payments.services import build_liqpay_urls
 
         provider = get_payment_provider()
         if not provider.is_configured():
@@ -456,6 +457,7 @@ class LocalListingPromoteView(APIView):
             amount=str(tariff.price),
             currency=tariff.currency,
             description=description,
+            **build_liqpay_urls(order_id),  # F5: server_url/result_url только из SITE_URL
         )
 
         return Response(

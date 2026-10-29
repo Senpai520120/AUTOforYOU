@@ -54,7 +54,8 @@ def _liqpay_sign(data_b64: str, private_key: str) -> str:
     return base64.b64encode(hashlib.sha1(raw.encode()).digest()).decode()
 
 
-def _build_callback(order_id: str, liqpay_status: str, private_key: str, public_key: str) -> dict:
+def _build_callback(order_id: str, liqpay_status: str, private_key: str, public_key: str,
+                    amount: str = '100.00', currency: str = 'USD') -> dict:
     payload = {
         'version': 3,
         'public_key': public_key,
@@ -62,8 +63,8 @@ def _build_callback(order_id: str, liqpay_status: str, private_key: str, public_
         'order_id': order_id,
         'status': liqpay_status,
         'payment_id': 99999,
-        'amount': '100.00',
-        'currency': 'USD',
+        'amount': amount,
+        'currency': currency,
     }
     data_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
     return {'data': data_b64, 'signature': _liqpay_sign(data_b64, private_key)}
@@ -239,141 +240,122 @@ class TestCalculatorAPIE2E(CleanCacheTestCase):
 #    invalid sig → отклонён; duplicate → идемпотентен
 # ══════════════════════════════════════════════════════════════════════════════
 
-_TEST_PUB  = 'test_public_key_e2e'
-_TEST_PRIV = 'test_private_key_e2e'
+_TEST_PUB = 'test-only-public-key'
+_TEST_PRIV = 'test-only-private-key'
 
 _LIQPAY_ENV = {
     'LIQPAY_PUBLIC_KEY': _TEST_PUB,
     'LIQPAY_PRIVATE_KEY': _TEST_PRIV,
     'LIQPAY_SANDBOX': True,
+    'PAYMENTS_ENABLED': True,
 }
 
 
 @override_settings(**_LIQPAY_ENV)
 class TestLiqPayPaymentFlow(TestCase):
     """
-    E2E платёжного цикла:
-    create checkout → simulate callback → verify outcome.
+    E2E платёжного цикла (после 1.15 единственный рабочий вход - promote, цена с сервера):
+    promote → simulate callback → verify outcome.
     Подпись формируется теми же алгоритмами, что и LiqPayClient.
     """
 
     def setUp(self):
-        self.seller = make_user('seller_liq@test.com')
-        self.buyer  = make_user('buyer_liq@test.com')
-        self.vehicle = make_vehicle(vin='LIQVIN000000001')
-        self.listing = make_listing(self.vehicle, self.seller, status='in_transit')
-        self.buyer_client = auth_client(self.buyer)
+        from local_listings.models import PromotionTariff
+        from tests.factories import make_local_listing
+
+        self.owner = make_user('seller_liq@test.com')
+        self.listing = make_local_listing(self.owner)
+        self.tariff, _ = PromotionTariff.objects.update_or_create(
+            code='e2e-top', defaults=dict(name='e2e', type='top', price=Decimal('99.00'), currency='UAH',
+                                          duration_days=7))
+        self.owner_client = auth_client(self.owner)
         self.anon = APIClient()
 
-    def _checkout(self, order_id='e2e-order-001'):
-        return self.buyer_client.post(CHECKOUT_URL, {
-            'order_id': order_id,
-            'amount': '100.00',
-            'currency': 'USD',
-            'description': 'E2E test',
-            'listing_id': self.listing.pk,
-        }, format='json')
+    def _checkout(self):
+        """Promote; order_id генерирует сервер. Возвращает order_id."""
+        resp = self.owner_client.post(
+            f'/api/v1/local/listings/{self.listing.pk}/promote/', {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        return resp.data['order_id']
+
+    def _callback(self, order_id, liqpay_status='success', key=_TEST_PRIV):
+        payload = _build_callback(order_id, liqpay_status, key, _TEST_PUB, amount='99.00', currency='UAH')
+        return self.anon.post(CALLBACK_URL, payload, format='json')
 
     # ── Checkout ──────────────────────────────────────────────────────────────
 
-    def test_checkout_returns_200_and_checkout_url(self):
-        resp = self._checkout()
-        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        self.assertIn('checkout_url', resp.data)
-        self.assertIn('payment_id', resp.data)
+    def test_checkout_returns_201_and_checkout_url(self):
+        order_id = self._checkout()
+        payment = Payment.objects.get(order_id=order_id)
+        self.assertEqual(payment.amount, self.tariff.price)
 
     def test_checkout_creates_pending_payment(self):
-        self._checkout('e2e-pending-001')
-        payment = Payment.objects.get(order_id='e2e-pending-001')
+        order_id = self._checkout()
+        payment = Payment.objects.get(order_id=order_id)
         self.assertEqual(payment.status, Payment.Status.PENDING)
-        self.assertEqual(payment.listing, self.listing)
+        self.assertEqual(payment.local_listing, self.listing)
 
     def test_checkout_requires_auth(self):
-        resp = self.anon.post(CHECKOUT_URL, {'order_id': 'x', 'amount': '10'}, format='json')
+        resp = self.anon.post(f'/api/v1/local/listings/{self.listing.pk}/promote/',
+                              {'tariff': self.tariff.code}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_duplicate_order_id_rejected(self):
-        self._checkout('e2e-dup-001')
-        resp = self._checkout('e2e-dup-001')
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     # ── Callback валидный ─────────────────────────────────────────────────────
 
     def test_valid_callback_completes_payment(self):
-        self._checkout('e2e-valid-001')
-        payload = _build_callback('e2e-valid-001', 'success', _TEST_PRIV, _TEST_PUB)
-
-        resp = self.anon.post(CALLBACK_URL, payload, format='json')
+        order_id = self._checkout()
+        resp = self._callback(order_id)
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertTrue(resp.data.get('ok'))
+        self.assertEqual(Payment.objects.get(order_id=order_id).status, Payment.Status.COMPLETED)
 
-        payment = Payment.objects.get(order_id='e2e-valid-001')
-        self.assertEqual(payment.status, Payment.Status.COMPLETED)
-
-    def test_valid_callback_unlocks_listing(self):
-        self._checkout('e2e-unlock-001')
-        payload = _build_callback('e2e-unlock-001', 'success', _TEST_PRIV, _TEST_PUB)
-        self.anon.post(CALLBACK_URL, payload, format='json')
-
+    def test_valid_callback_promotes_listing(self):
+        self._callback(self._checkout())
         self.listing.refresh_from_db()
-        self.assertEqual(self.listing.status, 'in_stock',
-                         'Листинг должен быть разблокирован после успешной оплаты')
+        self.assertIsNotNone(self.listing.promoted_until, 'ТОП должен быть применён после успешной оплаты')
 
     # ── Callback невалидный ───────────────────────────────────────────────────
 
     def test_invalid_signature_rejected_with_400(self):
-        self._checkout('e2e-badsig-001')
-        payload = _build_callback('e2e-badsig-001', 'success', 'WRONG_PRIVATE_KEY', _TEST_PUB)
-
-        resp = self.anon.post(CALLBACK_URL, payload, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST,
-                         'Невірний підпис має давати 400')
+        resp = self._callback(self._checkout(), key='WRONG_PRIVATE_KEY')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, 'Невірний підпис має давати 400')
 
     def test_invalid_signature_does_not_change_payment_status(self):
-        self._checkout('e2e-badsig-002')
-        payload = _build_callback('e2e-badsig-002', 'success', 'WRONG_KEY', _TEST_PUB)
-        self.anon.post(CALLBACK_URL, payload, format='json')
+        order_id = self._checkout()
+        self._callback(order_id, key='WRONG_KEY')
+        self.assertEqual(Payment.objects.get(order_id=order_id).status, Payment.Status.PENDING)
 
-        payment = Payment.objects.get(order_id='e2e-badsig-002')
-        self.assertEqual(payment.status, Payment.Status.PENDING)
-
-    def test_invalid_signature_does_not_unlock_listing(self):
-        self._checkout('e2e-badsig-003')
-        payload = _build_callback('e2e-badsig-003', 'success', 'WRONG_KEY', _TEST_PUB)
-        self.anon.post(CALLBACK_URL, payload, format='json')
-
+    def test_invalid_signature_does_not_promote_listing(self):
+        self._callback(self._checkout(), key='WRONG_KEY')
         self.listing.refresh_from_db()
-        self.assertEqual(self.listing.status, 'in_transit',
-                         'Листинг не должен разблокироваться при неверной подписи')
+        self.assertIsNone(self.listing.promoted_until)
 
     # ── Идемпотентность ───────────────────────────────────────────────────────
 
     def test_duplicate_valid_callback_idempotent(self):
-        self._checkout('e2e-idem-001')
-        payload = _build_callback('e2e-idem-001', 'success', _TEST_PRIV, _TEST_PUB)
-
-        resp1 = self.anon.post(CALLBACK_URL, payload, format='json')
-        resp2 = self.anon.post(CALLBACK_URL, payload, format='json')
+        order_id = self._checkout()
+        resp1 = self._callback(order_id)
+        self.listing.refresh_from_db()
+        first = self.listing.promoted_until
+        resp2 = self._callback(order_id)
 
         self.assertEqual(resp1.status_code, status.HTTP_200_OK)
         self.assertEqual(resp2.status_code, status.HTTP_200_OK)
-
-        # Payment создан ровно один
-        self.assertEqual(Payment.objects.filter(order_id='e2e-idem-001').count(), 1)
-
-        # Статус: completed
-        self.assertEqual(
-            Payment.objects.get(order_id='e2e-idem-001').status,
-            Payment.Status.COMPLETED,
-        )
-
-        # Листинг разблокирован, но не ещё раз
+        self.assertEqual(Payment.objects.filter(order_id=order_id).count(), 1)
+        self.assertEqual(Payment.objects.get(order_id=order_id).status, Payment.Status.COMPLETED)
         self.listing.refresh_from_db()
-        self.assertEqual(self.listing.status, 'in_stock')
+        self.assertEqual(self.listing.promoted_until, first)
 
     def test_callback_missing_data_returns_400(self):
         resp = self.anon.post(CALLBACK_URL, {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_legacy_checkout_closed_by_default(self):
+        resp = self.owner_client.post(
+            CHECKOUT_URL, {'order_id': 'x', 'amount': '0.01', 'listing_id': 1, 'purpose': 'listing_unlock'},
+            format='json')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(Payment.objects.exists())
 
 
 # ══════════════════════════════════════════════════════════════════════════════

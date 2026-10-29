@@ -69,7 +69,7 @@ REQUIRED_VARS = {
 # Значення за замовчуванням у шаблонах .env (перевіряє тест полноты шаблонів).
 PROD_TEMPLATE_VALUES = dict(
     ANTISPAM_MODE='hard', PAYMENTS_ENABLED='false', C2C_ENABLED='false', C2C_PUBLIC_POSTING_ENABLED='false',
-    DEBUG='false', TURNSTILE_SECRET_KEY='',
+    DEBUG='false', TURNSTILE_SECRET_KEY='', LIQPAY_SANDBOX='false', PAYMENTS_LEGACY_CHECKOUT_ENABLED='false',
 )
 DEV_TEMPLATE_VALUES = dict(ANTISPAM_MODE='soft', C2C_ENABLED='true', PAYMENTS_ENABLED='false')
 
@@ -165,6 +165,20 @@ def check_flags() -> list:
         findings.append(Finding(WARNING, 'PAYMENTS_ENABLED=true (режим розробки)'))
     else:
         findings.append(Finding(OK, 'PAYMENTS_ENABLED=false'))
+    if _flag('PAYMENTS_LEGACY_CHECKOUT_ENABLED') and prod:
+        findings.append(Finding(ERROR, 'PAYMENTS_LEGACY_CHECKOUT_ENABLED=true: старий checkout (сума від клієнта) '
+                                       'має бути закритий (знахідка F2, задача 1.15)'))
+    if payments_enabled() and prod and getattr(settings, 'LIQPAY_SANDBOX', False):
+        findings.append(Finding(WARNING, 'LIQPAY_SANDBOX=true при увімкнених платежах: оплата йде тестовою карткою '
+                                         '(для бойових ключів задайте LIQPAY_SANDBOX=false)'))
+    if prod:
+        from integrations.base import MODE_DEMO
+        from payments.providers import LiqPayProvider
+        provider = LiqPayProvider()
+        res = provider.resolution()
+        if res.configured and res.mode == MODE_DEMO and not provider._public_key().startswith('sandbox_'):
+            findings.append(Finding(ERROR, 'LiqPay працює в режимі sandbox, але LIQPAY_PUBLIC_KEY не sandbox_-ключ: '
+                                           'бойові ключі в тестовому режимі (задайте LIQPAY_SANDBOX=false / LIQPAY_MODE=real)'))
     for name in FROZEN_MODULE_FLAGS:
         if _flag(name):
             findings.append(Finding(WARNING, f'{name}=true: модуль заморожено на ВОЛНІ-1, тримайте false'))

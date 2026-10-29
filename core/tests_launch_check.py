@@ -200,6 +200,44 @@ class FlagsTests(LaunchCheckTestCase):
         self.assertOk(code, out)
         self.assertIn('PAYMENTS_ENABLED=true (режим розробки)', out)
 
+    def test_legacy_checkout_in_prod_is_error(self):
+        code, out = self.run_check(PAYMENTS_LEGACY_CHECKOUT_ENABLED=True)
+        self.assertFails(code, out, 'PAYMENTS_LEGACY_CHECKOUT_ENABLED=true')
+
+    def test_legacy_checkout_off_is_clean(self):
+        code, out = self.run_check(PAYMENTS_LEGACY_CHECKOUT_ENABLED=False)
+        self.assertOk(code, out)
+        self.assertNotIn('PAYMENTS_LEGACY_CHECKOUT_ENABLED', out)
+
+    def test_sandbox_with_enabled_payments_in_prod_warns(self):
+        # PAYMENTS_ENABLED=true в проде само даёт ошибку; нас интересует именно предупреждение про sandbox.
+        _, out = self.run_check(PAYMENTS_ENABLED=True, LIQPAY_SANDBOX=True)
+        self.assertIn('LIQPAY_SANDBOX=true при увімкнених платежах', out)
+
+    def test_sandbox_false_with_enabled_payments_does_not_warn(self):
+        _, out = self.run_check(PAYMENTS_ENABLED=True, LIQPAY_SANDBOX=False)
+        self.assertNotIn('LIQPAY_SANDBOX=true', out)
+
+    def test_real_keys_in_sandbox_mode_in_prod_is_error(self):
+        code, out = self.run_check(LIQPAY_PUBLIC_KEY='i12345live', LIQPAY_PRIVATE_KEY='test-only-liqpay-private',
+                                   LIQPAY_MODE='auto', LIQPAY_SANDBOX=True)
+        self.assertFails(code, out, 'бойові ключі в тестовому режимі')
+
+    def test_sandbox_keys_in_sandbox_mode_are_fine(self):
+        code, out = self.run_check(LIQPAY_PUBLIC_KEY='sandbox_i123', LIQPAY_PRIVATE_KEY='test-only-liqpay-private',
+                                   LIQPAY_MODE='auto', LIQPAY_SANDBOX=True)
+        self.assertOk(code, out)
+
+    def test_real_keys_in_real_mode_are_fine(self):
+        code, out = self.run_check(LIQPAY_PUBLIC_KEY='i12345live', LIQPAY_PRIVATE_KEY='test-only-liqpay-private',
+                                   LIQPAY_MODE='auto', LIQPAY_SANDBOX=False)
+        self.assertOk(code, out)
+
+    def test_real_keys_in_sandbox_mode_in_debug_not_error(self):
+        code, out = self.run_check(LIQPAY_PUBLIC_KEY='i12345live', LIQPAY_PRIVATE_KEY='test-only-liqpay-private',
+                                   LIQPAY_MODE='auto', LIQPAY_SANDBOX=True, DEBUG=True)
+        self.assertNotIn('бойові ключі в тестовому режимі', out)
+
     def test_public_posting_in_prod_is_error(self):
         code, out = self.run_check(C2C_ENABLED=True, C2C_PUBLIC_POSTING_ENABLED=True)
         self.assertFails(code, out, 'C2C_PUBLIC_POSTING_ENABLED=true')
