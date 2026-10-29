@@ -86,7 +86,7 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 ## E2E (Playwright) — правила
 - Запускать только из `frontend/`.
 - Стек: `docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml up -d --build` (env из `.env.e2e`, боевой `.env` не подхватывается; шаблон `.env.e2e.example`), затем `docker compose -p autoforyou-e2e exec -T redis redis-cli FLUSHALL` (сброс троттлинга), затем `... exec -T backend python manage.py e2e_seed`. Сайт — `http://localhost` (nginx), не `:3000`. Dev-стек занимает те же порты 80 — перед прогоном его остановить.
-- Постоянное разрешение владельца (2026-10-13), спрашивать не нужно: для e2e — `docker compose down` dev-стека **без `-v`**, подъём e2e-стека, после прогона `docker compose -p autoforyou-e2e … down -v` (e2e-стек с томами) и `docker compose up -d` dev-стека обратно. Тома dev-стека (`-v`) не трогать никогда.
+- Постоянное разрешение владельца (2026-10-13), спрашивать не нужно: для e2e — `docker compose down` dev-стека **без `-v`**, подъём e2e-стека, после прогона `bash scripts/e2e-cleanup.sh` (снимает e2e-стек с томами и чистит висячие/устаревшие образы — обязательно после каждого прогона, иначе диск заполняется) и `docker compose up -d` dev-стека обратно. Тома dev-стека (`-v`) не трогать никогда.
 - Импорт `test` — из `e2e/fixtures`. Роли — через `storageState` (`e2e/.auth/<role>.json`). Новые пользователи — только `…@e2e.test`, тестовые записи — с префиксом `[E2E]`.
 - Негативные проверки — через отсутствие сетевого запроса (`helpers/network.ts`) и `validity.*`, а не мгновенное «элемента нет». Ошибки сверять по тексту, не по CSS-классу.
 - `fill()` на `input[type=number]` с нечисловым значением кидает исключение — печатать с клавиатуры.
