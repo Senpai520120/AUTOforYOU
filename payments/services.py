@@ -72,7 +72,10 @@ def apply_payment_effect(payment) -> bool:
     Строка платежа блокируется `select_for_update`, повторный вызов видит `applied_at` и ничего не делает.
     Возвращает True, если эффект применён сейчас.
     """
-    locked = Payment.objects.select_for_update().select_related('listing', 'local_listing', 'tariff').get(pk=payment.pk)
+    # of=('self',): в PostgreSQL FOR UPDATE нельзя применить к nullable-стороне LEFT JOIN (listing/local_listing/tariff),
+    # блокируем только строку платежа; связанные объекты подтягиваются тем же запросом без блокировки.
+    locked = Payment.objects.select_for_update(of=('self',)).select_related(
+        'listing', 'local_listing', 'tariff').get(pk=payment.pk)
     if locked.status != Payment.Status.COMPLETED or locked.applied_at is not None:
         return False
     locked.unlock_listing()

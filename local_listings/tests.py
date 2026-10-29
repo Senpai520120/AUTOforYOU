@@ -783,6 +783,7 @@ def _make_tariff(code='test_renew', ttype='renew', price='49.00', days=30):
 
 class TestExpiresAt(APITestCase):
     def setUp(self):
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
         self.region = _make_region('exp-обл')
         self.city = _make_city(self.region, 'exp-місто')
         self.owner = make_user('exp@test.com')
@@ -1033,6 +1034,7 @@ class TestCallbackAppliesTariff(APITestCase):
 
 class TestCatalogTopSorting(APITestCase):
     def setUp(self):
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
         self.region = _make_region('sort-обл')
         self.city = _make_city(self.region, 'sort-місто')
         self.owner = make_user('sort@test.com')
@@ -1059,6 +1061,7 @@ class TestCatalogTopSorting(APITestCase):
 
 class TestContactEndpoint(APITestCase):
     def setUp(self):
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
         self.owner = make_user('cowner@test.com')
         self.buyer = make_user('cbuyer@test.com')
         self.region = _make_region('Контакт-область')
@@ -1258,6 +1261,7 @@ class TestCatalogQueryCount(APITestCase):
     """
 
     def setUp(self):
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
         self.owner = make_user('qc_owner@test.com')
         self.region = _make_region('QC-область')
         self.city = _make_city(self.region, 'QC-місто')
