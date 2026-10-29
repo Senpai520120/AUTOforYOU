@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
+import { getErrorMessage } from '@/lib/errors';
 import { getFavoriteStatus, addFavorite, removeFavorite } from '@/api/favorites';
 
 interface Props {
@@ -15,12 +16,15 @@ export default function HeartButton({ listingType, listingId, size = 'md' }: Pro
   const router = useRouter();
   const [isFav, setIsFav] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     getFavoriteStatus(listingType, listingId)
       .then(d => setIsFav(d.is_favorite))
-      .catch(() => {});
+      .catch(() => {
+        // Початковий статус не критичний: сердечко лишається незаповненим, дія покаже помилку.
+      });
   }, [user, listingType, listingId]);
 
   const toggle = async (e: React.MouseEvent) => {
@@ -29,6 +33,7 @@ export default function HeartButton({ listingType, listingId, size = 'md' }: Pro
     if (!user) { router.push('/login'); return; }
     if (loading) return;
     setLoading(true);
+    setError(null);
     try {
       if (isFav) {
         await removeFavorite(listingType, listingId);
@@ -37,8 +42,8 @@ export default function HeartButton({ listingType, listingId, size = 'md' }: Pro
         await addFavorite(listingType, listingId);
         setIsFav(true);
       }
-    } catch {
-      // silently ignore
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -47,6 +52,7 @@ export default function HeartButton({ listingType, listingId, size = 'md' }: Pro
   const sz = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
 
   return (
+    <span className="relative inline-flex">
     <button
       onClick={toggle}
       aria-label={isFav ? 'Прибрати з обраного' : 'Додати в обране'}
@@ -70,5 +76,11 @@ export default function HeartButton({ listingType, listingId, size = 'md' }: Pro
         />
       </svg>
     </button>
+    {error && (
+      <span role="alert" className="absolute right-0 top-full mt-1 z-20 whitespace-nowrap rounded bg-red-600 px-2 py-1 text-xs text-white shadow">
+        {error}
+      </span>
+    )}
+    </span>
   );
 }

@@ -5,11 +5,15 @@ from .cache import invalidate
 from .models import (
     AuctionFeeTier,
     AuctionFixedFee,
+    BrokerServiceFee,
+    CalculatorSettings,
+    CustomsCalcRule,
     CustomsExciseRate,
     EuToUaDeliveryRate,
     ExchangeRate,
     OceanFreightRate,
     PensionFundBracket,
+    UaDeliveryRate,
     UsLandRoute,
 )
 
@@ -52,3 +56,23 @@ def _inv_excise(sender, **kwargs):
 @receiver([post_save, post_delete], sender=PensionFundBracket)
 def _inv_pension(sender, **kwargs):
     invalidate('pension')
+
+
+@receiver([post_save, post_delete], sender=CustomsCalcRule)
+def _inv_rules(sender, **kwargs):
+    invalidate('rules')
+
+
+@receiver([post_save, post_delete], sender=CalculatorSettings)
+def _inv_settings(sender, **kwargs):
+    invalidate('settings')
+
+
+@receiver([post_save, post_delete], sender=UaDeliveryRate)
+def _inv_ua_delivery(sender, **kwargs):
+    invalidate('ua_delivery')
+
+
+@receiver([post_save, post_delete], sender=BrokerServiceFee)
+def _inv_broker_fees(sender, **kwargs):
+    invalidate('broker_fees')

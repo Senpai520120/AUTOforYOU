@@ -9,7 +9,7 @@
 Сетки аукционных сборов — baseline (сверить с тарифом брокера).
 """
 from dataclasses import asdict, dataclass, field
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 
 ZERO = Decimal('0')
 TWO_PLACES = Decimal('0.01')
@@ -95,6 +95,16 @@ class RateSnapshot:
     rates_date: str = ''
     pension_fund_rate: Decimal = ZERO
     meta: dict = field(default_factory=dict)
+    # Фактические даты курсов (02-Q5, 02-Q10): не позже даты расчёта
+    usd_to_uah_date: str = ''
+    usd_to_eur_date: str = ''
+    # Правило растаможки, по которому считали (2.5, Q5): id и значения полей
+    rule: dict = field(default_factory=dict)
+    # Дата расчёта для выбора брекета внутри calculate_landed_cost
+    rates_on_date: object = None
+    # После растаможки (2.7): доставка по Украине (None = «уточнюється менеджером») и услуги брокера
+    ua_delivery_cost_usd: Decimal | None = None
+    broker_services: list = field(default_factory=list)  # [{'title': str, 'amount_usd': Decimal, ...}]
 
 
 # ─── Входные данные ───────────────────────────────────────────────────────────
@@ -106,7 +116,7 @@ class LandedCostInputs:
     fuel_type: str   # petrol / diesel / electric / hybrid / phev
     vehicle_year: int
     calculation_year: int
-    battery_capacity_kwh: int = 0  # для EV/PHEV — ёмкость батареи в кВт·ч
+    battery_capacity_kwh: Decimal = ZERO  # для EV/PHEV — ёмкость батареи в кВт·ч (напр. 75.5)
 
 
 # ─── Детализация расчёта ──────────────────────────────────────────────────────
@@ -138,26 +148,42 @@ class LandedCostBreakdown:
     total_usd: Decimal
     total_uah: Decimal
     is_estimate: bool = True
+    # 2.7: после растаможки, в таможенную стоимость не входят
+    ua_delivery_usd: Decimal | None = None
+    ua_delivery_pending: bool = True
+    broker_services: list = field(default_factory=list)  # [{'title': str, 'amount_usd': Decimal}]
+    broker_services_total_usd: Decimal = ZERO
+    broker_services_pending: bool = True
 
     def to_dict(self) -> dict:
-        return {k: str(v) if isinstance(v, Decimal) else v for k, v in asdict(self).items()}
+        def conv(v):
+            if isinstance(v, Decimal):
+                return str(v)
+            if isinstance(v, list):
+                return [conv(x) for x in v]
+            if isinstance(v, dict):
+                return {k: conv(x) for k, x in v.items()}
+            return v
+        return {k: conv(v) for k, v in asdict(self).items()}
 
 
 # ─── Возрастной коэффициент ───────────────────────────────────────────────────
 
-def calc_age_coeff(vehicle_year: int, calculation_year: int) -> Decimal:
+def calc_age_coeff(vehicle_year: int, calculation_year: int, min_coeff: int = 1, max_coeff: int = 15,
+                   offset_years: int = 0) -> Decimal:
     """
-    Коэффициент возраста = min(15, max(1, год_расчёта − год_выпуска)).
+    Коэффициент возраста = min(max_coeff, max(min_coeff, год_расчёта − год_выпуска − offset_years)).
 
-    Потолок 15 — авто старше 15 лет таможатся с коэффициентом 15 (выше не растёт).
-    Уточнить у брокера: часть брокеров считает (год − год_выпуска − 1).
+    Параметры - из правила растаможки (CustomsCalcRule, 02-C6); значения по умолчанию воспроизводят
+    прежнюю формулу. Часть брокеров считает (год − год_выпуска − 1) - это offset_years=1.
     """
-    return _d(min(15, max(1, calculation_year - vehicle_year)))
+    return _d(min(max_coeff, max(min_coeff, calculation_year - vehicle_year - offset_years)))
 
 
 # ─── Основной расчёт «под ключ» ───────────────────────────────────────────────
 
-def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> LandedCostBreakdown:
+def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension_brackets=None,
+                          rule=None) -> LandedCostBreakdown:
     """
     Рассчитывает стоимость авто «под ключ» в Украине.
 
@@ -171,7 +197,13 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> Land
       6. Пенсионный сбор = итоговая_стоимость_uah × pension_rate
       7. Итого USD = auction_price + auction_fee + us_land + ocean + eu_to_ua + duty_usd
       8. Итого UAH = итого_USD × usd_to_uah + excise_uah + vat_uah + pension_uah
+
+    pension_brackets и rule (2.5, Q5): брекет пенсионного сбора выбирается здесь по базе из правила
+    (rule.pension_bracket_base), ставка применяется к rule.pension_rate_base. Без брекетов -
+    берётся готовая rates.pension_fund_rate (прежнее поведение, юнит-тесты формулы).
+    Брекет не найден - MissingRate('PensionFundBracket').
     """
+    rule = rule or DEFAULT_RULE
     price = _d(inputs.auction_price_usd)
     engine_cc = inputs.engine_cc
     is_ev_type = inputs.fuel_type in ('electric', 'phev')
@@ -180,7 +212,10 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> Land
     auction_fee_total = _d(rates.auction_fee.total)
 
     # 2. Таможенная стоимость (CIF до порта ЕС = auction + US land + ocean)
-    customs_value_usd = (price + _d(rates.us_land_cost_usd) + _d(rates.ocean_freight_usd)).quantize(TWO_PLACES, ROUND_HALF_UP)
+    customs_value_usd = price + _d(rates.us_land_cost_usd) + _d(rates.ocean_freight_usd)
+    if rule.customs_value_includes_eu_to_ua:  # 02-Q7: по заключению брокера (CustomsCalcRule)
+        customs_value_usd += _d(rates.eu_to_ua_cost_usd)
+    customs_value_usd = customs_value_usd.quantize(TWO_PLACES, ROUND_HALF_UP)
 
     # 3. Акциз
     # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026; финал подтверждает таможенный брокер
@@ -206,16 +241,37 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> Land
 
     # 6. Итого USD (аукцион + логистика + пошлина)
     total_logistic_usd = (price + auction_fee_total + _d(rates.us_land_cost_usd) + _d(rates.ocean_freight_usd) + _d(rates.eu_to_ua_cost_usd)).quantize(TWO_PLACES, ROUND_HALF_UP)
-    total_usd = (total_logistic_usd + duty_usd).quantize(TWO_PLACES, ROUND_HALF_UP)
+    # 2.7: доставка по Украине и услуги брокера - после растаможки, в таможенную базу не входят.
+    ua_delivery_usd = _d(rates.ua_delivery_cost_usd) if rates.ua_delivery_cost_usd is not None else None
+    broker_services = [{'title': x['title'], 'amount_usd': _d(x['amount_usd'])} for x in rates.broker_services]
+    broker_total = sum((x['amount_usd'] for x in broker_services), ZERO)
+    after_customs_usd = (ua_delivery_usd or ZERO) + broker_total
+    total_usd = (total_logistic_usd + duty_usd + after_customs_usd).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     # 7. Пенсионный сбор от общей стоимости авто в UAH
     # ПРОВЕРИТЬ по действующему законодательству Украины
     pre_pension_uah = (total_logistic_usd * _d(rates.usd_to_uah) + excise_uah + duty_uah + vat_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
-    pension_fund_uah = (pre_pension_uah * _d(rates.pension_fund_rate)).quantize(TWO_PLACES, ROUND_HALF_UP)
+    bases = {
+        PENSION_BASE_AUCTION_PRICE: (price * _d(rates.usd_to_uah)).quantize(TWO_PLACES, ROUND_HALF_UP),
+        PENSION_BASE_CUSTOMS_VALUE: customs_value_uah,
+        PENSION_BASE_CUSTOMS_WITH_TAXES: (customs_value_uah + duty_uah + excise_uah + vat_uah).quantize(
+            TWO_PLACES, ROUND_HALF_UP),
+        PENSION_BASE_TOTAL: pre_pension_uah,
+    }
+    pension_rate = _d(rates.pension_fund_rate)
+    if pension_brackets is not None:
+        bracket = pick_pension_bracket(pension_brackets, bases[rule.pension_bracket_base], rates.rates_on_date)
+        if bracket is None:
+            raise MissingRate('PensionFundBracket')
+        pension_rate = _d(bracket.rate)
+        rates.pension_fund_rate = pension_rate
+        rates.meta = {**rates.meta, 'pension_bracket_id': bracket.pk}
+    pension_fund_uah = (bases[rule.pension_rate_base] * pension_rate).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     # 8. Итого UAH
     customs_total_uah = excise_uah + duty_uah + vat_uah + pension_fund_uah
-    total_uah = (total_logistic_usd * _d(rates.usd_to_uah) + customs_total_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
+    total_uah = ((total_logistic_usd + after_customs_usd) * _d(rates.usd_to_uah)
+                 + customs_total_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     return LandedCostBreakdown(
         auction_price_usd=price,
@@ -239,6 +295,11 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot) -> Land
         total_usd=total_usd,
         total_uah=total_uah,
         is_estimate=True,
+        ua_delivery_usd=ua_delivery_usd,
+        ua_delivery_pending=ua_delivery_usd is None,
+        broker_services=broker_services,
+        broker_services_total_usd=broker_total,
+        broker_services_pending=not broker_services,
     )
 
 
@@ -254,11 +315,17 @@ def build_rate_snapshot_from_db(
     excise_rate,
     vehicle_year: int,
     calculation_year: int,
-    pension_rate,
+    pension_rate=None,
     rates_date: str = '',
     meta: dict = None,
+    rule=None,
+    on_date=None,
 ) -> RateSnapshot:
-    """Собирает RateSnapshot из объектов моделей Django."""
+    """Собирает RateSnapshot из объектов моделей Django (или заглушек с теми же атрибутами).
+
+    pension_rate=None: брекет выберет calculate_landed_cost по правилу (2.5).
+    """
+    rule = rule or DEFAULT_RULE
     ev_kwh = excise_rate.ev_excise_eur_per_kwh
     return RateSnapshot(
         auction_fee=auction_fee_breakdown,
@@ -269,10 +336,11 @@ def build_rate_snapshot_from_db(
         usd_to_eur=_d(usd_to_eur_rate.rate),
         excise_eur_per_100cc=_d(excise_rate.eur_per_100cc),
         ev_excise_eur_per_kwh=_d(ev_kwh) if ev_kwh is not None else Decimal('0'),
-        age_coefficient=calc_age_coeff(vehicle_year, calculation_year),
+        age_coefficient=calc_age_coeff(vehicle_year, calculation_year, rule.age_coeff_min, rule.age_coeff_max,
+                                       rule.age_offset_years),
         duty_rate=_d(excise_rate.duty_rate),
         vat_rate=_d(excise_rate.vat_rate),
-        pension_fund_rate=_d(pension_rate.rate),
+        pension_fund_rate=_d(pension_rate.rate) if pension_rate is not None else ZERO,
         rates_date=rates_date,
         meta=meta or {
             'us_land_route_id': us_land_route.pk,
@@ -281,8 +349,12 @@ def build_rate_snapshot_from_db(
             'usd_to_uah_rate_id': usd_to_uah_rate.pk,
             'usd_to_eur_rate_id': usd_to_eur_rate.pk,
             'excise_rate_id': excise_rate.pk,
-            'pension_bracket_id': pension_rate.pk,
+            **({'pension_bracket_id': pension_rate.pk} if pension_rate is not None else {}),
         },
+        usd_to_uah_date=_iso(getattr(usd_to_uah_rate, 'date', '')),
+        usd_to_eur_date=_iso(getattr(usd_to_eur_rate, 'date', '')),
+        rule=rule_to_dict(rule),
+        rates_on_date=on_date,
     )
 
 
@@ -305,5 +377,371 @@ def rate_snapshot_to_dict(rates: RateSnapshot) -> dict:
         'vat_rate': str(rates.vat_rate),
         'pension_fund_rate': str(rates.pension_fund_rate),
         'rates_date': rates.rates_date,
+        'usd_to_uah_date': rates.usd_to_uah_date,
+        'usd_to_eur_date': rates.usd_to_eur_date,
+        'rule': rates.rule,
         'meta': rates.meta,
+        'ua_delivery_cost_usd': str(rates.ua_delivery_cost_usd) if rates.ua_delivery_cost_usd is not None else None,
+        'broker_services': [{k: str(v) if isinstance(v, Decimal) else v for k, v in x.items()}
+                            for x in rates.broker_services],
+    }
+
+
+# ─── Правило растаможки и подбор тарифов (задача 2.5) ───────────────────────────
+# Без Django и ORM: на вход - списки объектов тарифов (из pricing/cache.py) или заглушки.
+
+PENSION_BASE_AUCTION_PRICE = 'auction_price'          # цена аукциона × курс
+PENSION_BASE_CUSTOMS_VALUE = 'customs_value'          # таможенная стоимость, грн
+PENSION_BASE_CUSTOMS_WITH_TAXES = 'customs_value_with_taxes'  # таможенная + пошлина + акциз + НДС
+PENSION_BASE_TOTAL = 'total_before_pension'           # всё, кроме самого сбора (прежняя формула)
+
+EV_FUEL_TYPES = ('electric', 'phev')
+
+
+class MissingRate(Exception):
+    """Нет активной ставки/правила для расчёта (view отвечает 422)."""
+
+
+@dataclass
+class DefaultRule:
+    """Значения по умолчанию = прежнее поведение кода, а не юридическая трактовка (Q5)."""
+    pk: object = None
+    pension_bracket_base: str = PENSION_BASE_AUCTION_PRICE
+    pension_rate_base: str = PENSION_BASE_TOTAL
+    customs_value_includes_eu_to_ua: bool = False
+    age_coeff_min: int = 1
+    age_coeff_max: int = 15
+    age_offset_years: int = 0
+    confirmed_by_broker: bool = False
+    confirmed_at: object = None
+    valid_from: object = None
+
+
+DEFAULT_RULE = DefaultRule()
+
+_RULE_FIELDS = ('pension_bracket_base', 'pension_rate_base', 'customs_value_includes_eu_to_ua',
+                'age_coeff_min', 'age_coeff_max', 'age_offset_years', 'confirmed_by_broker')
+
+
+def _iso(value) -> str:
+    if not value:
+        return ''
+    return value.isoformat() if hasattr(value, 'isoformat') else str(value)
+
+
+def rule_to_dict(rule) -> dict:
+    data = {'id': getattr(rule, 'pk', None), **{f: getattr(rule, f) for f in _RULE_FIELDS}}
+    data['confirmed_at'] = _iso(getattr(rule, 'confirmed_at', None)) or None
+    data['valid_from'] = _iso(getattr(rule, 'valid_from', None)) or None
+    return data
+
+
+def is_active(obj, on_date) -> bool:
+    return obj.valid_from <= on_date and (obj.valid_to is None or obj.valid_to >= on_date)
+
+
+def _latest(items):
+    """Из нескольких подходящих записей побеждает самый поздний valid_from, при равенстве - больший pk (02-Q4)."""
+    items = list(items)
+    if not items:
+        return None
+    return max(items, key=lambda o: (o.valid_from, o.pk or 0))
+
+
+def pick_active(items, on_date, predicate=lambda o: True):
+    return _latest(o for o in items if is_active(o, on_date) and predicate(o))
+
+
+def lookup_tier(tiers, auction, bid, member_type, payment_type, title_type, on_date):
+    """AuctionFeeTier: приоритет точного title_type, затем 'any' (смысл прежнего _lookup_tier)."""
+    bid = _d(bid)
+
+    def fits(t, title):
+        return (t.auction == auction and t.member_type == member_type and t.payment_type == payment_type
+                and t.title_type == title and t.bid_min <= bid and (t.bid_max is None or t.bid_max >= bid))
+
+    return (pick_active(tiers, on_date, lambda t: fits(t, title_type))
+            or pick_active(tiers, on_date, lambda t: fits(t, 'any')))
+
+
+def lookup_fixed_fees(fees, auction, title_type, on_date):
+    """Фиксированные сборы: по одному на тип (gate - точный title_type или 'any'), самый свежий."""
+    result = []
+    for fee_type in ('gate', 'environmental', 'virtual_bid'):
+        if fee_type == 'gate':
+            fee = (pick_active(fees, on_date, lambda f: f.auction == auction and f.fee_type == 'gate'
+                               and f.title_type == title_type)
+                   or pick_active(fees, on_date, lambda f: f.auction == auction and f.fee_type == 'gate'
+                                  and f.title_type == 'any'))
+        else:
+            fee = pick_active(fees, on_date, lambda f, ft=fee_type: f.auction == auction and f.fee_type == ft)
+        if fee is not None:
+            result.append(fee)
+    return result
+
+
+def pick_exchange_rate(rates, from_currency, to_currency, on_date):
+    """Курс с максимальной датой не позже on_date; курса «из будущего» нет (02-Q5)."""
+    candidates = [r for r in rates if r.from_currency == from_currency and r.to_currency == to_currency
+                  and r.date <= on_date]
+    return max(candidates, key=lambda r: (r.date, r.pk or 0)) if candidates else None
+
+
+def pick_pension_bracket(brackets, base_uah, on_date):
+    """Брекет: min <= база <= max; на общей границе - верхний брекет, затем самый свежий (02-Q2)."""
+    base_uah = _d(base_uah)
+    candidates = [b for b in brackets
+                  if (on_date is None or is_active(b, on_date))
+                  and b.min_value_uah <= base_uah and (b.max_value_uah is None or b.max_value_uah >= base_uah)]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda b: (b.min_value_uah, b.valid_from, b.pk or 0))
+
+
+@dataclass
+class RateCatalog:
+    auction_fee_tiers: list = field(default_factory=list)
+    auction_fixed_fees: list = field(default_factory=list)
+    us_land_routes: list = field(default_factory=list)
+    ocean_freight: list = field(default_factory=list)
+    eu_to_ua: list = field(default_factory=list)
+    exchange_rates: list = field(default_factory=list)
+    excise_rates: list = field(default_factory=list)
+    pension_brackets: list = field(default_factory=list)
+    customs_rules: list = field(default_factory=list)
+    ua_delivery_rates: list = field(default_factory=list)
+    broker_service_fees: list = field(default_factory=list)
+
+
+@dataclass
+class SelectedRates:
+    tier: object = None
+    fixed_fees: list = field(default_factory=list)
+    us_land: object = None
+    ocean: object = None
+    eu_to_ua: object = None
+    usd_to_uah: object = None
+    usd_to_eur: object = None
+    excise: object = None
+    rule: object = None
+    pension_brackets: list = field(default_factory=list)
+    missing: list = field(default_factory=list)
+    ua_delivery: object = None          # 2.7: None - не выбрано или нет тарифа (pending, не 422)
+    broker_fees: list = field(default_factory=list)
+
+    @property
+    def applied(self) -> list:
+        return [x for x in (self.tier, self.us_land, self.ocean, self.eu_to_ua, self.excise, self.rule,
+                            self.ua_delivery) if x] + list(self.fixed_fees) + list(self.broker_fees)
+
+    @property
+    def rates_updated_on(self):
+        """Дата последнего обновления применённых ставок (максимум valid_from) - «Ставки оновлено»."""
+        dates = [x.valid_from for x in self.applied if getattr(x, 'valid_from', None)]
+        return max(dates) if dates else None
+
+
+def select_rates(catalog: RateCatalog, params: dict, on_date) -> SelectedRates:
+    """Подбор тарифов на дату расчёта. Не найденное - в missing (формат view 422 сохраняется)."""
+    auction = params['auction']
+    member_type = params['member_type']
+    payment_type = params['payment_type']
+    title_type = params['title_type']
+    bid = _d(params['auction_price_usd'])
+    loc = params['auction_location'].lower()
+    us_port = params['us_port'].lower()
+    eu_port = params['eu_port']
+    fuel_type = params['fuel_type']
+    engine_cc = params['engine_cc']
+
+    sel = SelectedRates()
+    sel.tier = lookup_tier(catalog.auction_fee_tiers, auction, bid, member_type, payment_type, title_type, on_date)
+    sel.fixed_fees = lookup_fixed_fees(catalog.auction_fixed_fees, auction, title_type, on_date)
+    sel.us_land = pick_active(catalog.us_land_routes, on_date,
+                              lambda r: r.auction_location.lower() == loc and r.us_port.lower() == us_port)
+    sel.ocean = pick_active(catalog.ocean_freight, on_date,
+                            lambda r: r.us_port.lower() == us_port and r.eu_port == eu_port)
+    sel.eu_to_ua = pick_active(catalog.eu_to_ua, on_date, lambda r: r.eu_port == eu_port)
+    sel.usd_to_uah = pick_exchange_rate(catalog.exchange_rates, 'USD', 'UAH', on_date)
+    sel.usd_to_eur = pick_exchange_rate(catalog.exchange_rates, 'USD', 'EUR', on_date)
+    # Акциз: из подходящих по объёму - с самым большим engine_cc_min, затем самый свежий.
+    excise = [r for r in catalog.excise_rates
+              if is_active(r, on_date) and r.fuel_type == fuel_type and r.engine_cc_min <= engine_cc
+              and (r.engine_cc_max is None or r.engine_cc_max >= engine_cc)]
+    sel.excise = max(excise, key=lambda r: (r.engine_cc_min, r.valid_from, r.pk or 0)) if excise else None
+    sel.rule = pick_active(catalog.customs_rules, on_date)
+    sel.pension_brackets = [b for b in catalog.pension_brackets if is_active(b, on_date)]
+    # 2.7: необязательные - их отсутствие не 422, а «уточнюється менеджером».
+    sel.ua_delivery = pick_ua_delivery(catalog.ua_delivery_rates, params.get('ua_delivery_rate'), eu_port, on_date)
+    sel.broker_fees = sorted((f for f in catalog.broker_service_fees if is_active(f, on_date)),
+                             key=lambda f: (f.sort_order, f.pk or 0))
+
+    if not sel.tier:
+        sel.missing.append(f'AuctionFeeTier для {auction} / {member_type}/{payment_type}/{title_type} / ${bid}')
+    if not sel.us_land:
+        sel.missing.append(f'UsLandRoute для {params["auction_location"]} → {params["us_port"]}')
+    if not sel.ocean:
+        sel.missing.append(f'OceanFreightRate для {params["us_port"]} → {eu_port}')
+    if not sel.eu_to_ua:
+        sel.missing.append(f'EuToUaDeliveryRate для {eu_port}')
+    if not sel.usd_to_uah:
+        sel.missing.append('ExchangeRate USD→UAH')
+    if not sel.usd_to_eur:
+        sel.missing.append('ExchangeRate USD→EUR')
+    if not sel.excise:
+        sel.missing.append(f'CustomsExciseRate для {fuel_type}')
+    elif fuel_type in EV_FUEL_TYPES and sel.excise.ev_excise_eur_per_kwh is None:
+        sel.missing.append(f'CustomsExciseRate: немає ставки акцизу EV (EUR/кВт·год) для {fuel_type}')
+    if not sel.rule:
+        sel.missing.append('CustomsCalcRule')
+    if not sel.pension_brackets:
+        sel.missing.append('PensionFundBracket')
+    return sel
+
+
+# ─── Справочники формы и демо-флаг (задача 2.6) ─────────────────────────────────
+
+def selection_is_demo(sel: SelectedRates) -> bool:
+    """Демо, если хотя бы одна применённая ставка не проверена владельцем или курс из сида (02-C2)."""
+    records = sel.applied + list(sel.pension_brackets)
+    if any(not getattr(r, 'is_verified', False) for r in records):
+        return True
+    return any(getattr(r, 'source', 'demo') == 'demo' for r in (sel.usd_to_uah, sel.usd_to_eur) if r)
+
+
+def applied_rates(rates: RateSnapshot, fuel_type: str) -> dict:
+    """Ставки для подписей разбивки («Мито 0%»), Decimal строкой - без округления float."""
+    data = {
+        'duty_rate': str(rates.duty_rate),
+        'vat_rate': str(rates.vat_rate),
+        'pension_fund_rate': str(rates.pension_fund_rate),
+    }
+    if fuel_type in EV_FUEL_TYPES:
+        data['ev_excise_eur_per_kwh'] = str(rates.ev_excise_eur_per_kwh)
+    else:
+        data['excise_eur_per_100cc'] = str(rates.excise_eur_per_100cc)
+    return data
+
+
+def _opt(value, labels=None) -> dict:
+    labels = labels or {}
+    return {'value': value, 'label': labels.get(value) or value.replace('_', ' ').capitalize()}
+
+
+def _uniq(values) -> list:
+    return sorted(set(values))
+
+
+def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: dict = None) -> dict:
+    """Справочники формы калькулятора без сумм (Q11): только значения из активных тарифов.
+
+    us_ports[].eu_ports - порты ЕС, куда из этого порта США есть фрахт и откуда есть доставка в UA;
+    auction_locations[].us_ports - порты США, куда есть сухопутный маршрут.
+    """
+    labels = labels or {}
+    tiers = [t for t in catalog.auction_fee_tiers if is_active(t, on_date)]
+    land = [r for r in catalog.us_land_routes if is_active(r, on_date)]
+    ocean = [r for r in catalog.ocean_freight if is_active(r, on_date)]
+    eu_ok = {r.eu_port for r in catalog.eu_to_ua if is_active(r, on_date)}
+    excise = [r for r in catalog.excise_rates if is_active(r, on_date)]
+
+    eu_by_us = {}
+    for r in ocean:
+        if r.eu_port in eu_ok:
+            eu_by_us.setdefault(r.us_port.lower(), set()).add(r.eu_port)
+    us_by_loc = {}
+    for r in land:
+        if r.us_port.lower() in eu_by_us:
+            us_by_loc.setdefault(r.auction_location.lower(), set()).add(r.us_port.lower())
+    us_ports = _uniq(p for ports in us_by_loc.values() for p in ports)
+
+    def choice(field_name):
+        values = _uniq(getattr(t, field_name) for t in tiers)
+        default = defaults.get(field_name)
+        if default not in values:
+            default = values[0] if values else None
+        return [_opt(v, labels.get(field_name)) for v in values], default
+
+    member_types, member_default = choice('member_type')
+    payment_types, payment_default = choice('payment_type')
+    title_types, title_default = choice('title_type')
+    options = {
+        'auctions': [_opt(v, labels.get('auction')) for v in _uniq(t.auction for t in tiers)],
+        'auction_locations': [{**_opt(loc), 'us_ports': sorted(ports)} for loc, ports in sorted(us_by_loc.items())],
+        'us_ports': [{**_opt(p), 'eu_ports': sorted(eu_by_us[p])} for p in us_ports],
+        'eu_ports': [_opt(p) for p in _uniq(e for p in us_ports for e in eu_by_us[p])],
+        'fuel_types': [{**_opt(v, labels.get('fuel_type')), 'requires_battery': v in EV_FUEL_TYPES}
+                       for v in _uniq(r.fuel_type for r in excise)],
+        'member_types': member_types,
+        'payment_types': payment_types,
+        'title_types': title_types,
+        'defaults': {'member_type': member_default, 'payment_type': payment_default, 'title_type': title_default},
+    }
+    has_rates = all(pick_exchange_rate(catalog.exchange_rates, 'USD', cur, on_date) for cur in ('UAH', 'EUR'))
+    options['is_configured'] = bool(
+        options['auctions'] and options['us_ports'] and options['fuel_types'] and has_rates
+        and pick_active(catalog.customs_rules, on_date)
+        and any(is_active(b, on_date) for b in catalog.pension_brackets)
+    )
+    return options
+
+
+def catalog_is_demo(catalog: RateCatalog, on_date) -> bool:
+    """/rates/: среди активных тарифов есть непроверенные или последний курс - из сида."""
+    groups = (catalog.auction_fee_tiers, catalog.auction_fixed_fees, catalog.us_land_routes, catalog.ocean_freight,
+              catalog.eu_to_ua, catalog.excise_rates, catalog.pension_brackets, catalog.customs_rules,
+              catalog.ua_delivery_rates, catalog.broker_service_fees)
+    if any(not getattr(r, 'is_verified', False) for g in groups for r in g if is_active(r, on_date)):
+        return True
+    latest = [pick_exchange_rate(catalog.exchange_rates, 'USD', cur, on_date) for cur in ('UAH', 'EUR')]
+    return any(getattr(r, 'source', 'demo') == 'demo' for r in latest if r)
+
+
+# ─── Доставка по Украине и услуги брокера (задача 2.7) ──────────────────────────
+
+def ua_delivery_available(rate, eu_port, on_date) -> bool:
+    return is_active(rate, on_date) and (not rate.eu_port or rate.eu_port == eu_port)
+
+
+def pick_ua_delivery(rates, rate_id, eu_port, on_date):
+    """Выбранная посетителем ставка (по id), если она действует на дату и подходит к порту ЕС."""
+    if rate_id is None:
+        return None
+    for rate in rates:
+        if rate.pk == rate_id and ua_delivery_available(rate, eu_port, on_date):
+            return rate
+    return None
+
+
+def ua_delivery_cost(rate):
+    """Сумма доставки или None («уточнюється менеджером»)."""
+    if rate is None or rate.quote_on_request or rate.cost_usd is None:
+        return None
+    return _d(rate.cost_usd)
+
+
+def broker_services_for(fees, auction_price_usd) -> list:
+    """Суммы услуг брокера: fixed - сумма, percent - % от цены покупки на аукционе, вверх до цента (Q6, шаг 14)."""
+    base = _d(auction_price_usd)
+    result = []
+    for fee in fees:
+        if fee.fee_mode == 'percent':
+            amount = (base * _d(fee.percent) / Decimal('100')).quantize(TWO_PLACES, ROUND_CEILING)
+            result.append({'id': fee.pk, 'title': fee.title, 'fee_mode': 'percent', 'percent': _d(fee.percent),
+                           'base_usd': base, 'amount_usd': amount})
+        else:
+            result.append({'id': fee.pk, 'title': fee.title, 'fee_mode': 'fixed', 'amount_usd': _d(fee.amount_usd)})
+    return result
+
+
+def public_extra_options(catalog: RateCatalog, on_date) -> dict:
+    """/rates/ для гостей (Q11): города и названия услуг без сумм и процентов."""
+    rates = sorted((r for r in catalog.ua_delivery_rates if is_active(r, on_date)),
+                   key=lambda r: (r.sort_order, r.destination, r.pk or 0))
+    fees = sorted((f for f in catalog.broker_service_fees if is_active(f, on_date)),
+                  key=lambda f: (f.sort_order, f.pk or 0))
+    return {
+        'ua_delivery_rates': [{'id': r.pk, 'destination': r.destination, 'eu_port': r.eu_port or None,
+                               'quote_on_request': bool(r.quote_on_request or r.cost_usd is None)} for r in rates],
+        'broker_service_fees': [{'id': f.pk, 'title': f.title} for f in fees],
     }

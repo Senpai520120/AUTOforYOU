@@ -1,0 +1,49 @@
+# Режимы selfsigned и letsencrypt: :80 отдаёт только ACME-challenge и 301 на https.
+server {
+    listen 80 default_server;
+    server_name ${SERVER_NAMES};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Живость по http (healthcheck контейнера, задача 7.3): без редиректа; для Django запрос "https".
+    # proxy-common.conf не подключаем: он ставит X-Forwarded-Proto из $forwarded_proto (здесь нужен https).
+    location = /healthz {
+        limit_req zone=health burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Strict-Transport-Security;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location / {
+        return 301 https://${DOMAIN}$request_uri;
+    }
+}
+
+# Внутренний хост docker-сети (INTERNAL_MEDIA_URL, фото для OG-картинок, задача 6.3b):
+# только /media/ по http, без редиректа. Остальное снаружи с этим Host недоступно.
+server {
+    listen 80;
+    server_name ${INTERNAL_HOST};
+
+    # Только loopback и частные сети docker; снаружи (публичный IP) - 403.
+    allow 127.0.0.1;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
+    deny all;
+
+    include /etc/nginx/generated/media-location.conf;
+
+    location / {
+        return 404;
+    }
+}

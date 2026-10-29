@@ -95,16 +95,16 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
           onClick={() => inputRef.current?.click()}
           className="border-2 border-dashed border-slate-200 rounded-xl h-32 flex flex-col items-center justify-center gap-2 text-slate-400 cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
         >
-          <span className="text-3xl">📷</span>
+          <span className="text-3xl" aria-hidden="true">📷</span>
           <span className="text-sm">Клацніть або перетягніть фото (jpg/png/webp, до 8 МБ)</span>
         </div>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {images.map(img => (
+          {images.map((img, idx) => (
             <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200">
               <Image
                 src={imgSrc(img)}
-                alt="фото"
+                alt={`Фото ${idx + 1} з ${images.length}`}
                 fill
                 className="object-cover"
                 sizes="150px"
@@ -114,13 +114,13 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
                   Головне
                 </span>
               )}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <div className="absolute inset-0 bg-black/40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 {!img.is_primary && (
                   <button
                     type="button"
                     title="Зробити головним"
                     onClick={() => handleSetPrimary(img.id)}
-                    className="bg-white/90 hover:bg-white text-blue-700 text-xs font-semibold px-2 py-1 rounded"
+                    className="bg-white/90 hover:bg-white text-blue-700 text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
                   >
                     Гол.
                   </button>
@@ -129,7 +129,7 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
                   type="button"
                   title="Видалити"
                   onClick={() => handleDelete(img.id)}
-                  className="bg-white/90 hover:bg-white text-red-600 text-xs font-semibold px-2 py-1 rounded"
+                  className="bg-white/90 hover:bg-white text-red-600 text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
                 >
                   ✕
                 </button>

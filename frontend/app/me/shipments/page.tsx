@@ -1,12 +1,14 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { meApi } from '@/api/me';
 import { Shipment } from '@/lib/types';
-import Spinner from '@/components/ui/Spinner';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
 import Badge from '@/components/ui/Badge';
 import Link from 'next/link';
+import { useSiteConfig } from '@/lib/use-site-config';
 
 const STATUS_STEPS = [
   'at_us_warehouse', 'loading', 'in_ocean',
@@ -15,7 +17,7 @@ const STATUS_STEPS = [
 
 const STATUS_LABELS: Record<string, string> = {
   at_us_warehouse: 'Склад США',
-  loading: 'Погрузка',
+  loading: 'Завантаження',
   in_ocean: 'В морі 🌊',
   at_eu_port: 'Порт ЄС',
   on_truck_to_ua: 'Автовоз → UA',
@@ -24,17 +26,24 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function MyShipmentsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
+  const siteConfig = useSiteConfig();
+  const managerContact = siteConfig?.manager_contact ?? '';
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(() => {
+    setFetching(true);
+    setError(null);
+    meApi.shipments().then(d => setShipments(d.results)).catch(setError).finally(() => setFetching(false));
+  }, []);
 
   useEffect(() => {
-    if (!loading && !user) { router.push('/login'); return; }
-    if (user) meApi.shipments().then(d => setShipments(d.results)).finally(() => setFetching(false));
-  }, [user, loading, router]);
+    if (user) load();
+  }, [user, load]);
 
-  if (loading || fetching) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (loading || !user || fetching) return <LoadingState />;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -43,11 +52,15 @@ export default function MyShipmentsPage() {
         <h1 className="text-xl font-bold text-slate-900">Мої контейнери</h1>
       </div>
 
-      {shipments.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-slate-400 text-lg">Відстежуваних контейнерів немає</p>
-          <p className="text-slate-400 text-sm mt-2">Зверніться до менеджера щоб додати контейнер</p>
-        </div>
+      {error ? (
+        <ErrorState error={error} onRetry={load} />
+      ) : shipments.length === 0 ? (
+        <EmptyState
+          title="Відстежуваних контейнерів немає"
+          hint={managerContact
+            ? `Зверніться до менеджера, щоб додати контейнер: ${managerContact}`
+            : 'Зверніться до менеджера, щоб додати контейнер'}
+        />
       ) : (
         <div className="space-y-4">
           {shipments.map(s => {
@@ -63,7 +76,7 @@ export default function MyShipmentsPage() {
                     <Badge variant={s.status === 'delivered' ? 'success' : 'info'}>
                       {STATUS_LABELS[s.status] ?? s.status}
                     </Badge>
-                    {s.eta && <p className="text-xs text-slate-400 mt-1">ETA: {s.eta}</p>}
+                    {s.eta && <p className="text-xs text-slate-400 mt-1">Орієнтовне прибуття: {s.eta}</p>}
                   </div>
                 </div>
                 {/* Progress bar */}

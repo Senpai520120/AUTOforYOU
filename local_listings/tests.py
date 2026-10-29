@@ -1,44 +1,41 @@
 import io
+import os
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
+import httpx
 from django.conf import settings
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import DatabaseError
+from django.test import override_settings
 from django.utils import timezone
 from PIL import Image as PILImage
 from rest_framework import status
-from rest_framework.test import APITestCase
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.test import APIClient, APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
 from integrations.models import VinReport
 from local_listings.models import PromotionTariff
 from local_listings.tasks import expire_listings, warn_expiring_listings
 from payments.models import Payment
-from users.models import CustomUser
+from pricing.models import ExchangeRate
+from tests.factories import (
+    TEST_PASSWORD,
+    auth_client,
+    make_local_listing,
+    make_moderator,
+    make_staff,
+    make_user,
+    nhtsa_response,
+)
+from tests.test_uploads import admin_form_data, image_bytes, use_temp_media
 
 from .models import City, LocalListing, LocalListingImage, Region
 from .services import approve_listing, reject_listing
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def _token(user):
-    return str(RefreshToken.for_user(user).access_token)
-
-
-def _auth(client, user):
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {_token(user)}')
-
-
-def _make_user(email='u@test.com', **kw):
-    return CustomUser.objects.create_user(email=email, password='pass', **kw)
-
-
-def _make_admin(email='admin@test.com'):
-    u = CustomUser.objects.create_user(email=email, password='pass')
-    u.is_staff = True
-    u.is_superuser = True
-    u.save()
-    return u
-
 
 def _make_region(name='Тестова область'):
     return Region.objects.get_or_create(name=name, defaults={'slug': 'test-region'})[0]
@@ -66,24 +63,18 @@ def _listing_payload(region, city, **extra):
 
 
 def _make_listing(owner, region, city, status_val=LocalListing.Status.ACTIVE, **kw):
-    defaults = dict(
-        make='Toyota', model='Camry', year=2020, mileage_km=50000,
-        fuel_type='petrol', transmission='auto', body_type='sedan',
-        price='500000', currency='UAH', price_type='fixed',
-        region=region, city=city, status=status_val, agreed_to_rules=True,
-    )
-    defaults.update(kw)
-    return LocalListing.objects.create(owner=owner, **defaults)
+    # Тонкая обёртка: в этом файле регион/город передаются позиционно, статус — status_val.
+    return make_local_listing(owner, status=status_val, region=region, city=city, **kw)
 
 
 # ─── Тест: нова подача → pending ──────────────────────────────────────────────
 
 class TestLocalListingCreate(APITestCase):
     def setUp(self):
-        self.user = _make_user('owner@test.com')
+        self.user = make_user('owner@test.com')
         self.region = _make_region()
         self.city = _make_city(self.region)
-        _auth(self.client, self.user)
+        self.client = auth_client(self.user)
 
     def test_create_sets_pending(self):
         payload = _listing_payload(self.region, self.city)
@@ -110,21 +101,24 @@ class TestLocalListingCreate(APITestCase):
         self.assertEqual(r.status_code, 400)
 
     def test_phone_not_in_list_response(self):
-        payload = _listing_payload(self.region, self.city)
-        self.client.post('/api/v1/local/listings/', payload, format='json')
+        # Публичный список показывает только ACTIVE: создаём такое объявление напрямую,
+        # иначе (pending через API) список пуст и проверка ничего не проверяет.
+        _make_listing(self.user, self.region, self.city, status_val=LocalListing.Status.ACTIVE,
+                      contact_phone='+380501234567')
         self.client.credentials()
         r = self.client.get('/api/v1/local/listings/')
+        self.assertEqual(r.status_code, 200)
         results = r.data.get('results', [])
-        if results:
-            self.assertNotIn('contact_phone', results[0])
+        self.assertTrue(results)
+        self.assertNotIn('contact_phone', results[0])
 
 
 # ─── Тест: модерація (approve / reject) ───────────────────────────────────────
 
 class TestModerationService(APITestCase):
     def setUp(self):
-        self.owner = _make_user('owner2@test.com')
-        self.admin = _make_admin()
+        self.owner = make_user('owner2@test.com')
+        self.admin = make_staff(superuser=True)
         self.region = _make_region('Модерація-область')
         self.city = _make_city(self.region, 'Модерація-місто')
         self.listing = _make_listing(
@@ -152,7 +146,7 @@ class TestModerationService(APITestCase):
 
     def test_rejection_reason_visible_to_owner(self):
         reject_listing(self.listing, self.admin, reason='Тест')
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['rejection_reason'], 'Тест')
@@ -161,8 +155,8 @@ class TestModerationService(APITestCase):
         # Раніше стороннiй бачив саме оголошення, а маскувалася тільки причина
         # відхилення. Тепер не-ACTIVE оголошення недоступне цілком.
         reject_listing(self.listing, self.admin, reason='Таємна причина')
-        stranger = _make_user('stranger@test.com')
-        _auth(self.client, stranger)
+        stranger = make_user('stranger@test.com')
+        self.client = auth_client(stranger)
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/')
         self.assertEqual(r.status_code, 404)
 
@@ -176,15 +170,15 @@ class TestModerationService(APITestCase):
 
 class TestRemoderation(APITestCase):
     def setUp(self):
-        self.owner = _make_user('remod@test.com')
-        self.admin = _make_admin('adm2@test.com')
+        self.owner = make_user('remod@test.com')
+        self.admin = make_staff('adm2@test.com', superuser=True)
         self.region = _make_region('Ремод-область')
         self.city = _make_city(self.region, 'Ремод-місто')
         self.listing = _make_listing(
             self.owner, self.region, self.city,
             status_val=LocalListing.Status.ACTIVE,
         )
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
 
     def test_substantive_edit_active_returns_pending(self):
         r = self.client.patch(
@@ -225,10 +219,10 @@ class TestRemoderation(APITestCase):
 
 class TestLocalListingLimit(APITestCase):
     def setUp(self):
-        self.user = _make_user('limit@test.com')
+        self.user = make_user('limit@test.com')
         self.region = _make_region('Лімітна область')
         self.city = _make_city(self.region, 'Лімітне місто')
-        _auth(self.client, self.user)
+        self.client = auth_client(self.user)
 
     def test_exceeds_limit_returns_error(self):
         max_active = getattr(settings, 'LOCAL_LISTING_MAX_ACTIVE', 10)
@@ -265,8 +259,8 @@ class TestLocalListingLimit(APITestCase):
 
 class TestLocalListingOwnership(APITestCase):
     def setUp(self):
-        self.owner = _make_user('own@test.com')
-        self.other = _make_user('other@test.com')
+        self.owner = make_user('own@test.com')
+        self.other = make_user('other@test.com')
         self.region = _make_region('Права область')
         self.city = _make_city(self.region, 'Права місто')
         self.listing = _make_listing(
@@ -275,7 +269,7 @@ class TestLocalListingOwnership(APITestCase):
         )
 
     def test_owner_can_patch(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.patch(
             f'/api/v1/local/listings/{self.listing.pk}/',
             {'contact_phone': '+380990000000'}, format='json',
@@ -283,7 +277,7 @@ class TestLocalListingOwnership(APITestCase):
         self.assertEqual(r.status_code, 200)
 
     def test_other_user_cannot_patch(self):
-        _auth(self.client, self.other)
+        self.client = auth_client(self.other)
         r = self.client.patch(
             f'/api/v1/local/listings/{self.listing.pk}/',
             {'contact_phone': '+380990000001'}, format='json',
@@ -291,19 +285,19 @@ class TestLocalListingOwnership(APITestCase):
         self.assertEqual(r.status_code, 403)
 
     def test_other_user_cannot_delete(self):
-        _auth(self.client, self.other)
+        self.client = auth_client(self.other)
         r = self.client.delete(f'/api/v1/local/listings/{self.listing.pk}/')
         self.assertEqual(r.status_code, 403)
 
     def test_owner_can_delete(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.delete(f'/api/v1/local/listings/{self.listing.pk}/')
         self.assertEqual(r.status_code, 204)
 
     def test_stranger_cannot_see_pending(self):
         self.listing.status = LocalListing.Status.PENDING
         self.listing.save()
-        _auth(self.client, self.other)
+        self.client = auth_client(self.other)
         r = self.client.get('/api/v1/local/listings/')
         self.assertEqual(r.data['count'], 0)
 
@@ -312,8 +306,8 @@ class TestLocalListingOwnership(APITestCase):
 
 class TestMyListings(APITestCase):
     def setUp(self):
-        self.owner = _make_user('my@test.com')
-        self.admin = _make_admin('adm3@test.com')
+        self.owner = make_user('my@test.com')
+        self.admin = make_staff('adm3@test.com', superuser=True)
         self.region = _make_region('Мої область')
         self.city = _make_city(self.region, 'Мої місто')
 
@@ -321,7 +315,7 @@ class TestMyListings(APITestCase):
         _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.ACTIVE)
         _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.PENDING)
         _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.REJECTED)
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.get('/api/v1/local/my-listings/')
         self.assertEqual(r.status_code, 200)
         statuses = {item['status'] for item in r.data['results']}
@@ -334,9 +328,9 @@ class TestMyListings(APITestCase):
         self.assertEqual(r.status_code, 401)
 
     def test_my_listings_only_own(self):
-        other = _make_user('notmy@test.com')
+        other = make_user('notmy@test.com')
         _make_listing(other, self.region, self.city)
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.get('/api/v1/local/my-listings/')
         self.assertEqual(r.data['count'], 0)
 
@@ -345,11 +339,15 @@ class TestMyListings(APITestCase):
 
 class TestLocalListingFilters(APITestCase):
     def setUp(self):
-        self.user = _make_user('filt@test.com')
+        self.user = make_user('filt@test.com')
         self.r1 = Region.objects.create(name='Київська область', slug='kyivska')
         self.r2 = Region.objects.create(name='Одеська область', slug='odeska')
         self.c1 = City.objects.create(region=self.r1, name='Київ', slug='kyiv')
         self.c2 = City.objects.create(region=self.r2, name='Одеса', slug='odesa')
+        # 6.7 (05-Q3): цена в каталоге считается в USD по курсу на момент сохранения.
+        cache.clear()
+        self.addCleanup(cache.clear)
+        ExchangeRate.objects.create(from_currency='UAH', to_currency='USD', rate=Decimal('0.025'), date=timezone.localdate())
 
         def _mk(region, city, fuel, price, year):
             return LocalListing.objects.create(
@@ -377,7 +375,8 @@ class TestLocalListingFilters(APITestCase):
         self.assertNotIn(self.l1.pk, ids)
 
     def test_filter_by_price_range(self):
-        r = self.client.get('/api/v1/local/listings/?price_min=400000&price_max=600000')
+        # 300000/500000/800000 UAH * 0.025 = 7500/12500/20000 USD
+        r = self.client.get('/api/v1/local/listings/?price_min=10000&price_max=15000')
         ids = {item['id'] for item in r.data['results']}
         self.assertIn(self.l2.pk, ids)
         self.assertNotIn(self.l1.pk, ids)
@@ -405,27 +404,45 @@ class TestLocalListingFilters(APITestCase):
 
 class TestVinPrefill(APITestCase):
     def test_vin_prefill_from_nhtsa(self):
-        mock_data = {
-            'demo': False, 'provider': 'nhtsa_vpic', 'vin': '1HGCM82633A004352',
-            'make': 'Honda', 'model': 'Accord', 'year': 2003,
-            'engine_cc': 2354, 'fuel_type': 'petrol', 'body_class': 'Sedan',
-        }
-        with patch('local_listings.views.NHTSAVinDecodeProvider') as MockProv:
-            MockProv.return_value.decode.return_value = mock_data
+        with patch('httpx.get') as mock_get:
+            mock_get.return_value = nhtsa_response(Make='HONDA', Model='Accord', ModelYear='2003',
+                                                   DisplacementCC='2354', FuelTypePrimary='Gasoline')
             r = self.client.get('/api/v1/local/vin-prefill/1HGCM82633A004352/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data['make'], 'Honda')
+        self.assertEqual(r.data['make'], 'HONDA')
+        self.assertEqual(r.data['engine_cc'], 2354)
         self.assertFalse(r.data['cached'])
 
     def test_vin_prefill_from_cache(self):
         vin = '1HGCM82633A004352'
-        cached = {'demo': False, 'provider': 'nhtsa_vpic', 'vin': vin, 'make': 'Honda', 'model': 'Accord', 'year': 2003}
+        cached = {'demo': False, 'provider': 'nhtsa_vpic', 'vin': vin, 'make': 'Honda', 'model': 'Accord', 'year': 2003,
+                  'valid': True}
         VinReport.objects.create(vin=vin, provider='nhtsa_vpic', report_data=cached, demo=False)
-        with patch('local_listings.views.NHTSAVinDecodeProvider') as MockProv:
+        with patch('httpx.get') as mock_get:
             r = self.client.get(f'/api/v1/local/vin-prefill/{vin}/')
-            MockProv.assert_not_called()
+            mock_get.assert_not_called()
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data['cached'])
+
+    def test_vin_prefill_is_throttled_with_expensive_scope(self):
+        cache.clear()
+        rates = {**settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], 'expensive': '2/min'}
+        with override_settings(REST_FRAMEWORK={**settings.REST_FRAMEWORK, 'DEFAULT_THROTTLE_RATES': rates}),                 patch.object(SimpleRateThrottle, 'THROTTLE_RATES', rates),                 patch('httpx.get', return_value=nhtsa_response()):
+            codes = [self.client.get('/api/v1/local/vin-prefill/1HGCM82633A004352/').status_code for _ in range(3)]
+        cache.clear()
+        self.assertEqual(codes, [200, 200, 429])
+
+    def test_vin_prefill_rejects_forbidden_letters_without_network(self):
+        with patch('httpx.get') as mock_get:
+            r = self.client.get('/api/v1/local/vin-prefill/1HGCM82633A00435Q/')
+            mock_get.assert_not_called()
+        self.assertEqual(r.status_code, 400)
+
+    def test_vin_prefill_network_error_is_generic_503(self):
+        with patch('httpx.get', side_effect=httpx.ConnectError('boom internal host 10.0.0.5')):
+            r = self.client.get('/api/v1/local/vin-prefill/1HGCM82633A004352/')
+        self.assertEqual(r.status_code, 503)
+        self.assertNotIn('10.0.0.5', r.content.decode())
 
     def test_vin_too_short_returns_400(self):
         r = self.client.get('/api/v1/local/vin-prefill/SHORT/')
@@ -462,16 +479,18 @@ def _make_image_file(name='photo.jpg', fmt='JPEG', size=(100, 100), content_type
 
 class TestListingImageUpload(APITestCase):
     def setUp(self):
-        self.owner = _make_user('owner@img.com')
-        self.other = _make_user('other@img.com')
-        self.admin = _make_admin('adm@img.com')
+        self.media_root = use_temp_media(self)
+        cache.clear()  # счётчики throttle 'uploads' не переходят между тестами
+        self.owner = make_user('owner@img.com')
+        self.other = make_user('other@img.com')
+        self.admin = make_staff('adm@img.com', superuser=True)
         region = _make_region('img-область')
         city = _make_city(region, 'img-місто')
         self.listing = _make_listing(self.owner, region, city)
         self.url = f'/api/v1/local/listings/{self.listing.pk}/images/'
 
     def _auth(self, user):
-        _auth(self.client, user)
+        self.client = auth_client(user)
 
     def test_upload_single_image_owner(self):
         self._auth(self.owner)
@@ -527,11 +546,145 @@ class TestListingImageUpload(APITestCase):
         r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
         self.assertEqual(r.status_code, 201)
 
+    # ─── 23-D19: тип по содержимому, размер, EXIF, имя (задача 1.10) ──────────
+
+    @override_settings(LOCAL_LISTING_PHOTO_MAX_SIZE_MB=1, UPLOAD_IMAGE_MAX_SIZE_MB=50)
+    def test_file_over_c2c_limit_rejected(self):
+        self._auth(self.owner)
+        big = SimpleUploadedFile('big.jpg', b'\xff\xd8' + b'0' * (1024 * 1024), content_type='image/jpeg')
+        r = self.client.post(self.url, {'images': big}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('завеликий', r.data['detail'][0])
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    def test_html_with_jpeg_content_type_rejected(self):
+        self._auth(self.owner)
+        evil = SimpleUploadedFile('x.jpg', b'<html><script>alert(1)</script></html>', content_type='image/jpeg')
+        r = self.client.post(self.url, {'images': evil}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('не є зображенням', r.data['detail'][0])
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    def test_png_with_text_content_type_accepted(self):
+        self._auth(self.owner)
+        png = _make_image_file('pic.txt', fmt='PNG', content_type='text/plain')
+        r = self.client.post(self.url, {'images': png}, format='multipart')
+        self.assertEqual(r.status_code, 201)
+        img = LocalListingImage.objects.get(listing=self.listing)
+        self.assertRegex(img.image.name, r'^local_listings/[0-9a-f]{32}\.png$')
+
+    def test_saved_file_has_no_gps_and_uuid_name(self):
+        self._auth(self.owner)
+        src = SimpleUploadedFile('home-kyiv.jpg', image_bytes(gps=True), content_type='image/jpeg')
+        r = self.client.post(self.url, {'images': src}, format='multipart')
+        self.assertEqual(r.status_code, 201)
+        img = LocalListingImage.objects.get(listing=self.listing)
+        self.assertRegex(img.image.name, r'^local_listings/[0-9a-f]{32}\.jpg$')
+        self.assertTrue(img.image.path.startswith(self.media_root))
+        with PILImage.open(img.image.path) as saved:
+            self.assertEqual(dict(saved.getexif()), {})
+        self.assertNotIn('home-kyiv', r.data[0]['image'])
+
+    def test_one_bad_file_of_three_creates_nothing(self):
+        self._auth(self.owner)
+        files = [
+            _make_image_file('a.jpg'),
+            SimpleUploadedFile('b.jpg', b'not an image', content_type='image/jpeg'),
+            _make_image_file('c.jpg'),
+        ]
+        r = self.client.post(self.url, {'images': files}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(len(r.data['detail']), 1)
+        self.assertTrue(r.data['detail'][0].startswith('b.jpg:'))
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    def test_db_failure_leaves_no_orphan_files(self):
+        # Вторая строка падает уже после записи файла: строки откатываются, файлы удаляются.
+        self._auth(self.owner)
+        original = LocalListingImage.save
+        calls = []
+
+        def flaky_save(instance, *args, **kwargs):
+            original(instance, *args, **kwargs)
+            calls.append(instance.image.name)
+            if len(calls) == 2:
+                raise DatabaseError('boom')
+
+        files = [_make_image_file('a.jpg'), _make_image_file('b.jpg')]
+        with patch.object(LocalListingImage, 'save', flaky_save), self.assertRaises(DatabaseError):
+            self.client.post(self.url, {'images': files}, format='multipart')
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+        for name in calls:
+            self.assertFalse(os.path.exists(os.path.join(self.media_root, name)), name)
+
+    def test_upload_throttled(self):
+        self._auth(self.owner)
+        with patch.dict(SimpleRateThrottle.THROTTLE_RATES, {'uploads': '2/hour'}):
+            for _ in range(2):
+                r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+                self.assertEqual(r.status_code, 201)
+            r = self.client.post(self.url, {'images': _make_image_file()}, format='multipart')
+        self.assertEqual(r.status_code, 429)
+
+    def test_existing_string_values_untouched(self):
+        # Уже сохранённые значения (строка-путь) поле не трогает.
+        img = LocalListingImage.objects.create(listing=self.listing, image='old/name.jpg')
+        img.is_primary = True
+        img.save()
+        img.refresh_from_db()
+        self.assertEqual(img.image.name, 'old/name.jpg')
+
+
+class TestLocalListingImageAdminUpload(APITestCase):
+    """Точка 2: inline фото в админке C2C — ошибка поля, а не 500; файл очищен."""
+
+    def setUp(self):
+        use_temp_media(self)
+        self.admin = make_staff('adm-ll-upl@img.com', superuser=True)
+        region = _make_region('adm-upl-область')
+        self.listing = _make_listing(self.owner_user(), region, _make_city(region, 'adm-upl-місто'))
+        self.client.force_login(self.admin)
+
+    def owner_user(self):
+        return make_user('own-ll-upl@img.com')
+
+    def _post(self, upload):
+        url = f'/admin/local_listings/locallisting/{self.listing.pk}/change/'
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        data = admin_form_data(page.context['adminform'].form, page.context['inline_admin_formsets'])
+        data['images-0-image'] = upload
+        return self.client.post(url, data)
+
+    def test_html_file_gives_field_error(self):
+        r = self._post(SimpleUploadedFile('x.jpg', b'<html></html>', content_type='image/jpeg'))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.context['inline_admin_formsets'][0].formset.errors[0]['image'])
+        self.assertFalse(LocalListingImage.objects.filter(listing=self.listing).exists())
+
+    @override_settings(LOCAL_LISTING_PHOTO_MAX_SIZE_MB=1, UPLOAD_IMAGE_MAX_SIZE_MB=50)
+    def test_over_c2c_limit_gives_field_error(self):
+        big = io.BytesIO()
+        PILImage.effect_noise((800, 800), 100).convert('RGB').save(big, format='PNG')
+        self.assertGreater(big.tell(), 1024 * 1024)
+        r = self._post(SimpleUploadedFile('big.png', big.getvalue(), content_type='image/png'))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('завеликий', str(r.context['inline_admin_formsets'][0].formset.errors[0]['image']))
+
+    def test_valid_jpeg_saved_clean(self):
+        r = self._post(SimpleUploadedFile('home.jpg', image_bytes(gps=True), content_type='image/jpeg'))
+        self.assertEqual(r.status_code, 302)
+        img = LocalListingImage.objects.get(listing=self.listing)
+        self.assertRegex(img.image.name, r'^local_listings/[0-9a-f]{32}\.jpg$')
+        with PILImage.open(img.image.path) as saved:
+            self.assertEqual(dict(saved.getexif()), {})
+
 
 class TestListingImageDelete(APITestCase):
     def setUp(self):
-        self.owner = _make_user('del_owner@img.com')
-        self.other = _make_user('del_other@img.com')
+        self.owner = make_user('del_owner@img.com')
+        self.other = make_user('del_other@img.com')
         region = _make_region('del-область')
         city = _make_city(region, 'del-місто')
         self.listing = _make_listing(self.owner, region, city)
@@ -542,26 +695,56 @@ class TestListingImageDelete(APITestCase):
         return f'/api/v1/local/listings/{self.listing.pk}/images/{img_id}/'
 
     def test_delete_non_primary(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.delete(self._url(self.img2.pk))
         self.assertEqual(r.status_code, 204)
         self.assertFalse(LocalListingImage.objects.filter(pk=self.img2.pk).exists())
 
     def test_delete_primary_promotes_next(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         self.client.delete(self._url(self.img1.pk))
         self.img2.refresh_from_db()
         self.assertTrue(self.img2.is_primary)
 
     def test_non_owner_delete_gets_403(self):
-        _auth(self.client, self.other)
+        self.client = auth_client(self.other)
         r = self.client.delete(self._url(self.img1.pk))
         self.assertEqual(r.status_code, 403)
 
 
+class TestForeignListingImageViaOwnListing(APITestCase):
+    """23-D14: фото чужого объявления нельзя тронуть через pk СВОЕГО объявления (IDOR по img_id)."""
+
+    def setUp(self):
+        self.attacker = make_user('idor_attacker@img.com')
+        victim = make_user('idor_victim@img.com')
+        region = _make_region('idor-область')
+        city = _make_city(region, 'idor-місто')
+        self.own = _make_listing(self.attacker, region, city)
+        self.victim_listing = _make_listing(victim, region, city)
+        self.victim_img = LocalListingImage.objects.create(
+            listing=self.victim_listing, image='v.jpg', is_primary=False)
+        self.url = f'/api/v1/local/listings/{self.own.pk}/images/{self.victim_img.pk}/'
+        self.client = auth_client(self.attacker)
+
+    def test_delete_404_and_image_kept(self):
+        self.assertEqual(self.client.delete(self.url).status_code, 404)
+        self.assertTrue(LocalListingImage.objects.filter(pk=self.victim_img.pk).exists())
+
+    def test_patch_primary_404_and_flag_unchanged(self):
+        self.assertEqual(self.client.patch(self.url).status_code, 404)
+        self.victim_img.refresh_from_db()
+        self.assertFalse(self.victim_img.is_primary)
+
+    def test_anonymous_401(self):
+        anon = APIClient()
+        self.assertEqual(anon.delete(self.url).status_code, 401)
+        self.assertEqual(anon.patch(self.url).status_code, 401)
+
+
 class TestListingImageSetPrimary(APITestCase):
     def setUp(self):
-        self.owner = _make_user('prim_owner@img.com')
+        self.owner = make_user('prim_owner@img.com')
         region = _make_region('prim-область')
         city = _make_city(region, 'prim-місто')
         self.listing = _make_listing(self.owner, region, city)
@@ -572,7 +755,7 @@ class TestListingImageSetPrimary(APITestCase):
         return f'/api/v1/local/listings/{self.listing.pk}/images/{img_id}/'
 
     def test_set_primary(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.patch(self._url(self.img2.pk))
         self.assertEqual(r.status_code, 200)
         self.img1.refresh_from_db()
@@ -581,8 +764,8 @@ class TestListingImageSetPrimary(APITestCase):
         self.assertTrue(self.img2.is_primary)
 
     def test_non_owner_set_primary_gets_403(self):
-        other = _make_user('prim_other@img.com')
-        _auth(self.client, other)
+        other = make_user('prim_other@img.com')
+        self.client = auth_client(other)
         r = self.client.patch(self._url(self.img2.pk))
         self.assertEqual(r.status_code, 403)
 
@@ -600,9 +783,10 @@ def _make_tariff(code='test_renew', ttype='renew', price='49.00', days=30):
 
 class TestExpiresAt(APITestCase):
     def setUp(self):
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
         self.region = _make_region('exp-обл')
         self.city = _make_city(self.region, 'exp-місто')
-        self.owner = _make_user('exp@test.com')
+        self.owner = make_user('exp@test.com')
 
     def test_expires_at_set_on_create(self):
         listing = _make_listing(self.owner, self.region, self.city)
@@ -629,7 +813,7 @@ class TestExpiryTasks(APITestCase):
     def setUp(self):
         self.region = _make_region('task-обл')
         self.city = _make_city(self.region, 'task-місто')
-        self.owner = _make_user('task_owner@test.com')
+        self.owner = make_user('task_owner@test.com')
 
     def test_warn_expiring_sends_once(self):
         listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.ACTIVE)
@@ -676,10 +860,11 @@ class TestExpiryTasks(APITestCase):
 # ─── Тести: promote endpoint + callback ──────────────────────────────────────
 
 
+@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
 class TestPromoteEndpoint(APITestCase):
     def setUp(self):
-        self.owner = _make_user('promo_owner@test.com')
-        self.other = _make_user('promo_other@test.com')
+        self.owner = make_user('promo_owner@test.com')
+        self.other = make_user('promo_other@test.com')
         region = _make_region('promo-обл')
         city = _make_city(region, 'promo-місто')
         self.listing = _make_listing(self.owner, region, city)
@@ -687,7 +872,7 @@ class TestPromoteEndpoint(APITestCase):
         self.url = f'/api/v1/local/listings/{self.listing.pk}/promote/'
 
     def test_promote_creates_payment(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
         self.assertEqual(r.status_code, 201)
         self.assertIn('checkout_url', r.data)
@@ -698,13 +883,52 @@ class TestPromoteEndpoint(APITestCase):
             purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
         ).exists())
 
+    def test_promote_sandbox_mode_checkout(self):
+        import base64
+        import json
+        self.client = auth_client(self.owner)
+        with override_settings(LIQPAY_MODE='sandbox'):
+            r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertIs(r.data['sandbox'], True)
+        self.assertEqual(json.loads(base64.b64decode(r.data['form_data']['data']))['sandbox'], 1)
+
+    def test_promote_real_mode_checkout(self):
+        import base64
+        import json
+        self.client = auth_client(self.owner)
+        with override_settings(LIQPAY_MODE='real'):
+            r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(json.loads(base64.b64decode(r.data['form_data']['data']))['sandbox'], 0)
+
+    def _assert_unavailable(self):
+        self.client = auth_client(self.owner)
+        r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.data['detail'], 'Оплата тимчасово недоступна')
+        self.assertIs(r.data['configured'], False)
+        self.assertFalse(Payment.objects.filter(local_listing=self.listing).exists())
+
+    @override_settings(LIQPAY_PUBLIC_KEY='', LIQPAY_PRIVATE_KEY='')
+    def test_promote_empty_keys_503_no_payment(self):
+        self._assert_unavailable()
+
+    @override_settings(LIQPAY_PUBLIC_KEY='your_liqpay_public_key', LIQPAY_PRIVATE_KEY='your_liqpay_private_key')
+    def test_promote_placeholder_keys_503(self):
+        self._assert_unavailable()
+
+    @override_settings(LIQPAY_MODE='off')
+    def test_promote_mode_off_503(self):
+        self._assert_unavailable()
+
     def test_promote_non_owner_403(self):
-        _auth(self.client, self.other)
+        self.client = auth_client(self.other)
         r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
         self.assertEqual(r.status_code, 403)
 
     def test_promote_missing_tariff_400(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.post(self.url, {}, format='json')
         self.assertEqual(r.status_code, 400)
 
@@ -715,10 +939,11 @@ class TestPromoteEndpoint(APITestCase):
         self.assertGreaterEqual(len(r.data), 4)
 
 
+@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv', LIQPAY_SANDBOX=True)
 class TestCallbackAppliesTariff(APITestCase):
     def setUp(self):
 
-        self.owner = _make_user('cb_owner@test.com')
+        self.owner = make_user('cb_owner@test.com')
         region = _make_region('cb-обл')
         city = _make_city(region, 'cb-місто')
         self.listing = _make_listing(self.owner, region, city, status_val=LocalListing.Status.ACTIVE)
@@ -732,11 +957,12 @@ class TestCallbackAppliesTariff(APITestCase):
         import json
 
         from django.conf import settings
-        private_key = settings.LIQPAY_PRIVATE_KEY
+        private_key = settings.LIQPAY_PRIVATE_KEY  # 'test_priv' из override_settings класса
         payload = {
             'order_id': payment.order_id,
             'status': liqpay_status,
             'payment_id': '12345',
+            'action': 'pay',
             'amount': str(payment.amount),
             'currency': payment.currency,
         }
@@ -808,9 +1034,10 @@ class TestCallbackAppliesTariff(APITestCase):
 
 class TestCatalogTopSorting(APITestCase):
     def setUp(self):
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
         self.region = _make_region('sort-обл')
         self.city = _make_city(self.region, 'sort-місто')
-        self.owner = _make_user('sort@test.com')
+        self.owner = make_user('sort@test.com')
 
     def test_top_listing_appears_first(self):
         normal = _make_listing(self.owner, self.region, self.city,
@@ -834,8 +1061,9 @@ class TestCatalogTopSorting(APITestCase):
 
 class TestContactEndpoint(APITestCase):
     def setUp(self):
-        self.owner = _make_user('cowner@test.com')
-        self.buyer = _make_user('cbuyer@test.com')
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
+        self.owner = make_user('cowner@test.com')
+        self.buyer = make_user('cbuyer@test.com')
         self.region = _make_region('Контакт-область')
         self.city = _make_city(self.region, 'Контакт-місто')
         self.listing = _make_listing(
@@ -846,7 +1074,9 @@ class TestContactEndpoint(APITestCase):
 
     def test_phone_not_in_list(self):
         r = self.client.get('/api/v1/local/listings/')
-        for item in r.data.get('results', []):
+        results = r.data.get('results', [])
+        self.assertTrue(results)
+        for item in results:
             self.assertNotIn('contact_phone', item)
 
     def test_phone_not_in_detail(self):
@@ -858,19 +1088,19 @@ class TestContactEndpoint(APITestCase):
         self.assertEqual(r.status_code, 401)
 
     def test_contact_endpoint_auth_returns_phone(self):
-        _auth(self.client, self.buyer)
+        self.client = auth_client(self.buyer)
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['contact_phone'], '+380501234567')
 
     def test_contact_endpoint_owner_returns_own_phone(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['contact_phone'], '+380501234567')
 
     def test_contact_endpoint_nonexistent_404(self):
-        _auth(self.client, self.buyer)
+        self.client = auth_client(self.buyer)
         r = self.client.get('/api/v1/local/listings/99999/contact/')
         self.assertEqual(r.status_code, 404)
 
@@ -879,10 +1109,10 @@ class TestContactEndpoint(APITestCase):
 
 class TestAntispamListing(APITestCase):
     def setUp(self):
-        self.user = _make_user('spam@test.com')
+        self.user = make_user('spam@test.com')
         self.region = _make_region('Спам-область')
         self.city = _make_city(self.region, 'Спам-місто')
-        _auth(self.client, self.user)
+        self.client = auth_client(self.user)
 
     def _post(self, description):
         payload = _listing_payload(self.region, self.city, description=description)
@@ -919,7 +1149,7 @@ class TestAntispamListing(APITestCase):
 
 class TestBannedUser(APITestCase):
     def setUp(self):
-        self.banned = _make_user('banned@test.com')
+        self.banned = make_user('banned@test.com')
         self.region = _make_region('Бан-область')
         self.city = _make_city(self.region, 'Бан-місто')
         self.listing = _make_listing(
@@ -936,9 +1166,9 @@ class TestBannedUser(APITestCase):
 
     def test_banned_user_cannot_get_jwt(self):
         r = self.client.post('/api/v1/auth/token/', {
-            'email': 'banned@test.com', 'password': 'pass'
+            'email': 'banned@test.com', 'password': TEST_PASSWORD
         }, format='json')
-        self.assertIn(r.status_code, [400, 401])
+        self.assertEqual(r.status_code, 401)
 
     def test_banned_user_listings_hidden(self):
         r = self.client.get('/api/v1/local/listings/')
@@ -946,12 +1176,10 @@ class TestBannedUser(APITestCase):
         self.assertNotIn(self.listing.pk, ids)
 
     def test_banned_user_cannot_create_listing(self):
-        from rest_framework_simplejwt.tokens import RefreshToken
-        token = str(RefreshToken.for_user(self.banned).access_token)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client = auth_client(self.banned)
         payload = _listing_payload(self.region, self.city)
         r = self.client.post('/api/v1/local/listings/', payload, format='json')
-        self.assertIn(r.status_code, [401, 403])
+        self.assertEqual(r.status_code, 401)
 
 
 # ─── Видимість оголошень за статусом (деталь + контакт) ───────────────────────
@@ -964,9 +1192,9 @@ class TestListingVisibilityByStatus(APITestCase):
     """
 
     def setUp(self):
-        self.owner = _make_user('vis_owner@test.com')
-        self.stranger = _make_user('vis_stranger@test.com')
-        self.staff = _make_user('vis_staff@test.com', is_staff=True)
+        self.owner = make_user('vis_owner@test.com')
+        self.stranger = make_user('vis_stranger@test.com')
+        self.staff = make_moderator('vis_staff@test.com')
         self.region = Region.objects.create(name='Одеська', slug='odeska')
         self.city = City.objects.create(name='Одеса', slug='odesa', region=self.region)
         self.listing = _make_listing(self.owner, self.region, self.city)
@@ -990,31 +1218,31 @@ class TestListingVisibilityByStatus(APITestCase):
     def test_hidden_listing_unavailable_to_stranger(self):
         # Саме цей сценарій і має закривати адмін-екшен hide_listing.
         self._set_status(LocalListing.Status.HIDDEN)
-        _auth(self.client, self.stranger)
+        self.client = auth_client(self.stranger)
         self.assertEqual(self._get_detail().status_code, 404)
 
     def test_owner_sees_own_listing_in_any_status(self):
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
         for value in ['pending', 'rejected', 'hidden', 'expired']:
             with self.subTest(status=value):
                 self._set_status(value)
                 self.assertEqual(self._get_detail().status_code, 200)
 
     def test_staff_sees_any_listing(self):
-        _auth(self.client, self.staff)
+        self.client = auth_client(self.staff)
         self._set_status(LocalListing.Status.HIDDEN)
         self.assertEqual(self._get_detail().status_code, 200)
 
     def test_contact_not_exposed_before_moderation(self):
         # Телефон не має віддаватися, доки оголошення не пройшло модерацію.
         self._set_status(LocalListing.Status.PENDING)
-        _auth(self.client, self.stranger)
+        self.client = auth_client(self.stranger)
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
         self.assertEqual(r.status_code, 404)
 
     def test_contact_available_for_active(self):
         self._set_status(LocalListing.Status.ACTIVE)
-        _auth(self.client, self.stranger)
+        self.client = auth_client(self.stranger)
         r = self.client.get(f'/api/v1/local/listings/{self.listing.pk}/contact/')
         self.assertEqual(r.status_code, 200)
         self.assertIn('contact_phone', r.data)
@@ -1033,7 +1261,8 @@ class TestCatalogQueryCount(APITestCase):
     """
 
     def setUp(self):
-        self.owner = _make_user('qc_owner@test.com')
+        cache.clear()  # счётчики троттлинга каталога от предыдущих классов (LocMem не откатывается)
+        self.owner = make_user('qc_owner@test.com')
         self.region = _make_region('QC-область')
         self.city = _make_city(self.region, 'QC-місто')
         for i in range(5):
@@ -1063,7 +1292,7 @@ class TestCatalogQueryCount(APITestCase):
     def test_my_listings_query_count_is_flat(self):
         # Кабінет використовує LocalListingOwnerSerializer — там ще середня
         # оцінка й лічильник угод, тобто найгірший випадок до правки.
-        _auth(self.client, self.owner)
+        self.client = auth_client(self.owner)
 
         with self.assertNumQueries(4):
             resp = self.client.get('/api/v1/local/my-listings/')
@@ -1081,7 +1310,7 @@ class TestCatalogQueryCount(APITestCase):
             Deal.objects.create(
                 listing=listing,
                 seller=self.owner,
-                buyer=_make_user(f'qc_buyer{i}@test.com'),
+                buyer=make_user(f'qc_buyer{i}@test.com'),
                 status=Deal.Status.CONFIRMED,
             )
 
@@ -1090,3 +1319,39 @@ class TestCatalogQueryCount(APITestCase):
         self.assertEqual(resp.data['seller_deal_count'], 3)
         # SELLER_BADGE_THRESHOLD за замовчуванням 3
         self.assertTrue(resp.data['seller_has_badge'])
+
+
+class TestOwnerNameAndIsOwner(APITestCase):
+    """Задача 1.9 (05-S3, 10-S1): owner_name без email, is_owner только владельцу."""
+
+    def setUp(self):
+        self.region = _make_region('Імена область')
+        self.city = _make_city(self.region, 'Імена місто')
+        self.owner = make_user('hidden.owner@example.com')
+        self.listing = _make_listing(self.owner, self.region, self.city)
+        self.detail = f'/api/v1/local/listings/{self.listing.pk}/'
+
+    def test_nameless_owner_is_anonymous_in_list_and_detail(self):
+        lst = self.client.get('/api/v1/local/listings/')
+        self.assertEqual(lst.status_code, 200)
+        self.assertEqual(lst.data['results'][0]['owner_name'], 'Користувач')
+        det = self.client.get(self.detail)
+        self.assertEqual(det.data['owner_name'], 'Користувач')
+        self.assertNotIn('hidden.owner', det.content.decode())
+        self.assertNotIn('hidden.owner', lst.content.decode())
+
+    def test_named_owner_short_form(self):
+        self.owner.first_name, self.owner.last_name = 'Олена', 'Коваль'
+        self.owner.save()
+        lst = self.client.get('/api/v1/local/listings/')
+        self.assertEqual(lst.data['results'][0]['owner_name'], 'Олена К.')
+        self.assertEqual(self.client.get(self.detail).data['owner_name'], 'Олена К.')
+
+    def test_is_owner_true_only_for_owner(self):
+        self.assertIs(auth_client(self.owner).get(self.detail).data['is_owner'], True)
+
+    def test_is_owner_false_for_other_user(self):
+        self.assertIs(auth_client(make_user()).get(self.detail).data['is_owner'], False)
+
+    def test_is_owner_false_for_anonymous(self):
+        self.assertIs(self.client.get(self.detail).data['is_owner'], False)

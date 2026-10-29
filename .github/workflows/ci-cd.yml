@@ -5,15 +5,31 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+# Минимальные права по умолчанию (аудит C11). Шире - только у джобы, которой это нужно.
+permissions:
+  contents: read
 
 jobs:
+  # ─── Секреты: gitleaks по рабочему дереву (история не сканируется, см. задачу 1.1) ───
+  secrets-scan:
+    name: Secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: gitleaks dir (working tree)
+        # TODO владельцу: закрепить образ по digest (zricethezav/gitleaks:v8.21.2@sha256:...).
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.21.2             dir . --config .gitleaks.toml --redact --verbose
+
   # ─── Backend: линтер + системные проверки + миграции + тесты ───
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18.4-alpine
         env:
           POSTGRES_DB: autoforyou
           POSTGRES_USER: autoforyou
@@ -36,9 +52,9 @@ jobs:
       # С реальным токеном тесты стучались бы в api.telegram.org.
       TELEGRAM_BOT_TOKEN: ""
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: pip
@@ -46,7 +62,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Ruff lint
         run: |
-          pip install ruff
+          pip install ruff==0.15.22
           ruff check .
       - name: Django system check
         run: python manage.py check
@@ -84,11 +100,11 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
@@ -101,35 +117,192 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost
+          NEXT_PUBLIC_SITE_URL: http://localhost
+
+  # ─── Инфраструктура (7.4, 7.5): shellcheck, LF, compose config, тесты deploy.sh и backup.sh на заглушках ───
+  infra-lint:
+    name: Infra lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: shellcheck
+        # SC1007 исключён: `DATABASE_URL= REDIS_URL= cmd` в scripts/test-backend.sh - намеренное обнуление переменных.
+        run: shellcheck -e SC1007 deploy.sh docker/*.sh docker/backup/*.sh scripts/*.sh scripts/tests/*.sh
+      - name: Only LF in shell scripts
+        run: |
+          git ls-files --eol -- '*.sh' | awk '$1 != "i/lf" {print; bad=1} END {exit bad}'
+          if git ls-files -z '*.sh' | xargs -0 grep -lI $'\r'; then echo "CRLF found in *.sh" >&2; exit 1; fi
+      - name: docker compose config
+        run: |
+          export POSTGRES_PASSWORD=x REDIS_PASSWORD=x NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x
+          # docker-compose.yml требует .env (env_file, required): в чистом checkout его нет, для проверки конфига - пустой.
+          : > .env
+          docker compose --env-file /dev/null config --quiet
+          # e2e-override тоже должен собираться (нужен .env.e2e: required: true).
+          cp .env.e2e.example .env.e2e
+          docker compose --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml config --quiet
+          rm -f .env.e2e
+      - name: Rotation and backup.sh tests
+        run: ./scripts/tests/test_backup_rotation.sh
+      - name: deploy.sh and server-setup.sh tests
+        run: ./scripts/tests/test_deploy.sh
+      - name: check-memory.sh tests (7.7a)
+        run: ./scripts/tests/test_check_memory.sh
+
+  # ─── Аудит зависимостей (C5). Необязательная: не добавлять в required checks до задачи 1.16 ───
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    # снять в задаче 1.16 (C5: блокирующая после обновления зависимостей)
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: pip-audit
+        run: |
+          pip install pip-audit==2.10.1
+          pip-audit -r requirements.txt
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: npm audit
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
 
   # ─── E2E: Playwright против полного стека в Docker ───
   e2e:
     name: E2E tests
     runs-on: ubuntu-latest
+    env:
+      # Стек читает только .env.e2e (override), боевой .env не подхватывается.
+      DC: docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Generate .env for the stack
+      - name: Generate .env.e2e for the stack
         run: |
-          cp .env.docker.example .env
+          cp .env.e2e.example .env.e2e
           {
             echo "SECRET_KEY=$(head -c 50 /dev/urandom | base64 | tr -d '\n/+=' | head -c 50)"
             echo "POSTGRES_PASSWORD=ci_$(head -c 12 /dev/urandom | base64 | tr -d '\n/+=')"
-          } >> .env
+            echo "REDIS_PASSWORD=ci_$(head -c 18 /dev/urandom | base64 | tr -d '\n/+=')"
+          } >> .env.e2e
+          # Пароль Redis (7.3, C9): REDIS_URL пересобираем под сгенерированный, как DATABASE_URL.
+          R_PASS=$(grep '^REDIS_PASSWORD=' .env.e2e | tail -1 | cut -d= -f2)
+          echo "REDIS_URL=redis://:${R_PASS}@redis:6379/0" >> .env.e2e
           # DATABASE_URL из шаблона содержит пароль по умолчанию — пересобираем
           # его под сгенерированный.
-          PG_PASS=$(grep '^POSTGRES_PASSWORD=' .env | tail -1 | cut -d= -f2)
-          echo "DATABASE_URL=postgres://autoforyou:${PG_PASS}@db:5432/autoforyou" >> .env
-          echo "POSTGRES_USER=autoforyou" >> .env
-          echo "POSTGRES_DB=autoforyou" >> .env
-          # Стек поднимается с DEBUG=false — как в проде. Но TLS здесь нет,
-          # и без этого Django редиректил бы весь HTTP на HTTPS.
-          echo "SECURE_SSL_REDIRECT=false" >> .env
-          echo "==== .env (без значений) ===="
-          cut -d= -f1 .env | grep -v '^#' | grep -v '^$' | sort -u
+          PG_PASS=$(grep '^POSTGRES_PASSWORD=' .env.e2e | tail -1 | cut -d= -f2)
+          echo "DATABASE_URL=postgres://autoforyou:${PG_PASS}@db:5432/autoforyou" >> .env.e2e
+          echo "POSTGRES_USER=autoforyou" >> .env.e2e
+          echo "POSTGRES_DB=autoforyou" >> .env.e2e
+          # Стек поднимается с DEBUG=false — как в проде. TLS здесь нет: TLS_MODE=off
+          # (nginx только :80, Django без SSL-редиректа и HSTS; задача 7.1).
+          echo "TLS_MODE=off" >> .env.e2e
+          # Только для тестового стека: разрешение e2e_seed и случайный пароль
+          # тестовых пользователей (маскируем в логах).
+          E2E_PASS="e2e_$(head -c 18 /dev/urandom | base64 | tr -d '[:space:]/+=')"
+          echo "::add-mask::${E2E_PASS}"
+          echo "E2E_SEED_ALLOWED=true" >> .env.e2e
+          echo "E2E_PASSWORD=${E2E_PASS}" >> .env.e2e
+          echo "E2E_PASSWORD=${E2E_PASS}" >> "$GITHUB_ENV"
+          echo "==== .env.e2e (без значений) ===="
+          cut -d= -f1 .env.e2e | grep -v '^#' | grep -v '^$' | sort -u
 
-      - name: Start the stack
-        run: docker compose up -d --build
+      - name: Fake production .env (override must ignore it)
+        run: echo "TELEGRAM_BOT_TOKEN=ci-fake-prod-token" > .env
+
+      - name: nginx -t for every TLS_MODE (7.1)
+        run: |
+          for mode in off external selfsigned letsencrypt; do
+            for cf in false; do
+              docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1                 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE="$mode" -e CLOUDFLARE_PROXY="$cf" -e TRUSTED_PROXY_IPS=10.0.0.0/8                 nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t'
+            done
+          done
+          # CAPTCHA_PROVIDER=turnstile: домен Turnstile сам попадает в CSP (иначе капча не загрузится).
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e CAPTCHA_PROVIDER=turnstile \
+            nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && grep -rq "challenges.cloudflare.com" /etc/nginx/'
+          # Аналитика (3.5): домены GA4 и Cloudflare WA попадают в CSP только при заданных ID, без ID их нет.
+          docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID=G-TEST000000 -e CLOUDFLARE_ANALYTICS_TOKEN=CFTEST0000000000             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t && grep -rq "www.googletagmanager.com" /etc/nginx/ && grep -rq "static.cloudflareinsights.com" /etc/nginx/'
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics|cloudflareinsights" /etc/nginx/'
+          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID='G-"><script>'             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics" /etc/nginx/'
+          # Cloudflare без файла диапазонов: nginx обязан не стартовать с понятной ошибкой.
+          if docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e CLOUDFLARE_PROXY=true               nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh'; then
+            echo "CLOUDFLARE_PROXY=true without ranges file must fail" >&2; exit 1
+          fi
+
+      - name: Compose config fails without secrets (C9, C13, 6.4)
+        run: |
+          # Положительный контроль: с четырьмя переменными конфиг валиден (иначе отказы ниже могли быть по другой причине).
+          POSTGRES_PASSWORD=x REDIS_PASSWORD=x NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x docker compose --env-file /dev/null config -q
+          if POSTGRES_PASSWORD= REDIS_PASSWORD=x NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x docker compose --env-file /dev/null config -q 2>/dev/null; then
+            echo "empty POSTGRES_PASSWORD must fail docker compose config" >&2; exit 1
+          fi
+          if POSTGRES_PASSWORD=x REDIS_PASSWORD= NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x docker compose --env-file /dev/null config -q 2>/dev/null; then
+            echo "empty REDIS_PASSWORD must fail docker compose config" >&2; exit 1
+          fi
+          if POSTGRES_PASSWORD=x REDIS_PASSWORD=x docker compose --env-file /dev/null config -q 2>/dev/null; then
+            echo "missing NEXT_PUBLIC_* must fail docker compose config" >&2; exit 1
+          fi
+
+      - name: Backend image has no secrets or dumps (C6, 7.3)
+        run: |
+          # Приманки: без них проверка зелёная и тогда, когда .dockerignore пуст (файлов просто нет в рабочей копии CI).
+          # .env и .env.e2e уже созданы шагами выше.
+          touch dump.sql .dev_secret_key .coverage
+          mkdir -p pgdata private_media .claude
+          touch private_media/x pgdata/x .claude/x
+          docker build -f Dockerfile.backend -t afy-backend-check .
+          test "$(docker run --rm afy-backend-check id -u)" = "10001"
+          docker run --rm afy-backend-check sh -c 'test ! -e /app/dump.sql && test ! -e /app/pgdata && test ! -e /app/private_media && test ! -e /app/.env && test ! -e /app/.env.e2e && test ! -e /app/.claude && test ! -e /app/.coverage && test ! -e /app/.dev_secret_key'
+          # Положительный контроль: тома и /tmp для app доступны на запись.
+          docker run --rm afy-backend-check sh -c 'touch /app/media/x && touch /app/staticfiles/x && touch /tmp/x'
+          # Код образа только для чтения: при RCE процесс app не должен переписать исходники. Проверяем весь /app.
+          writable=$(docker run --rm afy-backend-check sh -c 'find /app -path /app/media -prune -o -path /app/staticfiles -prune -o -writable -print')
+          if [ -n "$writable" ]; then
+            echo "app can write inside /app:" >&2; echo "$writable" >&2; exit 1
+          fi
+          rm -rf dump.sql .dev_secret_key .coverage pgdata private_media .claude
+
+      - name: Start the stack (deploy.sh, 7.5)
+        # Стек поднимает сам deploy.sh: проверки .env, сборка с тегом, up --wait, smoke /healthz и /.
+        # Бэкап пропущен (БД ещё нет). Файлы, имя проекта и env - стандартными переменными Compose и DEPLOY_ENV_FILE.
+        run: ./deploy.sh --build --skip-backup
+        env:
+          DEPLOY_ENV_FILE: .env.e2e
+          COMPOSE_FILE: docker-compose.yml:docker-compose.e2e.yml
+          COMPOSE_PROJECT_NAME: autoforyou-e2e
+
+      - name: Containers are non-root, Redis requires a password (7.3)
+        run: |
+          test "$($DC exec -T backend id -u)" = "10001"
+          test "$($DC exec -T frontend id -u)" != "0"
+          # Без пароля: именно AuthenticationError (NOAUTH). Любое другое исключение (сеть, опечатка) - провал.
+          $DC exec -T backend python -c "
+          import sys, redis
+          try:
+              redis.Redis(host='redis').ping()
+          except redis.exceptions.AuthenticationError:
+              sys.exit(0)
+          sys.exit(1)
+          "
+          # Положительный контроль: с паролем из REDIS_URL ping проходит (иначе проверка выше могла бы пройти по другой причине).
+          $DC exec -T backend python -c "
+          import os, sys, redis
+          sys.exit(0 if redis.Redis.from_url(os.environ['REDIS_URL']).ping() is True else 1)
+          "
+
+      - name: Check production .env is not visible in the stack
+        run: |
+          for svc in backend bot celery_worker celery_beat; do
+            val=$($DC exec -T "$svc" printenv TELEGRAM_BOT_TOKEN || true)
+            if [ -n "$val" ]; then echo "$svc sees production .env" >&2; exit 1; fi
+          done
+          test "$($DC exec -T backend printenv E2E_SEED_ALLOWED)" = "true"
 
       - name: Wait for the site
         run: |
@@ -139,14 +312,83 @@ jobs:
             sleep 5
           done
           echo "site did not come up in time" >&2
-          docker compose ps
-          docker compose logs --tail 100
+          $DC ps
+          $DC logs --tail 100
           exit 1
 
+      - name: Seed e2e data
+        run: |
+          # Сброс троттлинга (429 на логин/расчёт) — только на e2e-стеке.
+          $DC exec -T redis redis-cli FLUSHALL
+          $DC exec -T backend python manage.py e2e_seed
+          # Подвал кэширует публичные настройки на 300 с. «Wait for the site» выше
+          # отрисовал страницу до сида, и в кэше frontend остались пустые реквизиты.
+          # Пересоздаём контейнер frontend (кэш fetch лежит в его файловой системе
+          # и в памяти) и перезапускаем nginx, чтобы он взял новый адрес апстрима.
+          $DC up -d --force-recreate --no-deps frontend
+          $DC restart nginx
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://localhost/terms || true)
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 2
+          done
+          echo "frontend did not come back after restart" >&2
+          exit 1
+
+      - name: Backup, restore, verify (7.4)
+        run: |
+          set -euo pipefail
+          export COMPOSE_CMD="$DC"
+          BKP_PASS="e2e_$(head -c 18 /dev/urandom | base64 | tr -d '[:space:]/+=')"
+          {
+            echo "BACKUP_S3_BUCKET=e2e-backups"
+            echo "BACKUP_S3_ENDPOINT_URL=http://s3mock:9000"
+            echo "BACKUP_S3_ACCESS_KEY_ID=test"
+            echo "BACKUP_S3_SECRET_ACCESS_KEY=testtesttest"
+            echo "BACKUP_ENCRYPTION_PASSPHRASE=${BKP_PASS}"
+          } >> .env.e2e
+          # Эмуляция S3 (moto) в сети стека. MinIO не используем: его образы больше не публикуются в Docker Hub.
+          docker run -d --name afy-s3mock --network autoforyou-e2e_default --network-alias s3mock python:3.12-slim             sh -c "pip install -q 'moto[server]' && moto_server -H 0.0.0.0 -p 9000"
+          for i in $(seq 1 90); do
+            if $DC run --rm -T --no-deps --entrypoint sh backup -c 'wget -S -q -O /dev/null http://s3mock:9000/ 2>&1 | grep -q HTTP'; then break; fi
+            sleep 2
+          done
+          $DC run --rm -T --no-deps -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=testtesttest -e AWS_DEFAULT_REGION=auto             --entrypoint aws backup --endpoint-url http://s3mock:9000 s3 mb s3://e2e-backups
+
+          $DC exec -T backend python manage.py shell -c "from django.contrib.auth import get_user_model as g; g().objects.create_user(email='backup-check@e2e.test', password='x-Backup-check-1')"
+          ./scripts/backup.sh --now
+          # Файлы бэкапа создаёт контейнер (root, 600): чтобы читать их на runner, отдаём каталог пользователю. Контейнер пишет в такой каталог благодаря DAC_OVERRIDE; на сервере скрипты запускают через sudo.
+          sudo chown -R "$(id -u):$(id -g)" backups
+          dump=$(ls -1 backups/autoforyou_*.dump | tail -n 1)
+          test -n "$dump"
+          $DC exec -T backend python manage.py shell -c "from django.contrib.auth import get_user_model as g; g().objects.filter(email='backup-check@e2e.test').delete()"
+          ./scripts/restore.sh "$dump" --yes
+          test "$($DC exec -T backend python manage.py shell -c "from django.contrib.auth import get_user_model as g; print(g().objects.filter(email='backup-check@e2e.test').count())" | tail -n 1 | tr -d '[:space:]')" = "1"
+          # Проверка на временной БД (рабочая не затрагивается) и из «облака»; чужая passphrase - отказ, метка не обновляется.
+          ./scripts/backup-verify.sh --file "$dump"
+          rm -f backups/.last_verify
+          ./scripts/backup-verify.sh --from-remote
+          test -f backups/.last_verify
+          rm -f backups/.last_verify
+          sed -i 's/^BACKUP_ENCRYPTION_PASSPHRASE=.*/BACKUP_ENCRYPTION_PASSPHRASE=wrong-passphrase/' .env.e2e
+          if ./scripts/backup-verify.sh --from-remote 2> verify_err.log; then echo "wrong passphrase must fail" >&2; exit 1; fi
+          grep -q "расшифровка не удалась" verify_err.log   # причина отказа - именно расшифровка, а не сеть или bucket
+          test ! -e backups/.last_verify
+          # Пароль шифрования не задан при заданном bucket: код != 0, в лог попадает «шифрование не настроено».
+          sed -i 's/^BACKUP_ENCRYPTION_PASSPHRASE=.*/BACKUP_ENCRYPTION_PASSPHRASE=/' .env.e2e
+          if ./scripts/backup.sh --now 2> err.log; then echo "no passphrase must fail" >&2; exit 1; fi
+          grep -q "шифрование не настроено" err.log
+          # Healthcheck: свежая метка = healthy; метка старше 26 часов = unhealthy.
+          $DC run --rm -T --no-deps --entrypoint sh backup -c 'touch /backups/.last_success && /usr/local/bin/healthcheck.sh'
+          if $DC run --rm -T --no-deps --entrypoint sh backup -c 'touch -t 202001010000 /backups/.last_success && /usr/local/bin/healthcheck.sh'; then
+            echo "stale marker must be unhealthy" >&2; exit 1
+          fi
+          docker rm -f afy-s3mock
+
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -154,17 +396,94 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Install Chromium
+      - name: Install browsers
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run Playwright
         working-directory: frontend
         run: npx playwright test
+        env:
+          E2E_PASSWORD: ${{ env.E2E_PASSWORD }}
+
+      - name: Resilience pages (7.1)
+        run: |
+          # Frontend остановлен: оформленная страница 503, без внешних хостов.
+          $DC stop frontend
+          code=$(curl -s -o /tmp/50x.html -w '%{http_code}' http://localhost/)
+          test "$code" = "503"
+          grep -q "Сервіс тимчасово недоступний" /tmp/50x.html
+          if grep -Eq 'https?://' /tmp/50x.html; then echo "50x page has external links" >&2; exit 1; fi
+          $DC start frontend
+          # Backend остановлен: для /api/ JSON, не HTML-страница.
+          $DC stop backend
+          code=$(curl -s -o /tmp/api503.json -w '%{http_code}' http://localhost/api/v1/auth/csrf/)
+          test "$code" = "503"
+          grep -q '"detail"' /tmp/api503.json
+          $DC start backend
+
+      - name: Smoke with backend stopped (7.5)
+        run: |
+          $DC stop backend
+          cd frontend
+          E2E_BACKEND_STOPPED=1 npx playwright test --project=smoke --grep @backend-down
+
+      - name: Start backend again
+        if: always()
+        run: |
+          $DC start backend
+          $DC up -d --wait --wait-timeout 180 --no-deps backend
+
+      - name: Admin IP allow-list (C10, 7.1)
+        run: |
+          # Без ADMIN_ALLOWED_IPS /admin/ открыт (302 на логин), с чужим списком - 403.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/admin/)
+          test "$code" != "403"
+          sed -i '/^ADMIN_ALLOWED_IPS=/d' .env.e2e && echo "ADMIN_ALLOWED_IPS=203.0.113.1" >> .env.e2e
+          $DC up -d --force-recreate --no-deps nginx
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/admin/ || true)
+            if [ "$code" = "403" ]; then break; fi
+            sleep 2
+          done
+          test "$code" = "403"
+          # Подделка XFF адрес не подменяет: nginx смотрит на адрес соединения.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-For: 203.0.113.1' http://localhost/admin/)
+          test "$code" = "403"
+          # Публичные страницы список не затрагивает.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)
+          test "$code" = "200"
+          sed -i '/^ADMIN_ALLOWED_IPS=/d' .env.e2e
+          $DC up -d --force-recreate --no-deps nginx
+
+      - name: Security headers on the TLS stand (selfsigned, 7.1)
+        working-directory: frontend
+        run: |
+          cd ..
+          # AUTH_COOKIE_SECURE=false (стенд без TLS) несовместим с TLS_MODE != off: backend не стартует.
+          # NEXT_PUBLIC_* вшиваються при збірці: для https-стенду фронт перезбираємо з https-адресами,
+          # інакше браузер іде на http://localhost (mixed content + CSP connect-src 'self').
+          sed -i '/^TLS_MODE=/d;/^AUTH_COOKIE_SECURE=/d;/^NEXT_PUBLIC_API_URL=/d;/^NEXT_PUBLIC_SITE_URL=/d' .env.e2e
+          { echo "TLS_MODE=selfsigned"; echo "AUTH_COOKIE_SECURE=true";
+            echo "NEXT_PUBLIC_API_URL=https://localhost"; echo "NEXT_PUBLIC_SITE_URL=https://localhost"; } >> .env.e2e
+          $DC up -d --build --force-recreate nginx backend frontend
+          for i in $(seq 1 40); do
+            code=$(curl -sk -o /dev/null -w '%{http_code}' -m 5 https://localhost/ || true)
+            if [ "$code" = "200" ]; then break; fi
+            sleep 3
+          done
+          cd frontend
+          E2E_BASE_URL=https://localhost E2E_TLS_STAND=1 npx playwright test security-headers --project=tls
+        env:
+          E2E_PASSWORD: ${{ env.E2E_PASSWORD }}
+
+      - name: Clean up e2e data
+        if: always()
+        run: $DC exec -T backend python manage.py e2e_cleanup
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report
           path: frontend/playwright-report/
@@ -172,21 +491,68 @@ jobs:
 
       - name: Dump stack logs on failure
         if: failure()
-        run: docker compose logs --tail 200
+        run: $DC logs --tail 200
 
-  # ─── Deploy: только после зелёных проверок, только на push в main ───
+  # ─── Deploy: после зелёных проверок на push в main (если DEPLOY_ENABLED=true) или вручную ───
+  # Без переменной DEPLOY_ENABLED джоба пропускается (skipped), main остаётся зелёным.
   deploy:
-    name: Deploy to AWS EC2
+    name: Deploy
     runs-on: ubuntu-latest
-    needs: [backend, frontend, e2e]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [secrets-scan, infra-lint, backend, frontend, e2e]
+    if: vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: production
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
     steps:
+      - name: Check deploy settings
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST_FINGERPRINT: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          missing=""
+          for name in SSH_HOST SSH_USER SSH_KEY SSH_HOST_FINGERPRINT DEPLOY_PATH; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Деплой остановлен: не заданы:$missing. Secrets: SSH_HOST, SSH_USER, SSH_KEY, SSH_HOST_FINGERPRINT (строка вида SHA256:..., взять на самом сервере: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub), SSH_PORT (необязательно); Variables: DEPLOY_PATH. Без отпечатка сервера подключаться вслепую запрещено (аудит C11)."
+            exit 1
+          fi
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          # Коммит, прошедший проверки: deploy.sh откажется деплоить любой другой HEAD после git pull.
+          EXPECTED_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          envs: DEPLOY_PATH,EXPECTED_SHA
           script: |
-            /opt/autoforyou/redeploy.sh
+            cd "$DEPLOY_PATH" && ./deploy.sh --pull --build
+      - name: Checkout (for post-deploy smoke)
+        if: vars.SITE_URL != ''
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Node.js
+        if: vars.SITE_URL != ''
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Post-deploy smoke (Playwright @smoke, read-only)
+        if: vars.SITE_URL != ''
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test --project=smoke --grep @smoke
+        env:
+          E2E_BASE_URL: ${{ vars.SITE_URL }}
+          E2E_ALLOW_REMOTE: "1"

@@ -1,29 +1,10 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from local_listings.models import City, LocalListing, Region
-from messaging.models import Message
+from messaging.models import Conversation, Message
 from messaging.services import get_or_create_conversation, unread_count_for_user
-from users.models import CustomUser
-
-
-def make_user(email, role='buyer', **kw):
-    u = CustomUser.objects.create_user(email=email, password='pass1234', role=role, **kw)
-    return u
-
-
-def make_local_listing(owner, region, city, **kw):
-    defaults = dict(
-        make='Toyota', model='Camry', year=2020,
-        mileage_km=50000, fuel_type='petrol', transmission='auto',
-        body_type='sedan', condition='used',
-        price='500000', currency='UAH', price_type='fixed',
-        region=region, city=city,
-        status=LocalListing.Status.ACTIVE,
-        agreed_to_rules=True,
-    )
-    defaults.update(kw)
-    return LocalListing.objects.create(owner=owner, **defaults)
+from tests.factories import make_dealer, make_listing, make_local_listing, make_user, make_vehicle
 
 
 class SetupMixin(TestCase):
@@ -36,7 +17,7 @@ class SetupMixin(TestCase):
         self.admin = make_user('admin@test.com', role='admin', is_staff=True)
         self.region = Region.objects.create(name='Київська', slug='kyivska')
         self.city = City.objects.create(name='Київ', slug='kyiv', region=self.region)
-        self.listing = make_local_listing(self.seller, self.region, self.city)
+        self.listing = make_local_listing(self.seller, region=self.region, city=self.city)
         self.client = APIClient()
 
     def auth(self, user):
@@ -161,11 +142,11 @@ class TestConversationDetailAPI(SetupMixin):
         r = self.client.get(f'/api/v1/messages/conversations/{self.conv.pk}/')
         self.assertEqual(r.status_code, 200)
 
-    def test_stranger_gets_403(self):
+    def test_stranger_gets_404(self):
         stranger = make_user('stranger2@test.com')
         self.auth(stranger)
         r = self.client.get(f'/api/v1/messages/conversations/{self.conv.pk}/')
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 404)
 
     def test_reading_marks_messages_as_read(self):
         # seller reads → buyer's message becomes read
@@ -192,7 +173,7 @@ class TestConversationDetailAPI(SetupMixin):
             {'text': 'spam'},
             format='json',
         )
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 404)
 
 
 class TestUnreadCountAPI(SetupMixin):
@@ -211,3 +192,77 @@ class TestUnreadCountAPI(SetupMixin):
     def test_anon_gets_401(self):
         r = self.client.get('/api/v1/messages/unread-count/')
         self.assertEqual(r.status_code, 401)
+
+
+class TestNoEmailLeak(SetupMixin):
+    """Задача 1.9 (06-S5): email и его локальная часть не уходят в ответы и уведомления."""
+
+    def setUp(self):
+        super().setUp()
+        self.nameless = make_user('leaky.nameless@test.com')
+
+    def _assert_clean(self, text):
+        for leak in ('leaky', 'nameless@', '@test.com'):
+            self.assertNotIn(leak, text)
+
+    def test_conversation_responses_have_no_email(self):
+        conv, _, _ = get_or_create_conversation(self.nameless, 'local', self.listing.pk, 'Привіт!')
+        self.auth(self.seller)
+        lst = self.client.get('/api/v1/messages/conversations/')
+        self.assertEqual(lst.status_code, 200)
+        self.assertEqual(set(lst.data[0]['other_participant']), {'id', 'display_name'})
+        self.assertEqual(lst.data[0]['other_participant']['display_name'], 'Користувач')
+        self._assert_clean(lst.content.decode())
+        det = self.client.get(f'/api/v1/messages/conversations/{conv.pk}/')
+        self.assertEqual(det.status_code, 200)
+        for p in det.data['participants']:
+            self.assertEqual(set(p), {'id', 'display_name'})
+        self.assertEqual(det.data['messages'][0]['sender_name'], 'Користувач')
+        self._assert_clean(det.content.decode())
+
+    def test_message_notification_has_no_email(self):
+        from unittest.mock import patch
+
+        from notifications.models import Notification
+        with patch('integrations.tasks.send_notification.delay') as tg:
+            get_or_create_conversation(self.nameless, 'local', self.listing.pk, 'Привіт!')
+        note = Notification.objects.get(user=self.seller, type=Notification.Type.NEW_MESSAGE)
+        self._assert_clean(note.title + note.text)
+        self.assertIn('Користувач', note.title)
+        tg.assert_called_once()
+        self._assert_clean(tg.call_args.args[1])
+
+
+class TestStartImportedConversationGating(SetupMixin):
+    url = '/api/v1/messages/start/'
+
+    def _start(self, user, listing):
+        self.auth(user)
+        return self.client.post(
+            self.url, {'listing_type': 'imported', 'listing_id': listing.pk, 'text': 'Hi'}, format='json',
+        )
+
+    def test_retail_lot_works_when_lots_enabled(self):
+        lot = make_listing(make_vehicle(), self.seller)
+        self.assertEqual(self._start(self.buyer, lot).status_code, 201)
+
+    @override_settings(LOTS_ENABLED=False)
+    def test_imported_is_404_when_lots_disabled(self):
+        lot = make_listing(make_vehicle(), self.seller)
+        self.assertEqual(self._start(self.buyer, lot).status_code, 404)
+        self.assertEqual(Conversation.objects.count(), 0)
+
+    def test_wholesale_is_404_for_regular_buyer(self):
+        lot = make_listing(make_vehicle(), self.seller, channel='wholesale')
+        self.assertEqual(self._start(self.buyer, lot).status_code, 404)
+        self.assertEqual(Conversation.objects.count(), 0)
+
+    def test_wholesale_works_for_verified_dealer(self):
+        lot = make_listing(make_vehicle(), self.seller, channel='wholesale')
+        self.assertEqual(self._start(make_dealer(), lot).status_code, 201)
+
+    @override_settings(B2B_ENABLED=False)
+    def test_wholesale_is_404_for_dealer_when_b2b_disabled(self):
+        lot = make_listing(make_vehicle(), self.seller, channel='wholesale')
+        self.assertEqual(self._start(make_dealer(), lot).status_code, 404)
+        self.assertEqual(Conversation.objects.count(), 0)

@@ -3,10 +3,14 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 
+from core.c2c import c2c_enabled
+
 
 @shared_task
 def warn_expiring_listings():
     """За 3 дні до expires_at — попередження власнику (один раз, idempotent)."""
+    if not c2c_enabled():  # 6.7: раздел выключен - ни БД, ни писем
+        return {'skipped': 'c2c_disabled'}
     from integrations.tasks import send_notification
     from notifications.models import Notification
     from notifications.services import create_notification
@@ -44,6 +48,8 @@ def warn_expiring_listings():
 @shared_task
 def expire_listings():
     """Переводить прострочені active-оголошення в expired (idempotent)."""
+    if not c2c_enabled():  # 6.7
+        return {'skipped': 'c2c_disabled'}
     from integrations.tasks import send_notification
     from notifications.models import Notification
     from notifications.services import create_notification

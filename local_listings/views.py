@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import (
     Avg,
     Count,
@@ -12,20 +13,28 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
-from integrations.models import VinReport
-from integrations.providers import NHTSAVinDecodeProvider
+from core.c2c import payments_enabled
+from core.uploads import ImageUploadError, max_bytes_from_setting, sanitize_image
+from integrations.services import decode_vin
+from integrations.validators import normalize_vin
+from metrics.models import MetricKey
+from metrics.services import record_metric
+from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
+from .permissions import POSTING_CLOSED_DETAIL, CanPostLocalListing, posting_allowed
 from .serializers import (
     CitySerializer,
     LocalListingCreateSerializer,
@@ -90,7 +99,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.owner == request.user or request.user.is_staff
+        return obj.owner == request.user or request.user.has_perm('local_listings.moderate_locallisting')
 
 
 @extend_schema_view(
@@ -122,11 +131,12 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     ),
 )
 class LocalListingListCreateView(generics.ListCreateAPIView):
+    # права по методу в get_permissions: GET - AllowAny, POST - IsAuthenticated
     filter_backends = [LocalListingFilter]
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [permissions.IsAuthenticated()]
+            return [permissions.IsAuthenticated(), CanPostLocalListing(), IsEmailVerified()]
         return [permissions.AllowAny()]
 
     def get_serializer_class(self):
@@ -137,6 +147,10 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return _base_queryset().filter(status=LocalListing.Status.ACTIVE)
 
+    def perform_create(self, serializer):
+        serializer.save()
+        record_metric(MetricKey.LISTING_SUBMITTED)
+
 
 @extend_schema_view(
     get=extend_schema(tags=['local'], summary='Деталі місцевого оголошення'),
@@ -145,7 +159,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 )
 class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
     http_method_names = ['get', 'patch', 'delete', 'head', 'options']
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrAdmin]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, CanPostLocalListing, IsOwnerOrAdmin]
 
     def get_serializer_class(self):
         if self.request.method == 'PATCH':
@@ -167,14 +181,14 @@ class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         if not user.is_authenticated:
             return qs.filter(status=LocalListing.Status.ACTIVE)
-        if user.is_staff:
+        if user.has_perm('local_listings.moderate_locallisting'):
             return qs
         return qs.filter(Q(status=LocalListing.Status.ACTIVE) | Q(owner=user))
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
         if request.method not in permissions.SAFE_METHODS:
-            if obj.owner != request.user and not request.user.is_staff:
+            if obj.owner != request.user and not request.user.has_perm('local_listings.moderate_locallisting'):
                 self.permission_denied(
                     request,
                     message='Тільки власник може редагувати оголошення.',
@@ -204,27 +218,18 @@ class MyListingsView(generics.ListAPIView):
 )
 class VinPrefillView(APIView):
     permission_classes = [permissions.AllowAny]
+    # Тот же лимит, что у /vehicles/<vin>/decode/: оба ходят в NHTSA.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'expensive'
 
     def get(self, request, vin: str):
-        vin = vin.upper()
-        if len(vin) != 17:
-            return Response({'error': 'VIN має бути 17 символів.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        cached = VinReport.objects.filter(vin=vin, provider='nhtsa_vpic').first()
-        if cached:
-            return Response({**cached.report_data, 'cached': True})
-
-        provider = NHTSAVinDecodeProvider()
-        data = provider.decode(vin)
-
-        if 'error' not in data:
-            VinReport.objects.get_or_create(
-                vin=vin,
-                provider='nhtsa_vpic',
-                defaults={'report_data': data, 'demo': False},
-            )
-
-        return Response({**data, 'cached': False})
+        # Помощник формы подачи: пока подача закрыта (6.7), недоступен (аноним в открытом режиме - как раньше).
+        if not posting_allowed(request.user):
+            if not request.user.is_authenticated:
+                raise NotAuthenticated()
+            raise PermissionDenied(POSTING_CLOSED_DETAIL)
+        payload, http_status = decode_vin(normalize_vin(vin))
+        return Response(payload, status=http_status)
 
 
 @extend_schema(tags=['local'], summary='Список областей України')
@@ -248,12 +253,9 @@ class CityListView(generics.ListAPIView):
 
 # ─── Фото оголошень ───────────────────────────────────────────────────────────
 
-ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
-
-
 def _get_owned_listing(pk, user):
     listing = get_object_or_404(LocalListing, pk=pk)
-    if listing.owner != user and not user.is_staff:
+    if listing.owner != user and not user.has_perm('local_listings.moderate_locallisting'):
         return None, Response({'detail': 'Тільки власник може керувати фото.'}, status=status.HTTP_403_FORBIDDEN)
     return listing, None
 
@@ -264,8 +266,11 @@ def _get_owned_listing(pk, user):
     description='Завантажити одне або кілька фото. Перше фото стає головним, якщо головного ще немає.',
 )
 class LocalListingImageUploadView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanPostLocalListing]
     parser_classes = [MultiPartParser, FormParser]
+    # Каждый запрос декодирует и пересохраняет картинки (задача 1.10): отдельный лимит.
+    throttle_classes = [UserRateThrottle, ScopedRateThrottle]
+    throttle_scope = 'uploads'
 
     def post(self, request, pk):
         listing, err = _get_owned_listing(pk, request.user)
@@ -277,8 +282,7 @@ class LocalListingImageUploadView(APIView):
             return Response({'detail': 'Файли не передані (поле: images).'}, status=status.HTTP_400_BAD_REQUEST)
 
         max_photos = getattr(settings, 'LOCAL_LISTING_MAX_PHOTOS', 15)
-        max_size_mb = getattr(settings, 'LOCAL_LISTING_PHOTO_MAX_SIZE_MB', 8)
-        max_size_bytes = max_size_mb * 1024 * 1024
+        max_bytes = max_bytes_from_setting('LOCAL_LISTING_PHOTO_MAX_SIZE_MB')
 
         current_count = listing.images.count()
         if current_count + len(files) > max_photos:
@@ -287,27 +291,34 @@ class LocalListingImageUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        errors = []
+        # Тип — по содержимому (content_type и расширение клиента игнорируются), EXIF снимается,
+        # имя — uuid (задача 1.10). Сначала проверяются все файлы: всё или ничего.
+        errors, cleaned = [], []
         for f in files:
-            if f.content_type not in ALLOWED_IMAGE_TYPES:
-                errors.append(f'{f.name}: тип {f.content_type} не підтримується (тільки jpg/png/webp).')
-            if f.size > max_size_bytes:
-                errors.append(f'{f.name}: розмір {f.size // 1024 // 1024} МБ перевищує ліміт {max_size_mb} МБ.')
+            try:
+                cleaned.append(sanitize_image(f, max_bytes=max_bytes))
+            except ImageUploadError as exc:
+                errors.append(f'{(f.name or "файл")[:100]}: {exc}')
         if errors:
             return Response({'detail': errors}, status=status.HTTP_400_BAD_REQUEST)
 
         has_primary = listing.images.filter(is_primary=True).exists()
         created = []
-        for i, f in enumerate(files):
-            is_primary = not has_primary and i == 0
-            img = LocalListingImage.objects.create(
-                listing=listing,
-                image=f,
-                is_primary=is_primary,
-            )
-            if is_primary:
-                has_primary = True
-            created.append(img)
+        try:
+            with transaction.atomic():
+                for i, content in enumerate(cleaned):
+                    is_primary = not has_primary and i == 0
+                    img = LocalListingImage(listing=listing, image=content, is_primary=is_primary)
+                    created.append(img)  # до save(): файл пишется в pre_save, строка может не записаться
+                    img.save()
+                    if is_primary:
+                        has_primary = True
+        except Exception:
+            # Строки откатились — файлы, уже записанные в хранилище, не должны остаться сиротами.
+            for img in created:
+                if img.image and img.image._committed:
+                    img.image.storage.delete(img.image.name)
+            raise
 
         return Response(
             LocalListingImageSerializer(created, many=True).data,
@@ -320,7 +331,7 @@ class LocalListingImageUploadView(APIView):
     summary='Видалити або призначити головним фото оголошення',
 )
 class LocalListingImageDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanPostLocalListing]
 
     def _get(self, pk, img_id, user):
         listing, err = _get_owned_listing(pk, user)
@@ -375,6 +386,8 @@ class LocalListingContactView(APIView):
             pk=pk,
             status=LocalListing.Status.ACTIVE,
         )
+        if listing.contact_phone:
+            record_metric(MetricKey.PHONE_VIEW)
         return Response({'contact_phone': listing.contact_phone or None})
 
 
@@ -403,8 +416,10 @@ class LocalListingPromoteView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
+        if not payments_enabled():  # 6.7: платные услуги закрыты, платёж не создаётся
+            raise Http404
         listing = get_object_or_404(LocalListing, pk=pk)
-        if listing.owner != request.user and not request.user.is_staff:
+        if listing.owner != request.user and not request.user.has_perm('local_listings.moderate_locallisting'):
             return Response(
                 {'detail': 'Тільки власник може просувати оголошення.'},
                 status=status.HTTP_403_FORBIDDEN,
@@ -418,8 +433,13 @@ class LocalListingPromoteView(APIView):
         order_id = f'promo-{listing.pk}-{tariff.code}-{uuid.uuid4().hex[:8]}'
         description = f'{tariff.name}: {listing.make} {listing.model} {listing.year}'
 
-        from payments.liqpay_client import LiqPayClient
         from payments.models import Payment
+        from payments.providers import get_payment_provider, unavailable_response
+        from payments.services import build_liqpay_urls
+
+        provider = get_payment_provider()
+        if not provider.is_configured():
+            return unavailable_response()
 
         payment = Payment.objects.create(
             user=request.user,
@@ -432,12 +452,12 @@ class LocalListingPromoteView(APIView):
             purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
         )
 
-        client = LiqPayClient.from_settings()
-        checkout = client.create_checkout(
+        checkout = provider.create_checkout(
             order_id=order_id,
             amount=str(tariff.price),
             currency=tariff.currency,
             description=description,
+            **build_liqpay_urls(order_id),  # F5: server_url/result_url только из SITE_URL
         )
 
         return Response(

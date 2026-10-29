@@ -2,9 +2,33 @@ from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
+
+
+class ConsentDocument(models.TextChoices):
+    TERMS = 'terms', 'Умови використання'
+    PRIVACY = 'privacy', 'Політика конфіденційності'
+    DEALER_PROCESSING = 'dealer_processing', 'Обробка даних (заявка дилера)'
+    LEAD_PROCESSING = 'lead_processing', 'Обробка даних (заявка на підбір)'
+    AGE_18 = 'age_18', 'Підтвердження 18+'
+    PARTNER_TRANSFER = 'partner_transfer', 'Передача контактів партнеру'
+
+
+class ConsentMethod(models.TextChoices):
+    REGISTER = 'register', 'Реєстрація'
+    DEALER_FORM = 'dealer_form', 'Заявка дилера'
+    LEAD_FORM = 'lead_form', 'Заявка на підбір'
 
 
 class CustomUserManager(BaseUserManager):
+    def brokers_and_admins(self):
+        """Брокеры и администраторы (роль), включая суперпользователей."""
+        return self.filter(
+            models.Q(role=CustomUser.Role.BROKER)
+            | models.Q(role=CustomUser.Role.ADMIN, is_staff=True)
+            | models.Q(is_superuser=True)
+        )
+
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError('Email обязателен')
@@ -25,6 +49,8 @@ class CustomUser(AbstractUser):
     class Role(models.TextChoices):
         BUYER = 'buyer', 'Покупатель'
         DEALER = 'dealer', 'Перекупщик'
+        BROKER = 'broker', 'Брокер'
+        MODERATOR = 'moderator', 'Модератор'
         ADMIN = 'admin', 'Администратор'
 
     objects = CustomUserManager()
@@ -38,7 +64,19 @@ class CustomUser(AbstractUser):
     agreed_to_terms_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата згоди з умовами')
     is_banned = models.BooleanField(default=False, verbose_name='Забанений')
     is_email_verified = models.BooleanField(default=False, verbose_name='Email підтверджено')
-    # повноцінна email-верифікація — окремо
+    # Версия сессий (1.7): claim `sv` в JWT. revoke_all_sessions увеличивает её, токены со старой
+    # версией (и без claim, как версия 0) отклоняются сразу - и access, и refresh.
+    session_version = models.PositiveIntegerField(default=0, verbose_name='Версія сесій')
+    # Удаление аккаунта (1.8, Q3): запрос ставит deletion_scheduled_at (начало периода отмены),
+    # по истечении периода anonymize_user ставит deleted_at. deleted_at отличает удалённого
+    # от забаненного и неактивного: по нему контрагенты видят «Користувач видалений».
+    deletion_scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Видалення заплановано')
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='Видалено (знеособлено)')
+    # Источник первого касания (2.14): пишется один раз при регистрации, дальше не меняется.
+    # Только для admin (право view_attribution); в API пользователю и другим не отдаётся.
+    first_touch_utm = models.JSONField('UTM першого візиту', default=dict, blank=True, editable=False)
+    first_touch_referrer = models.CharField('Реферер першого візиту', max_length=500, blank=True, editable=False)
+    first_touch_entry_url = models.CharField('Сторінка входу', max_length=500, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     USERNAME_FIELD = 'email'
@@ -47,9 +85,23 @@ class CustomUser(AbstractUser):
     class Meta:
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+        permissions = [('view_attribution', 'Може бачити джерело візиту (UTM, реферер)')]
 
     def __str__(self):
         return self.email
+
+    @property
+    def is_admin_role(self):
+        # Голое поле role прав не даёт: admin подтверждается is_staff (его ставит только админка).
+        return self.is_superuser or (self.role == self.Role.ADMIN and self.is_staff)
+
+    @property
+    def is_broker(self):
+        return self.role == self.Role.BROKER
+
+    @property
+    def is_moderator(self):
+        return self.role == self.Role.MODERATOR
 
 
 class TrustedShop(models.Model):
@@ -127,3 +179,71 @@ class DealerApplication(models.Model):
 
     def __str__(self):
         return f'{self.user.email} — {self.company_name} [{self.get_status_display()}]'
+
+
+class ImmutableError(Exception):
+    """Попытка изменить или удалить запись журнала согласий."""
+
+
+class ConsentRecordQuerySet(models.QuerySet):
+    """Журнал только дополняется. SET_NULL при удалении пользователя/заявки идёт через
+    Collector (sql.UpdateQuery), а не через QuerySet.update, поэтому продолжает работать."""
+
+    def update(self, **kwargs):
+        raise ImmutableError('Журнал згод не змінюється.')
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ImmutableError('Журнал згод не змінюється.')
+
+    def delete(self):
+        raise ImmutableError('Записи журналу згод не видаляються.')
+
+
+class ConsentRecord(models.Model):
+    """
+    Журнал згод: що, коли, якої версії документів і яким способом. Тільки створюється.
+    IP, user-agent і текст чекбокса не зберігаються (мінімум ПДн). Запис переживає
+    видалення акаунта (user -> NULL) як доказ згоди; строк зберігання визначає юрист.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='consent_records', verbose_name='Користувач',
+    )
+    lead = models.ForeignKey(
+        'leads.Lead', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='consent_records', verbose_name='Заявка',
+    )
+    document = models.CharField('Документ', max_length=20, choices=ConsentDocument.choices)
+    doc_version = models.CharField('Версія документів', max_length=32, blank=True, default='')
+    partner_name = models.CharField(
+        'Назва партнера на момент згоди', max_length=255, blank=True, default='',
+        help_text='Заповнюється лише для передачі контактів партнеру.',
+    )
+    given_at = models.DateTimeField('Дата згоди', default=timezone.now, editable=False)
+    method = models.CharField('Спосіб', max_length=12, choices=ConsentMethod.choices)
+    lead_public_id = models.CharField(
+        'Номер заявки (копія)', max_length=20, blank=True, default='',
+        help_text='AFY-ГГГГ-NNNN, не ПДн: лишається, коли заявку обезличено або видалено.',
+    )
+
+    objects = ConsentRecordQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = 'Згода'
+        verbose_name_plural = 'Журнал згод'
+        ordering = ['-given_at', '-id']
+        indexes = [
+            models.Index(fields=['user', 'document'], name='consent_user_doc_idx'),
+            models.Index(fields=['document', 'doc_version'], name='consent_doc_ver_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.document} v{self.doc_version or "-"} {self.given_at:%Y-%m-%d}'
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ImmutableError('Запис журналу згод не змінюється.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ImmutableError('Записи журналу згод не видаляються.')

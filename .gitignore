@@ -30,6 +30,17 @@ Thumbs.db
 .env
 .env.local
 *.env
+.env.*
+!.env.*.example
+!.env.example
+
+# Дампы и ключи
+*.dump
+*.sql
+*.sql.gz
+*.pem
+*.key
+id_rsa*
 
 # Backups (содержат данные БД — никогда не коммитить)
 backups/
@@ -41,7 +52,11 @@ pgdata/
 dump.sql
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/agents/
+!.claude/commands/
+.claude/settings.local.json
+.claude/*.local.*
 
 # Playwright (артефакты случайного запуска из корня репозитория)
 test-results/
@@ -51,3 +66,17 @@ blob-report/
 # coverage.py
 .coverage
 htmlcov/
+
+# E2E storageState (токены тестовых пользователей)
+frontend/e2e/.auth/
+
+# e2e-стек: локальный env (шаблон — .env.e2e.example)
+.env.e2e
+
+# Приватные файлы (фото трекинга, задача 1.10)
+private_media/
+# Локальный SECRET_KEY разработчика (задача 7.2)
+.dev_secret_key
+
+# Состояние деплоя (теги образов для отката, задача 7.5)
+.deploy/

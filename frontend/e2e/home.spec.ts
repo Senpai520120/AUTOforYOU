@@ -1,14 +1,11 @@
 /**
  * E2E: головна сторінка.
  *
- * Блок «Свіжі авто» рендериться на сервері й тільки за наявності лотів,
- * тому тут не перевіряється: SSR-запит неможливо перехопити через page.route,
- * а умовна перевірка «якщо блок є, то...» була б зеленою завжди. Наявність
- * блока підтверджена вручну на стеку з 4 лотами.
+ * Блок «Свіжі авто» прибрано разом із заморозкою каталогу лотів (задача 2.8).
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Головна сторінка', () => {
+test.describe('Головна сторінка @smoke', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem('cookie_consent', 'necessary');
@@ -16,7 +13,7 @@ test.describe('Головна сторінка', () => {
     await page.goto('/');
   });
 
-  test('hero веде в калькулятор і в каталог', async ({ page }) => {
+  test('hero веде в калькулятор', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Авто з США під ключ в Україну' })).toBeVisible();
 
     const calc = page.getByRole('link', { name: 'Порахувати вартість' });
@@ -29,9 +26,10 @@ test.describe('Головна сторінка', () => {
     const section = page.getByRole('region', { name: 'Два напрямки' });
     await expect(section).toBeVisible();
 
+    // Каталог лотів заморожено (2.8): картка імпорту веде в калькулятор.
     await expect(section.getByRole('link', { name: /Імпорт з аукціонів США/ })).toHaveAttribute(
       'href',
-      '/listings',
+      '/calculator',
     );
     await expect(section.getByRole('link', { name: /Каталог Україна/ })).toHaveAttribute('href', '/ua');
   });
@@ -50,9 +48,10 @@ test.describe('Головна сторінка', () => {
     const section = page.getByRole('region', { name: 'Що входить у розрахунок' });
     await expect(section).toBeVisible();
 
-    // Ключові статті розмитнення мають бути названі явно.
-    await expect(section).toContainText('Мито 10% від митної вартості');
-    await expect(section).toContainText('ПДВ 20%');
+    // Ключові статті названі без цифр ставок і портів (6.4, 08-C3): цифри — тільки в калькуляторі.
+    await expect(section).toContainText('Мито та ПДВ');
+    await expect(section).not.toContainText('10%');
+    await expect(section).not.toContainText('20%');
     await expect(section).toContainText('Пенсійний збір');
 
     await section.getByRole('link', { name: 'Відкрити калькулятор' }).click();

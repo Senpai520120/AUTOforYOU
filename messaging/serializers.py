@@ -1,5 +1,8 @@
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
+
+from users.display import public_display_name
 
 from .models import Conversation, Message
 
@@ -7,9 +10,15 @@ User = get_user_model()
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name']
+        fields = ['id', 'display_name']
+
+    @extend_schema_field(serializers.CharField())
+    def get_display_name(self, obj):
+        return public_display_name(obj)
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -20,7 +29,7 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'sender_name', 'text', 'created_at', 'read_at']
 
     def get_sender_name(self, obj):
-        return obj.sender.first_name or obj.sender.email.split('@')[0]
+        return public_display_name(obj.sender)
 
 
 class ConversationListSerializer(serializers.ModelSerializer):

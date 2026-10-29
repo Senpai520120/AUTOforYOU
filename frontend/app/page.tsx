@@ -1,10 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import ListingCard from '@/components/listings/ListingCard';
-import type { Listing, PaginatedResponse } from '@/lib/types';
-
-// INTERNAL_API_URL задається в Docker (http://backend:8000) для SSR.
-const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+import { getC2CFlags } from '@/lib/c2c';
+import { getDemoStatus } from '@/lib/site-config';
+import { buildMetadata } from '@/lib/seo';
+import { serverGet } from '@/lib/server-api';
 
 /**
  * Рендер на кожен запит, а не на етапі збірки.
@@ -16,50 +15,28 @@ const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?
  */
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: 'AUTOforYOU — авто з США під ключ',
+  absoluteTitle: true,
   description:
     'Маркетплейс автомобілів з аукціонів США Copart та IAAI. Калькулятор вартості під ключ з розмитненням, доставка в Україну, каталог місцевих оголошень.',
-  openGraph: {
-    title: 'AUTOforYOU — авто з США під ключ',
-    description: 'Авто з аукціонів Copart та IAAI, калькулятор розмитнення, каталог оголошень по Україні.',
-    type: 'website',
-  },
-};
+  path: '/',
+  ownImage: true,
+});
 
 type ExchangeRate = { from_currency: string; to_currency: string; rate: number; date: string };
 
-/** Свіжі роздрібні лоти. Порожній масив — блок просто не рендериться. */
-async function fetchLatestListings(): Promise<Listing[]> {
-  try {
-    const res = await fetch(`${apiUrl}/api/v1/listings/?channel=retail`, {
-      next: { revalidate: 300 },
-    });
-    if (!res.ok) return [];
-    const data: PaginatedResponse<Listing> = await res.json();
-    return data.results.slice(0, 3);
-  } catch {
-    return [];
-  }
-}
-
-/** Актуальний курс НБУ. null — блок покаже формулу без конкретної цифри. */
+/** Актуальний курс НБУ через спільний serverGet (кеш 1 год). null — блок покаже формулу без цифри. */
 async function fetchUsdRate(): Promise<ExchangeRate | null> {
-  try {
-    const res = await fetch(`${apiUrl}/api/v1/pricing/rates/`, { next: { revalidate: 3600 } });
-    if (!res.ok) return null;
-    const data: { exchange_rates?: ExchangeRate[] } = await res.json();
-    return data.exchange_rates?.find(r => r.from_currency === 'USD' && r.to_currency === 'UAH') ?? null;
-  } catch {
-    return null;
-  }
+  const data = await serverGet<{ exchange_rates?: ExchangeRate[] }>('/api/v1/pricing/rates/', 3600);
+  return data?.exchange_rates?.find(r => r.from_currency === 'USD' && r.to_currency === 'UAH') ?? null;
 }
 
 const STEPS = [
   {
     n: '1',
     title: 'Обираєте лот',
-    text: 'Знаходите авто на Copart або IAAI чи в нашому каталозі. Перевіряєте VIN і стан.',
+    text: 'Знаходите авто на Copart або IAAI. Перевіряєте VIN і стан.',
   },
   {
     n: '2',
@@ -80,18 +57,17 @@ const STEPS = [
 
 const COST_ITEMS = [
   'Ставка на аукціоні',
-  'Аукціонний збір: buyer fee, gate, environmental, virtual bid',
+  'Аукціонний збір і супутні збори аукціону',
   'Доставка до порту США',
-  'Морський фрахт до Клайпеди або Гданська',
+  'Морський фрахт до порту ЄС',
   'Доставка ЄС → Україна',
-  'Акциз: 50–150 €/л залежно від палива й об’єму',
-  'Мито 10% від митної вартості',
-  'ПДВ 20%',
+  'Акциз — залежить від палива та об’єму двигуна',
+  'Мито та ПДВ',
   'Пенсійний збір',
 ];
 
 export default async function Home() {
-  const [listings, usdRate] = await Promise.all([fetchLatestListings(), fetchUsdRate()]);
+  const [usdRate, c2c, isDemo] = await Promise.all([fetchUsdRate(), getC2CFlags(), getDemoStatus()]);
 
   return (
     <div className="space-y-14">
@@ -108,16 +84,12 @@ export default async function Home() {
           >
             Порахувати вартість
           </Link>
-          <Link
-            href="/listings"
-            className="bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
-          >
-            Переглянути каталог
-          </Link>
         </div>
-        <p className="mt-6 text-xs text-amber-300">
-          ⚠ Тестові тарифи — всі розрахунки є демонстраційними
-        </p>
+        {isDemo === true && (
+          <p className="mt-6 text-xs text-amber-300" data-testid="home-demo-note">
+            ⚠ Тестові тарифи — всі розрахунки є демонстраційними
+          </p>
+        )}
       </section>
 
       {/* Два напрямки — прибирає плутанину між імпортом і локальним каталогом */}
@@ -127,7 +99,7 @@ export default async function Home() {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link
-            href="/listings"
+            href="/calculator"
             className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <div className="text-4xl mb-3" aria-hidden="true">🇺🇸</div>
@@ -135,21 +107,30 @@ export default async function Home() {
               Імпорт з аукціонів США
             </h3>
             <p className="text-sm text-slate-500">
-              Лоти Copart та IAAI, розрахунок «під ключ», відстеження контейнера від складу до гаража.
+              Авто з Copart та IAAI: розрахунок «під ключ», викуп, доставка й розмитнення.
             </p>
           </Link>
-          <Link
-            href="/ua"
-            className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
-            <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
-              Каталог Україна
-            </h3>
-            <p className="text-sm text-slate-500">
-              Оголошення від власників і дилерів по всій Україні. Подати своє — безкоштовно.
-            </p>
-          </Link>
+          {c2c.enabled ? (
+            <Link
+              href="/ua"
+              className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
+              <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
+                Каталог Україна
+              </h3>
+              <p className="text-sm text-slate-500">
+                Оголошення від власників і дилерів по всій Україні.
+                {c2c.postingEnabled ? ' Подати своє — безкоштовно.' : ''}
+              </p>
+            </Link>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-xl p-6" data-testid="home-ua-soon">
+              <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
+              <h3 className="font-bold text-lg text-slate-900 mb-1">Оголошення по Україні — незабаром</h3>
+              <p className="text-sm text-slate-500">Каталог авто від власників і дилерів готується до запуску.</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -203,25 +184,6 @@ export default async function Home() {
           )}
         </div>
       </section>
-
-      {/* Свіжі авто — рендериться тільки якщо є що показати */}
-      {listings.length > 0 && (
-        <section aria-labelledby="latest-heading">
-          <div className="flex items-center justify-between mb-6">
-            <h2 id="latest-heading" className="text-2xl font-bold text-slate-900">
-              Свіжі авто
-            </h2>
-            <Link href="/listings" className="text-sm text-blue-700 hover:underline">
-              Весь каталог →
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {listings.map(l => (
-              <ListingCard key={l.id} listing={l} />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

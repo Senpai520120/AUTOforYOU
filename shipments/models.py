@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
+from django.urls import reverse
 
+from core.uploads import SanitizedImageField, UuidUploadTo, private_media_storage
 from vehicles.models import Vehicle
 
 
@@ -65,8 +67,8 @@ class Shipment(models.Model):
     def advance_status(self, new_status: str, note: str = '', photo=None) -> 'TrackingEvent':
         if not self.can_transition_to(new_status):
             raise ValueError(
-                f'Переход {self.status} → {new_status} недопустим. '
-                f'Возможные: {self.VALID_TRANSITIONS.get(self.status, [])}'
+                f'Перехід {self.status} → {new_status} неприпустимий. '
+                f'Можливі: {self.VALID_TRANSITIONS.get(self.status, [])}'
             )
         self.status = new_status
         self.save(update_fields=['status', 'updated_at'])
@@ -84,7 +86,11 @@ class TrackingEvent(models.Model):
         max_length=20, choices=Shipment.Status.choices, verbose_name='Статус'
     )
     note = models.TextField(blank=True, verbose_name='Комментарий')
-    photo = models.ImageField(upload_to='tracking_photos/', null=True, blank=True, verbose_name='Фото')
+    # Приватное хранилище (вне /media/): отдаёт только TrackingEventPhotoView с проверкой прав.
+    photo = SanitizedImageField(
+        upload_to=UuidUploadTo('tracking_photos'), storage=private_media_storage,
+        null=True, blank=True, verbose_name='Фото',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -94,3 +100,9 @@ class TrackingEvent(models.Model):
 
     def __str__(self):
         return f'{self.shipment.container_no} → {self.get_status_display()} ({self.created_at:%Y-%m-%d})'
+
+    def get_photo_url(self):
+        """Защищённый URL фото (прямого /media/ у фото трекинга нет)."""
+        if not self.photo or not self.pk:
+            return None
+        return reverse('tracking-event-photo', kwargs={'pk': self.shipment_id, 'event_id': self.pk})

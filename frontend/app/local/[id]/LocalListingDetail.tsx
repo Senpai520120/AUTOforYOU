@@ -1,13 +1,15 @@
 'use client';
 import Image from 'next/image';
+import { trackEvent } from '@/lib/analytics';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LocalListing } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { localApi } from '@/api/local';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
 import ReportButton from '@/components/reports/ReportButton';
+import { useC2C } from '@/components/c2c/C2CProvider';
 
 const PLACEHOLDER_SVG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%2394a3b8'%3EФото відсутнє%3C/text%3E%3C/svg%3E";
@@ -28,6 +30,8 @@ const CONDITION_LABELS: Record<string, string> = {
 
 export default function LocalListingDetail({ listing }: { listing: LocalListing }) {
   const { user } = useAuth();
+  // У «засіві» переписка, обране й скарги по C2C закриті (бекенд відповідає 404), кнопки ховаємо.
+  const social = useC2C().social;
   const [activeImg, setActiveImg] = useState(0);
   const [phone, setPhone] = useState<string | null>(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
@@ -35,7 +39,18 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
 
   const images = listing.images.length > 0 ? listing.images : [{ id: 0, image: null, source_url: '', is_primary: true }];
   const mainImg = images[activeImg]?.image || images[activeImg]?.source_url || PLACEHOLDER_SVG;
-  const isOwner = user && listing.owner_name === (user.first_name && user.last_name ? `${user.first_name} ${user.last_name}`.trim() : user.email.split('@')[0]);
+  // SSR-HTML публичный и кэшируется (is_owner там всегда false), поэтому признак владельца
+  // берём из авторизованного запроса на клиенте.
+  const [ownerFlag, setOwnerFlag] = useState(false);
+  const isOwner = Boolean(user) && ownerFlag;
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    localApi.detail(listing.id)
+      .then(d => { if (!cancelled) setOwnerFlag(Boolean(d.is_owner)); })
+      .catch(() => { if (!cancelled) setOwnerFlag(false); });
+    return () => { cancelled = true; };
+  }, [user, listing.id]);
 
   const price = Number(listing.price).toLocaleString('uk-UA');
 
@@ -59,6 +74,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
     try {
       const data = await localApi.getContact(listing.id);
       setPhone(data.contact_phone || 'Номер не вказано');
+      trackEvent('phone_reveal', { source: 'listing' });
     } catch {
       setPhoneError('Не вдалося завантажити номер. Спробуйте ще раз.');
     } finally {
@@ -74,9 +90,11 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
         <span>{listing.make} {listing.model}</span>
       </div>
 
-      <div className="flex justify-end mb-2">
-        <HeartButton listingType="local" listingId={listing.id} />
-      </div>
+      {social && (
+        <div className="flex justify-end mb-2">
+          <HeartButton listingType="local" listingId={listing.id} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Gallery */}
@@ -102,7 +120,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                 >
                   <Image
                     src={img.image || img.source_url || PLACEHOLDER_SVG}
-                    alt={`Фото ${i + 1}`}
+                    alt={`Фото ${i + 1} з ${images.length} — ${listing.make} ${listing.model} ${listing.year}`}
                     fill
                     className="object-cover"
                     sizes="64px"
@@ -165,26 +183,33 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                 >
                   {phone}
                 </a>
+              ) : !user ? (
+                <Link
+                  href="/login"
+                  className="block w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
+                >
+                  Увійдіть, щоб побачити телефон
+                </Link>
               ) : (
                 <button
                   onClick={handleShowPhone}
                   disabled={phoneLoading}
                   className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
                 >
-                  {phoneLoading ? 'Завантаження...' : user ? 'Показати телефон' : 'Увійдіть, щоб побачити телефон'}
+                  {phoneLoading ? 'Завантаження...' : 'Показати телефон'}
                 </button>
               )}
               {phoneError && <p className="mt-1 text-xs text-red-500">{phoneError}</p>}
             </div>
           </div>
 
-          {!isOwner && listing.status === 'active' && (
+          {social && !isOwner && listing.status === 'active' && (
             <div className="mt-3">
               <WriteSellerButton listingType="local" listingId={listing.id} />
             </div>
           )}
 
-          {isOwner && (
+          {social && isOwner && (
             <div className="mt-3 flex gap-2">
               <Link
                 href={`/local/${listing.id}/edit`}
@@ -195,7 +220,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
             </div>
           )}
 
-          {!isOwner && (
+          {social && !isOwner && (
             <div className="mt-3 flex justify-end">
               <ReportButton listingId={listing.id} />
             </div>

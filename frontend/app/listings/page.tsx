@@ -3,21 +3,26 @@ import { Suspense } from 'react';
 import ListingFilters from '@/components/listings/ListingFilters';
 import ListingsGrid from './ListingsGrid';
 import WholesaleHint from './WholesaleHint';
+import { buildMetadata, hasFilters } from '@/lib/seo';
 import { buildQuery, serverGet, type SearchParams } from '@/lib/server-api';
 import type { Listing, PaginatedResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Каталог авто',
-  description:
-    'Каталог автомобілів з аукціонів США Copart та IAAI. Фільтри за статусом, типом палива, ціною. В наявності та в дорозі.',
-  openGraph: {
-    title: 'Каталог авто — AUTOforYOU',
-    description: 'Автомобілі з США: Copart, IAAI. Фільтри за ціною, паливом, статусом.',
-    type: 'website',
-  },
-};
+/** Canonical — базовий шлях без query; сторінки з фільтрами не індексуються (задача 6.3). */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}): Promise<Metadata> {
+  return buildMetadata({
+    title: 'Каталог авто',
+    description:
+      'Каталог автомобілів з аукціонів США Copart та IAAI. Фільтри за статусом, типом палива, ціною. В наявності та в дорозі.',
+    path: '/listings',
+    noindex: hasFilters(await searchParams),
+  });
+}
 
 /** Має збігатися з _apply_filters у listings/views.py плюс search/ordering з DRF. */
 const LISTING_FILTERS = [

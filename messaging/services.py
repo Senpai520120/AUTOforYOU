@@ -2,20 +2,41 @@
 Сервісний шар мессенджера (non-realtime).
 
 Місцеві оголошення  → покупець ↔ автор оголошення.
-Імпортні оголошення → покупець ↔ адмін (перший is_staff=True).
-                      Всі адміни бачать ці діалоги через permissions у views.
+Імпортні оголошення → покупець ↔ брокер (перший broker, інакше перший admin).
+                      Ці діалоги бачать лише broker і admin (не просто is_staff).
 """
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
+
+from users.display import public_display_name
 
 from .models import Conversation, Message
 
 User = get_user_model()
 
 
+class ListingUnavailable(LookupError):
+    """Лот не існує або недоступний користувачу (не розрізняємо) - view відповідає 404."""
+
+
+def handles_imports(user) -> bool:
+    """Імпортні діалоги бачать лише broker і admin (06-S9), is_staff без ролі - ні."""
+    return bool(
+        getattr(user, 'is_authenticated', False)
+        and (user.is_broker or user.is_admin_role)
+    )
+
+
 def _first_admin():
-    return User.objects.filter(is_staff=True).order_by('pk').first()
+    """Отримувач імпортного діалогу: перший брокер, за його відсутності - перший admin."""
+    return (
+        User.objects.filter(role=User.Role.BROKER).order_by('pk').first()
+        or User.objects.filter(
+            Q(role=User.Role.ADMIN, is_staff=True) | Q(is_superuser=True)
+        ).order_by('pk').first()
+    )
 
 
 @transaction.atomic
@@ -47,10 +68,19 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
         conv.participants.set([initiator.pk, listing.owner_id])
 
     elif listing_type == 'imported':
+        from core.modules import module_enabled
+        from listings.permissions import can_view_wholesale
+
+        if not module_enabled('lots'):
+            raise ListingUnavailable('Оголошення не знайдено.')
         try:
             listing = Listing.objects.get(pk=listing_id)
         except Listing.DoesNotExist:
-            raise ValueError('Оголошення не знайдено.')
+            raise ListingUnavailable('Оголошення не знайдено.')
+        if listing.channel == Listing.Channel.WHOLESALE and not (
+            module_enabled('b2b') and can_view_wholesale(initiator)
+        ):
+            raise ListingUnavailable('Оголошення не знайдено.')
 
         conv = Conversation.objects.filter(
             initiator=initiator, imported_listing=listing
@@ -74,7 +104,7 @@ def send_message_to_conversation(sender, conversation: Conversation, text: str):
     """Returns (message, detected_contacts_list). Raises PermissionError if not participant."""
     is_participant = conversation.participants.filter(pk=sender.pk).exists()
     is_admin_imported = (
-        bool(getattr(sender, 'is_staff', False))
+        handles_imports(sender)
         and conversation.imported_listing_id is not None
     )
     if not is_participant and not is_admin_imported:
@@ -92,9 +122,8 @@ def mark_as_read(user, conversation: Conversation) -> int:
 
 def unread_count_for_user(user) -> int:
     """Загальна кількість непрочитаних повідомлень для користувача."""
-    from django.db.models import Q
     qs = Message.objects.filter(read_at__isnull=True).exclude(sender=user)
-    if getattr(user, 'is_staff', False):
+    if handles_imports(user):
         qs = qs.filter(
             Q(conversation__participants=user)
             | Q(conversation__imported_listing__isnull=False)
@@ -146,17 +175,17 @@ def _notify_recipients(sender, conversation: Conversation, message: Message) -> 
         subject_label = 'оголошення'
         conv_link = '/me/messages'
 
-    sender_label = sender.first_name or sender.email.split('@')[0]
+    sender_label = public_display_name(sender)
     preview = message.text[:80]
     tg_text = f'Нове повідомлення від {sender_label} по {subject_label}:\n«{preview}»'
     notif_title = f'Нове повідомлення від {sender_label}'
     notif_text = f'{subject_label}: «{preview}»'
 
     recipients = list(conversation.participants.exclude(pk=sender.pk))
-    # Для імпортних — додатково адміни, які не є учасниками
+    # Для імпортних — додатково брокери й адміни, які не є учасниками
     if conversation.imported_listing_id:
         existing_ids = {r.pk for r in recipients} | {sender.pk}
-        extra_admins = User.objects.filter(is_staff=True).exclude(pk__in=existing_ids)
+        extra_admins = User.objects.brokers_and_admins().exclude(pk__in=existing_ids)
         for admin in extra_admins:
             _send_one(admin.pk, tg_text, notif_title, notif_text, conv_link, send_notification, create_notification, NotifModel)
 

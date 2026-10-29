@@ -1,0 +1,62 @@
+# Override для e2e-стека (Playwright). Боевой .env в этот стек не попадает.
+#
+# Запуск (из корня репозитория; один раз: cp .env.e2e.example .env.e2e):
+#   docker compose -p autoforyou-e2e --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+#
+# `--env-file .env.e2e` подменяет и подстановку ${VAR} в docker-compose.yml
+# (POSTGRES_*, NEXT_PUBLIC_*), которую иначе Compose брал бы из корневого .env.
+# `!override` заменяет env_file базового файла, а не добавляет к нему: без
+# этого Compose сложил бы списки и боевые токены попали бы в контейнеры.
+# required: true — без .env.e2e Compose останавливается с ошибкой
+# «env file … .env.e2e not found»; запасного .env нет.
+#
+# Если ошибка: cp .env.e2e.example .env.e2e
+services:
+  backend:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+    environment:
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      EMAIL_USE_TLS: "false"
+    depends_on:
+      mailpit:
+        condition: service_started
+  bot:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+  celery_worker:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+    environment:
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      EMAIL_USE_TLS: "false"
+    depends_on:
+      mailpit:
+        condition: service_started
+  celery_beat:
+    env_file: !override
+      - path: .env.e2e
+        required: true
+  # Порт БД наружу e2e не нужен; без этого стек конфликтует с dev-стеком на 5433.
+  db:
+    ports: !reset []
+  # Весь набор Playwright логинится с одного IP: боевой limit_req (20r/m, 12-S10) даёт 429 и делает
+  # тесты входа зависимыми от порядка прогона. В e2e-стеке поднимаем только лимит; остальное - боевой конфиг.
+  # Заголовки безопасности, CSP и страница 50x в e2e - боевые (задача 7.1).
+  nginx:
+    environment:
+      NGINX_AUTH_RATE: 6000r/m
+  # Перехват писем (задача 1.7): SMTP :1025 для backend и celery_worker, HTTP API :8025 для Playwright.
+  # Письма сброса пароля уходят из Celery-воркера, поэтому SMTP-настройки нужны обоим сервисам.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped

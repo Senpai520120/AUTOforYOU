@@ -25,7 +25,7 @@
 | Сповіщення | Telegram-бот на aiogram 3 |
 | Розгортання | Docker Compose: nginx, backend, frontend, celery worker і beat, bot, db, redis |
 | API-документація | drf-spectacular (Swagger / ReDoc) |
-| Тести | Django test runner (433) + Playwright (33) |
+| Тести | Django test runner (433) + Playwright (80 тестов, 6 из них `fixme`) |
 
 ---
 
@@ -47,6 +47,8 @@ docker compose ps
 `docker/entrypoint.sh` сам застосовує міграції та наповнює довідники — окремих команд запускати не потрібно.
 
 ### Локально, без Docker
+
+Робоче оточення Python — `.venv` (інших venv у корені немає).
 
 ```bash
 python -m venv .venv
@@ -82,13 +84,17 @@ npm run dev
 
 ### Backend — 433 тести
 
-```bash
-python manage.py test
+Робоче оточення Python — `.venv` (у PyCharm оберіть інтерпретатор `.venv\Scripts\python.exe`).
+
+```powershell
+scripts/test-backend.ps1              # Windows
+scripts/test-backend.sh               # Linux/Mac/Git Bash
+scripts/test-backend.ps1 pricing      # один застосунок
 ```
 
-Токен Telegram у тестах обнуляється автоматично, окремих змінних задавати не треба.
+Скрипти самі обнуляють `DATABASE_URL` і `REDIS_URL`: локальний `.env` — шаблон для Docker з хостами `db`/`redis`, а `core/settings.py` його підвантажує. Без обнулення тести йдуть у Postgres/Redis з `.env` або падають. Токен Telegram у тестах обнуляється автоматично.
 
-### E2E — 33 тести, Playwright
+### E2E — 80 тестів, Playwright (6 `fixme` з посиланням на задачу)
 
 Потрібен піднятий стек. Запускати **з `frontend/`**, не з кореня репозиторію:
 
@@ -106,9 +112,34 @@ npx playwright test
 | `npm run test:e2e:report` | HTML-звіт останнього прогону |
 | `npm run test:e2e:codegen` | Запис дій у код |
 
+### E2E-стек (окремий compose-проект)
+
+Боєвий `.env` не використовується: беремо `.env.docker.example` + `E2E_SEED_ALLOWED=true`, `SECURE_SSL_REDIRECT=false` (у стека немає TLS, інакше API редіректить на https), `E2E_PASSWORD=<випадковий>` (лише для тестового стека).
+
+```bash
+docker compose -p autoforyou-e2e up -d --build
+docker compose -p autoforyou-e2e exec -T backend python manage.py e2e_seed
+cd frontend && E2E_PASSWORD=<той самий> npx playwright test
+docker compose -p autoforyou-e2e down -v
+```
+
+Конфіг відмовляється працювати з `E2E_BASE_URL`, якого немає в білому списку (localhost, 127.0.0.1, nginx, frontend), якщо не задано `E2E_ALLOW_REMOTE=1`. Деталі — [`docs/TEST_CASES.md`](docs/TEST_CASES.md).
+
 Детальний розбір усіх тест-кейсів — [`docs/TEST_CASES.md`](docs/TEST_CASES.md).
 
 ---
+
+## Захист від витоку секретів
+
+Перед комітом працює gitleaks (конфіг `.gitleaks.toml`, той самий у CI):
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files   # перевірка всього дерева
+```
+
+Ключі й токени — лише в `.env` (він у `.gitignore`), у репозиторій не потрапляють.
 
 ## URL-карта
 
@@ -125,7 +156,7 @@ npx playwright test
 | `/me/messages`, `/me/deals`, `/me/favorites`, `/me/saved-searches`, `/me/notifications` | Розділи кабінету |
 | `/me/shipments`, `/me/trusted-shops`, `/me/telegram`, `/me/calculations` | Логістика, партнери, бот, історія розрахунків |
 | `/terms`, `/rules`, `/refund`, `/privacy`, `/cookies` | Юридичні документи |
-| `/api/docs/` | Swagger UI |
+| `/api/docs/` | Swagger UI (только admin-роль; `API_DOCS_PUBLIC=true` открывает всем) |
 | `/api/redoc/` | ReDoc |
 | `/admin/` | Django Admin |
 
@@ -224,6 +255,7 @@ AUTOforYOU/
 | [`docs/TEST_CASES.md`](docs/TEST_CASES.md) | Розбір E2E-тестів на happy і negative path |
 | [`docs/BACKEND_TESTS.md`](docs/BACKEND_TESTS.md) | Розбір backend-тестів |
 | [`docs/DEMO.md`](docs/DEMO.md) | Сценарій демонстрації |
+| [`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md) | Чек-лист запуску для власника (змінні `.env`, адмінка, перевірки, `launch_check`) |
 | [`DEPLOY_NOTES.md`](DEPLOY_NOTES.md) | Розгортання простою мовою |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Журнал архітектурних рішень |
 | [`PROGRESS.md`](PROGRESS.md) | Журнал прогресу |

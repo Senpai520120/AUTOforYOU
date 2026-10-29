@@ -1,41 +1,64 @@
 'use client';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/api/client';
+import { useState } from 'react';
+import { ApiError, apiFetch } from '@/api/client';
+import LoadingState from '@/components/ui/LoadingState';
 
 interface LinkTokenResponse {
-  token: string;
-  expires_at: string;
+  configured: boolean;
+  bot_username: string | null;
+  token: string | null;
+  expires_at: string | null;
   link: string | null;
-  note: string;
+  note: string | null;
+}
+
+// Термін дії посилання: з expires_at відповіді API, а не константа на фронті. «HH:MM» за київським часом.
+function validUntil(expiresAt: string | null): string | null {
+  if (!expiresAt) return null;
+  const d = new Date(expiresAt);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Kyiv' });
 }
 
 export default function TelegramPage() {
-  const { user, loading, refreshUser } = useAuth();
+  const { user, loading, refreshUser } = useRequireAuth();
   const router = useRouter();
 
   const [generating, setGenerating] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState<string | null>(null);
+  const [until, setUntil] = useState<string | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
-
-  if (loading || !user) return null;
+  if (loading || !user) return <LoadingState />;
 
   const isLinked = !!user.telegram_id;
 
   async function handleGenerateLink() {
     setError(null);
+    setNotConfigured(false);
     setGenerating(true);
     try {
-      const data = await apiFetch<LinkTokenResponse>('/api/v1/telegram/link-token/');
+      const data = await apiFetch<LinkTokenResponse>('/api/v1/telegram/link-token/', { method: 'POST' });
+      if (!data.configured || !data.link) {
+        setLink(null);
+        setNotConfigured(true);
+        return;
+      }
       setLink(data.link);
-    } catch {
-      setError('Не вдалося отримати посилання. Спробуйте ще раз.');
+      setBotUsername(data.bot_username);
+      setUntil(validUntil(data.expires_at));
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : undefined;
+      setError(
+        status === 429
+          ? 'Забагато запитів. Спробуйте за годину.'
+          : 'Не вдалося отримати посилання. Спробуйте ще раз.',
+      );
     } finally {
       setGenerating(false);
     }
@@ -95,6 +118,12 @@ export default function TelegramPage() {
               <p className="text-sm text-slate-600">Telegram ще не прив'язаний до вашого акаунту.</p>
             </div>
 
+            {notConfigured && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3">
+                Telegram-бот ще не налаштований, спробуйте пізніше.
+              </div>
+            )}
+
             {link ? (
               <div className="space-y-3">
                 <p className="text-sm text-slate-600">Натисніть кнопку нижче, щоб відкрити бота і завершити прив'язку:</p>
@@ -104,9 +133,9 @@ export default function TelegramPage() {
                   rel="noopener noreferrer"
                   className="block w-full text-center bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl transition-colors"
                 >
-                  Відкрити @AUTO_F_Y_bot у Telegram →
+                  Відкрити @{botUsername} у Telegram →
                 </a>
-                <p className="text-xs text-slate-400 text-center">Посилання діє 30 хвилин. Після прив'язки оновіть сторінку.</p>
+                <p className="text-xs text-slate-400 text-center">{until ? `Посилання діє до ${until}. ` : ''}Після прив'язки оновіть сторінку.</p>
                 <button
                   onClick={handleGenerateLink}
                   className="w-full text-sm text-slate-500 hover:text-slate-700 underline"

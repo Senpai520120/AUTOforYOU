@@ -1,0 +1,107 @@
+# Общие location'ы для серверных блоков :80 (off/external) и :443. Рендерится скриптом.
+
+# ─── Статическая страница недоступности (502/503/504, отчёт 39) ─────────────────
+location = /50x.html {
+    internal;
+    alias /nginx-src/error-pages/50x.html;
+    add_header Cache-Control "no-store" always;
+    include /etc/nginx/generated/security-headers.conf;
+}
+
+# ─── Именованные location'ы с JSON для /api/ ─────────────────────────────────
+location @json_413 {
+    default_type application/json;
+    charset utf-8;
+    add_header Cache-Control "no-store" always;
+    include /etc/nginx/generated/security-headers.conf;
+    return 413 '{"detail": "Файл або запит завеликий. Зменште розмір і спробуйте ще раз."}';
+}
+location @json_429 {
+    default_type application/json;
+    charset utf-8;
+    add_header Cache-Control "no-store" always;
+    add_header Retry-After "60" always;
+    include /etc/nginx/generated/security-headers.conf;
+    return 429 '{"detail": "Забагато запитів. Спробуйте за хвилину."}';
+}
+location @json_503 {
+    default_type application/json;
+    charset utf-8;
+    add_header Cache-Control "no-store" always;
+    include /etc/nginx/generated/security-headers.conf;
+    return 503 '{"detail": "Сервіс тимчасово недоступний"}';
+}
+
+# ─── Живость (задача 7.3): healthcheck nginx и внешний uptime-монитор. Тело - только статусы. ──
+location = /healthz {
+    limit_req zone=health burst=10 nodelay;
+    limit_req_status 429;
+    proxy_pass http://backend;
+    include /nginx-src/snippets/proxy-common.conf;
+    error_page 502 503 504 =503 @json_503;
+    add_header Cache-Control "no-store" always;
+}
+
+# ─── Django static files (collectstatic output) ──────────────────────────────
+location /static/ {
+    alias /static/;
+    expires 7d;
+    add_header Cache-Control "public, immutable";
+    include /etc/nginx/generated/security-headers.conf;
+}
+
+# ─── User-uploaded media ────────────────────────────────────────────────────
+include /etc/nginx/generated/media-location.conf;
+
+# ─── Приватные файлы (фото трекинга) ─────────────────────────────────────────
+# Только через X-Accel-Redirect из Django после проверки прав
+# (PRIVATE_MEDIA_USE_X_ACCEL=true). Прямой запрос снаружи - 404.
+location /protected-media/ {
+    internal;
+    alias /private_media/;
+    add_header Cache-Control "private, no-store" always;
+    include /etc/nginx/generated/security-headers-media.conf;
+}
+
+# ─── Вход/регистрация: limit_req по IP (12-S10). 429 вместо дефолтного 503 ─────
+location ~ ^/api/v1/auth/(token|register)/$ {
+    limit_req zone=auth burst=10 nodelay;
+    limit_req_status 429;
+    proxy_pass http://backend;
+    include /nginx-src/snippets/proxy-common.conf;
+    include /nginx-src/snippets/api-errors.conf;
+    include /etc/nginx/generated/security-headers.conf;
+}
+
+# ─── Админка: список IP (C10) и limit_req только на /admin/login/ ─────────────
+location ^~ /admin/ {
+    include /etc/nginx/generated/admin-access.conf;
+    limit_req zone=admin_login burst=10 nodelay;
+    limit_req_status 429;
+    proxy_pass http://backend;
+    include /nginx-src/snippets/proxy-common.conf;
+    error_page 502 503 504 =503 /50x.html;
+    include /etc/nginx/generated/security-headers.conf;
+}
+
+# ─── Django API ───────────────────────────────────────────────────────────────
+location /api/ {
+    proxy_pass http://backend;
+    include /nginx-src/snippets/proxy-common.conf;
+    include /nginx-src/snippets/api-errors.conf;
+    include /etc/nginx/generated/security-headers.conf;
+}
+
+# ─── Next.js frontend (everything else) ──────────────────────────────────────
+location / {
+    proxy_pass http://frontend;
+    proxy_http_version 1.1;
+    include /nginx-src/snippets/proxy-common.conf;
+    # В отличие от backend, XFF сохраняет цепочку (как было до 7.1).
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_cache_bypass $http_upgrade;
+    error_page 502 503 504 =503 /50x.html;
+    include /etc/nginx/generated/security-headers.conf;
+}

@@ -1,26 +1,30 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { pricingApi } from '@/api/pricing';
 import { Calculation, PaginatedResponse } from '@/lib/types';
-import Spinner from '@/components/ui/Spinner';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
 import Link from 'next/link';
 
 export default function MyCalculationsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [data, setData] = useState<PaginatedResponse<Calculation> | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(() => {
+    setFetching(true);
+    setError(null);
+    pricingApi.myCalculations().then(setData).catch(setError).finally(() => setFetching(false));
+  }, []);
 
   useEffect(() => {
-    if (!loading && !user) { router.push('/login'); return; }
-    if (user) {
-      pricingApi.myCalculations().then(setData).finally(() => setFetching(false));
-    }
-  }, [user, loading, router]);
+    if (user) load();
+  }, [user, load]);
 
-  if (loading || fetching) return <div className="flex justify-center py-20"><Spinner size="lg" /></div>;
+  if (loading || !user || fetching) return <LoadingState />;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -29,13 +33,10 @@ export default function MyCalculationsPage() {
         <h1 className="text-xl font-bold text-slate-900">Мої розрахунки</h1>
       </div>
 
-      {!data || data.results.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-slate-400 text-lg mb-4">Розрахунків поки немає</p>
-          <Link href="/calculator" className="bg-blue-700 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-800">
-            Порахувати
-          </Link>
-        </div>
+      {error ? (
+        <ErrorState error={error} onRetry={load} />
+      ) : !data || data.results.length === 0 ? (
+        <EmptyState title="Розрахунків поки немає" hint="Зробіть перший розрахунок у калькуляторі." action={{ label: 'Порахувати', href: '/calculator' }} />
       ) : (
         <div className="space-y-4">
           {data.results.map(c => (

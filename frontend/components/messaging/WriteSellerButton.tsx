@@ -3,6 +3,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { startConversation } from '@/api/messages';
+import Modal from '@/components/ui/Modal';
+import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import { isEmailNotVerified } from '@/lib/email-verify';
 
 interface Props {
   listingType: 'local' | 'imported';
@@ -17,6 +20,7 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notVerified, setNotVerified] = useState(false);
 
   const btnLabel = label ?? (listingType === 'imported' ? 'Написати менеджеру' : 'Написати продавцю');
 
@@ -25,14 +29,22 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
     setOpen(true);
   };
 
+  const closeModal = () => { setOpen(false); setError(''); setText(''); };
+
   const handleSend = async () => {
     if (!text.trim()) return;
     setLoading(true);
     setError('');
+    setNotVerified(false);
     try {
       const res = await startConversation(listingType, listingId, text.trim());
       router.push(`/me/messages?conv=${res.conversation_id}`);
     } catch (e: unknown) {
+      if (isEmailNotVerified(e)) {
+        setNotVerified(true);
+        setLoading(false);
+        return;
+      }
       const err = e as { data?: { detail?: string } };
       setError(err?.data?.detail ?? 'Помилка. Спробуйте ще раз.');
       setLoading(false);
@@ -49,15 +61,16 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-bold text-slate-900 mb-3">{btnLabel}</h2>
+        <Modal title={btnLabel} onClose={closeModal}>
+          <div>
+            {notVerified && <EmailNotVerified className="mb-3" />}
             {error && (
-              <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
+              <div role="alert" className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
             )}
             <textarea
               value={text}
               onChange={e => setText(e.target.value)}
+              aria-label="Ваше перше повідомлення"
               placeholder="Ваше перше повідомлення…"
               rows={4}
               autoFocus
@@ -65,7 +78,7 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
             />
             <div className="flex gap-2 mt-4">
               <button
-                onClick={() => { setOpen(false); setError(''); setText(''); }}
+                onClick={closeModal}
                 className="flex-1 border border-slate-300 text-slate-600 hover:border-slate-400 py-2 rounded-xl text-sm transition-colors"
               >
                 Скасувати
@@ -79,7 +92,7 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

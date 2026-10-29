@@ -6,6 +6,9 @@ from aiogram.types import TelegramObject
 
 class UserBindingMiddleware(BaseMiddleware):
     """
+    НЕ подключён к диспетчеру (5.4, 07-Q11): хендлеры не использовали результат, а SQL шёл на каждое
+    сообщение. /unlink ищет пользователя сам. Файл оставлен до решения владельца об удалении.
+
     Ищет привязанного Django-пользователя по telegram_id и кладёт его в data.
     Доступен в хендлерах как `telegram_user` и `is_linked`.
     """

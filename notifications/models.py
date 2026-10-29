@@ -13,6 +13,8 @@ class Notification(models.Model):
         DEAL_CONFIRMED = 'deal_confirmed', 'Угода підтверджена'
         DEAL_CANCELLED = 'deal_cancelled', 'Угода скасована'
         REVIEW_RECEIVED = 'review_received', 'Новий відгук'
+        NEW_LEAD = 'new_lead', 'Нова заявка брокеру'
+        LEAD_UNDELIVERED = 'lead_undelivered', 'Заявку не доставлено брокеру'
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
