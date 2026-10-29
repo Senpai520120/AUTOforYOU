@@ -24,7 +24,15 @@ cat > "$BIN/docker" <<'MOCK'
 echo "docker platform=${DOCKER_DEFAULT_PLATFORM:-} tag=${IMAGE_TAG:-} $*" >> "$STUB_LOG"
 case "$1" in
     info) exit 0 ;;
-    image) [ "${STUB_NO_IMAGES:-0}" = 1 ] && exit 1; exit 0 ;;
+    image)
+        if [ "$2" = ls ]; then printf 'autoforyou-backend:a1a1a1a
+autoforyou-backend:b2b2b2b
+autoforyou-backend:9f9f9f9
+autoforyou-frontend:9f9f9f9
+autoforyou-backend:local
+other-app:9f9f9f9
+'; exit 0; fi
+        [ "${STUB_NO_IMAGES:-0}" = 1 ] && exit 1; exit 0 ;;
 esac
 [ "$1" = compose ] || exit 0
 shift
@@ -258,6 +266,12 @@ contains "деплой: бэкап вызван" "$(docker_log)" "backup.sh --no
 contains "деплой: путь к дампу напечатан" "$OUT" "autoforyou_2026-01-01_0330.dump"
 contains "деплой: --build передан в compose up" "$(docker_log)" "--build"
 if docker_log | grep -qE ' up -d$'; then ok "деплой: остальные сервисы (bot, backup) запущены без --wait"; else bad "деплой: нет запуска остальных сервисов"; fi
+contains "деплой: старый тег backend удалён" "$(docker_log)" "image rm autoforyou-backend:9f9f9f9"
+contains "деплой: старый тег frontend удалён" "$(docker_log)" "image rm autoforyou-frontend:9f9f9f9"
+lacks "деплой: текущий тег не удаляется" "$(docker_log)" "image rm autoforyou-backend:b2b2b2b"
+lacks "деплой: предыдущий тег (для отката) не удаляется" "$(docker_log)" "image rm autoforyou-backend:a1a1a1a"
+lacks "деплой: тег :local не удаляется" "$(docker_log)" "image rm autoforyou-backend:local"
+lacks "деплой: чужие образы не трогаются" "$(docker_log)" "image rm other-app"
 contains "деплой: ждём healthy" "$(docker_log)" "--wait"
 contains "деплой: smoke ходит на /healthz" "$(docker_log)" "/healthz"
 contains "деплой: smoke через --resolve на 127.0.0.1" "$(docker_log)" "--resolve shop.example.test:443:127.0.0.1"

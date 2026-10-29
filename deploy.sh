@@ -267,6 +267,22 @@ up_stack() { # $1 = тег; $2 = --build или пусто
     IMAGE_TAG="$tag" dc exec -T nginx nginx -s reload || return 1
 }
 
+# Каждый деплой оставляет образы со своим тегом (~1,5 ГБ на тег): храним только текущий и предыдущий
+# (нужен для --rollback), остальные теги и висячие слои удаляем, чтобы диск сервера не заполнялся.
+prune_old_tags() {
+    local prev ref tag
+    prev="$(read_state previous_tag)"
+    log "Удаляю старые теги образов (оставляю $TAG${prev:+ и $prev})"
+    docker image ls --format '{{.Repository}}:{{.Tag}}' |
+        grep -E '^autoforyou-[a-z_]+:[0-9a-f]{7,40}$' |
+        while read -r ref; do
+            tag="${ref##*:}"
+            if [ "$tag" = "$TAG" ] || [ "$tag" = "$prev" ]; then continue; fi
+            docker image rm "$ref" > /dev/null 2>&1 || warn "не удалось удалить $ref (занят контейнером?)"
+        done
+    docker image prune -f > /dev/null || warn "docker image prune не выполнился"
+}
+
 smoke_check() { # $1 = путь
     local path="$1" i code
     for ((i = 1; i <= SMOKE_RETRIES; i++)); do
@@ -410,5 +426,6 @@ if [ "$DO_E2E" = 1 ]; then
 fi
 
 write_state current_tag "$TAG"
+prune_old_tags
 log "Готово. Работает тег $TAG."
 dc ps
