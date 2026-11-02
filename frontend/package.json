@@ -15,7 +15,7 @@
     "test:e2e:codegen": "playwright codegen http://localhost"
   },
   "dependencies": {
-    "next": "16.2.9",
+    "next": "16.4.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "0.0.1"
@@ -28,7 +28,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.4.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

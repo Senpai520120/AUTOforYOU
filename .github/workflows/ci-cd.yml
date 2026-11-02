@@ -149,12 +149,10 @@ jobs:
       - name: check-memory.sh tests (7.7a)
         run: ./scripts/tests/test_check_memory.sh
 
-  # ─── Аудит зависимостей (C5). Необязательная: не добавлять в required checks до задачи 1.16 ───
+  # ─── Аудит зависимостей (C5). Блокирующая (1.16): в needs деплоя ───
   dependency-audit:
     name: Dependency audit
     runs-on: ubuntu-latest
-    # снять в задаче 1.16 (C5: блокирующая после обновления зависимостей)
-    continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Set up Python 3.12
@@ -498,7 +496,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: [secrets-scan, infra-lint, backend, frontend, e2e]
+    needs: [secrets-scan, infra-lint, backend, frontend, e2e, dependency-audit]
     if: vars.DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment: production
     concurrency:

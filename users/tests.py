@@ -1134,6 +1134,15 @@ class CookieAuthTests(CleanCacheTestCase):
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertIn('Bearer', resp['WWW-Authenticate'])
 
+    def test_forged_signature_cookie_on_protected_is_401(self):
+        # C4: токен с валидным payload, но подписанный чужим ключом, не принимается (PyJWT 2.15).
+        import jwt
+        from rest_framework_simplejwt.tokens import AccessToken
+        payload = dict(AccessToken.for_user(self.user).payload)
+        self.client.cookies['access'] = jwt.encode(payload, 'x' * 64, algorithm='HS256')
+        resp = self.client.get(PROFILE_URL)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_garbage_cookie_on_allowany_get_is_anonymous(self):
         self.client.cookies['access'] = 'garbage'
         resp = self.client.get('/api/v1/pricing/rates/')

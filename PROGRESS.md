@@ -10,7 +10,7 @@
 
 - Прогон 2026-10-27…28 (ветка `finish-site`): **6.3a/6.3b, 6.4, 2.13, 2.16a/2.16b, 6.5, 7.1 (◐: Let's Encrypt и Cloudflare — только на сервере), 3.5, 7.3, 7.4** — по коммиту на задачу, ревью безопасности по каждой с правами/ПДн/контейнерами, полный e2e на чистом стеке, CI последнего коммита `be2739d` зелёный.
 - Остановка: по просьбе владельца после 7.4.
-- **Следующая задача: 1.16** (1.15 сделана 2026-10-29, ждёт проверки `security-reviewer`) (7.7a — ◐ сессия 1 сделана 2026-10-28; сессия 2: Lighthouse и финальный прогон после 1.15–5.5) (7.5 — ◐ 2026-10-28: деплой проверен локально, реальный VPS — на сервере), затем 1.15, 1.16, 1.17, 1.18, 2.17, 3.4a, 5.5 (решение владельца 2026-10-27).
+- **Следующая задача: 1.17** (1.15 сделана 2026-10-29, ждёт проверки `security-reviewer`; 1.16 сделана 2026-11-02) (7.7a — ◐ сессия 1 сделана 2026-10-28; сессия 2: Lighthouse и финальный прогон после 1.15–5.5) (7.5 — ◐ 2026-10-28: деплой проверен локально, реальный VPS — на сервере), затем 1.15, 1.16, 1.17, 1.18, 2.17, 3.4a, 5.5 (решение владельца 2026-10-27).
 - Dev-стек: работает без бота (`--scale bot=0`, на dev настоящий токен). При следующей пересборке backend не стартует с `DEBUG=true` без `ALLOW_DEBUG_ON_PUBLIC_HOST=true` в `.env` (правило 7.2, ослаблять отказались). В `.env`/`.env.e2e` добавлен `REDIS_PASSWORD` (7.3).
 - Нестабильная группа e2e (каждый полный прогон, зелёная на перепрогоне): `lead.spec.ts` (157–367), `metrics.spec.ts:33` (429), `mobile.spec.ts:73,151` — похоже на троттлинг калькулятора при полном прогоне; стоит отдельной задачей.
 - Предыдущая остановка (2026-10-26): Прогон локального оркестратора 2026-10-23…26 (ветка `finish-site`, PR #38 в `main`): задачи **2.8, 3.1, 3.2a, 3.4a, 2.12, 3.4b, 5.1, 5.4** (2026-10-23…25), затем **6.7, 6.1, 6.2** (2026-10-26) — по коммиту на задачу, ревью `security-reviewer` для 6.7 и 6.2 (критичного и важного нет), полный бэкенд, полный e2e на чистом стеке, `openapi.yaml` против PostgreSQL.
@@ -29,6 +29,20 @@
   - 6.2: при 503 checkout пользователь видит общий текст «Сервіс тимчасово недоступний» (раньше «Оплата тимчасово недоступна» из 3.4b) — по правилу 6.2 текст 5xx не показывается; если нужен особый текст, сделать 503 → 4xx-код или отдельную ветку в `getErrorMessage`.
 
 ---
+
+## Задача 1.16: обновление уязвимых зависимостей (C1, C3, C4, C5) (2026-11-02) — ЗАВЕРШЕНО (Docker-стек и Playwright не запускались)
+
+- Версии (из реестров PyPI/npm): next и eslint-config-next 16.2.9 -> 16.4.4; Django 6.0.6 -> 6.0.9; djangorestframework 3.17.1 -> 3.18.3; Pillow 12.2.0 -> 13.0.0 (мажор; 12.3.0 не закрывал все записи, pip-audit требовал 13.0.0); PyJWT 2.13.0 -> 2.15.1. SimpleJWT 5.5.1 (последняя) и остальные пакеты уязвимостей не имели. Транзитивно: sharp 0.34.5 -> 0.35.5, postcss (внутри next) 8.5.23; `npm audit fix` без --force поднял source-map-js, baseline-browser-mapping и остальное в пределах диапазонов (package.json не менялся, кроме next/eslint-config-next).
+- pip-audit 2.10.1 ДО: 93 записи в 4 пакетах (Pillow 12.2.0 - 64, PyJWT 2.13.0 - 15, Django 6.0.6 - 9, DRF 3.17.1 - 5; pip-audit не печатает severity). ПОСЛЕ: No known vulnerabilities found.
+- npm audit --omit=dev ДО: 6 (1 critical - next, 4 high - next/postcss/sharp/source-map-js, 1 moderate). ПОСЛЕ: found 0 vulnerabilities (`--audit-level=high` код 0).
+- Совместимость: правок кода не потребовалось. Pillow 13 убрал Python 3.10, `ImageCms.product_name/info`, `ExifTags.IFD.Makernote`, `Image._show` - в проекте не используются (`core/uploads.py` использует Image/ImageOps/ImageFile/UnidentifiedImageError). Конфиг `images` в `next.config` менять не пришлось: `npm run build` проходит.
+- `npm run build` (NEXT_PUBLIC_API_URL/SITE_URL=http://localhost) и `npx tsc --noEmit` чисто; `npm run lint` - 0 ошибок, 36 предупреждений (react-hooks, не от обновления). `makemigrations --check --dry-run` - без изменений. `check --deploy` на прод-настройках: предупреждений безопасности (security.W*) нет; остались только drf_spectacular.W001 про type hints в messaging/serializers.py (не от обновления); `docs/openapi.yaml` не перегенерирован (против PostgreSQL не запускалось; схема от обновления DRF/Django не должна меняться, CI проверит).
+- Регрессионные тесты: JWT-просроченный/мусорный cookie, ротация refresh с blacklist, загрузка не-изображения с `.jpg` (400) и снятие EXIF/GPS (201) уже были (`users/tests.py`, `tests/test_uploads.py`, `local_listings/tests.py`) - не дублировались. Добавлен `users.tests::test_forged_signature_cookie_on_protected_is_401` (access, подписанный чужим ключом -> 401).
+- Прогон: полный backend 2653 теста, красные только 2 известных Windows-падения `tests.test_prod_settings.DjangoStartupTests.test_entrypoint_refuses_debug_*`. `--parallel` на этом наборе падает с `cannot pickle 'traceback'` (маскирует падения) - гонять последовательно.
+- CI: у джобы `dependency-audit` снят `continue-on-error`, она добавлена в `needs` джобы `deploy` (`.github/workflows/ci-cd.yml`).
+- Не сделано: Playwright smoke (`/_next/image` с внешним хостом, загрузка фото) - e2e-стек запускает владелец; образы frontend/backend нужно пересобрать (`docker compose build`).
+
+- Проверено основной сессией (2026-11-02): стек пересобран через `deploy.sh` (новые next/Django), Playwright полный набор 509 passed / 0 failed; `/_next/image?url=<внешний хост>` и `url=http://169.254.169.254/` → 400 (не проксируется); `openapi.yaml`, сгенерированный против PostgreSQL, совпадает с закоммиченным.
 
 ## Задача 1.15: LiqPay, срочное закрытие находок аудита F1–F6, F12, F14 (2026-10-29) — ЗАВЕРШЕНО
 
