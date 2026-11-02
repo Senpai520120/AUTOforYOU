@@ -13,7 +13,12 @@ esac
 echo "[entrypoint] Running database migrations..."
 python manage.py migrate --noinput
 
-echo "[entrypoint] Seeding reference data (idempotent)..."
+echo "[entrypoint] Seeding reference data (only into empty tables)..."
+
+# Безопасный режим (задача 1.18, E1/E2): каждый seed_* заполняет справочник ТОЛЬКО если его таблица
+# пуста (первый запуск, e2e). Повторный старт данные не меняет: удалённые/закрытые админом ставки
+# не возвращаются, демо-курс не подменяет настоящий курс НБУ. Принудительный досев - вручную:
+#   docker compose exec backend python manage.py seed_rates --force   (то же для seed_auction_fees, seed_regions)
 
 # Раньше было `2>/dev/null || true`: любая ошибка сида уходила в никуда.
 # Так, seed_rates падал при недоступном Redis, тарифы не применялись, и

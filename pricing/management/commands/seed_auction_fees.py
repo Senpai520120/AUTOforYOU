@@ -3,7 +3,11 @@ Baseline-сетки аукционных сборов Copart и IAAI.
 
 ВАЖНО: все числа помечены «# baseline».
 Реальные ставки — тариф вашего брокера или офиц. прайс-лист аукциона.
-Запуск: python manage.py seed_auction_fees [--clear]
+Запуск: python manage.py seed_auction_fees [--clear] [--force]
+
+Безопасность старта контейнера (1.18, E2): каждая таблица (AuctionFeeTier, AuctionFixedFee) засевается
+только если пуста. Удалённые и закрытые админом записи не воскрешаются. `--force` досоздаёт недостающие
+записи по ключу (без valid_from) и печатает, сколько создано.
 """
 from datetime import date
 from decimal import Decimal
@@ -23,12 +27,24 @@ class Command(BaseCommand):
             '--clear', action='store_true',
             help='Удалить все существующие записи перед заполнением',
         )
+        parser.add_argument(
+            '--force', action='store_true',
+            help='Досоздать недостающие записи и в непустых таблицах',
+        )
 
     def handle(self, *args, **options):
         if options['clear']:
             AuctionFeeTier.objects.all().delete()
             AuctionFixedFee.objects.all().delete()
             self.stdout.write('Существующие записи удалены.')
+
+        # Решение «сеять или пропустить» - один раз до заполнения (иначе вторая сетка видела бы первую).
+        self.seed_tiers = options['force'] or not AuctionFeeTier.objects.exists()
+        self.seed_fixed = options['force'] or not AuctionFixedFee.objects.exists()
+        if not self.seed_tiers:
+            self.stdout.write('  AuctionFeeTier: пропущено, справочник не пуст.')
+        if not self.seed_fixed:
+            self.stdout.write('  AuctionFixedFee: пропущено, справочник не пуст.')
 
         self._seed_copart_public_salvage_secured()
         self._seed_copart_licensed_broker()
@@ -173,34 +189,32 @@ class Command(BaseCommand):
     # ── Вспомогательные методы ────────────────────────────────────────────────
 
     def _bulk_create_tiers(self, auction, member_type, payment_type, title_type, tiers):
+        if not self.seed_tiers:
+            return
         count = 0
         for bid_min, bid_max, fee_flat, fee_percent in tiers:
-            _, created = AuctionFeeTier.objects.get_or_create(
-                auction=auction,
-                member_type=member_type,
-                payment_type=payment_type,
-                title_type=title_type,
-                bid_min=Decimal(str(bid_min)),
-                defaults=dict(
-                    bid_max=Decimal(str(bid_max)) if bid_max is not None else None,
-                    fee_flat=Decimal(str(fee_flat)) if fee_flat is not None else None,
-                    fee_percent=Decimal(fee_percent) if fee_percent is not None else None,
-                    valid_from=TODAY,
-                ),
+            key = dict(auction=auction, member_type=member_type, payment_type=payment_type,
+                       title_type=title_type, bid_min=Decimal(str(bid_min)))
+            if AuctionFeeTier.objects.filter(**key).exists():
+                continue
+            AuctionFeeTier.objects.create(
+                **key,
+                bid_max=Decimal(str(bid_max)) if bid_max is not None else None,
+                fee_flat=Decimal(str(fee_flat)) if fee_flat is not None else None,
+                fee_percent=Decimal(fee_percent) if fee_percent is not None else None,
+                valid_from=TODAY,
             )
-            if created:
-                count += 1
+            count += 1
         self.stdout.write(f'  {auction}/{member_type}/{payment_type}/{title_type}: {count} тиров создано.')
 
     def _bulk_create_fixed(self, auction, fees):
+        if not self.seed_fixed:
+            return
         count = 0
         for fee_type, title_type, amount in fees:
-            _, created = AuctionFixedFee.objects.get_or_create(
-                auction=auction,
-                fee_type=fee_type,
-                title_type=title_type,
-                defaults=dict(amount=Decimal(amount), valid_from=TODAY),
-            )
-            if created:
-                count += 1
+            key = dict(auction=auction, fee_type=fee_type, title_type=title_type)
+            if AuctionFixedFee.objects.filter(**key).exists():
+                continue
+            AuctionFixedFee.objects.create(**key, amount=Decimal(amount), valid_from=TODAY)
+            count += 1
         self.stdout.write(f'  {auction} fixed fees: {count} создано.')

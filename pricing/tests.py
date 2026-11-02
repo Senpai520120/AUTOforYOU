@@ -1011,3 +1011,170 @@ class TestNoStaleTiersAfterSeededClass(CleanCacheTestCase):
             'eu_port': 'klaipeda',
         }, format='json')
         self.assertEqual(resp.status_code, 422, getattr(resp, 'data', None))
+
+
+class TestSeedStartupSafety(CleanCacheTestCase):
+    """1.18 (E1, E2): сид на старте контейнера не затирает и не воскрешает реальные данные."""
+
+    TABLES = None
+
+    @staticmethod
+    def _models():
+        from .models import (
+            AuctionFeeTier,
+            AuctionFixedFee,
+            CustomsCalcRule,
+            CustomsExciseRate,
+            EuToUaDeliveryRate,
+            ExchangeRate,
+            OceanFreightRate,
+            PensionFundBracket,
+            UsLandRoute,
+        )
+        return (UsLandRoute, OceanFreightRate, EuToUaDeliveryRate, ExchangeRate, CustomsExciseRate,
+                PensionFundBracket, CustomsCalcRule, AuctionFeeTier, AuctionFixedFee)
+
+    def _counts(self):
+        return {m.__name__: m.objects.count() for m in self._models()}
+
+    def _seed(self, *args, command='seed_rates'):
+        from io import StringIO
+        out = StringIO()
+        call_command(command, *args, stdout=out)
+        return out.getvalue()
+
+    # --- E1 ---
+    def test_e1_real_rate_yesterday_no_demo_today(self):
+        from datetime import date, timedelta
+
+        from .models import ExchangeRate
+        yesterday = date.today() - timedelta(days=1)
+        ExchangeRate.objects.create(from_currency='USD', to_currency='UAH', rate=D('44'), date=yesterday, source='nbu')
+        self._seed()
+        self.assertEqual(ExchangeRate.objects.count(), 1)
+        self.assertFalse(ExchangeRate.objects.filter(date=date.today()).exists())
+
+    def test_e1_empty_db_creates_demo(self):
+        from .models import ExchangeRate
+        self._seed()
+        self.assertEqual(set(ExchangeRate.objects.values_list('source', flat=True)), {'demo'})
+        self.assertEqual(ExchangeRate.objects.count(), 2)
+
+    def test_e1_demo_mode_adds_demo_despite_real_rate(self):
+        from datetime import date, timedelta
+
+        from django.test import override_settings
+
+        from .models import ExchangeRate
+        ExchangeRate.objects.create(from_currency='USD', to_currency='UAH', rate=D('44'),
+                                    date=date.today() - timedelta(days=1), source='nbu')
+        with override_settings(NBU_MODE='demo'):
+            self._seed()
+        self.assertTrue(ExchangeRate.objects.filter(date=date.today(), source='demo').exists())
+
+    # --- E2 ---
+    def test_e2_closed_and_new_rate_no_error_no_additions(self):
+        from datetime import date, timedelta
+
+        from .models import UsLandRoute
+        self._seed()
+        before = self._counts()
+        old = UsLandRoute.objects.get(auction_location='general', us_port='houston')
+        old.valid_from = date.today() - timedelta(days=30)
+        old.valid_to = date.today() - timedelta(days=1)
+        old.save()
+        UsLandRoute.objects.create(auction_location='general', us_port='houston', cost_usd=D('555'),
+                                   valid_from=date.today())
+        before['UsLandRoute'] += 1
+        self._seed()  # раньше: MultipleObjectsReturned
+        self.assertEqual(self._counts(), before)
+
+    def test_e2_deleted_placeholder_not_resurrected(self):
+        from .models import CustomsExciseRate, PensionFundBracket, UsLandRoute
+        self._seed()
+        UsLandRoute.objects.filter(auction_location='general', us_port='houston').delete()
+        CustomsExciseRate.objects.filter(fuel_type='hybrid').delete()
+        PensionFundBracket.objects.filter(rate=D('0.05')).delete()
+        self._seed()
+        self.assertFalse(UsLandRoute.objects.filter(auction_location='general', us_port='houston').exists())
+        self.assertFalse(CustomsExciseRate.objects.filter(fuel_type='hybrid').exists())
+        self.assertFalse(PensionFundBracket.objects.filter(rate=D('0.05')).exists())
+
+    def test_e2_auction_fees_deleted_not_resurrected_and_closed_ok(self):
+        from datetime import date, timedelta
+
+        from .models import AuctionFeeTier, AuctionFixedFee
+        self._seed(command='seed_auction_fees')
+        before = self._counts()
+        AuctionFixedFee.objects.filter(auction='copart', fee_type='gate', title_type='clean').delete()
+        tier = AuctionFeeTier.objects.filter(auction='copart').first()
+        tier.valid_from = date.today() - timedelta(days=30)
+        tier.valid_to = date.today() - timedelta(days=1)
+        tier.save()
+        AuctionFeeTier.objects.create(
+            auction=tier.auction, member_type=tier.member_type, payment_type=tier.payment_type,
+            title_type=tier.title_type, bid_min=tier.bid_min, bid_max=tier.bid_max, fee_flat=D('1'),
+            valid_from=date.today())
+        out = self._seed(command='seed_auction_fees')
+        after = self._counts()
+        self.assertEqual(after['AuctionFixedFee'], before['AuctionFixedFee'] - 1)
+        self.assertEqual(after['AuctionFeeTier'], before['AuctionFeeTier'] + 1)
+        self.assertIn('пропущено', out)
+
+    def test_e2_empty_fills_all_tables(self):
+        self._seed()
+        self._seed(command='seed_auction_fees')
+        for name, n in self._counts().items():
+            self.assertGreater(n, 0, name)
+
+    def test_e2_idempotent_double_call(self):
+        self._seed()
+        self._seed(command='seed_auction_fees')
+        first = self._counts()
+        self._seed()
+        self._seed(command='seed_auction_fees')
+        self.assertEqual(self._counts(), first)
+
+    def test_e2_force_restores_missing_and_reports(self):
+        from .models import UsLandRoute
+        self._seed()
+        UsLandRoute.objects.filter(auction_location='general', us_port='houston').delete()
+        before = self._counts()
+        out = self._seed('--force')
+        self.assertTrue(UsLandRoute.objects.filter(auction_location='general', us_port='houston').exists())
+        self.assertEqual(self._counts()['UsLandRoute'], before['UsLandRoute'] + 1)
+        self.assertIn('создано', out)
+
+    def test_e2_force_with_closed_and_new_rate_no_error(self):
+        from datetime import date, timedelta
+
+        from .models import UsLandRoute
+        self._seed()
+        old = UsLandRoute.objects.get(auction_location='general', us_port='houston')
+        old.valid_from = date.today() - timedelta(days=30)
+        old.valid_to = date.today() - timedelta(days=1)
+        old.save()
+        UsLandRoute.objects.create(auction_location='general', us_port='houston', cost_usd=D('555'),
+                                   valid_from=date.today())
+        n = UsLandRoute.objects.count()
+        self._seed('--force')
+        self.assertEqual(UsLandRoute.objects.count(), n)
+
+    def test_e2_partial_table_not_topped_up(self):
+        """Таблица не пуста (админ оставил одну запись) - досева нет."""
+        from .models import UsLandRoute
+        self._seed()
+        UsLandRoute.objects.exclude(auction_location='general', us_port='houston').delete()
+        self._seed()
+        self.assertEqual(UsLandRoute.objects.count(), 1)
+
+    def test_e2_regions_seed_only_when_empty(self):
+        from local_listings.models import City, Region
+        self._seed(command='seed_regions')
+        self.assertGreater(Region.objects.count(), 20)
+        Region.objects.filter(name='Львівська область').delete()
+        regions, cities = Region.objects.count(), City.objects.count()
+        self._seed(command='seed_regions')
+        self.assertEqual((Region.objects.count(), City.objects.count()), (regions, cities))
+        self._seed('--force', command='seed_regions')
+        self.assertTrue(Region.objects.filter(name='Львівська область').exists())
