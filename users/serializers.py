@@ -15,6 +15,8 @@ from metrics.services import record_metric
 from .consents import record_consents
 from .models import ConsentDocument, ConsentMethod, CustomUser, DealerApplication, TrustedShop
 
+UA_PHONE_VALIDATOR = RegexValidator(r'^\+380\d{9}$', 'Телефон у форматі +380XXXXXXXXX.')
+
 
 def _first_touch(raw) -> dict:
     """Источник первого касания для CustomUser; ошибка очистки не мешает регистрации."""
@@ -30,7 +32,7 @@ def _first_touch(raw) -> dict:
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, validators=[validate_password])
+    password = serializers.CharField(write_only=True)
     password2 = serializers.CharField(write_only=True, label='Підтвердження пароля')
     agreed_to_terms = serializers.BooleanField(write_only=True)
     # Подтверждение 18+ (Q-шаг 7): без него 400. Версия текста и дата - по механике Н-32.
@@ -48,11 +50,24 @@ class RegisterSerializer(serializers.ModelSerializer):
             'confirmed_age_18', 'attribution',
         )
         # Уникальность email проверяет RegisterView (01-S11: дубль не раскрываем).
-        extra_kwargs = {'email': {'validators': []}}
+        # Пустой телефон разрешён (валидатор на пустой строке не запускается), D7.
+        extra_kwargs = {'email': {'validators': []}, 'phone': {'validators': [UA_PHONE_VALIDATOR]}}
+
+    def validate_email(self, value):
+        return value.strip().lower()  # D2: один регистр во всех путях
 
     def validate(self, attrs):
         if attrs['password'] != attrs.pop('password2'):
             raise serializers.ValidationError({'password': 'Паролі не збігаються.'})
+        # D3: UserAttributeSimilarityValidator сравнивает пароль с email и именем.
+        candidate = CustomUser(
+            email=attrs.get('email', ''), first_name=attrs.get('first_name', ''),
+            last_name=attrs.get('last_name', ''),
+        )
+        try:
+            validate_password(attrs['password'], candidate)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({'password': list(exc.messages)}) from exc
         if not attrs.pop('agreed_to_terms'):
             raise serializers.ValidationError(
                 {'agreed_to_terms': 'Необхідно погодитися з умовами використання.'}
@@ -75,9 +90,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
             record_metric(MetricKey.REGISTRATION)  # on_commit внутри: откат регистрации не считается
         return user
-
-
-UA_PHONE_VALIDATOR = RegexValidator(r'^\+380\d{9}$', 'Телефон у форматі +380XXXXXXXXX.')
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -174,6 +186,9 @@ class DealerApplicationSerializer(serializers.ModelSerializer):
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
+
+    def validate_email(self, value):
+        return value.strip().lower()
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):

@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 
@@ -32,11 +33,15 @@ class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError('Email обязателен')
-        email = self.normalize_email(email)
+        email = self.normalize_email(email).lower()
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
+
+    def get_by_natural_key(self, username):
+        # D2 (1.17): вход не зависит от регистра email; уникальность - UniqueConstraint(Lower('email')).
+        return self.get(**{f'{self.model.USERNAME_FIELD}__iexact': username})
 
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
@@ -86,9 +91,55 @@ class CustomUser(AbstractUser):
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
         permissions = [('view_attribution', 'Може бачити джерело візиту (UTM, реферер)')]
+        constraints = [
+            # D2 (1.17): один аккаунт на адрес независимо от регистра.
+            models.UniqueConstraint(Lower('email'), name='users_customuser_email_lower_uniq'),
+        ]
 
     def __str__(self):
         return self.email
+
+    def set_password(self, raw_password):
+        # D1 (1.17): любая смена пароля существующего пользователя (форма админки, changepassword,
+        # API, shell) отзывает сессии при сохранении. Пересчёт хэша при входе (check_password)
+        # пароль не меняет и сессии не трогает.
+        super().set_password(raw_password)
+        if self.pk and not getattr(self, '_rehashing', False):
+            self._revoke_sessions_on_save = True
+
+    def set_unusable_password(self):
+        super().set_unusable_password()
+        if self.pk and not getattr(self, '_rehashing', False):
+            self._revoke_sessions_on_save = True
+
+    async def acheck_password(self, raw_password):
+        self._rehashing = True
+        try:
+            return await super().acheck_password(raw_password)
+        finally:
+            self._rehashing = False
+
+    def check_password(self, raw_password):
+        self._rehashing = True
+        try:
+            return super().check_password(raw_password)
+        finally:
+            self._rehashing = False
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.lower()
+        update_fields = kwargs.get('update_fields')
+        revoke = getattr(self, '_revoke_sessions_on_save', False) and (
+            update_fields is None or 'password' in update_fields
+        )
+        if not revoke:
+            return super().save(*args, **kwargs)
+        from .services import revoke_all_sessions
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            self._revoke_sessions_on_save = False
+            revoke_all_sessions(self)
 
     @property
     def is_admin_role(self):
@@ -192,6 +243,12 @@ class DealerApplication(models.Model):
         verbose_name = 'Заявка дилера'
         verbose_name_plural = 'Заявки дилеров'
         ordering = ['-created_at']
+        constraints = [
+            # D8 (1.17): не больше одной заявки на рассмотрении на пользователя.
+            models.UniqueConstraint(
+                fields=['user'], condition=models.Q(status='pending'), name='dealerapp_one_pending_per_user',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.user.email} — {self.company_name} [{self.get_status_display()}]'

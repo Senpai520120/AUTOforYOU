@@ -18,7 +18,15 @@ load_dotenv(BASE_DIR / '.env', encoding='utf-8', override=False)
 DEBUG = os.environ.get('DEBUG', 'false').lower() in ('true', '1', 'yes')
 
 # Флаг тест-раннера: единственный, вычисляется один раз (см. блок изоляции в конце файла).
-_TESTING = 'test' in sys.argv
+def _is_test_run(argv):
+    """Тестовый запуск - только `manage.py test` / `python -m django test` (argv[1] == 'test').
+
+    `'test' in argv` срабатывал на `celery -Q test` или `--hostname test` и отключал защиты в проде.
+    """
+    return list(argv[1:2]) == ['test']
+
+
+_TESTING = _is_test_run(sys.argv)
 
 # In production set: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 _raw_hosts = os.environ.get('ALLOWED_HOSTS', '')
@@ -354,6 +362,8 @@ REST_FRAMEWORK = {
         'refresh': os.environ.get('THROTTLE_REFRESH_RATE', '30/min'),
         'verify_resend': os.environ.get('THROTTLE_VERIFY_RESEND_RATE', '3/hour'),
         'password_reset': os.environ.get('THROTTLE_PASSWORD_RESET_RATE', '5/hour'),
+        # D4 (1.17): писем сброса/«вже є акаунт» на один адрес (ключ - HMAC адреса, users/throttles.py).
+        'password_reset_email': os.environ.get('THROTTLE_PASSWORD_RESET_EMAIL_RATE', '3/hour'),
         # Выгрузка «Мої дані» (1.8): тяжёлый запрос по всем таблицам пользователя.
         'data_export': os.environ.get('THROTTLE_DATA_EXPORT_RATE', '5/day'),
         # Отчёты об ошибках фронтенда (7.6), на IP: не даёт забить мониторинг мусором.

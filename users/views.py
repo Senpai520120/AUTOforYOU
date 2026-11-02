@@ -58,6 +58,7 @@ from .services import (
     schedule_account_deletion,
 )
 from .tasks import send_password_reset_email_task
+from .throttles import consume_email_slot
 from .tokens import email_verification_token
 
 logger = logging.getLogger(__name__)
@@ -253,7 +254,8 @@ class RegisterView(generics.CreateAPIView):
                 send_verification_email(user)
         if existing is not None:
             make_password(data['password'])
-            send_already_registered_email(existing)
+            if consume_email_slot(data['email'], 'exists'):  # D4: лимит писем на адрес, ответ тот же
+                send_already_registered_email(existing)
         body = {key: data.get(key, '') for key in ('email', 'first_name', 'last_name', 'phone')}
         return Response(body, status=status.HTTP_201_CREATED)
 
@@ -342,6 +344,10 @@ class PasswordResetRequestView(APIView):
                 {'detail': EMAIL_UNAVAILABLE_DETAIL, 'configured': False},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+        # D4 (1.17): лимит писем на один адрес. Сверх лимита - тот же ответ без письма (не 429:
+        # иначе по коду ответа видно, что на адрес уже писали). Слот занимается и для чужих адресов.
+        if not consume_email_slot(serializer.validated_data['email']):
+            return Response({'detail': RESET_REQUESTED_DETAIL})
         # Всегда одно и то же действие; поиск пользователя - в задаче, не в запросе.
         try:
             send_password_reset_email_task.delay(serializer.validated_data['email'])
@@ -369,8 +375,7 @@ class PasswordResetConfirmView(APIView):
         user = serializer.validated_data['user']
         with transaction.atomic():
             user.set_password(serializer.validated_data['new_password'])
-            user.save(update_fields=['password'])
-            revoke_all_sessions(user)
+            user.save(update_fields=['password'])  # отзыв сессий - в CustomUser.save (D1, ровно один сдвиг)
         lockout.reset(user.email)  # владелец подтвердил почту: блокировка входа снимается
         return clear_auth_cookies(Response({'ok': True}))
 
@@ -393,8 +398,7 @@ class PasswordChangeView(APIView):
         user = request.user
         with transaction.atomic():
             user.set_password(serializer.validated_data['new_password'])
-            user.save(update_fields=['password'])
-            revoke_all_sessions(user)
+            user.save(update_fields=['password'])  # отзыв сессий - в CustomUser.save (D1, ровно один сдвиг)
         refresh = VersionedRefreshToken.for_user(user)
         response = Response(_token_body({'access': str(refresh.access_token), 'refresh': str(refresh)}))
         return set_auth_cookies(response, refresh.access_token, refresh)

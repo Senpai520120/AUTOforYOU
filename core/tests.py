@@ -141,3 +141,62 @@ class TestLegacyCarsApiFlag(TestCase):
             from drf_spectacular.generators import SchemaGenerator
             paths = SchemaGenerator().get_schema(request=None, public=True)['paths']
         self.assertEqual([p for p in paths if p.startswith(('/api/calculate', '/api/list'))], [])
+
+
+class TestingFlagTests(TestCase):
+    """D5 (1.17): тестовым считается только `manage.py test` / `python -m django test`."""
+
+    def test_flag_is_true_for_test_runs(self):
+        from core.settings import _is_test_run
+        self.assertTrue(_is_test_run(['manage.py', 'test']))
+        self.assertTrue(_is_test_run(['manage.py', 'test', 'users', '--parallel']))
+        self.assertTrue(_is_test_run(['/venv/lib/django/__main__.py', 'test']))  # python -m django test
+
+    def test_flag_is_false_for_other_commands_with_test_word(self):
+        from core.settings import _is_test_run
+        self.assertFalse(_is_test_run(['celery', '-A', 'core', 'worker', '-Q', 'test']))
+        self.assertFalse(_is_test_run(['celery', 'worker', '--hostname', 'test']))
+        self.assertFalse(_is_test_run(['manage.py', 'runserver', 'test']))
+        self.assertFalse(_is_test_run(['gunicorn']))
+        self.assertFalse(_is_test_run([]))
+
+    def test_current_run_is_detected_as_test(self):
+        self.assertTrue(settings.IS_TESTING)
+
+
+class NetworkGuardTests(TestCase):
+    """D9 (1.17): предохранитель ловит connect_ex и UDP sendto, не только connect."""
+
+    def _sock(self, kind):
+        import socket
+        sock = socket.socket(socket.AF_INET, kind)
+        self.addCleanup(sock.close)
+        return sock
+
+    def test_connect_ex_to_external_host_is_blocked(self):
+        import socket
+
+        from core.test_runner import ExternalNetworkBlocked
+        with self.assertRaises(ExternalNetworkBlocked):
+            self._sock(socket.SOCK_STREAM).connect_ex(('example.com', 80))
+
+    def test_sendto_two_args_to_external_host_is_blocked(self):
+        import socket
+
+        from core.test_runner import ExternalNetworkBlocked
+        with self.assertRaises(ExternalNetworkBlocked):
+            self._sock(socket.SOCK_DGRAM).sendto(b'x', ('example.com', 53))
+
+    def test_sendto_with_flags_to_external_host_is_blocked(self):
+        import socket
+
+        from core.test_runner import ExternalNetworkBlocked
+        with self.assertRaises(ExternalNetworkBlocked):
+            self._sock(socket.SOCK_DGRAM).sendto(b'x', 0, ('example.com', 53))
+
+    def test_sendto_localhost_is_allowed(self):
+        import socket
+        receiver = self._sock(socket.SOCK_DGRAM)
+        receiver.bind(('127.0.0.1', 0))
+        sender = self._sock(socket.SOCK_DGRAM)
+        self.assertEqual(sender.sendto(b'x', receiver.getsockname()), 1)

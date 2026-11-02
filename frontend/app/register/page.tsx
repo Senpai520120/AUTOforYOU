@@ -77,13 +77,14 @@ export default function RegisterPage() {
           {[
             { label: "Ім'я", key: 'first_name', type: 'text' },
             { label: 'Email', key: 'email', type: 'email' },
-            { label: 'Телефон', key: 'phone', type: 'tel' },
+            { label: 'Телефон', key: 'phone', type: 'tel', placeholder: '+380XXXXXXXXX' },
             { label: 'Пароль', key: 'password', type: 'password' },
             { label: 'Підтвердити пароль', key: 'password2', type: 'password' },
           ].map(f => (
             <div key={f.key}>
               <label htmlFor={`${idPrefix}-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-1">{f.label}</label>
               <input id={`${idPrefix}-${f.key}`} type={f.type} className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                placeholder={'placeholder' in f ? f.placeholder : undefined}
                 value={form[f.key as keyof typeof form]} onChange={e => set(f.key, e.target.value)}
                 required={f.key !== 'first_name' && f.key !== 'phone'} />
             </div>

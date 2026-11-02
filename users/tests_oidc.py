@@ -10,7 +10,7 @@ from django.conf import settings
 from django.core import signing
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.throttling import SimpleRateThrottle
@@ -416,11 +416,12 @@ class LinkCommandTests(CleanCacheTestCase):
         self.assertEqual(OidcIdentity.objects.get(sub=SUB).user, alice)
         self.assertFalse(OidcIdentity.objects.filter(user=bob).exists())
 
-    def test_same_email_in_two_cases_is_an_error(self):
+    def test_same_email_in_two_cases_cannot_exist(self):
+        # 1.17 (D2): дубль по регистру невозможен (email в нижнем регистре + UniqueConstraint(Lower)),
+        # поэтому ветка «Несколько пользователей» остаётся лишь защитой от старых данных.
         make_user(ALICE)
-        make_user(ALICE.upper())
-        with self.assertRaisesMessage(CommandError, 'Несколько пользователей'):
-            call_command('link_oidc_user', f'{ALICE}={SUB}', stdout=mock.Mock())
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            make_user(ALICE.upper())
 
     def test_bad_format_and_unknown_user(self):
         with self.assertRaisesMessage(CommandError, 'Формат'):

@@ -69,6 +69,7 @@ class CustomUserAdmin(UserAdmin):
     # is_banned - только через actions/ban_user (отзыв сессий, скрытие объявлений).
     readonly_fields = ('role', 'is_verified_dealer', 'is_banned', 'deletion_scheduled_at', 'deleted_at')
 
+    PRIVILEGE_FIELDS = ('is_superuser', 'is_staff', 'groups', 'user_permissions')
     ATTRIBUTION_FIELDS = ('first_touch_utm', 'first_touch_referrer', 'first_touch_entry_url')
 
     def _can_see_attribution(self, request):
@@ -85,9 +86,19 @@ class CustomUserAdmin(UserAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            # D6 (1.17): права правит только superuser; иначе staff с change_customuser повышает себя.
+            fields += [f for f in self.PRIVILEGE_FIELDS if f not in fields]
         if self._can_see_attribution(request):
             fields += [f for f in self.ATTRIBUTION_FIELDS if f not in fields]
         return fields
+
+    def has_change_permission(self, request, obj=None):
+        # Сотрудников (и superuser) правит только superuser: иначе staff с change_customuser меняет
+        # им пароль/email и захватывает аккаунт. user_change_password проверяет этот метод.
+        if obj is not None and obj.is_staff and not request.user.is_superuser:
+            return False
+        return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         # Удаление каскадом стёрло бы сделки, переписку и отзывы второй стороны (06-S11):

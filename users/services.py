@@ -12,7 +12,7 @@ import uuid
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from integrations.email import send_email
@@ -32,21 +32,26 @@ def apply_for_dealer(user, company_name, full_name, contact_phone, documents='')
     Метка времени согласия ставится здесь: заявку без согласия принимать
     нельзя, а сериализатор не пропустит её без agreed_to_processing=True.
     """
+    duplicate = DuplicatePendingError('У вас уже есть заявка на рассмотрении.')
     if DealerApplication.objects.filter(user=user, status=DealerApplication.Status.PENDING).exists():
-        raise DuplicatePendingError('У вас уже есть заявка на рассмотрении.')
-    with transaction.atomic():
-        application = DealerApplication.objects.create(
-            user=user,
-            company_name=company_name,
-            full_name=full_name,
-            contact_phone=contact_phone,
-            documents=documents,
-            status=DealerApplication.Status.PENDING,
-            agreed_to_processing_at=timezone.now(),
-        )
-        record_consents(
-            user, [ConsentDocument.DEALER_PROCESSING, ConsentDocument.AGE_18], ConsentMethod.DEALER_FORM,
-        )
+        raise duplicate
+    try:
+        # IntegrityError ловим снаружи atomic: внутри него транзакция на Postgres уже сломана.
+        with transaction.atomic():
+            application = DealerApplication.objects.create(
+                user=user,
+                company_name=company_name,
+                full_name=full_name,
+                contact_phone=contact_phone,
+                documents=documents,
+                status=DealerApplication.Status.PENDING,
+                agreed_to_processing_at=timezone.now(),
+            )
+            record_consents(
+                user, [ConsentDocument.DEALER_PROCESSING, ConsentDocument.AGE_18], ConsentMethod.DEALER_FORM,
+            )
+    except IntegrityError as exc:  # гонка двух POST: частичный UniqueConstraint (D8)
+        raise duplicate from exc
     return application
 
 
@@ -289,10 +294,9 @@ def anonymize_user(user, *, due_before=None) -> bool:
         locked.last_login = None
         locked.set_unusable_password()
         locked.deleted_at = timezone.now()
-        locked.save()
+        locked.save()  # set_unusable_password выше: CustomUser.save сам отзывает сессии (D1)
         if was_broker:  # как при снятии роли: импортные диалоги передаются другому брокеру/админу
             _release_import_conversations(locked)
-        revoke_all_sessions(locked)
 
         transaction.on_commit(lambda: _delete_files(files))
         transaction.on_commit(lambda: send_account_deleted_email(email))

@@ -4950,6 +4950,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
       required:
       - email
@@ -4981,6 +4982,7 @@ components:
         phone:
           type: string
           title: Телефон
+          pattern: ^\+380\d{9}$
           maxLength: 20
         agreed_to_terms:
           type: boolean

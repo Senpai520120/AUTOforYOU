@@ -44,7 +44,11 @@ class IsolatedDiscoverRunner(DiscoverRunner):
         super().setup_test_environment(**kwargs)
         self._orig_connect = socket.socket.connect
         self._orig_create_connection = socket.create_connection
+        self._orig_connect_ex = socket.socket.connect_ex
+        self._orig_sendto = socket.socket.sendto
         orig_connect = self._orig_connect
+        orig_connect_ex = self._orig_connect_ex
+        orig_sendto = self._orig_sendto
         orig_create = self._orig_create_connection
 
         def guarded_connect(sock, address):
@@ -55,11 +59,25 @@ class IsolatedDiscoverRunner(DiscoverRunner):
             _check_address(address)
             return orig_create(address, *args, **kw)
 
+        def guarded_connect_ex(sock, address):
+            _check_address(address)
+            return orig_connect_ex(sock, address)
+
+        def guarded_sendto(sock, data, *args):
+            # sendto(data, address) или sendto(data, flags, address): адрес - последний аргумент.
+            if args:
+                _check_address(args[-1])
+            return orig_sendto(sock, data, *args)
+
         socket.socket.connect = guarded_connect
+        socket.socket.connect_ex = guarded_connect_ex
+        socket.socket.sendto = guarded_sendto
         socket.create_connection = guarded_create_connection
 
     def teardown_test_environment(self, **kwargs):
         socket.socket.connect = self._orig_connect
+        socket.socket.connect_ex = self._orig_connect_ex
+        socket.socket.sendto = self._orig_sendto
         socket.create_connection = self._orig_create_connection
         # Ловушка aiogram (23-D4): кэш Update.event_type после прогона
         # приводит к segfault 139 в CI. Чистим для всех тестов.
