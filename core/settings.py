@@ -262,7 +262,8 @@ _THROTTLE_EXPENSIVE = os.environ.get('THROTTLE_EXPENSIVE_RATE', '10/hour')
 
 # ─── Защита входа от перебора (задача 1.5) ───────────────────────────────────
 # Сколько прокси стоит перед Django: DRF берёт IP клиента из XFF с конца.
-# 0 — dev без прокси (REMOTE_ADDR); 1 — nginx из docker-compose; 2 — ещё и Cloudflare/LB.
+# 0 — dev без прокси (REMOTE_ADDR); 1 — за nginx из docker-compose, в том числе с Cloudflare/LB:
+# real_ip в nginx уже подставил IP клиента, а XFF перезаписывается (не дописывается). 2 не ставить.
 NUM_PROXIES_COUNT = int(os.environ.get('NUM_PROXIES', '0'))
 LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', '5'))
 LOGIN_FAILURE_WINDOW_MINUTES = int(os.environ.get('LOGIN_FAILURE_WINDOW_MINUTES', '15'))

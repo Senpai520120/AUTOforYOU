@@ -111,6 +111,14 @@ if [ "${CLOUDFLARE_PROXY:-false}" = "true" ]; then
         fail "cloudflare-ips.conf содержит строки, кроме set_real_ip_from и комментариев"
     fi
     CF_RANGES="$(grep '^set_real_ip_from ' "$CF_FILE" | sed 's/^set_real_ip_from //; s/;$//')"
+    # CF-Connecting-IP принимается только от Cloudflare: балансировщик, доступный в обход Cloudflare,
+    # иначе подставил бы любой IP (обход ADMIN_ALLOWED_IPS, limit_req и блокировки входа).
+    if [ -n "$TRUSTED_LIST" ]; then
+        fail "CLOUDFLARE_PROXY=true и TRUSTED_PROXY_IPS вместе не поддерживаются: оставьте одно из двух"
+    fi
+    if [ "$TLS_MODE" = "off" ]; then
+        echo "[afy-nginx] ВНИМАНИЕ: CLOUDFLARE_PROXY=true при TLS_MODE=off - до сервера идёт http (HSTS нет). На проде: external или letsencrypt" >&2
+    fi
 fi
 
 mkdir -p "$GEN"
@@ -147,7 +155,7 @@ MAP
 # ─── real_ip: настоящий IP клиента только от доверенных адресов ───────────────────
 if [ "${CLOUDFLARE_PROXY:-false}" = "true" ]; then
     {
-        for ip in $CF_RANGES $TRUSTED_LIST; do echo "set_real_ip_from $ip;"; done
+        for ip in $CF_RANGES; do echo "set_real_ip_from $ip;"; done
         echo "real_ip_header CF-Connecting-IP;"
         echo "real_ip_recursive off;"
     } > "$GEN/real-ip.conf"

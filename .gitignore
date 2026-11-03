@@ -45,6 +45,10 @@ id_rsa*
 # Backups (содержат данные БД — никогда не коммитить)
 backups/
 
+# Диапазоны Cloudflare: генерирует scripts/update-cloudflare-ips.sh на сервере (deploy.sh), не коммитить
+nginx/cloudflare-ips.conf
+.cf-realip-test.*/
+
 # PostgreSQL data dir
 pgdata/
 

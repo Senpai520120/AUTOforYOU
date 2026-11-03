@@ -148,6 +148,8 @@ jobs:
         run: ./scripts/tests/test_deploy.sh
       - name: check-memory.sh tests (7.7a)
         run: ./scripts/tests/test_check_memory.sh
+      - name: CLOUDFLARE_PROXY echo test (7.1)
+        run: ./scripts/tests/test_cloudflare_realip.sh
 
   # ─── Аудит зависимостей (C5). Блокирующая (1.16): в needs деплоя ───
   dependency-audit:
