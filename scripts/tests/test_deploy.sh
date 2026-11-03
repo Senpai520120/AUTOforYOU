@@ -264,7 +264,9 @@ check "деплой: current_tag = новый sha" "b2b2b2b" "$(cat "$P/.deploy/
 check "деплой: previous_tag = прежний current_tag" "a1a1a1a" "$(cat "$P/.deploy/previous_tag")"
 contains "деплой: бэкап вызван" "$(docker_log)" "backup.sh --now"
 contains "деплой: путь к дампу напечатан" "$OUT" "autoforyou_2026-01-01_0330.dump"
-contains "деплой: --build передан в compose up" "$(docker_log)" "--build"
+b_line=$(docker_log | grep -n ' build$' | head -1 | cut -d: -f1)
+u_line=$(docker_log | grep -n ' up -d --wait' | head -1 | cut -d: -f1)
+if [ -n "$b_line" ] && [ -n "$u_line" ] && [ "$b_line" -lt "$u_line" ]; then ok "деплой: --build собирает образы до up (без гонки с pull)"; else bad "деплой: нет compose build перед up (build=$b_line up=$u_line)"; fi
 if docker_log | grep -qE ' up -d$'; then ok "деплой: остальные сервисы (bot, backup) запущены без --wait"; else bad "деплой: нет запуска остальных сервисов"; fi
 contains "деплой: старый тег backend удалён" "$(docker_log)" "image rm autoforyou-backend:9f9f9f9"
 contains "деплой: старый тег frontend удалён" "$(docker_log)" "image rm autoforyou-frontend:9f9f9f9"

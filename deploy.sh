@@ -257,7 +257,12 @@ do_backup() {
 up_stack() { # $1 = тег; $2 = --build или пусто
     local tag="$1" build="${2:-}"
     local -a args=(up -d --wait --wait-timeout "$WAIT_TIMEOUT")
-    [ -n "$build" ] && args+=(--build)
+    # Сначала сборка, потом запуск: образ backend собирается только у сервиса backend, а celery/bot берут
+    # его по тегу. При `up --build` Compose мог запросить этот тег из реестра раньше, чем закончилась
+    # сборка («pull access denied for autoforyou-backend», CI 2026-11-03).
+    if [ -n "$build" ]; then
+        IMAGE_TAG="$tag" dc build || return 1
+    fi
     IMAGE_TAG="$tag" dc "${args[@]}" "${WAIT_SERVICES[@]}" || return 1
     # Остальные сервисы (bot, backup, mailpit в e2e): без --wait.
     IMAGE_TAG="$tag" dc up -d || return 1
