@@ -8,7 +8,7 @@ from django.urls import path
 from django.views.decorators.http import require_POST
 
 from . import registry
-from .base import MODE_DEMO, mask_secrets
+from .base import MODE_DEMO, MODE_OFF, mask_secrets
 from .models import IntegrationHealth, OutboxMessage, RegistryReport, VinReport
 
 logger = logging.getLogger(__name__)
@@ -104,8 +104,10 @@ def refresh_nbu_view(request):
     except Exception as exc:  # noqa: BLE001 - любая причина показывается админу, секреты маскируются
         messages.error(request, f'Не вдалося оновити курс НБУ: {type(exc).__name__}: {mask_secrets(exc)[:200]}')
     else:
-        if not updated:
+        if not updated and mode == MODE_OFF:
             messages.warning(request, 'Курс не оновлено: NBU_MODE вимикає завантаження.')
+        elif not updated:
+            messages.info(request, 'Курс оновлено 0: усі курси на сьогодні вже актуальні (ручні курси не перезаписуються).')
         else:
             demo = ' (демо-курс, не НБУ)' if mode == MODE_DEMO else ''
             messages.success(request, f'Курс оновлено{demo}: {", ".join(updated)}')
@@ -131,7 +133,7 @@ def test_email_view(request):
     elif not result['queued']:
         messages.error(request, f'Не вдалося надіслати лист: {result.get("error", "помилка")}. Деталі - у «Остання помилка».')
     elif result['mode'] == MODE_DEMO:
-        messages.success(request, 'Демо: лист записано в Outbox і консоль, назовні не надсилався.')
+        messages.success(request, 'Демо: лист записано в Outbox (посилання в тексті замасковані), у консоль потрапила лише тема; назовні не надсилався.')
     else:
         messages.success(request, f'Тестовий лист надіслано на {to}.')
     return redirect('admin:integrations_status')

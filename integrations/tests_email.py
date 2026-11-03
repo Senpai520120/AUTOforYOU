@@ -282,6 +282,7 @@ class TestEmailButtonTests(CleanCacheTestCase):
             resp = self.client.post(self.URL, follow=True)
         self.assertContains(resp, 'Не вдалося надіслати лист')
         self.assertNotContains(resp, 'victim@leak.test')
+        self.assertNotIn('victim@leak.test', IntegrationHealth.objects.get(provider_key='email').last_error)
 
     def test_send_email_task_retry_attributes(self):
         self.assertEqual(
@@ -320,7 +321,8 @@ class SenderAndDemoLeakTests(CleanCacheTestCase):
 
     @override_settings(EMAIL_MODE='real', EMAIL_BACKEND=SMTP, EMAIL_HOST='smtp.mail.test')
     def test_service_domain_sender_not_configured(self):
-        for sender in ('noreply@localhost', 'noreply@example.org', 'noreply@example.com'):
+        for sender in ('noreply@localhost', 'noreply@example.org', 'noreply@example.com',
+                       'noreply@your-domain.example', 'noreply@mail.local', 'AFY <noreply@localhost>'):
             with override_settings(DEFAULT_FROM_EMAIL=sender):
                 self.assertFalse(EmailProvider().is_configured(), sender)
         with override_settings(DEFAULT_FROM_EMAIL='noreply@real-domain.ua'):
@@ -339,7 +341,10 @@ class SenderAndDemoLeakTests(CleanCacheTestCase):
         shown = buf.getvalue() + '\n'.join(logs.output)
         for needle in ('token=', 'uid=', 'secret.person@mail.test', 'password-reset/confirm'):
             self.assertNotIn(needle, shown)
-        self.assertIn('token=', OutboxMessage.objects.get().body)  # тело - только в Outbox
+        stored = OutboxMessage.objects.get().body
+        self.assertIn('password-reset/confirm', stored)  # адрес страницы виден, но без uid/token (A6)
+        self.assertNotIn('token=', stored)
+        self.assertNotIn('uid=', stored)
 
     @override_settings(EMAIL_MODE='demo', DEBUG=False)
     def test_demo_mail_in_production_is_error(self):
@@ -394,3 +399,92 @@ class ResetTaskDirectDeliveryTests(CleanCacheTestCase):
     def test_task_uses_resilient_base(self):
         from users.tasks import send_password_reset_email_task
         self.assertIsInstance(send_password_reset_email_task, ResilientTask)
+
+
+class ReviewFixesTests(CleanCacheTestCase):
+    """Аудит 2026-10-25, раздел A: A2, A3, A9, A14."""
+
+    @override_settings(EMAIL_MODE='real', EMAIL_BACKEND=SMTP, EMAIL_HOST='', DEFAULT_FROM_EMAIL='noreply@real-domain.ua')
+    def test_real_mode_smtp_without_host_not_configured(self):  # A2
+        status = EmailProvider().status()
+        self.assertEqual((status.mode, status.configured), ('real', False))
+        self.assertIn('EMAIL_HOST', status.reason)
+
+    @override_settings(EMAIL_MODE='real', EMAIL_BACKEND='django.core.mail.backends.dummy.EmailBackend',
+                       DEFAULT_FROM_EMAIL='noreply@real-domain.ua')
+    def test_real_mode_dummy_backend_not_configured(self):  # A2
+        self.assertFalse(EmailProvider().is_configured())
+
+    @override_settings(EMAIL_MODE='real', EMAIL_BACKEND=SMTP, EMAIL_HOST='smtp.mail.test',
+                       DEFAULT_FROM_EMAIL='noreply@real-domain.ua')
+    def test_real_mode_smtp_with_host_configured(self):  # A2
+        self.assertTrue(EmailProvider().is_configured())
+
+    def test_send_email_task_retry_params_come_from_settings(self):  # A3
+        from django.conf import settings
+        self.assertEqual(
+            (send_email_task.retry_backoff, send_email_task.retry_backoff_max, send_email_task.max_retries),
+            (settings.EMAIL_RETRY_BACKOFF, settings.EMAIL_RETRY_BACKOFF_MAX, settings.EMAIL_MAX_RETRIES),
+        )
+        self.assertGreaterEqual(send_email_task.retry_backoff, 60)
+        self.assertGreaterEqual(send_email_task.max_retries, 5)
+
+    def test_send_email_task_retries_on_smtp_exception(self):  # A3
+        from celery.exceptions import Retry
+        with mock.patch('django.core.mail.EmailMessage.send', side_effect=smtplib.SMTPException('down')), \
+                mock.patch.object(send_email_task, 'retry', side_effect=Retry()) as retry:
+            with self.assertRaises(Retry):
+                send_email_task('to@mail.test', 'Тема', 'Текст')
+        self.assertEqual(retry.call_count, 1)
+
+    @override_settings(EMAIL_MODE='auto', EMAIL_BACKEND=CONSOLE)
+    def test_worker_skip_when_not_configured_records_error_and_warns(self):  # A9
+        with self.assertLogs('integrations.email', level='WARNING') as logs:
+            result = email_service.deliver_email('to@mail.test', 'Тема', 'Текст')
+        self.assertEqual(result, 'skipped')
+        self.assertNotIn('to@mail.test', '\n'.join(logs.output))
+        self.assertIsNotNone(IntegrationHealth.objects.get(provider_key='email').last_error_at)
+
+    def test_redact_masks_url_encoded_address_and_phone(self):  # A14
+        text = 'refused user%40leak.test and +380671234567 for victim@leak.test'
+        shown = email_service._redact(text)
+        for needle in ('user%40leak.test', '380671234567', 'victim@leak.test'):
+            self.assertNotIn(needle, shown)
+
+    def test_smtp_error_with_encoded_address_and_phone_not_in_health(self):  # A14
+        err = smtplib.SMTPException('bad rcpt user%40leak.test phone +380671234567')
+        with mock.patch('django.core.mail.EmailMessage.send', side_effect=err):
+            send_email('to@mail.test', 'Тема', 'Текст', sync=True)
+        last = IntegrationHealth.objects.get(provider_key='email').last_error
+        self.assertNotIn('user%40leak.test', last)
+        self.assertNotIn('380671234567', last)
+
+    @override_settings(EMAIL_MODE='demo')
+    def test_demo_outbox_body_has_no_secret_values(self):  # A6
+        token = 'abc' + 'DEF123xyz789'
+        with mock.patch('sys.stdout'):
+            send_email('to@mail.test', 'Скидання', f'Перейдіть: https://site.test/reset?uid=MQ&token={token}')
+        stored = OutboxMessage.objects.get().body
+        self.assertNotIn(token, stored)
+        self.assertIn('https://site.test/reset', stored)
+
+    @override_settings(EMAIL_MODE='demo', SITE_URL='http://localhost')
+    def test_demo_outbox_has_no_real_verification_or_reset_tokens(self):  # A6 на настоящих ссылках
+        from users.emails import (
+            build_password_reset_url,
+            build_verification_url,
+            send_password_reset_email,
+            send_verification_email,
+        )
+        user = make_user('real.link@mail.test')
+        verify_url = build_verification_url(user)
+        reset_url = build_password_reset_url(user)
+        with mock.patch('sys.stdout'):
+            send_verification_email(user)
+            send_password_reset_email(user)
+        self.assertEqual(OutboxMessage.objects.count(), 2)
+        for url in (verify_url, reset_url):
+            uid, token = (part.split('=', 1)[1] for part in url.split('?', 1)[1].split('&'))
+            for row in OutboxMessage.objects.all():
+                self.assertNotIn(token, row.body)
+                self.assertNotIn(f'uid={uid}', row.body)

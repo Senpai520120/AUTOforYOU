@@ -541,14 +541,20 @@ def _positive_int_env(name, default):
 
 # Таймаут SMTP-соединения, секунды: зависший сервер не держит воркер (Н-28).
 EMAIL_TIMEOUT = _positive_int_env('EMAIL_TIMEOUT', 10)
+# Повторы Celery-задач отправки писем (A3): паузы 60, 120, 240, ... до EMAIL_RETRY_BACKOFF_MAX с, не более
+# EMAIL_MAX_RETRIES раз - минутный сбой SMTP не должен терять письмо сброса пароля.
+EMAIL_RETRY_BACKOFF = _positive_int_env('EMAIL_RETRY_BACKOFF', 60)
+EMAIL_RETRY_BACKOFF_MAX = _positive_int_env('EMAIL_RETRY_BACKOFF_MAX', 900)
+EMAIL_MAX_RETRIES = _positive_int_env('EMAIL_MAX_RETRIES', 6)
 # Сколько последних записей OutboxMessage хранить (demo-режимы email и Telegram).
 DEMO_OUTBOX_KEEP = _positive_int_env('DEMO_OUTBOX_KEEP', 200)
 
 # ─── Курс НБУ (задача 3.4a) ───────────────────────────────────────────────────
 # Базовый URL API НБУ без query; параметры valcode/date/json добавляет провайдер.
-NBU_API_URL = os.environ.get(
-    'NBU_API_URL', 'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange',
-).strip()
+# Пустая переменная (`NBU_API_URL=`) = значение по умолчанию (A10).
+NBU_API_URL = (
+    os.environ.get('NBU_API_URL') or 'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange'
+).strip() or 'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange'
 # Курс старше этого числа дней (относительно даты расчёта) даёт предупреждение в ответе калькулятора.
 EXCHANGE_RATE_MAX_AGE_DAYS = _positive_int_env('EXCHANGE_RATE_MAX_AGE_DAYS', 3)
 
@@ -722,6 +728,7 @@ if _TESTING:
     EMAIL_MODE = 'real'
     DEFAULT_FROM_EMAIL = 'noreply@afy-mail.test'
     EMAIL_TIMEOUT = 10
+    EMAIL_RETRY_BACKOFF, EMAIL_RETRY_BACKOFF_MAX, EMAIL_MAX_RETRIES = 60, 900, 6
     DEMO_OUTBOX_KEEP = 200
     NBU_API_URL = 'https://nbu.example.test/exchange'
     EXCHANGE_RATE_MAX_AGE_DAYS = 3

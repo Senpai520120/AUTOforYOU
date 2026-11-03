@@ -2,17 +2,19 @@
 import http.client
 from datetime import date, timedelta
 from decimal import Decimal as D
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
 
 from celery.exceptions import Retry
 from django.core.cache import cache
 from django.core.management import CommandError, call_command
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 
 from integrations.base import http_timeout
 from integrations.models import IntegrationHealth
 from pricing import cache as pricing_cache
+from pricing.calculator import exchange_rate_info
 from pricing.models import ExchangeRate
 from pricing.rates_provider import (
     DemoRateProvider,
@@ -142,7 +144,7 @@ class ModeTests(CleanCacheTestCase):
         ExchangeRate.objects.create(from_currency='USD', to_currency='UAH', date=today, rate=D('40'), source='nbu')
         with override_settings(NBU_MODE='demo'):
             updated = fetch_and_save_rates()
-        self.assertEqual(len(updated), 2)
+        self.assertEqual(updated, ['USD/EUR = 0.92'])  # A12: настоящий USD/UAH не тронут и не заявлен «оновлено»
         usd = ExchangeRate.objects.get(from_currency='USD', to_currency='UAH', date=today)
         self.assertEqual((usd.rate, usd.source), (D('40'), 'nbu'))
         eur = ExchangeRate.objects.get(from_currency='USD', to_currency='EUR', date=today)
@@ -228,6 +230,7 @@ class RefreshButtonTests(CleanCacheTestCase):
             resp = self.client.post(self.URL, follow=True)
         self.assertContains(resp, 'Не вдалося оновити курс НБУ')
         self.assertNotContains(resp, 'sekret-key-777')
+        self.assertNotIn('sekret-key-777', IntegrationHealth.objects.get(provider_key='nbu').last_error)
         self.assertEqual(ExchangeRate.objects.count(), 0)
 
     def test_anonymous_redirected_to_admin_login(self):
@@ -262,3 +265,127 @@ class RefreshButtonPermissionTests(CleanCacheTestCase):
             resp = self.client.post('/admin/integrations/status/refresh-nbu/')
         self.assertEqual(resp.status_code, 403)
         mocked.assert_not_called()
+
+
+class ReviewFixesTests(CleanCacheTestCase):
+    """Аудит 2026-10-25, раздел A: A7, A10, A11, A12."""
+
+    def test_manual_rate_not_overwritten_by_nbu(self):  # A7
+        from pricing.nbu import fetch_and_save_rates
+        today = date.today()
+        ExchangeRate.objects.create(from_currency='USD', to_currency='UAH', date=today, rate=D('40'), source='manual')
+        with patch_nbu(nbu_ok):
+            updated = fetch_and_save_rates(today)
+        row = ExchangeRate.objects.get(from_currency='USD', to_currency='UAH', date=today)
+        self.assertEqual((row.rate, row.source), (D('40'), 'manual'))
+        self.assertNotIn('USD/UAH = 41.5', updated)  # A12: ручную строку не «оновлено»
+        self.assertEqual(len(updated), 2)
+
+    def test_unchanged_rate_is_not_reported_as_updated(self):  # A12
+        from pricing.nbu import fetch_and_save_rates
+        with patch_nbu(nbu_ok):
+            first = fetch_and_save_rates(date(2026, 6, 23))
+            second = fetch_and_save_rates(date(2026, 6, 23))
+        self.assertEqual(len(first), 3)
+        self.assertEqual(second, [])
+
+    def test_error_on_second_currency_rolls_back_all(self):  # A12
+        from pricing import nbu
+        real_save = nbu._save
+        calls = []
+
+        def flaky(quote, rate_date):
+            calls.append(quote)
+            if len(calls) == 2:
+                raise RuntimeError('db down')
+            return real_save(quote, rate_date)
+
+        with patch_nbu(nbu_ok), patch.object(nbu, '_save', side_effect=flaky):
+            with self.assertRaisesMessage(RuntimeError, 'db down'):
+                nbu.fetch_and_save_rates(date(2026, 6, 23))
+        self.assertEqual(ExchangeRate.objects.count(), 0)
+        self.assertIsNotNone(IntegrationHealth.objects.get(provider_key='nbu').last_error_at)
+
+    def test_refresh_button_reports_zero_when_nothing_changed(self):  # A12
+        self.client.force_login(make_staff(superuser=True))
+        with patch_nbu(nbu_ok):
+            self.client.post('/admin/integrations/status/refresh-nbu/')
+            resp = self.client.post('/admin/integrations/status/refresh-nbu/', follow=True)
+        self.assertContains(resp, 'Курс оновлено 0')
+
+    def test_empty_nbu_api_url_env_falls_back_to_default(self):  # A10
+        import os
+        import subprocess
+        import sys
+        env = {**os.environ, 'NBU_API_URL': '', 'DATABASE_URL': '', 'REDIS_URL': '', 'DJANGO_SETTINGS_MODULE': 'core.settings'}
+        code = 'from django.conf import settings; print(settings.NBU_API_URL)'
+        out = subprocess.run([sys.executable, '-c', code], env=env, capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout.strip(), 'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange')
+
+
+class RateStaleTests(SeededCase):
+
+    def test_old_eur_rate_makes_response_stale(self):  # A11
+        today = date.today()
+        ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH').update(date=today)
+        ExchangeRate.objects.filter(from_currency='USD', to_currency='EUR').update(date=today - timedelta(days=5))
+        pricing_cache.invalidate_all()
+        body = self.calc().json()
+        self.assertTrue(body['exchange_rate_stale'])
+        self.assertIn((today - timedelta(days=5)).strftime('%d.%m.%Y'), body['exchange_rate_warning'])
+
+
+class ExchangeRateInfoUnitTests(SimpleTestCase):
+    """A13: чистая функция калькулятора, без БД."""
+
+    def rate(self, day, source='nbu'):
+        return SimpleNamespace(date=day, source=source)
+
+    def test_oldest_of_two_dates_decides(self):
+        today = date(2026, 6, 23)
+        info = exchange_rate_info(self.rate(today), self.rate(today - timedelta(days=4)), today, 3)
+        self.assertTrue(info['exchange_rate_stale'])
+        self.assertIn('4 дн.', info['exchange_rate_warning'])
+
+    def test_limit_is_not_stale(self):
+        today = date(2026, 6, 23)
+        info = exchange_rate_info(self.rate(today), self.rate(today - timedelta(days=3)), today, 3)
+        self.assertEqual(
+            info, {'exchange_rate_source': 'nbu', 'exchange_rate_stale': False, 'exchange_rate_warning': None},
+        )
+
+    def test_any_demo_rate_marks_source_demo(self):
+        today = date(2026, 6, 23)
+        info = exchange_rate_info(self.rate(today), self.rate(today, 'demo'), today, 3)
+        self.assertEqual(info['exchange_rate_source'], 'demo')
+
+
+class ExchangeRateAdminSaveTests(CleanCacheTestCase):
+
+    def _row(self, source='nbu'):
+        return ExchangeRate.objects.create(
+            from_currency='USD', to_currency='UAH', date=date(2026, 6, 23), rate=D('41.5'), source=source,
+        )
+
+    def _post_change(self, row, rate):
+        self.client.force_login(make_staff(superuser=True))
+        return self.client.post(f'/admin/pricing/exchangerate/{row.pk}/change/', {
+            'from_currency': 'USD', 'to_currency': 'UAH', 'date': '2026-06-23', 'rate': rate, 'source': 'nbu',
+        })
+
+    def test_changing_rate_in_admin_marks_manual_and_nbu_keeps_it(self):
+        row = self._row()
+        self.assertEqual(self._post_change(row, '42.5').status_code, 302)
+        row.refresh_from_db()
+        self.assertEqual((row.rate, row.source), (D('42.5'), 'manual'))
+        from pricing.nbu import fetch_and_save_rates
+        with patch_nbu(nbu_ok):
+            fetch_and_save_rates(date(2026, 6, 23))
+        row.refresh_from_db()
+        self.assertEqual((row.rate, row.source), (D('42.5'), 'manual'))
+
+    def test_saving_without_rate_change_keeps_source(self):
+        row = self._row()
+        self.assertEqual(self._post_change(row, '41.5').status_code, 302)
+        row.refresh_from_db()
+        self.assertEqual(row.source, 'nbu')

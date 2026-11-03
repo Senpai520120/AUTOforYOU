@@ -609,6 +609,27 @@ def selection_is_demo(sel: SelectedRates) -> bool:
     return any(getattr(r, 'source', 'demo') == 'demo' for r in (sel.usd_to_uah, sel.usd_to_eur) if r)
 
 
+def exchange_rate_info(usd_to_uah, usd_to_eur, calc_date, max_age_days: int) -> dict:
+    """Источник курса и предупреждение о давности (02-C8, 02-Q13, A11/A13). Чистая функция, без БД.
+
+    Принимает записи курсов (нужны `.date` и `.source`). Давность считается по самой старой из дат
+    USD/UAH и USD/EUR; источник `demo`, если демо хотя бы один из двух курсов.
+    """
+    rows = [r for r in (usd_to_uah, usd_to_eur) if r]
+    sources = {getattr(r, 'source', 'demo') for r in rows}
+    source = 'demo' if 'demo' in sources else getattr(usd_to_uah, 'source', 'demo')
+    oldest = min(r.date for r in rows)
+    age_days = (calc_date - oldest).days
+    stale = age_days > max_age_days
+    warning = None
+    if stale:
+        warning = (
+            f'Курс валют застарілий: останній курс від {oldest.strftime("%d.%m.%Y")} '
+            f'({age_days} дн. до дати розрахунку). Підсумок може відрізнятися від фактичного.'
+        )
+    return {'exchange_rate_source': source, 'exchange_rate_stale': stale, 'exchange_rate_warning': warning}
+
+
 def applied_rates(rates: RateSnapshot, fuel_type: str) -> dict:
     """Ставки для подписей разбивки («Мито 0%»), Decimal строкой - без округления float."""
     data = {

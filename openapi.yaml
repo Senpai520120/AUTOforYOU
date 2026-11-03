@@ -4952,8 +4952,12 @@ components:
           title: Телефон
           pattern: ^\+380\d{9}$
           maxLength: 20
+        email_sent:
+          type: boolean
+          readOnly: true
       required:
       - email
+      - email_sent
     RegisterRequest:
       type: object
       properties:

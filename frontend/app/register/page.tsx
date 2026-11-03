@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const idPrefix = useId();
   const captcha = useCaptchaState();
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(true);
   const [isAdult, setIsAdult] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', password2: '', first_name: '', phone: '' });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -35,13 +36,14 @@ export default function RegisterPage() {
     try {
       // Джерело візиту (2.14) — лише з sessionStorage; порожнє не надсилається.
       const attribution = getAttribution();
-      await apiFetch('/api/v1/auth/register/', {
+      const resp = await apiFetch<{ email_sent?: boolean }>('/api/v1/auth/register/', {
         method: 'POST',
         body: JSON.stringify({
           ...form, agreed_to_terms: true, confirmed_age_18: true, ...captcha.payload(),
           ...(Object.keys(attribution).length ? { attribution } : {}),
         }),
       });
+      setEmailSent(resp?.email_sent !== false); // A8: false — пошта не налаштована
       setRegisteredEmail(form.email);
       trackEvent('sign_up', { source: 'register' });
     } catch (err: unknown) {
@@ -57,10 +59,17 @@ export default function RegisterPage() {
       <div className="max-w-md mx-auto mt-10">
         <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
           <h1 className="text-2xl font-bold text-slate-900 mb-3">Перевірте пошту</h1>
-          <p className="text-slate-600 text-sm">
-            Якщо адреса <strong>{registeredEmail}</strong> доступна, ми надіслали на неї лист із
-            посиланням для підтвердження. Перейдіть за посиланням, щоб активувати всі функції.
-          </p>
+          {emailSent ? (
+            <p className="text-slate-600 text-sm" data-testid="register-email-sent">
+              Якщо адреса <strong>{registeredEmail}</strong> доступна, ми надіслали на неї лист із
+              посиланням для підтвердження. Перейдіть за посиланням, щоб активувати всі функції.
+            </p>
+          ) : (
+            <p className="text-slate-600 text-sm" data-testid="register-email-unavailable">
+              Відправка листів тимчасово не налаштована, зверніться до підтримки. Лист із
+              підтвердженням не надіслано.
+            </p>
+          )}
           <p className="mt-4 text-sm text-slate-500">
             <Link href="/login" className="text-blue-600 hover:underline">Перейти до входу</Link>
           </p>

@@ -184,7 +184,7 @@ class TestRegisterValidation(CleanCacheTestCase):
 
     def test_register_response_has_no_id(self):
         resp = self.client.post(REGISTER_URL, REG, format='json')
-        self.assertEqual(set(resp.json()), {'email', 'first_name', 'last_name', 'phone'})
+        self.assertEqual(set(resp.json()), {'email', 'first_name', 'last_name', 'phone', 'email_sent'})
 
 
 class TestUnverifiedRestricted(CleanCacheTestCase):
@@ -378,3 +378,51 @@ class TestCaptchaProviderSystemCheck(CleanCacheTestCase):
     @override_settings(CAPTCHA_PROVIDER='turnstile', TURNSTILE_SECRET_KEY='0x4AAAreal', DEBUG=False, IS_TESTING=False)
     def test_turnstile_is_ok(self):
         self.assertEqual(self._errors(), [])
+
+
+@override_settings(SITE_URL='https://site.test')
+class RegisterEmailSentFlagTests(CleanCacheTestCase):
+    """A8: ответ 201 сообщает, настроена ли почта; для занятого email ответ тот же."""
+
+    def test_email_sent_true_when_mail_configured(self):
+        resp = APIClient().post(REGISTER_URL, REG, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertIs(resp.json()['email_sent'], True)
+
+    @override_settings(EMAIL_MODE='auto', EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend')
+    def test_email_sent_false_when_mail_not_configured(self):
+        resp = APIClient().post(REGISTER_URL, REG, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertIs(resp.json()['email_sent'], False)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def _new_and_taken_responses(self):
+        new = APIClient().post(REGISTER_URL, REG, format='json')
+        cache.clear()  # лимиты регистрации не мешают второму запросу
+        taken = APIClient().post(REGISTER_URL, REG, format='json')
+        self.assertEqual(new.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(taken.status_code, status.HTTP_201_CREATED)
+        return new.json(), taken.json()
+
+    def test_taken_email_response_is_identical_when_mail_configured(self):
+        new, taken = self._new_and_taken_responses()
+        self.assertEqual(new, taken)  # в ответе нет id и других различающихся полей
+        self.assertIs(new['email_sent'], True)
+
+    @override_settings(EMAIL_MODE='auto', EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend')
+    def test_taken_email_response_is_identical_when_mail_not_configured(self):
+        new, taken = self._new_and_taken_responses()
+        self.assertEqual(new, taken)
+        self.assertIs(new['email_sent'], False)
+
+    @override_settings(EMAIL_MODE='demo')
+    def test_email_sent_false_in_demo_mode(self):
+        resp = APIClient().post(REGISTER_URL, REG, format='json')
+        self.assertIs(resp.json()['email_sent'], False)
+
+    @override_settings(SITE_URL='')
+    def test_email_sent_false_without_site_url(self):
+        resp = APIClient().post(REGISTER_URL, REG, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertIs(resp.json()['email_sent'], False)
+        self.assertEqual(len(mail.outbox), 0)

@@ -27,8 +27,9 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from integrations.base import MODE_DEMO
 from integrations.captcha import captcha_public_config, require_captcha
-from integrations.email import EMAIL_UNAVAILABLE_DETAIL, email_configured
+from integrations.email import EMAIL_UNAVAILABLE_DETAIL, EmailProvider, email_configured
 
 from . import lockout
 from .authentication import enforce_csrf
@@ -257,6 +258,10 @@ class RegisterView(generics.CreateAPIView):
             if consume_email_slot(data['email'], 'exists'):  # D4: лимит писем на адрес, ответ тот же
                 send_already_registered_email(existing)
         body = {key: data.get(key, '') for key in ('email', 'first_name', 'last_name', 'phone')}
+        # A8: «почта не настроена» - свойство сервера, одинаковое для нового и занятого email (аккаунт не раскрывается).
+        body['email_sent'] = bool(
+            email_configured() and (settings.SITE_URL or '').strip() and EmailProvider().mode != MODE_DEMO
+        )
         return Response(body, status=status.HTTP_201_CREATED)
 
 

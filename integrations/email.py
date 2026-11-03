@@ -11,11 +11,11 @@
 `IntegrationHealth`; адрес получателя и секреты в лог и журнал не попадают.
 """
 import logging
-import re
 
 from django.conf import settings
 from django.core.mail import EmailMessage, get_connection
 
+from core.logging_filters import scrub
 from core.test_runner import ExternalNetworkBlocked
 
 from .base import (
@@ -37,8 +37,6 @@ CONSOLE_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 LOCMEM_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 EMAIL_UNAVAILABLE_DETAIL = 'Відправка листів тимчасово не налаштована, зверніться до підтримки'
 
-_EMAIL_RE = re.compile(r'[\w.+%-]+@[\w-]+(?:\.[\w-]+)+')
-
 
 class EmailDeliveryError(OSError):
     """Сбой отправки (сеть, SMTP). OSError: Celery `ResilientTask` повторяет такие задачи."""
@@ -53,8 +51,8 @@ def email_timeout() -> int:
 
 
 def _redact(text) -> str:
-    """Убирает адреса и секреты: в журнал и лог не попадает получатель (03-S4)."""
-    return _EMAIL_RE.sub('***', mask_secrets(text))
+    """Убирает адреса, телефоны и секреты: в журнал и лог не попадает получатель (03-S4, A14)."""
+    return scrub(mask_secrets(text))
 
 
 class EmailProvider(BaseProvider):
@@ -74,7 +72,9 @@ class EmailProvider(BaseProvider):
         if is_placeholder(value):
             return False
         domain = value.rsplit('@', 1)[-1].rstrip('>').lower()
-        return not (domain == 'localhost' or domain.endswith('.localhost') or domain.startswith('example.'))
+        if domain in ('localhost', 'example') or domain.startswith('example.'):
+            return False
+        return not domain.endswith(('.localhost', '.example', '.local', '.invalid'))
 
     def _smtp_ok(self) -> bool:
         """smtp-бекенд с заданным хостом (без хоста письма падают в воркере)."""
@@ -115,11 +115,19 @@ def email_configured() -> bool:
     return EmailProvider().is_configured()
 
 
+def _outbox_body(body) -> str:
+    """Тело письма для Outbox: query-строки ссылок (uid, token) и секреты заменены на `***`."""
+    return scrub(mask_secrets(body))
+
+
 def _deliver_demo(to, subject, body) -> None:
-    """Демо: тело и адрес - только в OutboxMessage (админка superuser). В stdout и лог - лишь тема."""
+    """Демо: адрес и тело - в OutboxMessage (админка superuser), но ссылки и токены замаскированы (A6).
+
+    В stdout и лог - лишь тема. Рабочая ссылка сброса пароля не хранится нигде.
+    """
     from .models import write_outbox
 
-    write_outbox('email', recipient=to, subject=subject, body=body)
+    write_outbox('email', recipient=to, subject=subject, body=_outbox_body(body))
     logger.info('Email (demo): «%s» записано в Outbox, адрес и тело в лог не выводятся', subject)
 
 
@@ -131,7 +139,9 @@ def deliver_email(to, subject, body) -> str:
     """
     res = EmailProvider().resolution()
     if not res.configured:
-        logger.info('Email не отправлен: %s', res.reason)
+        # A9: молчаливый пропуск = потерянное письмо; видно в статусе интеграций и в логе.
+        record_error('email', EmailDeliveryError(f'письмо не отправлено: {res.reason}'))
+        logger.warning('Email не отправлен: %s', res.reason)
         return 'skipped'
     if res.mode == MODE_DEMO:
         _deliver_demo(to, subject, body)

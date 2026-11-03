@@ -1,6 +1,7 @@
 import logging
 
 from celery import shared_task
+from django.conf import settings
 
 from core.tasks import ResilientTask
 from integrations.base import RETRYABLE_EXCEPTIONS
@@ -10,9 +11,10 @@ logger = logging.getLogger(__name__)
 # ─── Письма (задача 3.4a) ────────────────────────────────────────────────────
 
 # Паузы 60, 120, 240, 480, 900, 900 с (до ~45 мин): минутный сбой SMTP не должен терять письмо.
-EMAIL_RETRY_BACKOFF = 60
-EMAIL_RETRY_BACKOFF_MAX = 900
-EMAIL_MAX_RETRIES = 6
+# Значения - в settings (EMAIL_RETRY_BACKOFF, EMAIL_RETRY_BACKOFF_MAX, EMAIL_MAX_RETRIES), здесь читаются при импорте.
+EMAIL_RETRY_BACKOFF = settings.EMAIL_RETRY_BACKOFF
+EMAIL_RETRY_BACKOFF_MAX = settings.EMAIL_RETRY_BACKOFF_MAX
+EMAIL_MAX_RETRIES = settings.EMAIL_MAX_RETRIES
 
 
 @shared_task(

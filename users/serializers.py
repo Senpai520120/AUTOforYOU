@@ -39,6 +39,8 @@ class RegisterSerializer(serializers.ModelSerializer):
     confirmed_age_18 = serializers.BooleanField(write_only=True)
     # Источник визита из sessionStorage (2.14): любой JSON; мусор тихо отбрасывается в create.
     attribution = serializers.JSONField(write_only=True, required=False, allow_null=True)
+    # A8: только в ответе 201; false - почта не настроена (одинаково для нового и занятого email).
+    email_sent = serializers.BooleanField(read_only=True)
     # Роль при регистрации не принимается: поле role в запросе молча игнорируется
     # (DRF отбрасывает неизвестные ключи), пользователь всегда buyer.
     # dealer ставит только approve_application; broker/moderator/admin - админка.
@@ -47,7 +49,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = (
             'email', 'password', 'password2', 'first_name', 'last_name', 'phone', 'agreed_to_terms',
-            'confirmed_age_18', 'attribution',
+            'confirmed_age_18', 'attribution', 'email_sent',
         )
         # Уникальность email проверяет RegisterView (01-S11: дубль не раскрываем).
         # Пустой телефон разрешён (валидатор на пустой строке не запускается), D7.

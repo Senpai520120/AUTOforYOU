@@ -141,3 +141,37 @@ test.describe('Просування: оплата LiqPay (3.4b)', () => {
     await expect(page.getByText('liqpay stub')).toBeVisible();
   });
 });
+
+test.describe('Реєстрація: пошта не налаштована (3.4a, A8)', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  async function fillAndSubmit(page: import('@playwright/test').Page, emailSent: boolean) {
+    const password = process.env.E2E_PASSWORD;
+    if (!password) throw new Error('E2E_PASSWORD не задано.');
+    await page.route('**/api/v1/auth/register/', (route) =>
+      route.fulfill({
+        status: 201,
+        json: { email: 'nobody@e2e.test', first_name: '', last_name: '', phone: '', email_sent: emailSent },
+      }),
+    );
+    await page.goto('/register');
+    await page.locator('input[type="email"]').fill('nobody@e2e.test');
+    await page.locator('input[type="password"]').first().fill(password);
+    await page.locator('input[type="password"]').nth(1).fill(password);
+    await page.getByLabel(/Погоджуюсь з/).check();
+    await page.getByLabel(/18 років/).check();
+    await page.getByRole('button', { name: 'Зареєструватися' }).click();
+  }
+
+  test('email_sent=false: текст про не налаштовану пошту, без «ми надіслали»', async ({ page }) => {
+    await fillAndSubmit(page, false);
+    await expect(page.getByTestId('register-email-unavailable')).toContainText('Відправка листів тимчасово не налаштована');
+    await expect(page.getByText('ми надіслали')).toHaveCount(0);
+  });
+
+  test('email_sent=true: «ми надіслали на неї лист»', async ({ page }) => {
+    await fillAndSubmit(page, true);
+    await expect(page.getByTestId('register-email-sent')).toContainText('ми надіслали');
+    await expect(page.getByTestId('register-email-unavailable')).toHaveCount(0);
+  });
+});

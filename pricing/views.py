@@ -25,6 +25,7 @@ from .calculator import (
     calc_auction_fees,
     calculate_landed_cost,
     catalog_is_demo,
+    exchange_rate_info,
     public_extra_options,
     rate_snapshot_to_dict,
     select_rates,
@@ -42,7 +43,6 @@ from .models import (
     ExchangeRate,
     OceanFreightRate,
     PensionFundBracket,
-    RateSource,
     UaDeliveryRate,
     UsLandRoute,
 )
@@ -74,22 +74,6 @@ def _sees_full_grid(user) -> bool:
     Голый is_staff не годится: его получает и модератор, а граница модератора - никаких pricing.*.
     """
     return bool(user and user.is_authenticated and (user.is_superuser or user.is_broker or user.is_admin_role))
-
-
-def exchange_rate_info(selected, calc_date) -> dict:
-    """Источник курса и предупреждение о давности (02-C8, 02-Q13). Демо-курс виден как `demo`."""
-    uah, eur = selected.usd_to_uah, selected.usd_to_eur
-    sources = {getattr(r, 'source', RateSource.DEMO) for r in (uah, eur) if r}
-    source = RateSource.DEMO.value if RateSource.DEMO in sources else uah.source
-    age_days = (calc_date - uah.date).days
-    stale = age_days > settings.EXCHANGE_RATE_MAX_AGE_DAYS
-    warning = None
-    if stale:
-        warning = (
-            f'Курс валют застарілий: останній курс від {uah.date.strftime("%d.%m.%Y")} '
-            f'({age_days} дн. до дати розрахунку). Підсумок може відрізнятися від фактичного.'
-        )
-    return {'exchange_rate_source': source, 'exchange_rate_stale': stale, 'exchange_rate_warning': warning}
 
 
 @extend_schema(
@@ -254,7 +238,9 @@ class CalculateView(APIView):
                 'rates_validity_date': calc_date.isoformat(),
                 'rates_updated_on': updated_on.isoformat() if updated_on else None,
                 'exchange_rate_date': selected.usd_to_uah.date.isoformat(),
-                **exchange_rate_info(selected, calc_date),
+                **exchange_rate_info(
+                    selected.usd_to_uah, selected.usd_to_eur, calc_date, settings.EXCHANGE_RATE_MAX_AGE_DAYS,
+                ),
                 'applied_rates': applied_rates(rates, data['fuel_type']),
                 'warning': texts.result_warning,
                 'estimate_note': texts.estimate_note,

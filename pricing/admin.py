@@ -14,6 +14,7 @@ from .models import (
     ExchangeRate,
     OceanFreightRate,
     PensionFundBracket,
+    RateSource,
     UaDeliveryRate,
     UsLandRoute,
 )
@@ -89,6 +90,12 @@ class ExchangeRateAdmin(admin.ModelAdmin):
     list_display = ('from_currency', 'to_currency', 'rate', 'date', 'source')
     list_filter = ('from_currency', 'to_currency', 'source')
     date_hierarchy = 'date'
+
+    def save_model(self, request, obj, form, change):
+        # Правка курса вручную закрепляет его: автозагрузка НБУ ручной курс не перезаписывает.
+        if change and 'rate' in form.changed_data:
+            obj.source = RateSource.MANUAL
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(CustomsExciseRate)
