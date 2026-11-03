@@ -1178,3 +1178,124 @@ class TestSeedStartupSafety(CleanCacheTestCase):
         self.assertEqual((Region.objects.count(), City.objects.count()), (regions, cities))
         self._seed('--force', command='seed_regions')
         self.assertTrue(Region.objects.filter(name='Львівська область').exists())
+
+
+class TestAuctionFeeTierOverlap(CleanCacheTestCase):
+    """2.17 (E9): clean() отклоняет пересечение диапазонов bid_min..bid_max (границы включительные)."""
+
+    MSG = 'Діапазон перетинається з існуючим тиром'
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import date
+
+        from pricing.models import AuctionFeeTier
+        AuctionFeeTier.objects.all().delete()
+        cls.key = dict(auction='copart', member_type='public', payment_type='secured', title_type='any')
+        cls.low = AuctionFeeTier.objects.create(
+            bid_min=D('0'), bid_max=D('999.99'), fee_flat=D('50'), valid_from=date(2025, 1, 1), **cls.key)
+
+    def _tier(self, bid_min, bid_max, valid_from='2025-01-01', valid_to=None, **over):
+        from datetime import date
+
+        from pricing.models import AuctionFeeTier
+        return AuctionFeeTier(
+            bid_min=D(bid_min), bid_max=D(bid_max) if bid_max is not None else None, fee_flat=D('10'),
+            valid_from=date.fromisoformat(valid_from), valid_to=date.fromisoformat(valid_to) if valid_to else None,
+            **{**self.key, **over})
+
+    def test_overlapping_range_rejected(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('500', '1500').full_clean()
+
+    def test_open_ended_overlap_rejected(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('900', None).full_clean()
+
+    def test_shared_boundary_value_rejected(self):
+        # границы включительные: 0-999.99 и 999.99-... делят ставку 999.99
+        from django.core.exceptions import ValidationError
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('999.99', None).full_clean()
+
+    def test_new_max_equal_existing_min_rejected(self):
+        from datetime import date
+
+        from django.core.exceptions import ValidationError
+
+        from pricing.models import AuctionFeeTier
+        AuctionFeeTier.objects.create(**{**self.key, 'member_type': 'broker'}, bid_min=D('1000'), bid_max=None,
+                                      fee_flat=D('90'), valid_from=date(2025, 1, 1))
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('500', '1000', member_type='broker').full_clean()
+
+    def test_adjacent_range_allowed(self):
+        self._tier('1000', None).full_clean()
+
+    def test_other_key_period_not_conflicting(self):
+        self._tier('500', '1500', auction='iaai').full_clean()
+        self._tier('500', '1500', member_type='broker').full_clean()
+        self._tier('500', '1500', valid_from='2024-01-01', valid_to='2024-12-31').full_clean()
+
+    def test_editing_existing_tier_does_not_clash_with_itself(self):
+        self.low.fee_flat = D('55')
+        self.low.full_clean()
+
+    def test_edit_into_overlap_rejected(self):
+        from datetime import date
+
+        from django.core.exceptions import ValidationError
+
+        from pricing.models import AuctionFeeTier
+        high = AuctionFeeTier.objects.create(
+            bid_min=D('1000'), bid_max=None, fee_flat=D('90'), valid_from=date(2025, 1, 1), **self.key)
+        high.bid_min = D('800')
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            high.full_clean()
+
+    def test_system_check_lists_existing_overlaps_without_changing_data(self):
+        from datetime import date
+
+        from pricing.apps import check_auction_fee_tier_overlaps
+        from pricing.models import AuctionFeeTier
+        self.assertEqual(check_auction_fee_tier_overlaps(databases=['default']), [])
+        bad = AuctionFeeTier.objects.create(  # в обход clean()
+            bid_min=D('500'), bid_max=D('800'), fee_flat=D('1'), valid_from=date(2025, 1, 1), **self.key)
+        self.assertEqual(check_auction_fee_tier_overlaps(), [])  # обычный `check` (без --database) в БД не ходит
+        found = check_auction_fee_tier_overlaps(databases=['default'])
+        self.assertEqual([w.id for w in found], ['pricing.W001'])
+        self.assertIn(f'id={bad.pk}', found[0].msg)
+        self.assertEqual(AuctionFeeTier.objects.count(), 2)
+
+
+class TestCalculationDateNotInFuture(CleanCacheTestCase):
+    """2.17 (E10): будущая calculation_date - 400, ставок в ответе нет."""
+
+    URL = '/api/v1/pricing/calculate/'
+
+    def _payload(self, calc_date):
+        return {'auction_price_usd': '5000', 'engine_cc': 2000, 'fuel_type': 'petrol',
+                'vehicle_year': 2018, 'calculation_date': calc_date.isoformat()}
+
+    def test_tomorrow_rejected_for_anonymous(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+        from rest_framework.test import APIClient
+        resp = APIClient().post(self.URL, self._payload(timezone.localdate() + timedelta(days=1)), format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {'calculation_date': ['Дата не може бути в майбутньому']})
+
+    def test_today_and_yesterday_pass_validation(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from pricing.serializers import CalculateInputSerializer
+        today = timezone.localdate()
+        for d in (today, today - timedelta(days=1)):
+            with self.subTest(date=d):
+                ser = CalculateInputSerializer(data=self._payload(d))
+                self.assertTrue(ser.is_valid(), ser.errors)

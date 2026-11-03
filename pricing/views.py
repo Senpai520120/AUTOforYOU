@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
@@ -164,7 +165,7 @@ class CalculateView(APIView):
             return Response(INTERNAL_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate(self, request, data):
-        calc_date = data.get('calculation_date') or date.today()
+        calc_date = data.get('calculation_date') or timezone.localdate()
         params = {**data}
         for key, value in FORM_DEFAULTS.items():
             params[key] = data.get(key) or value
@@ -320,7 +321,7 @@ class ActiveRatesView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        today = date.today()
+        today = timezone.localdate()
         catalog = pricing_cache.get_catalog()
         texts = pricing_cache.get_calculator_settings()
         body = {

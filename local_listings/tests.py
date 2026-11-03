@@ -381,6 +381,19 @@ class TestLocalListingFilters(APITestCase):
         self.assertIn(self.l2.pk, ids)
         self.assertNotIn(self.l1.pk, ids)
 
+    def test_invalid_price_param_returns_400_with_key(self):
+        # 2.17 (B6): нечисловая/бесконечная цена на публичном каталоге - 400 с ключом параметра, не 500.
+        for name in ('price_min', 'price_max'):
+            for bad in ('abc', '1e999', '--', 'NaN', 'Infinity', '-Infinity'):
+                with self.subTest(param=name, value=bad):
+                    r = APIClient().get('/api/v1/local/listings/', {name: bad})
+                    self.assertEqual(r.status_code, 400)
+                    self.assertEqual(list(r.json()), [name])
+
+    def test_valid_price_param_returns_200(self):
+        r = APIClient().get('/api/v1/local/listings/', {'price_min': '10000.50', 'price_max': '15000'})
+        self.assertEqual(r.status_code, 200)
+
     def test_filter_by_year_range(self):
         r = self.client.get('/api/v1/local/listings/?year_min=2019&year_max=2021')
         ids = {item['id'] for item in r.data['results']}

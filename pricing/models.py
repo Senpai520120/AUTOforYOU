@@ -48,6 +48,27 @@ class DateRangeModel(models.Model):
             )
 
 
+def _periods_overlap(a, b) -> bool:
+    """Периоды [valid_from, valid_to] пересекаются (valid_to=None - без конца)."""
+    return ((b.valid_to is None or b.valid_to >= a.valid_from)
+            and (a.valid_to is None or a.valid_to >= b.valid_from))
+
+
+def tiers_overlap(a, b) -> bool:
+    """Два тира одного ключа (аукцион/участник/оплата/титул) пересекаются и по периоду, и по ставке.
+
+    Границы bid_min..bid_max ВКЛЮЧИТЕЛЬНЫЕ (как в calculator.lookup_tier: bid_min <= bid <= bid_max),
+    поэтому 0-999.99 и 1000-... смежные, а 0-1000 и 1000-... пересекаются. bid_max=None - без верхнего лимита.
+    """
+    key = ('auction', 'member_type', 'payment_type', 'title_type')
+    if any(getattr(a, f) != getattr(b, f) for f in key):
+        return False
+    if not _periods_overlap(a, b):
+        return False
+    return ((a.bid_max is None or b.bid_min <= a.bid_max)
+            and (b.bid_max is None or a.bid_min <= b.bid_max))
+
+
 class AuctionFeeTier(DateRangeModel):
     """
     Тиерный buyer fee аукциона.
@@ -94,6 +115,13 @@ class AuctionFeeTier(DateRangeModel):
         pct_set = self.fee_percent is not None
         if flat_set == pct_set:
             raise ValidationError('Задайте ровно одно из fee_flat / fee_percent (не оба и не ни одного).')
+        if self.bid_min is not None and self.valid_from is not None:
+            candidates = type(self)._default_manager.filter(
+                auction=self.auction, member_type=self.member_type,
+                payment_type=self.payment_type, title_type=self.title_type,
+            ).exclude(pk=self.pk)
+            if any(tiers_overlap(self, other) for other in candidates):
+                raise ValidationError({'bid_min': 'Діапазон перетинається з існуючим тиром'})
 
     def __str__(self):
         fee_str = f'${self.fee_flat}' if self.fee_flat is not None else f'{(self.fee_percent * 100).normalize()}%'

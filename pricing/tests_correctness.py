@@ -470,3 +470,19 @@ class SnapshotAndAdminTests(SeededCase):
         staff.user_permissions.add(*Permission.objects.filter(codename__in=['view_calculation', 'delete_calculation']))
         self.client.force_login(staff)
         self.assertEqual(self.client.get(f'/admin/pricing/calculation/{calc.pk}/delete/').status_code, 403)
+
+
+class CalculationDateViaViewTests(SeededCase):
+    """2.17 (E10): прошлая дата без курса на неё - обычные правила расчёта, будущая - 400 из сериализатора."""
+
+    def test_yesterday_passes_date_validation_then_normal_rules(self):
+        from django.utils import timezone
+        resp = self.calc(calculation_date=(timezone.localdate() - timedelta(days=1)).isoformat())
+        # сид-тарифы действуют с сегодняшней даты: на вчера тарифов нет - штатный 422, а не 400 от даты
+        self.assertEqual(resp.status_code, 422, resp.content)
+        self.assertEqual(resp.json()['error'], 'not_configured')
+
+    def test_tomorrow_is_400(self):
+        from django.utils import timezone
+        resp = self.calc(calculation_date=(timezone.localdate() + timedelta(days=1)).isoformat())
+        self.assertEqual(resp.status_code, 400)

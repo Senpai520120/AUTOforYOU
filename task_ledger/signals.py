@@ -12,6 +12,16 @@ from core.monitoring import capture_message
 logger = logging.getLogger(__name__)
 
 
+def _param_names(sender) -> list:
+    """Имена параметров задачи (без self) - чтобы позиционные id попали в allowlist sanitize."""
+    try:
+        import inspect
+        positional = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        return [n for n, p in inspect.signature(sender.run).parameters.items() if p.kind in positional]
+    except Exception:
+        return []
+
+
 @task_failure.connect
 def record_failed_task(sender=None, task_id=None, exception=None, args=None, kwargs=None, **extra):
     task_name, retries, exception_class = 'unknown', 0, ''
@@ -27,7 +37,7 @@ def record_failed_task(sender=None, task_id=None, exception=None, args=None, kwa
         FailedTask.objects.create(
             task_name=task_name[:200], task_id=str(task_id or '')[:64], retries=retries,
             exception_class=exception_class[:200], error=safe_error(exception) if exception is not None else '',
-            args=safe_args(args), kwargs=safe_kwargs(kwargs),
+            args=safe_args(args, _param_names(sender)), kwargs=safe_kwargs(kwargs),
             queue=str(delivery.get('routing_key') or '')[:100],
         )
     except Exception:

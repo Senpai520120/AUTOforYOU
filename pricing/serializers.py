@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Calculation
@@ -29,6 +30,12 @@ class CalculateInputSerializer(serializers.Serializer):
     # Дата оформления таможни (YYYY-MM-DD). По ней берётся курс НБУ.
     # Если не указана - сегодня. Курс берётся последний не позже этой даты; курса «из будущего» нет (02-Q5).
     calculation_date = serializers.DateField(required=False, allow_null=True, default=None)
+
+    def validate_calculation_date(self, value):
+        # 2.17 (E10): будущие (ещё не вступившие) тарифы гостю не показываем. Нижней границы нет.
+        if value is not None and value > timezone.localdate():
+            raise serializers.ValidationError('Дата не може бути в майбутньому')
+        return value
 
     def validate(self, attrs):
         if attrs['fuel_type'] in ('electric', 'phev'):

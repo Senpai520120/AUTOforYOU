@@ -16,7 +16,7 @@ from tests.base import CleanCacheTestCase
 from tests.factories import make_admin_role, make_broker, make_moderator, make_staff
 
 from .models import FailedTask
-from .sanitize import safe_args, safe_repr
+from .sanitize import SAFE_ARG_NAMES, safe_args, safe_error, safe_kwargs, safe_repr
 from .signals import record_failed_task
 from .tasks import purge_failed_tasks
 
@@ -49,7 +49,7 @@ class SignalTests(LedgerTestCase):
         rec = FailedTask.objects.get()
         self.assertEqual((rec.task_name, rec.task_id, rec.exception_class, rec.retries),
                          ('task_ledger.tests.boom', result.id, 'ValueError', 0))
-        self.assertEqual(rec.args, ['***', '***', '<dict:1>', 42, None])
+        self.assertEqual(rec.args, ['<str:13>', '<str:16>', '<dict:1>', '<int>', None])
         self.assertNotIn('user@example.com', rec.error)
         self.capture.assert_called_once()
         extra = self.capture.call_args.kwargs['extra']
@@ -84,9 +84,27 @@ class SignalTests(LedgerTestCase):
         rec = FailedTask.objects.get()
         self.assertEqual(rec.kwargs['text'], '<str:1000>')
         self.assertEqual(rec.kwargs['msg'], '<str:13>')
-        self.assertEqual(rec.kwargs['code'], 'AFY-2026-0001')
+        self.assertEqual(rec.kwargs['code'], '<str:13>')
         self.assertEqual(rec.kwargs['items'], '<list:2>')
-        self.assertEqual(rec.kwargs['n'], 5)
+        self.assertEqual(rec.kwargs['n'], '<int>')
+
+    def test_secrets_without_spaces_masked_allowlisted_name_kept(self):
+        # 2.17 (E11): токен/IBAN/VIN без пробелов раньше хранились открыто.
+        token, iban, vin = '123456:ABC-DEFghIJKlmNoPqRsTuVwXyz', 'UA213223130000026007233566001', '1HGCM82633A004352'
+        boom.apply(args=(token,), kwargs={'token': token, 'iban': iban, 'vin': vin, 'lead_id': 77}, throw=False)
+        rec = FailedTask.objects.get()
+        self.assertEqual(rec.args, [f'<str:{len(token)}>'])
+        self.assertEqual(rec.kwargs, {'token': f'<str:{len(token)}>', 'iban': f'<str:{len(iban)}>',
+                                      'vin': '<str:17>', 'lead_id': 77})
+        dump = str(rec.args) + str(rec.kwargs)
+        for secret in (token, iban, vin):
+            self.assertNotIn(secret, dump)
+
+    def test_positional_arg_named_by_task_signature(self):
+        from integrations.tasks import send_notification
+        record_failed_task(sender=send_notification, task_id='t5', exception=OSError('x'),
+                           args=(5, 'UA213223130000026007233566001'), kwargs={})
+        self.assertEqual(FailedTask.objects.get().args, [5, '<str:29>'])
 
     def test_db_error_does_not_escape_and_monitoring_still_called(self):
         with mock.patch('task_ledger.models.FailedTask.objects.create', side_effect=RuntimeError('db down')), \
@@ -139,13 +157,41 @@ class RealMonitoringNoopTests(CleanCacheTestCase):
 
 class SanitizeTests(CleanCacheTestCase):
     def test_rules(self):
-        self.assertEqual(safe_args([True, 7, None, 1.5]), [True, 7, None, 1.5])
+        self.assertEqual(safe_args([True, 7, None, 1.5]), [True, '<int>', None, '<float>'])
+        self.assertEqual(safe_args([7, 8], names=['user_id', 'count']), [7, '<int>'])
+        self.assertEqual(safe_repr(7), 7)
         self.assertEqual(safe_repr('call +380 50 123 45 67 or a@b.cc'), '<str:32>')
         self.assertEqual(safe_repr('a@b.cc'), '***')
         self.assertEqual(safe_repr('+380501234567'), '***')
         self.assertEqual(safe_repr('/reset?token=abc'), '/reset?token=***')
         self.assertEqual(safe_repr({'nested': {'email': 'a@b.cc'}}), '<dict:1>')
         self.assertEqual(safe_repr(object()), '<object>')
+
+    def test_allowlist_is_exactly_id_names(self):
+        # Расширение allowlist - осознанное решение: значения этих имён хранятся открыто (не ПДн).
+        self.assertEqual(SAFE_ARG_NAMES, {'lead_id', 'listing_id', 'user_id', 'seller_id', 'force'})
+        self.assertEqual(safe_kwargs({'lead_id': 5, 'force': True, 'email': 'a@b.cc', 'chat_id': 12345}),
+                         {'lead_id': 5, 'force': True, 'email': '<str:6>', 'chat_id': '<int>'})
+
+    def test_allowlisted_name_masks_non_id_strings(self):
+        self.assertEqual(safe_kwargs({'user_id': 'ABC123:tok'}), {'user_id': '<str:10>'})
+        self.assertEqual(safe_kwargs({'user_id': '12345'}), {'user_id': '12345'})
+        uid = '12345678-1234-5678-1234-567812345678'
+        self.assertEqual(safe_kwargs({'lead_id': uid}), {'lead_id': uid})
+        self.assertEqual(safe_kwargs({'user_id': None, 'token': True}), {'user_id': None, 'token': True})
+
+    def test_error_text_hides_secrets_and_pg_detail(self):
+        # Фиктивные секреты собираются на лету, чтобы gitleaks не видел их в исходнике.
+        bot = 'bot123456789:' + 'AAH' + 'x' * 32
+        key = 'api' + 'key=' + 'k' * 12
+        exc = ValueError(
+            f'POST https://api.telegram.org/{bot}/sendMessage failed; retry /v1/x?{key}&a=1\n'
+            'duplicate key value violates unique constraint "uniq_vin"\n'
+            'DETAIL:  Key (vin)=(1HGCM82633A004352) already exists.')
+        text = safe_error(exc)
+        for leak in ('AAH' + 'x' * 32, 'k' * 12, '1HGCM82633A004352', 'DETAIL'):
+            self.assertNotIn(leak, text)
+        self.assertIn('duplicate key value', text)
 
     @override_settings(FAILED_TASK_ARG_MAX_LEN=10)
     def test_limit_from_settings(self):
