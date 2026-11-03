@@ -94,6 +94,15 @@ scripts/test-backend.ps1 pricing      # один застосунок
 
 Скрипти самі обнуляють `DATABASE_URL` і `REDIS_URL`: локальний `.env` — шаблон для Docker з хостами `db`/`redis`, а `core/settings.py` його підвантажує. Без обнулення тести йдуть у Postgres/Redis з `.env` або падають. Токен Telegram у тестах обнуляється автоматично.
 
+### Інфраструктура — `scripts/check-infra.sh`
+
+Ті самі перевірки, що й джоба `infra-lint` та крок `nginx -t` у CI: LF у `*.sh`, shellcheck, `docker compose config`, `nginx -t` для всіх `TLS_MODE` і CSP, тести shell-скриптів, ехо-тест Cloudflare. Потрібен запущений Docker (~1 хв). У Git Bash на Windows тести shell-скриптів ідуть у контейнері `ubuntu:24.04`.
+
+```bash
+./scripts/check-infra.sh                # усі розділи
+./scripts/check-infra.sh nginx lf       # лише вибрані: lf shellcheck compose nginx shell-tests cloudflare
+```
+
 ### E2E — 80 тестів, Playwright (6 `fixme` з посиланням на задачу)
 
 Потрібен піднятий стек. Запускати **з `frontend/`**, не з кореня репозиторію:

@@ -125,31 +125,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # Все проверки - разделы scripts/check-infra.sh (локально: ./scripts/check-infra.sh без аргументов).
       - name: shellcheck
-        # SC1007 исключён: `DATABASE_URL= REDIS_URL= cmd` в scripts/test-backend.sh - намеренное обнуление переменных.
-        run: shellcheck -e SC1007 deploy.sh docker/*.sh docker/backup/*.sh scripts/*.sh scripts/tests/*.sh
+        run: ./scripts/check-infra.sh shellcheck
       - name: Only LF in shell scripts
-        run: |
-          git ls-files --eol -- '*.sh' | awk '$1 != "i/lf" {print; bad=1} END {exit bad}'
-          if git ls-files -z '*.sh' | xargs -0 grep -lI $'\r'; then echo "CRLF found in *.sh" >&2; exit 1; fi
+        run: ./scripts/check-infra.sh lf
       - name: docker compose config
-        run: |
-          export POSTGRES_PASSWORD=x REDIS_PASSWORD=x NEXT_PUBLIC_API_URL=http://x NEXT_PUBLIC_SITE_URL=http://x
-          # docker-compose.yml требует .env (env_file, required): в чистом checkout его нет, для проверки конфига - пустой.
-          : > .env
-          docker compose --env-file /dev/null config --quiet
-          # e2e-override тоже должен собираться (нужен .env.e2e: required: true).
-          cp .env.e2e.example .env.e2e
-          docker compose --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.yml config --quiet
-          rm -f .env.e2e
-      - name: Rotation and backup.sh tests
-        run: ./scripts/tests/test_backup_rotation.sh
-      - name: deploy.sh and server-setup.sh tests
-        run: ./scripts/tests/test_deploy.sh
-      - name: check-memory.sh tests (7.7a)
-        run: ./scripts/tests/test_check_memory.sh
+        run: ./scripts/check-infra.sh compose
+      - name: Shell script tests (backup rotation, deploy.sh, check-memory.sh)
+        run: ./scripts/check-infra.sh shell-tests
       - name: CLOUDFLARE_PROXY echo test (7.1)
-        run: ./scripts/tests/test_cloudflare_realip.sh
+        run: ./scripts/check-infra.sh cloudflare
 
   # ─── Аудит зависимостей (C5). Блокирующая (1.16): в needs деплоя ───
   dependency-audit:
@@ -217,23 +203,7 @@ jobs:
         run: echo "TELEGRAM_BOT_TOKEN=ci-fake-prod-token" > .env
 
       - name: nginx -t for every TLS_MODE (7.1)
-        run: |
-          for mode in off external selfsigned letsencrypt; do
-            for cf in false; do
-              docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1                 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE="$mode" -e CLOUDFLARE_PROXY="$cf" -e TRUSTED_PROXY_IPS=10.0.0.0/8                 nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t'
-            done
-          done
-          # CAPTCHA_PROVIDER=turnstile: домен Turnstile сам попадает в CSP (иначе капча не загрузится).
-          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e CAPTCHA_PROVIDER=turnstile \
-            nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && grep -rq "challenges.cloudflare.com" /etc/nginx/'
-          # Аналитика (3.5): домены GA4 и Cloudflare WA попадают в CSP только при заданных ID, без ID их нет.
-          docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1 -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID=G-TEST000000 -e CLOUDFLARE_ANALYTICS_TOKEN=CFTEST0000000000             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && nginx -t && grep -rq "www.googletagmanager.com" /etc/nginx/ && grep -rq "static.cloudflareinsights.com" /etc/nginx/'
-          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics|cloudflareinsights" /etc/nginx/'
-          docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e TLS_MODE=off -e GA4_MEASUREMENT_ID='G-"><script>'             nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh && ! grep -rqE "googletagmanager|google-analytics" /etc/nginx/'
-          # Cloudflare без файла диапазонов: nginx обязан не стартовать с понятной ошибкой.
-          if docker run --rm -v "$PWD/nginx:/nginx-src:ro" -e DOMAIN=ci.example.test -e CLOUDFLARE_PROXY=true               nginx:1.31-alpine sh -c '. /nginx-src/docker-entrypoint.d/15-afy-nginx-setup.sh'; then
-            echo "CLOUDFLARE_PROXY=true without ranges file must fail" >&2; exit 1
-          fi
+        run: ./scripts/check-infra.sh nginx
 
       - name: Compose config fails without secrets (C9, C13, 6.4)
         run: |
