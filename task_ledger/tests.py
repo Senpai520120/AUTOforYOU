@@ -209,10 +209,10 @@ class ResilientTaskTests(CleanCacheTestCase):
     def test_other_tasks_not_affected_globally(self):
         # 8.9 не меняет поведение чужих задач: acks_late только у ResilientTask.
         from core.celery import app
-        from integrations.tasks import send_notification
         from pricing.tasks import fetch_nbu_rates_task
+        from users.tasks import flush_expired_tokens
         self.assertFalse(app.conf.task_acks_late)
-        self.assertFalse(send_notification.acks_late)
+        self.assertFalse(flush_expired_tokens.acks_late)  # send_notification с 5.5 на ResilientTask
         self.assertFalse(fetch_nbu_rates_task.acks_late)
         self.assertTrue(flaky.acks_late)
 

@@ -3,6 +3,7 @@ import uuid
 from datetime import timedelta
 from io import StringIO
 from types import SimpleNamespace
+from unittest import skipUnless
 from unittest.mock import AsyncMock, patch
 
 from aiogram import Bot, Dispatcher
@@ -13,7 +14,8 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase, TestCase
+from django.db import connection
+from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.throttling import SimpleRateThrottle
@@ -768,6 +770,48 @@ class BotLinkConflictTest(BotRuntimeTestCase):
         self.assertIn('застаріло', self.replies()[0])
 
 
+@skipUnless(connection.vendor == 'postgresql', 'гонка проверяется только на PostgreSQL (select_for_update)')
+class BotLinkRaceTest(TransactionTestCase):
+    """F9: два параллельных апдейта с одним токеном привязывают ровно один Telegram."""
+
+    def test_parallel_redeem_links_exactly_one(self):
+        import threading
+
+        from django.db import connections
+
+        from telegram_bot.handlers import _handle_link_token
+        from tests.factories import make_user
+
+        user = make_user()
+        token = TelegramLinkToken.objects.create(user=user, expires_at=timezone.now() + timedelta(minutes=10))
+        barrier = threading.Barrier(2)
+        replies, errors = [], []
+
+        def worker(tg_id):
+            try:
+                message = SimpleNamespace(from_user=SimpleNamespace(id=tg_id), answer=AsyncMock())
+                barrier.wait(timeout=10)
+                async_to_sync(_handle_link_token)(message, str(token.token))
+                replies.append(message.answer.await_args.args[0])
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=worker, args=(tg,)) for tg in (900001, 900002)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(replies), 2)
+        user.refresh_from_db()
+        token.refresh_from_db()
+        self.assertIn(user.telegram_id, (900001, 900002))
+        self.assertTrue(token.used)
+        self.assertEqual(sum('успішно' in r for r in replies), 1)
+
+
 class WebhookReliabilityTest(BotRuntimeTestCase):
     """07-Q6, 23-D100: коды ответа, дедупликация, исключения хендлеров."""
 
@@ -1263,6 +1307,140 @@ class SendNotificationBlockedTest(TestCase):
         self.token.refresh_from_db()
         self.assertEqual(self.user.telegram_id, 424242)
         self.assertFalse(self.token.used)
+
+
+class SendNotificationRetryTest(TestCase):
+    """F10 (5.5): сетевой сбой и flood control повторяются, окончательная неудача попадает в FailedTask."""
+
+    TG_ID = 777123456
+
+    def setUp(self):
+        from tests.factories import make_user
+        self.user = make_user(telegram_id=self.TG_ID)
+
+    def _apply(self, exc, retries=0):
+        from integrations.tasks import send_notification
+        with self.settings(TELEGRAM_BOT_TOKEN=BOT_TOKEN, TELEGRAM_MODE='auto'), \
+                patch.object(Bot, 'send_message', new_callable=AsyncMock, side_effect=exc):
+            return send_notification.apply(args=(self.user.pk, 'приватний текст'), retries=retries, throw=False)
+
+    def test_task_uses_resilient_base_and_keeps_name(self):
+        from core.tasks import ResilientTask
+        from integrations.tasks import send_notification
+        self.assertIsInstance(send_notification, ResilientTask)
+        self.assertEqual(send_notification.name, 'integrations.tasks.send_notification')
+
+    def test_network_error_goes_to_retry_not_sent_false(self):
+        from aiogram.exceptions import TelegramNetworkError
+        from celery.exceptions import Retry
+        exc = TelegramNetworkError(method=SendMessage(chat_id=1, text='x'), message='boom')
+        with patch('core.tasks.ResilientTask.retry', side_effect=Retry('again')) as retry:
+            result = self._apply(exc)
+        retry.assert_called_once()
+        self.assertIsInstance(retry.call_args.kwargs['exc'], ConnectionError)
+        self.assertEqual(result.state, 'RETRY')
+
+    def test_retry_after_calls_retry_with_countdown(self):
+        from aiogram.exceptions import TelegramRetryAfter
+        from celery.exceptions import Retry
+        exc = TelegramRetryAfter(method=SendMessage(chat_id=1, text='x'), message='flood', retry_after=5)
+        with patch('core.tasks.ResilientTask.retry', side_effect=Retry('again')) as retry:
+            result = self._apply(exc)
+        retry.assert_called_once()
+        self.assertEqual(retry.call_args.kwargs['countdown'], 6)
+        self.assertIsInstance(retry.call_args.kwargs['exc'], ConnectionError)
+        self.assertEqual(result.state, 'RETRY')
+
+    def _assert_record_clean(self, rec):
+        blob = ' '.join([str(rec.args), str(rec.kwargs), rec.error])
+        self.assertNotIn('приватний', blob)
+        self.assertNotIn(str(self.TG_ID), blob)
+
+    def test_exhausted_network_retries_create_failed_task_and_health_error(self):
+        from aiogram.exceptions import TelegramNetworkError
+
+        from integrations.models import IntegrationHealth
+        from task_ledger.models import FailedTask
+        exc = TelegramNetworkError(method=SendMessage(chat_id=self.TG_ID, text='приватний текст'),
+                                   message=f'boom {self.TG_ID} приватний текст')
+        with patch('task_ledger.signals.capture_message'):
+            result = self._apply(exc, retries=3)  # RESILIENT_TASK_MAX_RETRIES=3: последняя попытка
+        self.assertTrue(result.failed())
+        rec = FailedTask.objects.get()
+        self.assertEqual((rec.task_name, rec.exception_class),
+                         ('integrations.tasks.send_notification', 'ConnectionError'))
+        self._assert_record_clean(rec)
+        self.assertIsNotNone(IntegrationHealth.objects.get(provider_key='telegram').last_error_at)
+
+    def test_exhausted_retry_after_creates_failed_task_and_health_error(self):
+        from aiogram.exceptions import TelegramRetryAfter
+
+        from integrations.models import IntegrationHealth
+        from task_ledger.models import FailedTask
+        exc = TelegramRetryAfter(method=SendMessage(chat_id=self.TG_ID, text='приватний текст'),
+                                 message=f'flood {self.TG_ID} приватний текст', retry_after=5)
+        with patch('task_ledger.signals.capture_message'):
+            result = self._apply(exc, retries=3)
+        self.assertTrue(result.failed())
+        rec = FailedTask.objects.get()
+        self.assertEqual((rec.task_name, rec.exception_class),
+                         ('integrations.tasks.send_notification', 'ConnectionError'))
+        self.assertEqual(rec.error, 'TelegramRetryAfter')
+        self._assert_record_clean(rec)
+        self.assertIsNotNone(IntegrationHealth.objects.get(provider_key='telegram').last_error_at)
+
+    def test_final_exception_has_no_context_with_pii(self):
+        from aiogram.exceptions import TelegramRetryAfter
+        exc = TelegramRetryAfter(method=SendMessage(chat_id=self.TG_ID, text='x'),
+                                 message=f'flood {self.TG_ID}', retry_after=5)
+        with patch('task_ledger.signals.capture_message'):
+            result = self._apply(exc, retries=3)
+        final = result.result
+        self.assertIsNone(final.__context__)
+        self.assertNotIn(str(self.TG_ID), repr(final.args))
+
+    def test_retry_after_countdown_is_capped(self):
+        from aiogram.exceptions import TelegramRetryAfter
+        from celery.exceptions import Retry
+        exc = TelegramRetryAfter(method=SendMessage(chat_id=1, text='x'), message='flood', retry_after=86400)
+        with patch('core.tasks.ResilientTask.retry', side_effect=Retry('again')) as retry:
+            self._apply(exc)
+        self.assertEqual(retry.call_args.kwargs['countdown'], 600)
+
+    def test_logs_have_no_telegram_id_or_text_on_final_attempt(self):
+        from aiogram.exceptions import TelegramRetryAfter
+        exc = TelegramRetryAfter(method=SendMessage(chat_id=self.TG_ID, text='приватний текст'),
+                                 message=f'flood {self.TG_ID} приватний текст', retry_after=5)
+        with patch('task_ledger.signals.capture_message'), self.assertLogs('', 'DEBUG') as logs:
+            self._apply(exc, retries=3)
+        out = '\n'.join(logs.output)
+        self.assertIn('flood control', out)  # логи реально собраны
+        self.assertNotIn(str(self.TG_ID), out)
+        self.assertNotIn('приватний', out)
+
+    def test_retry_schedule_attributes(self):
+        from integrations.tasks import send_notification
+        self.assertEqual(send_notification.retry_backoff, 60)
+        self.assertEqual(send_notification.retry_backoff_max, 900)
+        self.assertEqual(send_notification.max_retries, 3)
+
+    def test_telegram_server_error_is_retried_as_network(self):
+        from aiogram.exceptions import TelegramServerError
+        from celery.exceptions import Retry
+        exc = TelegramServerError(method=SendMessage(chat_id=1, text='x'), message='Bad Gateway')
+        with patch('core.tasks.ResilientTask.retry', side_effect=Retry('again')) as retry:
+            result = self._apply(exc)
+        retry.assert_called_once()
+        self.assertIsInstance(retry.call_args.kwargs['exc'], ConnectionError)
+        self.assertEqual(result.state, 'RETRY')
+
+    def test_not_configured_returns_reason_without_retry(self):
+        from integrations.tasks import send_notification
+        with self.settings(TELEGRAM_BOT_TOKEN='', TELEGRAM_MODE='auto'), \
+                patch('core.tasks.ResilientTask.retry') as retry:
+            result = send_notification.apply(args=(self.user.pk, 'x'), throw=False)
+        self.assertEqual(result.get(), {'sent': False, 'reason': 'not_configured'})
+        retry.assert_not_called()
 
 
 # ─── Посты канала берут тексты из BotText ────────────────────────────────────

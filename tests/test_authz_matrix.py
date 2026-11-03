@@ -17,6 +17,7 @@
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -813,3 +814,29 @@ class ErrorTextsNotLeakedTests(CleanCacheTestCase):
             resp = auth_client(admin).post('/api/v1/lots/import/', body, format='json')
         self.assertEqual(resp.status_code, 400, resp.content)
         self.assertNotIn(self.SECRET, resp.content.decode())
+
+
+class TelegramWebhookSecretAuthzTests(CleanCacheTestCase):
+    """5.5 (F12): webhook без заголовка секрета (или с неверным) - отказ 403, апдейт в обработку не передаётся."""
+
+    URL = '/api/v1/telegram/webhook/'
+    SECRET = 'wh' + 'secret' * 3
+    BODY = ('{"update_id": 1, "message": {"message_id": 1, "date": 1, '
+            '"chat": {"id": 5, "type": "private"}, "text": "/start"}}')
+
+    def _post(self, **headers):
+        with override_settings(TELEGRAM_BOT_TOKEN='123456:' + 'ABCdef', TELEGRAM_WEBHOOK_SECRET=self.SECRET,
+                               TELEGRAM_MODE='auto'), \
+                unittest.mock.patch('telegram_bot.views.TelegramWebhookView._process_update') as proc:
+            resp = APIClient().post(self.URL, self.BODY, content_type='application/json', **headers)
+        return resp, proc
+
+    def test_missing_secret_header_403_and_nothing_processed(self):
+        resp, proc = self._post()
+        self.assertEqual(resp.status_code, 403)
+        proc.assert_not_called()
+
+    def test_wrong_secret_header_403_and_nothing_processed(self):
+        resp, proc = self._post(HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN='wrong')
+        self.assertEqual(resp.status_code, 403)
+        proc.assert_not_called()

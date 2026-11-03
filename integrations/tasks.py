@@ -75,16 +75,28 @@ def import_lot_task(self, lot_data: dict, seller_id: int):
 
 # ─── Уведомления (реализация промта 11) ──────────────────────────────────────
 
+# Паузы повторов уведомлений: 60, 120, 240 с (как у писем, 3.4a); пауза flood control ограничена 10 минутами.
+TELEGRAM_RETRY_BACKOFF = 60
+TELEGRAM_RETRY_BACKOFF_MAX = 900
+RETRY_AFTER_MAX_COUNTDOWN = 600
+
+
 @shared_task(
+    base=ResilientTask,
     bind=True,
     autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_kwargs={'max_retries': 3, 'countdown': 60},
+    retry_backoff=TELEGRAM_RETRY_BACKOFF,
+    retry_backoff_max=TELEGRAM_RETRY_BACKOFF_MAX,
     name='integrations.tasks.send_notification',
 )
 def send_notification(self, user_id: int, text: str, buttons=None):
     """
     Отправляет Telegram-уведомление привязанному пользователю через адаптер `telegram_bot.provider`.
     Telegram не налаштовано -> {'sent': False, 'reason': 'not_configured'}; пропуск виден в статусе интеграций.
+
+    Сетевой сбой (провайдер превращает TelegramNetworkError в ConnectionError) повторяется базой ResilientTask
+    с растущей паузой; TelegramRetryAfter - `self.retry(countdown=retry_after)`. После исчерпания повторов
+    задача падает, а сигнал task_failure пишет FailedTask (8.9). Аргументы (текст) в учёте сводятся к длине.
 
     Args:
         user_id: PK CustomUser.
@@ -116,7 +128,24 @@ def send_notification(self, user_id: int, text: str, buttons=None):
         return {'sent': False, 'reason': 'not linked'}
 
     # В лог идёт только pk пользователя, telegram_id не пишем (03-S4 / 07-S9).
-    result = provider.send_message(telegram_id, text, buttons=buttons)
+    from aiogram.exceptions import TelegramRetryAfter
+
+    from integrations.base import record_error
+
+    retry_after = None
+    try:
+        result = provider.send_message(telegram_id, text, buttons=buttons)
+    except TelegramRetryAfter as exc:
+        # Только пауза: в тексте исключения бывает chat_id (telegram_id), а у MaxRetriesExceededError - args (текст).
+        retry_after = exc.retry_after
+    if retry_after is not None:
+        # Вне блока except: у нового исключения нет __context__ с исходным TelegramRetryAfter.
+        record_error('telegram', RuntimeError('TelegramRetryAfter'))
+        logger.warning('send_notification: user pk=%s flood control, повтор через %ss', user_id, retry_after)
+        if self.request.retries >= self.max_retries:
+            raise ConnectionError('TelegramRetryAfter') from None
+        raise self.retry(exc=ConnectionError('TelegramRetryAfter'),
+                         countdown=min(int(retry_after) + 1, RETRY_AFTER_MAX_COUNTDOWN))
     logger.info('send_notification: user pk=%s → sent=%s', user_id, result.ok)
     if not result.ok:
         if result.reason == 'TelegramForbiddenError':

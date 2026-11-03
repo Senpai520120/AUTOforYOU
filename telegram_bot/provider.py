@@ -101,13 +101,18 @@ class RealTelegramProvider(TelegramProvider):
     def _call(self, method, **kwargs) -> SendResult:
         """Сетевая ошибка -> ConnectionError (ретрай задачи), TelegramRetryAfter пробрасывается,
         прочие ошибки API -> SendResult(ok=False, reason=<класс>). Токен и текст исключения наружу не идут."""
-        from aiogram.exceptions import TelegramAPIError, TelegramNetworkError, TelegramRetryAfter
+        from aiogram.exceptions import (
+            TelegramAPIError,
+            TelegramNetworkError,
+            TelegramRetryAfter,
+            TelegramServerError,
+        )
 
         try:
             message_id = asyncio.run(self._send(method, **kwargs))
         except TelegramRetryAfter:
             raise
-        except TelegramNetworkError as exc:
+        except (TelegramNetworkError, TelegramServerError) as exc:  # 5xx Telegram - тоже временный сбой
             record_error(self.key, ConnectionError(type(exc).__name__))
             raise ConnectionError(type(exc).__name__) from None
         except TelegramAPIError as exc:
