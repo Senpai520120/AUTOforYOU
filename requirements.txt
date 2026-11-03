@@ -19,6 +19,8 @@ boto3==1.38.38
 django-redis==5.4.0
 # Промт 10: Celery (брокер Redis, переиспользует REDIS_URL; без него — eager mode)
 celery[redis]==5.4.0
+# kombu 5.7 требует redis-py>=6.1 (у нас 5.3.1 из django-redis) — воркер падает VersionMismatch (CI 2026-11-03)
+kombu==5.6.2
 django-celery-beat==2.9.0
 # flower==2.0.1  # опционально: мониторинг задач в dev (pip install flower вручную)
 # Промт 11: Telegram-бот (aiogram 3.x; без TELEGRAM_BOT_TOKEN бот не стартует, сайт работает)
