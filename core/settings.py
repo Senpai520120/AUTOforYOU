@@ -602,12 +602,26 @@ from celery.schedules import crontab as _crontab  # noqa: E402
 # Адрес внешнего сервиса-сторожа (9.55), пусто - выключен
 CELERY_HEARTBEAT_URL = os.environ.get('CELERY_HEARTBEAT_URL', '').strip()
 
+# Алерт о росте упавших задач (9.55): окно, порог, пауза между одинаковыми алертами. Каналы пусты - алерта нет.
+# В алерт идёт только счётчик и имена задач (без текста ошибок, аргументов и ПДн).
+FAILED_TASK_ALERT_WINDOW_MINUTES = _positive_int_env('FAILED_TASK_ALERT_WINDOW_MINUTES', 60)
+FAILED_TASK_ALERT_THRESHOLD = _positive_int_env('FAILED_TASK_ALERT_THRESHOLD', 5)
+FAILED_TASK_ALERT_COOLDOWN_MINUTES = _positive_int_env('FAILED_TASK_ALERT_COOLDOWN_MINUTES', 360)
+FAILED_TASK_ALERT_CHAT_ID = os.environ.get('FAILED_TASK_ALERT_CHAT_ID', '').strip()
+FAILED_TASK_ALERT_EMAIL = os.environ.get('FAILED_TASK_ALERT_EMAIL', '').strip()
+
 CELERY_BEAT_SCHEDULE = {
     # Сигнал «Celery жив» сторожу; expires: при мёртвом worker пинги не копятся и не дают ложный зелёный (9.55)
     'celery-heartbeat': {
         'task': 'core.tasks.send_celery_heartbeat',
         'schedule': _crontab(minute='*/5'),
         'options': {'expires': 240},
+    },
+    # Рост упавших задач (FailedTask): алерт владельцу при превышении порога за окно (9.55)
+    'failed-task-alert': {
+        'task': 'core.tasks.alert_failed_task_growth',
+        'schedule': _crontab(minute='*/10'),
+        'options': {'expires': 540},
     },
     # Очистка старых анонимных расчётов (2.6, 02-S2)
     'purge-anonymous-calculations-daily': {
@@ -727,6 +741,8 @@ if _TESTING:
     PAYMENTS_ENABLED = True
     CARVERTICAL_PARTNER_URL = ''
     CELERY_HEARTBEAT_URL = ''
+    FAILED_TASK_ALERT_CHAT_ID = ''
+    FAILED_TASK_ALERT_EMAIL = ''
     GA4_MEASUREMENT_ID = ''
     CLOUDFLARE_ANALYTICS_TOKEN = ''
     LEGACY_CARS_API_ENABLED = False
