@@ -5,8 +5,10 @@ import ErrorState from '@/components/ui/ErrorState';
 import FaqBlock from '@/components/content/FaqBlock';
 import { getHowItWorks } from '@/lib/content';
 import { getLandingList } from '@/lib/landings';
-import { HOW_IT_WORKS_LABEL, HOW_IT_WORKS_SOON, CALC_COST_LABEL } from '@/lib/labels';
+import { HOW_IT_WORKS_LABEL, HOW_IT_WORKS_SOON, CALC_COST_LABEL, HOME_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
+import { breadcrumbLd } from '@/lib/jsonld';
+import JsonLd from '@/components/seo/JsonLd';
 
 // Дані з API: без force-dynamic Next пререндерить порожню сторінку під час build.
 export const dynamic = 'force-dynamic';
@@ -31,6 +33,9 @@ export default async function HowItWorksPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
+      {data?.published && (
+        <JsonLd data={breadcrumbLd([{ name: HOME_LABEL, path: '/' }, { name: HOW_IT_WORKS_LABEL, path: '/how-it-works' }])} />
+      )}
       <h1 className="text-2xl font-bold text-slate-900 mb-6">{HOW_IT_WORKS_LABEL}</h1>
 
       {data === null && <ErrorState error={null} />}
@@ -88,6 +93,9 @@ export default async function HowItWorksPage() {
             </p>
           </div>
 
+          <p className="mt-6 text-sm">
+            <Link href="/prigon" className="text-blue-700 underline" data-testid="how-link-prigon">{LANDING_INDEX_LABEL}: моделі та орієнтовна ціна</Link>
+          </p>
           <p className="mt-6 text-xs text-slate-500">Послугу пригону надає партнер, а не AUTOforYOU.</p>
         </>
       )}

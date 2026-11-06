@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getC2CFlags } from '@/lib/c2c';
 import { getDemoStatus } from '@/lib/site-config';
+import { getSiteSettings } from '@/lib/site-settings';
+import { organizationLd, websiteLd } from '@/lib/jsonld';
+import JsonLd from '@/components/seo/JsonLd';
 import { buildMetadata } from '@/lib/seo';
 import { serverGet } from '@/lib/server-api';
 
@@ -67,10 +70,13 @@ const COST_ITEMS = [
 ];
 
 export default async function Home() {
-  const [usdRate, c2c, isDemo] = await Promise.all([fetchUsdRate(), getC2CFlags(), getDemoStatus()]);
+  const [usdRate, c2c, isDemo, settings] = await Promise.all([
+    fetchUsdRate(), getC2CFlags(), getDemoStatus(), getSiteSettings(),
+  ]);
 
   return (
     <div className="space-y-14">
+      <JsonLd data={[organizationLd(settings), websiteLd()]} />
       {/* Hero */}
       <section className="bg-gradient-to-br from-blue-900 to-blue-700 text-white rounded-2xl p-12 text-center">
         <h1 className="text-4xl font-extrabold mb-3">Авто з США під ключ в Україну</h1>

@@ -3,8 +3,10 @@ import Link from 'next/link';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorState from '@/components/ui/ErrorState';
 import { getLandingList } from '@/lib/landings';
-import { HOW_IT_WORKS_LABEL } from '@/lib/labels';
+import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
+import { breadcrumbLd } from '@/lib/jsonld';
+import JsonLd from '@/components/seo/JsonLd';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,7 @@ export default async function LandingIndexPage() {
   const list = await getLandingList();
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
+      <JsonLd data={breadcrumbLd([{ name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' }])} />
       <h1 className="text-2xl font-bold text-slate-900 mb-6">Пригон авто з США</h1>
 
       {list === null && <ErrorState error={null} />}
@@ -44,8 +47,9 @@ export default async function LandingIndexPage() {
         </ul>
       )}
 
-      <p className="mt-8 text-sm">
+      <p className="mt-8 flex flex-wrap gap-4 text-sm">
         <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>
+        <Link href="/calculator" className="text-blue-700 underline" data-testid="prigon-link-calculator">{CALC_COST_LABEL}</Link>
       </p>
       <p className="mt-4 text-xs text-slate-500">Послугу пригону надає партнер, а не AUTOforYOU.</p>
     </div>

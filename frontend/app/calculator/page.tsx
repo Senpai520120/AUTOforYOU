@@ -9,6 +9,7 @@ import { trackCalculatorVisitOnce } from '@/lib/metrics';
 import CalcBreakdown from '@/components/calculator/CalcBreakdown';
 import PartnerVinLink from '@/components/calculator/PartnerVinLink';
 import CalculatorFaq from '@/components/content/CalculatorFaq';
+import CalculatorHowWeCount from '@/components/calculator/CalculatorHowWeCount';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
 
@@ -263,6 +264,7 @@ export default function CalculatorPage() {
         <CalculatorLoader />
       </Suspense>
       <PartnerVinLink />
+      <CalculatorHowWeCount />
       <CalculatorFaq />
     </div>
   );

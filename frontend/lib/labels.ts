@@ -27,3 +27,8 @@ export const HOW_IT_WORKS_LABEL = 'Як працює пригон';
 export const FAQ_LABEL = 'Питання та відповіді';
 export const HOW_IT_WORKS_SOON = "Інформація скоро з'явиться";
 export const CALC_COST_LABEL = 'Розрахувати вартість';
+
+/** Назви сторінок для хлібних крихт (задача 9.54). */
+export const HOME_LABEL = 'Головна';
+export const CALCULATOR_LABEL = 'Калькулятор вартості';
+export const LANDING_INDEX_LABEL = 'Пригон авто з США';

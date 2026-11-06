@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 import { buildMetadata } from '@/lib/seo';
+import { breadcrumbLd } from '@/lib/jsonld';
+import { CALCULATOR_LABEL, HOME_LABEL } from '@/lib/labels';
+import JsonLd from '@/components/seo/JsonLd';
 
 // демо-тарифи — не індексувати до реальних ставок (noindex лишається, OG-теги потрібні для превью ссилки)
 export const metadata: Metadata = buildMetadata({
@@ -11,5 +14,10 @@ export const metadata: Metadata = buildMetadata({
 });
 
 export default function CalculatorLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      <JsonLd data={breadcrumbLd([{ name: HOME_LABEL, path: '/' }, { name: CALCULATOR_LABEL, path: '/calculator' }])} />
+      {children}
+    </>
+  );
 }

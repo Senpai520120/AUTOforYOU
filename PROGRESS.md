@@ -38,6 +38,13 @@
 - `check_fee_tables` (только чтение, код 1 при расхождении) и `seed_auction_fees --update` (закрывает старые, ничего не удаляет). На работающей БД `--update` нужен один раз.
 - Остаток: диапазон «від–до»; Copart broker, IAA licensed и IAA EH&S — baseline. Вопросы владельцу — в отчёте сессии.
 
+## Задача 9.54: JSON-LD и текст /calculator (2026-11-07) — ◐
+
+- `lib/jsonld-core.ts` (чистые функции, проверяются без браузера) и `lib/jsonld.ts` (привязка к `SITE_NAME`/`SiteSettings`), серверный компонент `components/seo/JsonLd.tsx`. Главная: `Organization` + `WebSite`; `BreadcrumbList` на `/prigon`, `/prigon/[slug]`, `/calculator` (через layout), `/how-it-works` (только опубликованная).
+- Контакты и название юрлица только из настроек сайта; пустые не выводятся; ЄДРПОУ не выводится; `<`, `>`, `&`, U+2028/2029 экранируются; `sameAs` только http(s). CSP (`script-src 'self' 'unsafe-inline'`) не нарушается, проверено в e2e.
+- `/calculator`: блок «Як рахуємо» без цифр, ссылки на `/prigon` и `/how-it-works`; `/how-it-works` → `/prigon`, `/prigon` → калькулятор. `noindex` остаётся, в sitemap страницы нет, canonical без query.
+- Осталось: снять `noindex` и добавить в sitemap после сверки ставок с брокером; `Vehicle` + `Offer` с 9.9.
+
 ## Задача 9.56: «email завжди» и письмо брокеру без ПДн (2026-11-07)
 
 - `LeadNotificationSettings.email_always` (админка, по умолчанию выключено): письмо брокеру уходит и при доставленном Telegram. Дубли исключает идемпотентность `notify_broker_email` по `email_status`; заявка не считается недоставленной, если дошёл один канал (досыл её не берёт).

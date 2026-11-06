@@ -6,8 +6,10 @@ import LeadForm from '@/components/leads/LeadForm';
 import LandingCalc from '@/components/landing/LandingCalc';
 import LandingMobileBar, { LANDING_FORM_ID } from '@/components/landing/LandingMobileBar';
 import { calculatorHref, getLanding } from '@/lib/landings';
-import { CALC_COST_LABEL, HOW_IT_WORKS_LABEL } from '@/lib/labels';
+import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
+import { breadcrumbLd } from '@/lib/jsonld';
+import JsonLd from '@/components/seo/JsonLd';
 
 // Дані з API: без force-dynamic Next пререндерить сторінку під час build, коли backend недоступний.
 // Кеш запиту — LANDING_REVALIDATE_SECONDS (lib/landings.ts).
@@ -59,6 +61,10 @@ export default async function LandingPage({ params }: Params) {
   const label = `${p.make} ${p.model}`.trim();
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 pb-28 md:pb-10 space-y-6">
+      <JsonLd data={breadcrumbLd([
+        { name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' },
+        { name: label, path: `/prigon/${p.slug}` },
+      ])} />
       <header>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900" data-testid="landing-h1">{p.h1}</h1>
         {p.intro && <p className="mt-3 text-slate-700 whitespace-pre-line">{p.intro}</p>}

@@ -359,3 +359,177 @@ test.describe('OG: теги і картинки превью', () => {
     expect(['photo', 'item']).toContain(res.headers()['x-og-variant']);
   });
 });
+
+// ─── JSON-LD і текст /calculator (задача 9.54) ───────────────────────────────
+
+type Ld = Record<string, unknown>;
+const ldBlocks = async (page: import('@playwright/test').Page): Promise<Ld[]> =>
+  (await page.locator('script[type="application/ld+json"]').allTextContents()).map((t) => JSON.parse(t) as Ld);
+/** Жодного порожнього значення (рядка, null, порожнього об'єкта) у розмітці. */
+const noEmpty = (v: unknown): boolean => {
+  if (v === null || v === undefined || v === '') return false;
+  if (Array.isArray(v)) return v.every(noEmpty);
+  if (typeof v === 'object') return Object.values(v as object).every(noEmpty);
+  return true;
+};
+const crumbs = (b: Ld) => (b.itemListElement as { position: number; name: string; item: string }[]);
+
+test.describe('SEO: JSON-LD (9.54)', () => {
+  test.use({ storageState: GUEST });
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(consentInit);
+  });
+
+  test('головна: Organization і WebSite, контакти збігаються з налаштуваннями сайту, порожніх значень немає', async ({ page, request }) => {
+    const s = await (await request.get('/api/v1/site-settings/')).json();
+    await page.goto('/');
+    const blocks = await ldBlocks(page);
+    expect(blocks.map((b) => b['@type']).sort()).toEqual(['Organization', 'WebSite']);
+    for (const b of blocks) {
+      expect(b['@context']).toBe('https://schema.org');
+      expect(noEmpty(b)).toBe(true);
+    }
+    const org = blocks.find((b) => b['@type'] === 'Organization')!;
+    const site = blocks.find((b) => b['@type'] === 'WebSite')!;
+    expect(org.name).toBe('AUTOforYOU');
+    expect(site.name).toBe('AUTOforYOU');
+    expect(new URL(org.url as string).pathname).toBe('/');
+    // Контакти - лише з налаштувань: є в API - є в розмітці, немає - ключа теж немає.
+    const email = s.support_email || s.privacy_email;
+    if (s.phone) expect(org.telephone).toBe(s.phone); else expect(org).not.toHaveProperty('telephone');
+    if (email) expect(org.email).toBe(email); else expect(org).not.toHaveProperty('email');
+    if (s.owner_legal_name) expect(String(org.legalName)).toContain(s.owner_legal_name);
+    else expect(org).not.toHaveProperty('legalName');
+    if (s.owner_code) expect(JSON.stringify(blocks)).not.toContain(s.owner_code);
+  });
+
+  test('головна без хлібних крихт, внутрішні сторінки без Organization', async ({ page }) => {
+    await page.goto('/');
+    expect((await ldBlocks(page)).some((b) => b['@type'] === 'BreadcrumbList')).toBe(false);
+    await page.goto('/prigon');
+    expect((await ldBlocks(page)).some((b) => b['@type'] === 'Organization')).toBe(false);
+  });
+
+  const PAGES = [
+    { path: '/prigon', names: ['Головна', 'Пригон авто з США'], urls: ['/', '/prigon'] },
+    { path: '/calculator', names: ['Головна', 'Калькулятор вартості'], urls: ['/', '/calculator'] },
+    { path: '/how-it-works', names: ['Головна', 'Як працює пригон'], urls: ['/', '/how-it-works'] },
+  ];
+  for (const p of PAGES) {
+    test(`${p.path}: BreadcrumbList з позиціями, назвами й абсолютними адресами @smoke`, async ({ page }) => {
+      await page.goto(p.path);
+      if (p.path === '/how-it-works' && (await page.getByTestId('how-it-works-empty').count())) {
+        test.skip(true, 'сторінка не опублікована: розмітки немає, сторінка noindex');
+      }
+      const lists = (await ldBlocks(page)).filter((b) => b['@type'] === 'BreadcrumbList');
+      expect(lists).toHaveLength(1);
+      expect(noEmpty(lists[0])).toBe(true);
+      expect(crumbs(lists[0]).map((c) => c.position)).toEqual(p.names.map((_, i) => i + 1));
+      expect(crumbs(lists[0]).map((c) => c.name)).toEqual(p.names);
+      expect(crumbs(lists[0]).map((c) => new URL(c.item).pathname)).toEqual(p.urls);
+    });
+  }
+
+  test('сторінка моделі: крихти Головна → Пригон → модель', async ({ page, request }) => {
+    const list = await (await request.get('/api/v1/landings/')).json();
+    const slug = (list.results ?? list)[0]?.slug as string | undefined;
+    test.skip(!slug, 'у стеку немає опублікованих сторінок моделей');
+    await page.goto(`/prigon/${slug}`);
+    const [b] = (await ldBlocks(page)).filter((x) => x['@type'] === 'BreadcrumbList');
+    expect(crumbs(b).map((c) => c.position)).toEqual([1, 2, 3]);
+    expect(crumbs(b).map((c) => new URL(c.item).pathname)).toEqual(['/', '/prigon', `/prigon/${slug}`]);
+    expect(crumbs(b)[2].name.length).toBeGreaterThan(0);
+  });
+
+  test('CSP не блокує сторінки з розміткою: порушень script-src немає, розмітка читається', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __csp: string[] }).__csp = [];
+      document.addEventListener('securitypolicyviolation', (e) =>
+        (window as unknown as { __csp: string[] }).__csp.push(e.violatedDirective));
+    });
+    for (const path of ['/', '/prigon', '/calculator']) {
+      await page.goto(path);
+      expect((await ldBlocks(page)).length).toBeGreaterThan(0);
+      const violations = await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
+      expect(violations.filter((v) => v.startsWith('script-src'))).toEqual([]);
+    }
+  });
+});
+
+test.describe('JSON-LD: побудова розмітки без браузера (9.54)', () => {
+  const SITE = { name: 'AUTOforYOU', url: 'https://example.test' };
+  const KEYS = ['@context', '@type', 'name', 'url'];
+
+  test('порожні й пробільні реквізити не виводяться', async () => {
+    const { buildOrganizationLd } = await import('../lib/jsonld-core');
+    expect(Object.keys(buildOrganizationLd(SITE)).sort()).toEqual(KEYS);
+    expect(Object.keys(buildOrganizationLd(SITE, { telephone: '   ', address: '\n', email: '', legalName: ' ' })).sort())
+      .toEqual(KEYS);
+    const full = buildOrganizationLd(SITE, { legalName: 'ФОП Іваненко І. І.', telephone: '+380501112233',
+      email: 'help@example.test', address: 'м. Київ, вул. Тестова, 1' });
+    expect(full).toMatchObject({ legalName: 'ФОП Іваненко І. І.', telephone: '+380501112233', email: 'help@example.test',
+      address: { '@type': 'PostalAddress', streetAddress: 'м. Київ, вул. Тестова, 1' } });
+  });
+
+  test('sameAs лише з http(s)-адреси', async () => {
+    const { buildOrganizationLd } = await import('../lib/jsonld-core');
+    expect(buildOrganizationLd(SITE, { sameAs: 'javascript:alert(1)' })).not.toHaveProperty('sameAs');
+    expect(buildOrganizationLd(SITE, { sameAs: 'https://t.me/afy' })).toHaveProperty('sameAs', ['https://t.me/afy']);
+  });
+
+  test('текст із адмінки не закриває <script>: <, >, & і U+2028 екрановані, JSON повертається без змін', async () => {
+    const { buildOrganizationLd, jsonLdString } = await import('../lib/jsonld-core');
+    const evil = '</script><script>alert(1)</script> & x\u2028y\u2029z';
+    const text = jsonLdString(buildOrganizationLd(SITE, { legalName: evil, address: evil }));
+    for (const ch of ['<', '>', '&', '\u2028', '\u2029']) expect(text).not.toContain(ch);
+    expect(JSON.parse(text).legalName).toBe(evil);
+    expect(JSON.parse(text).address.streetAddress).toBe(evil);
+  });
+
+  test('крихти: порожня назва відкидається, позиції без пропусків, адреси абсолютні', async () => {
+    const { buildBreadcrumbLd } = await import('../lib/jsonld-core');
+    const ld = buildBreadcrumbLd(SITE.url, [{ name: 'A', path: '/' }, { name: '  ', path: '/x' }, { name: 'B', path: '/b' }]);
+    expect(ld.itemListElement).toEqual([
+      { '@type': 'ListItem', position: 1, name: 'A', item: 'https://example.test/' },
+      { '@type': 'ListItem', position: 2, name: 'B', item: 'https://example.test/b' },
+    ]);
+  });
+});
+
+test.describe('SEO: /calculator - текст, canonical, noindex (9.54)', () => {
+  test.use({ storageState: GUEST });
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(consentInit);
+  });
+
+  test('H1, блок «Як рахуємо» без цифр, посилання на /prigon і /how-it-works', async ({ page }) => {
+    await page.goto('/calculator');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Калькулятор вартості/);
+    const block = page.getByTestId('calculator-how-we-count');
+    await expect(block).toBeVisible();
+    await expect(block.getByRole('heading', { name: 'Як рахуємо' })).toBeVisible();
+    expect(await block.textContent()).not.toMatch(/\d/);
+    await expect(block.getByRole('link', { name: 'Пригон за моделями' })).toHaveAttribute('href', '/prigon');
+    await expect(block.getByRole('link', { name: 'Як працює пригон' })).toHaveAttribute('href', '/how-it-works');
+  });
+
+  test('адреса з query: canonical на /calculator без query, noindex лишається', async ({ page }) => {
+    await page.goto('/calculator?auction_price_usd=5000&year=2019&utm_source=tg');
+    const href = (await page.locator('link[rel="canonical"]').getAttribute('href'))!;
+    expect(new URL(href).pathname + new URL(href).search).toBe('/calculator');
+    await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute('content', /noindex/);
+  });
+
+  test('/calculator не в sitemap (noindex знімається лише після звірки ставок)', async ({ request }) => {
+    const xml = await (await request.get('/sitemap.xml')).text();
+    expect(sitemapPaths(xml)).not.toContain('/calculator');
+  });
+
+  test('внутрішні посилання: /prigon → калькулятор, /how-it-works → /prigon', async ({ page }) => {
+    await page.goto('/prigon');
+    await expect(page.getByTestId('prigon-link-calculator')).toHaveAttribute('href', '/calculator');
+    await page.goto('/how-it-works');
+    test.skip((await page.getByTestId('how-it-works-empty').count()) > 0, 'сторінка не опублікована');
+    await expect(page.getByTestId('how-link-prigon')).toHaveAttribute('href', '/prigon');
+  });
+});
