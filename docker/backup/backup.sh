@@ -195,6 +195,10 @@ if [ "$failed" -eq 0 ]; then
     date '+%Y-%m-%d %H:%M:%S' > "$work/.last_success"
     mv "$work/.last_success" "$BACKUP_DIR/.last_success"
     log "готово"
+    # Сигнал сервису-сторожу (9.55): нет пинга в срок - приходит оповещение. Сбой пинга бэкап не портит.
+    if [ -n "${BACKUP_HEARTBEAT_URL:-}" ]; then
+        curl -fs -m 10 --retry 2 -o /dev/null "$BACKUP_HEARTBEAT_URL" || err "сервис-сторож бэкапа не ответил"
+    fi
     exit 0
 fi
 err "бэкап выполнен не полностью (см. ошибки выше); метка успеха не обновлена"

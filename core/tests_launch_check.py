@@ -47,6 +47,7 @@ GOOD_ENV = dict(
     DOMAIN='shop.example.test', DATABASE_URL=f'postgresql://app:{PASSWORD}@db:5432/app',
     POSTGRES_PASSWORD=PASSWORD, REDIS_URL='redis://:test-only-redis@redis:6379/0', REDIS_PASSWORD='test-only-redis',
     SENTRY_DSN='https://test-only-key@sentry.example.test/1',
+    CELERY_HEARTBEAT_URL='https://hc.example.test/ping',
     BACKUP_S3_BUCKET='test-only-backups', BACKUP_S3_ENDPOINT_URL='https://r2.example.test',
     BACKUP_S3_ACCESS_KEY_ID='test-only-access', BACKUP_S3_SECRET_ACCESS_KEY='test-only-s3-secret',
     BACKUP_ENCRYPTION_PASSPHRASE='test-only-passphrase', BACKUP_DIR='', C2C_SEED_THRESHOLD='',

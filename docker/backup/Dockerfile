@@ -2,7 +2,7 @@
 # в docker-compose.yml (при смене версии db менять и здесь, иначе pg_dump откажется работать).
 FROM postgres:18.4-alpine
 
-RUN apk add --no-cache aws-cli gnupg tzdata
+RUN apk add --no-cache aws-cli curl gnupg tzdata
 
 COPY rotate.sh backup.sh loop.sh healthcheck.sh restore-inner.sh fetch-remote.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/rotate.sh /usr/local/bin/backup.sh /usr/local/bin/loop.sh \

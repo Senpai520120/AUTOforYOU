@@ -56,6 +56,7 @@ REQUIRED_VARS = {
     ],
     'Моніторинг': [
         ('SENTRY_DSN', ENV, 'Sentry/GlitchTip DSN'),
+        ('CELERY_HEARTBEAT_URL', ENV, 'адреса сервісу-сторожа для Celery (Healthchecks.io тощо)'),
     ],
     'Резервні копії поза сервером': [
         ('BACKUP_S3_BUCKET', ENV, 'bucket R2/S3 для бекапів'),

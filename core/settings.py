@@ -599,7 +599,16 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # Расписание фоновых задач
 from celery.schedules import crontab as _crontab  # noqa: E402
 
+# Адрес внешнего сервиса-сторожа (9.55), пусто - выключен
+CELERY_HEARTBEAT_URL = os.environ.get('CELERY_HEARTBEAT_URL', '').strip()
+
 CELERY_BEAT_SCHEDULE = {
+    # Сигнал «Celery жив» сторожу; expires: при мёртвом worker пинги не копятся и не дают ложный зелёный (9.55)
+    'celery-heartbeat': {
+        'task': 'core.tasks.send_celery_heartbeat',
+        'schedule': _crontab(minute='*/5'),
+        'options': {'expires': 240},
+    },
     # Очистка старых анонимных расчётов (2.6, 02-S2)
     'purge-anonymous-calculations-daily': {
         'task': 'pricing.tasks.purge_anonymous_calculations',
@@ -717,6 +726,7 @@ if _TESTING:
     C2C_PUBLIC_POSTING_ENABLED = True
     PAYMENTS_ENABLED = True
     CARVERTICAL_PARTNER_URL = ''
+    CELERY_HEARTBEAT_URL = ''
     GA4_MEASUREMENT_ID = ''
     CLOUDFLARE_ANALYTICS_TOKEN = ''
     LEGACY_CARS_API_ENABLED = False

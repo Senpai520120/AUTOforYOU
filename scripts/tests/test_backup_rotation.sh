@@ -166,5 +166,33 @@ run_backup env S3_BUCKET_NAME=b PRIVATE_S3_BUCKET_NAME=p BACKUP_KEEP_DAILY=1 BAC
 check "ротация без нового архива медиа -> код 0" 0 "$RC"
 check "остался только последний старый архив медиа" "autoforyou-media_2026-01-03_0330.tar.gz" "$(cd "$TMP/backups" && ls autoforyou-media_*.tar.gz)"
 
+# ── 3. Пинг сервиса-сторожа (9.55) ─────────────────────────────────────
+make_curl() {  # $1 - код возврата заглушки
+    printf '#!/bin/sh\necho "curl $*" >> "$MOCK_CURL_LOG"\nexit %s\n' "$1" > "$TMP/bin/curl"
+    chmod +x "$TMP/bin/curl"
+}
+CURL_LOG="$TMP/curl.log"
+curl_calls() { if [ -f "$CURL_LOG" ]; then grep -c 'https://hc.example/secret' "$CURL_LOG"; else echo 0; fi; }
+
+make_curl 0
+make_pg_dump_ok
+run_backup env MOCK_CURL_LOG="$CURL_LOG" BACKUP_HEARTBEAT_URL=https://hc.example/secret
+check "успешный бэкап -> код 0 и один пинг" "0 1" "$RC $(curl_calls)"
+
+rm -f "$CURL_LOG"
+run_backup env MOCK_CURL_LOG="$CURL_LOG" BACKUP_HEARTBEAT_URL=
+check "пустой адрес -> пинга нет" "0 0" "$RC $(curl_calls)"
+
+make_pg_dump_fail
+run_backup env MOCK_CURL_LOG="$CURL_LOG" BACKUP_HEARTBEAT_URL=https://hc.example/secret
+check "неудачный бэкап -> код 1 и пинга нет" "1 0" "$RC $(curl_calls)"
+
+make_curl 7
+make_pg_dump_ok
+run_backup env MOCK_CURL_LOG="$CURL_LOG" BACKUP_HEARTBEAT_URL=https://hc.example/secret
+check "сбой сторожа не портит бэкап" 0 "$RC"
+grep -q "сервис-сторож бэкапа не ответил" "$TMP/out.log" && ok "сбой сторожа записан в лог" || bad "сбой сторожа не записан в лог"
+grep -q "hc.example" "$TMP/out.log" && bad "адрес сторожа попал в лог" || ok "адреса сторожа нет в логе"
+
 if [ "$fails" -ne 0 ]; then echo "Провалено проверок: $fails"; exit 1; fi
 echo "Все проверки прошли"

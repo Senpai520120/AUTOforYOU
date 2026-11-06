@@ -30,6 +30,14 @@
 
 ---
 
+## Задача 9.55: runbook и сторож для Celery и бэкапа (2026-11-06) — ◐
+
+- В ROADMAP добавлены строки 9.49–9.58 (этап 9). Коммерческие условия в репозиторий не вносятся: он публичный.
+- `core.tasks.send_celery_heartbeat` раз в 5 минут пингует `CELERY_HEARTBEAT_URL` (пусто = выключено; `expires` 240 с, чтобы при мёртвом worker пинги не копились; в лог только тип ошибки). `docker/backup/backup.sh` пингует `BACKUP_HEARTBEAT_URL` после успеха, в образе бэкапа добавлен `curl`.
+- `CELERY_HEARTBEAT_URL` обязателен в `launch_check` (группа «Моніторинг»), пункт в LAUNCH_CHECKLIST, новый `docs/RUNBOOK.md`.
+- Мутации: без `raise_for_status`, с `exc` в логе, без `InvalidURL`, без `|| err` в `backup.sh` — тесты красные, код восстановлен.
+- Осталось: алерт на рост `FailedTask`; команды runbook на настоящем VPS не прогонялись (учения в конце файла).
+
 ## Задача 7.7a, сессия 2: Lighthouse и финальный прогон ВОЛНЫ-1 (2026-11-03) — ЗАВЕРШЕНО
 
 - **Lighthouse 12.8.2, mobile (simulated throttling), локальный e2e-стек Docker на Windows** (цель эталона O6: LCP < 2,5 с):
