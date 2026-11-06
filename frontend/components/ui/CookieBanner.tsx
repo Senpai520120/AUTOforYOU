@@ -66,7 +66,7 @@ export default function CookieBanner() {
       className="fixed bottom-0 inset-x-0 z-50 bg-slate-900 text-white px-4 py-4 shadow-lg"
     >
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <p className="text-sm flex-1">
+        <p className="text-xs sm:text-sm flex-1">
           Ми використовуємо файли cookie, потрібні для входу в акаунт і захисту від підроблених
           запитів.
           {hasGa4 && ' Аналітику Google Analytics ми вмикаємо лише з вашої згоди («Прийняти всі»).'}

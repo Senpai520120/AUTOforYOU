@@ -89,3 +89,19 @@ test.describe('Банер cookie (23-P7)', () => {
     expect(hits, `Сторонні запити до згоди: ${hits.join(', ')}`).toEqual([]);
   });
 });
+
+// Задача 6.8: банер не залежить від відповіді site-settings. Вклад банера в LCP перевіряється Lighthouse
+// (PROGRESS, 6.8): без throttling у Playwright кандидат LCP у банері не відтворюється, тож автотест був би порожнім.
+test.describe('Банер cookie: без site-settings (6.8)', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test('недоступний site-settings: банер усе одно показується й працює', async ({ page }) => {
+    await page.route('**/api/v1/site-settings/', (route) => route.abort());
+    await page.goto('/calculator');
+    const banner = page.getByRole('dialog', { name: BANNER });
+    await expect(banner).toBeVisible();
+    await banner.getByRole('button', { name: 'Лише необхідні' }).click();
+    await expect(banner).toBeHidden();
+    expect(await storedLevel(page)).toBe('necessary');
+  });
+});
