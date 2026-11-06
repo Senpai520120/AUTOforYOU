@@ -1,19 +1,25 @@
 """
-Baseline-сетки аукционных сборов Copart и IAAI.
+Сетки аукционных сборов Copart и IAAI.
 
-ВАЖНО: все числа помечены «# baseline».
-Реальные ставки — тариф вашего брокера или офиц. прайс-лист аукциона.
-Запуск: python manage.py seed_auction_fees [--clear] [--force]
+Два источника (9.51):
+- публичные страницы аукционов, снятые вручную в CSV `pricing/data/` (с `source_url` и `checked_at`):
+  Copart public и licensed (<25 авто/год), IAA public, фиксированные сборы Copart и IAA, virtual bid по цене;
+- baseline в этом файле, помечен «# baseline»: брокерская сетка Copart, лицензионная сетка IAA, IAA environmental.
+  Публичного источника для них нет: реальные ставки - тариф вашего брокера.
+Запуск: python manage.py seed_auction_fees [--clear] [--force] [--update]
 
 Безопасность старта контейнера (1.18, E2): каждая таблица (AuctionFeeTier, AuctionFixedFee) засевается
 только если пуста. Удалённые и закрытые админом записи не воскрешаются. `--force` досоздаёт недостающие
 записи по ключу (без valid_from) и печатает, сколько создано.
+`--update` приводит ставки из CSV к актуальным: расходящиеся действующие записи закрываются датой «по»,
+новые создаются, ничего не удаляется (правки в админке для групп CSV будут закрыты, группы вне CSV не трогаются).
 """
 from datetime import date
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 
+from pricing import fee_tables
 from pricing.models import AuctionFeeTier, AuctionFixedFee
 
 TODAY = date(2026, 1, 1)   # baseline-дата; актуализировать перед деплоем
@@ -28,11 +34,24 @@ class Command(BaseCommand):
             help='Удалить все существующие записи перед заполнением',
         )
         parser.add_argument(
+            '--update', action='store_true',
+            help='Привести ставки из CSV (публичные страницы) к актуальным: закрыть расходящиеся, создать новые.',
+        )
+        parser.add_argument(
             '--force', action='store_true',
             help='Досоздать недостающие записи и в непустых таблицах',
         )
 
     def handle(self, *args, **options):
+        if options['update']:
+            result = fee_tables.apply_csv()
+            self.stdout.write(self.style.SUCCESS(
+                'Сетки из CSV применены: '
+                f"тиры закрыто {result['tiers_closed']}, создано {result['tiers_created']}; "
+                f"фикс. сборы закрыто {result['fixed_closed']}, создано {result['fixed_created']}."
+            ))
+            return
+
         if options['clear']:
             AuctionFeeTier.objects.all().delete()
             AuctionFixedFee.objects.all().delete()
@@ -46,11 +65,9 @@ class Command(BaseCommand):
         if not self.seed_fixed:
             self.stdout.write('  AuctionFixedFee: пропущено, справочник не пуст.')
 
-        self._seed_copart_public_salvage_secured()
-        self._seed_copart_licensed_broker()
-        self._seed_copart_public_unsecured()
+        self._seed_csv()
+        self._seed_copart_broker()
         self._seed_iaai_licensed()
-        self._seed_copart_fixed_fees()
         self._seed_iaai_fixed_fees()
 
         self.stdout.write(self.style.SUCCESS(
@@ -58,39 +75,36 @@ class Command(BaseCommand):
             'ВАЖНО: сверить с офиц. прайс-листом аукциона и тарифом брокера!'
         ))
 
-    # ── Copart, public, salvage, secured ─────────────────────────────────────
+    # ── Публичные страницы (CSV) ──────────────────────────────────────────────
 
-    def _seed_copart_public_salvage_secured(self):
-        """
-        Copart buyer fee для публичных покупателей, salvage, обеспечённый счёт.
-        Источник: офиц. сайт Copart (approximation).
-        # baseline — сверить с офиц. сеткой и тарифом брокера
-        """
-        tiers = [
-            # (bid_min, bid_max,  fee_flat, fee_percent)
-            (0,     399,    75,    None),   # baseline
-            (400,   899,    135,   None),   # baseline
-            (900,   1399,   185,   None),   # baseline
-            (1400,  1999,   235,   None),   # baseline
-            (2000,  2499,   285,   None),   # baseline
-            (2500,  2999,   335,   None),   # baseline
-            (3000,  3499,   385,   None),   # baseline
-            (3500,  3999,   435,   None),   # baseline
-            (4000,  4499,   485,   None),   # baseline
-            (4500,  4999,   535,   None),   # baseline
-            (5000,  None,   None,  '0.1000'),  # 10% baseline
-        ]
-        self._bulk_create_tiers('copart', 'public', 'secured', 'salvage', tiers)
+    def _seed_csv(self):
+        """Ставки с `source_url`/`checked_at` из pricing/data/*.csv; создаются только недостающие по ключу."""
+        if self.seed_tiers:
+            count = 0
+            for row in fee_tables.load_tier_rows():
+                key = {f: row[f] for f in fee_tables.TIER_KEY}
+                if not AuctionFeeTier.objects.filter(**key).exists():
+                    AuctionFeeTier.objects.create(**{f: row[f] for f in fee_tables.TIER_CREATE})
+                    count += 1
+            self.stdout.write(f'  buyer fee из CSV: {count} тиров создано.')
+        if self.seed_fixed:
+            count = 0
+            for row in fee_tables.load_fixed_rows():
+                key = {f: row[f] for f in fee_tables.FIXED_KEY}
+                if not AuctionFixedFee.objects.filter(**key).exists():
+                    AuctionFixedFee.objects.create(**{f: row[f] for f in fee_tables.FIXED_CREATE})
+                    count += 1
+            self.stdout.write(f'  фикс. сборы из CSV: {count} создано.')
 
-    # ── Copart, licensed + broker ─────────────────────────────────────────────
+    # ── Copart, broker (baseline: публичной страницы нет) ─────────────────────
 
-    def _seed_copart_licensed_broker(self):
+    def _seed_copart_broker(self):
         """
-        Copart licensed/broker, secured.
+        Copart broker, secured/unsecured. Публичной сетки нет: тариф брокера.
         ~6% от ставки (min ~$100 → выражен через flat для нижнего диапазона).
         # baseline — сверить с офиц. сеткой и тарифом брокера
         """
-        for member in ('licensed', 'broker'):
+        for member in ('broker',):
             secured_tiers = [
                 # $0–1666: flat $100 (6% от 1666 ≈ $100 — выражен через floor)
                 (0,    1666,  100,   None),   # baseline min fee
@@ -105,30 +119,11 @@ class Command(BaseCommand):
             ]
             self._bulk_create_tiers('copart', member, 'unsecured', 'any', unsecured_tiers)
 
-    # ── Copart, public, unsecured ─────────────────────────────────────────────
-
-    def _seed_copart_public_unsecured(self):
-        """
-        Copart public, unsecured — дороже secured.
-        # baseline — сверить с офиц. сеткой и тарифом брокера
-        """
-        tiers = [
-            (0,    399,   100,   None),   # baseline
-            (400,  899,   175,   None),   # baseline
-            (900,  1399,  225,   None),   # baseline
-            (1400, 1999,  300,   None),   # baseline
-            (2000, 2999,  375,   None),   # baseline
-            (3000, 3999,  450,   None),   # baseline
-            (4000, 4999,  525,   None),   # baseline
-            (5000, None,  None,  '0.1100'),  # 11% baseline
-        ]
-        self._bulk_create_tiers('copart', 'public', 'unsecured', 'salvage', tiers)
-
     # ── IAAI, licensed ────────────────────────────────────────────────────────
 
     def _seed_iaai_licensed(self):
         """
-        IAAI licensed dealer buyer fee.
+        IAAI licensed/broker buyer fee (публичная сетка IAA public - в CSV).
         IAAI не различает title_type в тиерах → 'any'.
         # baseline — сверить с офиц. сеткой IAAI и тарифом брокера
         """
@@ -146,43 +141,16 @@ class Command(BaseCommand):
         for member in ('licensed', 'broker'):
             self._bulk_create_tiers('iaai', member, 'secured', 'any', licensed_tiers)
 
-        # IAAI public — упрощённо выше licensed
-        public_tiers = [
-            (0,    499,   100,  None),   # baseline
-            (500,  999,   150,  None),   # baseline
-            (1000, 1999,  225,  None),   # baseline
-            (2000, 3999,  350,  None),   # baseline
-            (4000, None,  None, '0.0900'),  # 9% baseline
-        ]
-        self._bulk_create_tiers('iaai', 'public', 'secured', 'any', public_tiers)
-
-    # ── Фиксированные сборы Copart ────────────────────────────────────────────
-
-    def _seed_copart_fixed_fees(self):
-        """
-        Copart фиксированные сборы.
-        # baseline — сверить с офиц. сеткой и тарифом брокера
-        """
-        fixed = [
-            # (fee_type, title_type, amount)
-            ('gate', 'clean',   '79.00'),   # gate clean baseline
-            ('gate', 'salvage', '95.00'),   # gate salvage baseline
-            ('environmental', 'any', '10.00'),  # baseline
-            ('virtual_bid',   'any', '99.00'),  # baseline
-        ]
-        self._bulk_create_fixed('copart', fixed)
-
     # ── Фиксированные сборы IAAI ──────────────────────────────────────────────
 
     def _seed_iaai_fixed_fees(self):
         """
-        IAAI фиксированные сборы.
-        # baseline — сверить с офиц. сеткой IAAI и тарифом брокера
+        IAAI: service fee, title handling и internet bid - в CSV (страница IAA, с 01.10.2026).
+        EH&S and Fuel Surcharge страница суммой не называет: $15 - baseline.
+        # baseline — сверить с тарифом брокера
         """
         fixed = [
-            ('gate',          'any', '95.00'),  # service fee baseline
-            ('environmental', 'any', '15.00'),  # baseline
-            ('virtual_bid',   'any', '75.00'),  # baseline (29–89 range; берём середину)
+            ('environmental', 'any', '15.00'),  # baseline: сумма EH&S surcharge не опубликована
         ]
         self._bulk_create_fixed('iaai', fixed)
 

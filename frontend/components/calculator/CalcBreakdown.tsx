@@ -2,6 +2,7 @@ import { CalcResult } from '@/lib/types';
 import DemoBanner from '@/components/ui/DemoBanner';
 import LeadForm from '@/components/leads/LeadForm';
 import { percentFromDecimal } from '@/lib/calc-errors';
+import { ExclusionsList, FeesFreshness } from '@/components/ui/CalcNotes';
 
 const PENDING = 'уточнюється менеджером';
 
@@ -88,6 +89,8 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
         {result.exchange_rate_date && <> Курс НБУ на {formatDate(result.exchange_rate_date)}.</>}
         {result.rates_validity_date && <> Тарифи на {formatDate(result.rates_validity_date)}.</>}
       </p>
+      <FeesFreshness checkedOn={result.fees_checked_on} stale={result.fees_stale} />
+      <ExclusionsList items={result.exclusions} />
       <div className="mt-6">
         {result.is_estimate && (
           <p className="text-sm text-slate-600 mb-3">Сума орієнтовна: точну вартість підтвердить брокер.</p>

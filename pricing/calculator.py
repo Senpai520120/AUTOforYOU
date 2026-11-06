@@ -28,7 +28,8 @@ class AuctionFeeBreakdown:
     gate_fee: Decimal     # gate / service fee
     environmental_fee: Decimal
     virtual_bid_fee: Decimal
-    total: Decimal        # сумма всех четырёх
+    total: Decimal        # сумма всех сборов (в т.ч. title handling)
+    title_handling_fee: Decimal = ZERO  # 9.51: фикс. сбор за оформление титула (IAA $20), в total входит
 
 
 def calc_auction_fees(
@@ -51,6 +52,7 @@ def calc_auction_fees(
     gate_fee = ZERO
     environmental_fee = ZERO
     virtual_bid_fee = ZERO
+    title_handling_fee = ZERO
 
     for f in fixed_fees:
         amount = _d(f.amount)
@@ -60,8 +62,11 @@ def calc_auction_fees(
             environmental_fee = (environmental_fee + amount).quantize(TWO_PLACES, ROUND_HALF_UP)
         elif f.fee_type == 'virtual_bid':
             virtual_bid_fee = (virtual_bid_fee + amount).quantize(TWO_PLACES, ROUND_HALF_UP)
+        elif f.fee_type == 'title_handling':
+            title_handling_fee = (title_handling_fee + amount).quantize(TWO_PLACES, ROUND_HALF_UP)
 
-    total = (buyer_fee + gate_fee + environmental_fee + virtual_bid_fee).quantize(TWO_PLACES, ROUND_HALF_UP)
+    total = (buyer_fee + gate_fee + environmental_fee + virtual_bid_fee + title_handling_fee).quantize(
+        TWO_PLACES, ROUND_HALF_UP)
 
     return AuctionFeeBreakdown(
         buyer_fee=buyer_fee,
@@ -69,6 +74,7 @@ def calc_auction_fees(
         environmental_fee=environmental_fee,
         virtual_bid_fee=virtual_bid_fee,
         total=total,
+        title_handling_fee=title_handling_fee,
     )
 
 
@@ -154,6 +160,8 @@ class LandedCostBreakdown:
     broker_services: list = field(default_factory=list)  # [{'title': str, 'amount_usd': Decimal}]
     broker_services_total_usd: Decimal = ZERO
     broker_services_pending: bool = True
+    # 9.51: у старых расчётов поля нет - читается как 0
+    auction_fee_title_handling_usd: Decimal = ZERO
 
     def to_dict(self) -> dict:
         def conv(v):
@@ -280,6 +288,7 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
         auction_fee_gate_usd=_d(rates.auction_fee.gate_fee),
         auction_fee_environmental_usd=_d(rates.auction_fee.environmental_fee),
         auction_fee_virtual_bid_usd=_d(rates.auction_fee.virtual_bid_fee),
+        auction_fee_title_handling_usd=_d(rates.auction_fee.title_handling_fee),
         us_land_usd=_d(rates.us_land_cost_usd),
         ocean_freight_usd=_d(rates.ocean_freight_usd),
         eu_to_ua_usd=_d(rates.eu_to_ua_cost_usd),
@@ -365,6 +374,7 @@ def rate_snapshot_to_dict(rates: RateSnapshot) -> dict:
         'auction_fee_gate': str(rates.auction_fee.gate_fee),
         'auction_fee_environmental': str(rates.auction_fee.environmental_fee),
         'auction_fee_virtual_bid': str(rates.auction_fee.virtual_bid_fee),
+        'auction_fee_title_handling': str(rates.auction_fee.title_handling_fee),
         'us_land_cost_usd': str(rates.us_land_cost_usd),
         'ocean_freight_usd': str(rates.ocean_freight_usd),
         'eu_to_ua_cost_usd': str(rates.eu_to_ua_cost_usd),
@@ -464,17 +474,33 @@ def lookup_tier(tiers, auction, bid, member_type, payment_type, title_type, on_d
             or pick_active(tiers, on_date, lambda t: fits(t, 'any')))
 
 
-def lookup_fixed_fees(fees, auction, title_type, on_date):
-    """Фиксированные сборы: по одному на тип (gate - точный title_type или 'any'), самый свежий."""
+FIXED_FEE_TYPES = ('gate', 'environmental', 'virtual_bid', 'title_handling')
+
+
+def _fixed_fee_fits_bid(fee, bid) -> bool:
+    """Сбор без диапазона подходит всегда; со диапазоном - только если ставка известна и входит в него."""
+    bid_min = getattr(fee, 'bid_min', None)
+    bid_max = getattr(fee, 'bid_max', None)
+    if bid_min is None and bid_max is None:
+        return True
+    if bid is None:
+        return False
+    return (bid_min is None or _d(bid_min) <= bid) and (bid_max is None or _d(bid_max) >= bid)
+
+
+def lookup_fixed_fees(fees, auction, title_type, on_date, bid=None):
+    """Фиксированные сборы: по одному на тип; точный title_type важнее 'any'; сбор по цене - по диапазону bid.
+
+    bid=None: сборы с диапазоном ставки не подходят (цена неизвестна). Побеждает самый свежий valid_from.
+    """
+    bid = _d(bid) if bid is not None else None
     result = []
-    for fee_type in ('gate', 'environmental', 'virtual_bid'):
-        if fee_type == 'gate':
-            fee = (pick_active(fees, on_date, lambda f: f.auction == auction and f.fee_type == 'gate'
-                               and f.title_type == title_type)
-                   or pick_active(fees, on_date, lambda f: f.auction == auction and f.fee_type == 'gate'
-                                  and f.title_type == 'any'))
-        else:
-            fee = pick_active(fees, on_date, lambda f, ft=fee_type: f.auction == auction and f.fee_type == ft)
+    for fee_type in FIXED_FEE_TYPES:
+        def fits(f, title, ft=fee_type):
+            return (f.auction == auction and f.fee_type == ft and f.title_type == title
+                    and _fixed_fee_fits_bid(f, bid))
+        fee = pick_active(fees, on_date, lambda f: fits(f, title_type)) or pick_active(
+            fees, on_date, lambda f: fits(f, 'any'))
         if fee is not None:
             result.append(fee)
     return result
@@ -535,6 +561,15 @@ class SelectedRates:
                             self.ua_delivery) if x] + list(self.fixed_fees) + list(self.broker_fees)
 
     @property
+    def fees_checked_on(self):
+        """Старейшая дата сверки применённых сборов аукциона с источником. None - нет даты хотя бы у одного."""
+        rows = [x for x in [self.tier, *self.fixed_fees] if x is not None]
+        dates = [getattr(x, 'checked_at', None) for x in rows]
+        if not dates or any(d is None for d in dates):
+            return None
+        return min(dates)
+
+    @property
     def rates_updated_on(self):
         """Дата последнего обновления применённых ставок (максимум valid_from) - «Ставки оновлено»."""
         dates = [x.valid_from for x in self.applied if getattr(x, 'valid_from', None)]
@@ -556,7 +591,7 @@ def select_rates(catalog: RateCatalog, params: dict, on_date) -> SelectedRates:
 
     sel = SelectedRates()
     sel.tier = lookup_tier(catalog.auction_fee_tiers, auction, bid, member_type, payment_type, title_type, on_date)
-    sel.fixed_fees = lookup_fixed_fees(catalog.auction_fixed_fees, auction, title_type, on_date)
+    sel.fixed_fees = lookup_fixed_fees(catalog.auction_fixed_fees, auction, title_type, on_date, bid)
     sel.us_land = pick_active(catalog.us_land_routes, on_date,
                               lambda r: r.auction_location.lower() == loc and r.us_port.lower() == us_port)
     sel.ocean = pick_active(catalog.ocean_freight, on_date,
@@ -600,6 +635,20 @@ def select_rates(catalog: RateCatalog, params: dict, on_date) -> SelectedRates:
 
 
 # ─── Справочники формы и демо-флаг (задача 2.6) ─────────────────────────────────
+
+FEES_STALE_DAYS = 90
+
+
+def fees_freshness(checked_on, calc_date, max_days: int = FEES_STALE_DAYS) -> dict:
+    """«Ставки аукциона станом на <дата>» и признак давности (9.51, шаг d). Чистая функция.
+
+    checked_on=None (дата сверки не заполнена) - ничего не утверждаем: без даты и без красной пометки,
+    о незаполненных датах предупреждает команда check_fee_tables.
+    """
+    if checked_on is None:
+        return {'fees_checked_on': None, 'fees_stale': False}
+    return {'fees_checked_on': checked_on.isoformat(), 'fees_stale': (calc_date - checked_on).days > max_days}
+
 
 def selection_is_demo(sel: SelectedRates) -> bool:
     """Демо, если хотя бы одна применённая ставка не проверена владельцем или курс из сида (02-C2)."""

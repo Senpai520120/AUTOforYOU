@@ -69,7 +69,22 @@ def tiers_overlap(a, b) -> bool:
             and (b.bid_max is None or a.bid_min <= b.bid_max))
 
 
-class AuctionFeeTier(DateRangeModel):
+class AuctionSourceModel(models.Model):
+    """Происхождение ставок аукциона (9.51, шаг d): страница-источник и дата последней сверки с ней."""
+    source_url = models.URLField(
+        'Джерело (сторінка тарифів)', max_length=300, blank=True,
+        help_text='Публічна сторінка аукціону, з якої взято ставку. Порожньо - ставка не звірена із джерелом.',
+    )
+    checked_at = models.DateField(
+        'Звірено з джерелом', null=True, blank=True,
+        help_text='Коли ставку востаннє зіставляли з джерелом. Старше 90 днів - калькулятор це позначає.',
+    )
+
+    class Meta:
+        abstract = True
+
+
+class AuctionFeeTier(AuctionSourceModel, DateRangeModel):
     """
     Тиерный buyer fee аукциона.
     # baseline — сверить с офиц. сеткой и тарифом брокера
@@ -131,15 +146,32 @@ class AuctionFeeTier(DateRangeModel):
         )
 
 
-class AuctionFixedFee(DateRangeModel):
+def fixed_fees_overlap(a, b) -> bool:
+    """Два сбора одного ключа (аукцион/тип/титул) пересекаются и по периоду, и по диапазону ставки.
+
+    bid_min=None - сбор не зависит от цены (весь диапазон). Границы ВКЛЮЧИТЕЛЬНЫЕ, bid_max=None - без лимита.
     """
-    Фиксированные сборы аукциона (gate, environmental, virtual bid).
+    if (a.auction, a.fee_type, a.title_type) != (b.auction, b.fee_type, b.title_type):
+        return False
+    if not _periods_overlap(a, b):
+        return False
+    if a.bid_min is None or b.bid_min is None:
+        return True
+    return ((a.bid_max is None or b.bid_min <= a.bid_max)
+            and (b.bid_max is None or a.bid_min <= b.bid_max))
+
+
+class AuctionFixedFee(AuctionSourceModel, DateRangeModel):
+    """
+    Сборы аукциона, не зависящие от тира buyer fee: gate, environmental, virtual bid, title handling.
+    Virtual bid у аукционов зависит от цены (9.51): тогда заданы bid_min/bid_max, иначе они пустые.
     # baseline — сверить с офиц. сеткой и тарифом брокера
     """
     class FeeType(models.TextChoices):
         GATE = 'gate', 'Gate / Service fee'
         ENVIRONMENTAL = 'environmental', 'Environmental fee'
         VIRTUAL_BID = 'virtual_bid', 'Virtual bid fee'
+        TITLE_HANDLING = 'title_handling', 'Title handling fee'
 
     class TitleType(models.TextChoices):
         CLEAN = 'clean', 'Чистый (clean)'
@@ -153,16 +185,41 @@ class AuctionFixedFee(DateRangeModel):
         verbose_name='Тип титула (актуально для gate fee)',
     )
     amount = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Сумма ($)')
+    # Сбор по цене (virtual bid): диапазон финальной ставки, границы включительные, bid_max=None - без лимита.
+    # Обе границы пусты - сбор не зависит от цены. Границы с копейками (49.99), чтобы 399.50 не провалилось.
+    bid_min = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='Ставка от ($)')
+    bid_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                  verbose_name='Ставка до ($, пусто=без лимита)')
 
-    overlap_key_fields = ('auction', 'fee_type', 'title_type')
+    overlap_key_fields = None  # пересечение проверяет clean() сам: ключ + период + диапазон ставки
 
     class Meta(DateRangeModel.Meta):
         verbose_name = 'Фиксированный сбор аукциона'
         verbose_name_plural = 'Фиксированные сборы аукциона'
-        ordering = ['auction', 'fee_type']
+        ordering = ['auction', 'fee_type', 'title_type', 'bid_min']
+
+    def clean(self):
+        super().clean()
+        if self.bid_min is None and self.bid_max is not None:
+            raise ValidationError({'bid_min': 'Задайте «Ставка від» або приберіть «Ставка до».'})
+        if self.bid_min is not None and self.bid_max is not None and self.bid_max < self.bid_min:
+            raise ValidationError({'bid_max': 'Верхня межа не може бути меншою за нижню.'})
+        if self.valid_from is None:
+            return
+        same_key = type(self)._default_manager.filter(
+            auction=self.auction, fee_type=self.fee_type, title_type=self.title_type,
+        ).exclude(pk=self.pk)
+        clash = next((o for o in same_key.order_by('valid_from') if fixed_fees_overlap(self, o)), None)
+        if clash is not None:
+            raise ValidationError(
+                f'Збір перетинається з іншим записом (id={clash.pk}, з {clash.valid_from}'
+                f'{f" по {clash.valid_to}" if clash.valid_to else ""}). Закрийте старий запис датою «по» '
+                f'або розведіть діапазони ставки.'
+            )
 
     def __str__(self):
-        return f'{self.auction} {self.fee_type} [{self.title_type}]: ${self.amount} ({self.valid_from})'
+        rng = f' ${self.bid_min}–{self.bid_max or "∞"}' if self.bid_min is not None else ''
+        return f'{self.auction} {self.fee_type} [{self.title_type}]{rng}: ${self.amount} ({self.valid_from})'
 
 
 class UsLandRoute(DateRangeModel):
@@ -444,6 +501,13 @@ DEFAULT_DEMO_BANNER_TEXT = (
     'Частина ставок ще не перевірена власником сайту. Не використовуйте ці цифри для реальних угод.'
 )
 DEFAULT_ESTIMATE_NOTE = 'Орієнтовний розрахунок.'
+# 9.51, шаг g: что не входит в расчёт. Один пункт - одна строка. Юридическую формулировку подтверждает владелец.
+DEFAULT_EXCLUSIONS_TEXT = (
+    'Ремонт автомобіля\n'
+    'Сертифікація та постановка на облік\n'
+    'Доставка по Україні\n'
+    'Комісія брокера'
+)
 
 
 class CalculatorSettings(models.Model):
@@ -455,6 +519,16 @@ class CalculatorSettings(models.Model):
         'Позначка «орієнтовний розрахунок»', max_length=200, default=DEFAULT_ESTIMATE_NOTE,
         help_text='Показується під підсумком, поки є неперевірені ставки або правило не звірене з брокером.',
     )
+
+    exclusions_text = models.TextField(
+        'Що не входить у розрахунок', default=DEFAULT_EXCLUSIONS_TEXT,
+        help_text='Один пункт - один рядок. Показується під результатом калькулятора і на сторінках «Пригон ... з США».',
+    )
+
+    @property
+    def exclusions(self) -> list[str]:
+        """Пункты «що не входить» - непустые строки текста настройки."""
+        return [line.strip() for line in self.exclusions_text.splitlines() if line.strip()]
 
     class Meta:
         verbose_name = 'Налаштування калькулятора'

@@ -58,7 +58,7 @@ class AuctionFeeTierAdmin(TariffAdmin):
     list_display = (
         'auction', 'member_type', 'payment_type', 'title_type',
         'bid_min', 'bid_max', 'fee_flat', 'fee_percent',
-        'valid_from', 'valid_to', 'is_verified',
+        'valid_from', 'valid_to', 'checked_at', 'is_verified',
     )
     list_filter = ('auction', 'member_type', 'payment_type', 'title_type')
     ordering = ('auction', 'member_type', 'bid_min')
@@ -66,7 +66,8 @@ class AuctionFeeTierAdmin(TariffAdmin):
 
 @admin.register(AuctionFixedFee)
 class AuctionFixedFeeAdmin(TariffAdmin):
-    list_display = ('auction', 'fee_type', 'title_type', 'amount', 'valid_from', 'valid_to', 'is_verified')
+    list_display = ('auction', 'fee_type', 'title_type', 'bid_min', 'bid_max', 'amount', 'valid_from', 'valid_to',
+                    'checked_at', 'is_verified')
     list_filter = ('auction', 'fee_type', 'title_type')
 
 

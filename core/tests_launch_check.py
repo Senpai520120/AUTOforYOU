@@ -395,7 +395,9 @@ class TariffsTests(LaunchCheckTestCase):
         self.assertFails(code, out, 'немає активних записів «аукціонні збори»')
 
     def test_expired_tariff_counts_as_missing(self):
-        AuctionFeeTier.objects.update(valid_to=date.today() - timedelta(days=1))
+        # Сетки из CSV действуют с даты сверки: сдвигаем начало, чтобы valid_to не оказался раньше valid_from.
+        AuctionFeeTier.objects.update(valid_from=date.today() - timedelta(days=60),
+                                      valid_to=date.today() - timedelta(days=1))
         code, out = self.run_check()
         self.assertFails(code, out, 'немає активних записів «аукціонні збори»')
 

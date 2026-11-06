@@ -6,7 +6,7 @@ DEFAULT_H1 = 'Пригон {title} з США — ціна під ключ'
 
 # В публичный ответ не попадают сетка ставок и id тарифов (rates_snapshot) - они остаются в снимке заявки.
 CALCULATION_FIELDS = (
-    'is_estimate', 'is_demo', 'rules_confirmed', 'rates_valid_from', 'rates_date', 'currency', 'local_currency',
+    'is_estimate', 'is_demo', 'rules_confirmed', 'rates_valid_from', 'rates_date', 'fees_checked_on', 'fees_stale', 'exclusions', 'currency', 'local_currency',
     'usd_to_uah', 'exchange_rate_date', 'total_usd', 'total_uah', 'breakdown', 'applied_rates', 'inputs',
 )
 

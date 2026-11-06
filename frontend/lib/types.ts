@@ -68,6 +68,8 @@ export interface PaginatedResponse<T> {
 export interface CalcBreakdown {
   auction_price_usd: string;
   auction_fee_usd: string;
+  // 9.51: окремий збір IAA за оформлення титулу; у старих розрахунках поля немає
+  auction_fee_title_handling_usd?: string;
   us_land_usd: string;
   ocean_freight_usd: string;
   eu_to_ua_usd: string;
@@ -98,6 +100,10 @@ export interface CalcResult {
   rules_confirmed: boolean;
   rates_validity_date: string;
   rates_updated_on: string | null;
+  // 9.51: коли аукціонні збори звірено із сайтом аукціону (null — дати немає); stale — понад 90 днів
+  fees_checked_on?: string | null;
+  fees_stale?: boolean;
+  exclusions?: string[];
   exchange_rate_date: string;
   warning: string;
   // 2.6: демо — є неперевірена застосована ставка або курс із сиду; лише тоді показується демо-банер.
@@ -700,6 +706,9 @@ export interface LandingCalculation {
   rules_confirmed: boolean;
   rates_valid_from: string | null;
   rates_date: string;
+  fees_checked_on?: string | null;
+  fees_stale?: boolean;
+  exclusions?: string[];
   currency: string;
   local_currency: string;
   usd_to_uah: string;

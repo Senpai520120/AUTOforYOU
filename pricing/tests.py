@@ -723,7 +723,7 @@ class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
         bid = D('5000')
 
         tier = lookup_tier(pricing_cache.get_auction_fee_tiers(), 'copart', bid, 'broker', 'secured', 'salvage', today)
-        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'copart', 'salvage', today)
+        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'copart', 'salvage', today, bid)
         auction_fee = calc_auction_fees(bid, tier, fixed)
 
         us_land = _active_on(UsLandRoute.objects.filter(auction_location='general', us_port='houston'), today).first()
@@ -766,8 +766,8 @@ class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
 
     def test_auction_fee_total_includes_fixed(self):
         breakdown, _ = self._build()
-        # buyer $300 + gate salvage $95 + env $10 + vb $99 = $504
-        self.assertEqual(breakdown.auction_fee_usd, D('504.00'))
+        # buyer $300 + gate non-clean $95 + env $15 + virtual bid (live, $4000-5999.99) $125 = $535
+        self.assertEqual(breakdown.auction_fee_usd, D('535.00'))
 
     def test_customs_value_usd(self):
         breakdown, _ = self._build()
@@ -786,8 +786,8 @@ class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
 
     def test_total_usd_includes_all_components(self):
         breakdown, _ = self._build()
-        # $5000 + $504 + $500 + $1300 + $350 + $680 = $8334
-        self.assertEqual(breakdown.total_usd, D('8334.00'))
+        # $5000 + $535 + $500 + $1300 + $350 + $680 = $8365
+        self.assertEqual(breakdown.total_usd, D('8365.00'))
 
     def test_total_uah_positive_and_above_usd_equivalent(self):
         breakdown, rates = self._build()

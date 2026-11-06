@@ -38,6 +38,44 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem('cookie_consent', 'necessary'));
 });
 
+test.describe('Калькулятор: дата ставок і «що не входить» (9.51)', () => {
+  test('перелік «що не входить» приходить з API й показаний під результатом', async ({ page }) => {
+    await page.goto('/calculator');
+    const resp = await calculate(page);
+    const body = (await resp.json()) as CalcResult;
+    expect(body.exclusions?.length).toBeGreaterThan(0);
+    const block = page.getByTestId('calc-exclusions');
+    await expect(block).toBeVisible();
+    await expect(block.getByRole('listitem')).toHaveCount(body.exclusions!.length);
+    await expect(block).toContainText(body.exclusions![0]);
+  });
+
+  test('ставки свіжі: дата звірки без червоної позначки', async ({ page }) => {
+    await patchCalc(page, (b) => ({ ...b, fees_checked_on: '2026-11-06', fees_stale: false }));
+    await page.goto('/calculator');
+    await calculate(page);
+    await expect(page.getByTestId('fees-checked')).toContainText('06.11.2026');
+    await expect(page.getByTestId('fees-stale')).toHaveCount(0);
+  });
+
+  test('звірці понад 90 днів: червона позначка замість дати', async ({ page }) => {
+    await patchCalc(page, (b) => ({ ...b, fees_checked_on: '2026-06-01', fees_stale: true }));
+    await page.goto('/calculator');
+    await calculate(page);
+    await expect(page.getByTestId('fees-stale')).toContainText('01.06.2026');
+    await expect(page.getByTestId('fees-checked')).toHaveCount(0);
+  });
+
+  test('дати звірки немає (ставки брокера без джерела): жодних тверджень про дату', async ({ page }) => {
+    await page.goto('/calculator');
+    const resp = await calculate(page);
+    expect(((await resp.json()) as CalcResult).fees_checked_on).toBeNull();
+    await expect(page.getByTestId('calc-result')).toBeVisible();
+    await expect(page.getByTestId('fees-checked')).toHaveCount(0);
+    await expect(page.getByTestId('fees-stale')).toHaveCount(0);
+  });
+});
+
 test.describe('Калькулятор: довідники з API', () => {
   test('сид-тарифи неперевірені — банер на формі й у результаті', async ({ page }) => {
     await page.goto('/calculator');

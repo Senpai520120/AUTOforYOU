@@ -120,7 +120,7 @@ class TestCalculatorAPIE2E(CleanCacheTestCase):
     """
     POST /api/v1/pricing/calculate/ с реальными seed-тарифами.
     Сценарий: Copart broker, бензин 2.0L 2018, $5 000.
-    Ожидаем: auction_fee=$504, customs_value=$6800, is_estimate=true.
+    Ожидаем: auction_fee=$535, customs_value=$6800, is_estimate=true.
     """
 
     @classmethod
@@ -191,11 +191,11 @@ class TestCalculatorAPIE2E(CleanCacheTestCase):
     def test_known_auction_fee_copart_broker_5000(self):
         resp = self._calc()
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        # buyer $300 + gate $95 + env $10 + vb $99 = $504
+        # buyer $300 (baseline broker) + gate non-clean $95 + env $15 + live bid $125 = $535
         self.assertEqual(
             Decimal(resp.data['breakdown']['auction_fee_usd']),
-            Decimal('504.00'),
-            'Auction fee Copart broker $5000 salvage = $504',
+            Decimal('535.00'),
+            'Auction fee Copart broker $5000 salvage = $535',
         )
 
     def test_known_customs_value(self):

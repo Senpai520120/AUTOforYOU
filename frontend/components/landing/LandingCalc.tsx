@@ -1,5 +1,6 @@
 import type { LandingCalculation } from '@/lib/types';
 import { percentFromDecimal } from '@/lib/calc-errors';
+import { ExclusionsList, FeesFreshness } from '@/components/ui/CalcNotes';
 
 const PENDING = 'уточнюється менеджером';
 
@@ -101,6 +102,9 @@ export default function LandingCalc({ calculation: c, termText, includedText }: 
         {c.exchange_rate_date && <> Курс НБУ на {formatDate(c.exchange_rate_date)}.</>}
         {' '}Сума орієнтовна: точну вартість підтвердить брокер.
       </p>
+
+      <FeesFreshness checkedOn={c.fees_checked_on} stale={c.fees_stale} />
+      <ExclusionsList items={c.exclusions} />
 
       {termText && (
         <p className="mt-4 text-sm text-slate-800" data-testid="landing-term">

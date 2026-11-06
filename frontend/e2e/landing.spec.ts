@@ -45,6 +45,9 @@ test.describe('Сторінка моделі', () => {
     const api = await (await request.get(`${API}/api/v1/landings/${SLUG}/`)).json();
 
     await expect(page.getByTestId('landing-h1')).toHaveText('Пригон [E2E] Toyota Camry з США — ціна під ключ');
+    // 9.51: перелік «що не входить» — той самий, що в API (текст правиться в адмінці)
+    expect(api.calculation.exclusions.length).toBeGreaterThan(0);
+    await expect(page.getByTestId('calc-exclusions')).toContainText(api.calculation.exclusions[0]);
     expect(digits(await page.getByTestId('landing-total-usd').textContent()))
       .toBe(Math.round(Number(api.calculation.total_usd)));
     expect(digits(await page.getByTestId('landing-total-uah').textContent()))

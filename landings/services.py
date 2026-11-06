@@ -20,6 +20,7 @@ from pricing.calculator import (
     build_rate_snapshot_from_db,
     calc_auction_fees,
     calculate_landed_cost,
+    fees_freshness,
     rate_snapshot_to_dict,
     select_rates,
     selection_is_demo,
@@ -146,12 +147,16 @@ def build_landing_calculation(page: ModelLandingPage, *, now=None) -> dict | Non
     updated_on = selected.rates_updated_on
     rates_dict = rate_snapshot_to_dict(rates)
     rates_dict['rates_updated_on'] = updated_on.isoformat() if updated_on else None
+    freshness = fees_freshness(selected.fees_checked_on, calc_date)
+    rates_dict.update(freshness)
     return {
         'is_estimate': True,
         'is_demo': selection_is_demo(selected),
         'rules_confirmed': bool(selected.rule.confirmed_by_broker),
         'rates_valid_from': updated_on.isoformat() if updated_on else None,
         'rates_date': calc_date.isoformat(),
+        **freshness,
+        'exclusions': pricing_cache.get_calculator_settings().exclusions,
         'currency': 'USD',
         'local_currency': 'UAH',
         'usd_to_uah': str(rates.usd_to_uah),

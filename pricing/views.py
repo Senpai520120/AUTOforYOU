@@ -26,6 +26,7 @@ from .calculator import (
     calculate_landed_cost,
     catalog_is_demo,
     exchange_rate_info,
+    fees_freshness,
     public_extra_options,
     rate_snapshot_to_dict,
     select_rates,
@@ -211,6 +212,8 @@ class CalculateView(APIView):
         rates_dict = rate_snapshot_to_dict(rates)
         updated_on = selected.rates_updated_on
         rates_dict['rates_updated_on'] = updated_on.isoformat() if updated_on else None
+        freshness = fees_freshness(selected.fees_checked_on, calc_date)
+        rates_dict.update(freshness)
         is_demo = selection_is_demo(selected)
         rates_dict['is_demo'] = is_demo
         texts = pricing_cache.get_calculator_settings()
@@ -237,6 +240,9 @@ class CalculateView(APIView):
                 'rules_confirmed': bool(selected.rule.confirmed_by_broker),
                 'rates_validity_date': calc_date.isoformat(),
                 'rates_updated_on': updated_on.isoformat() if updated_on else None,
+                # 9.51: «ставки аукціону станом на <дата>»; fees_stale - сверка старше 90 дней
+                **freshness,
+                'exclusions': texts.exclusions,
                 'exchange_rate_date': selected.usd_to_uah.date.isoformat(),
                 **exchange_rate_info(
                     selected.usd_to_uah, selected.usd_to_eur, calc_date, settings.EXCHANGE_RATE_MAX_AGE_DAYS,
@@ -336,12 +342,13 @@ def _full_grid(today) -> dict:
         'auction_fee_tiers': list(
             active(AuctionFeeTier.objects.all()).values(
                 'id', 'auction', 'member_type', 'payment_type', 'title_type',
-                'bid_min', 'bid_max', 'fee_flat', 'fee_percent', 'is_verified',
+                'bid_min', 'bid_max', 'fee_flat', 'fee_percent', 'is_verified', 'source_url', 'checked_at',
             )
         ),
         'auction_fixed_fees': list(
             active(AuctionFixedFee.objects.all()).values('id', 'auction', 'fee_type', 'title_type', 'amount',
-                                                         'is_verified')
+                                                         'bid_min', 'bid_max', 'is_verified', 'source_url',
+                                                         'checked_at')
         ),
         'us_land_routes': list(
             active(UsLandRoute.objects.all()).values('id', 'auction_location', 'us_port', 'cost_usd', 'is_verified')
