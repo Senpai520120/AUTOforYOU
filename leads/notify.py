@@ -3,6 +3,7 @@ import html
 import re
 from collections import defaultdict
 from decimal import Decimal
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -125,11 +126,14 @@ def notify_brokers_in_app(title: str, link: str, text: str = '') -> int:
 
 # Запасные тексты письма, если шаблоны в админке очищены (основные - дефолты data-миграции).
 FALLBACK_EMAIL_SUBJECT = 'Нова заявка {id}'
+# Письмо без ПДн (9.56): контакты клиента брокер видит в заявке после входа, а не в почте.
 FALLBACK_EMAIL_BODY = (
-    'Нова заявка {id}\n\nІмʼя: {name}\nТелефон: {phone}\nСпосіб звʼязку: {contact_method} {contact_handle}\n'
-    'Авто: {car}\nПідсумок: ≈ ${total_usd} / {total_uah} грн\nДжерело: {source_details}\n'
-    'Коментар: {comment}\n\nЗаявка в адмінці: {admin_url}\n'
+    'Нова заявка {id}\n\nАвто: {car}\nПідсумок: ≈ ${total_usd} / {total_uah} грн\n'
+    'Спосіб звʼязку: {contact_method}\nДжерело: {source_details}\n\n'
+    'Контакти клієнта — у заявці (потрібен вхід): {cabinet_url}\nЗаявка в адмінці: {admin_url}\n'
 )
+# Поля клиента, которые в письмо не попадают никогда (даже если шаблон в админке их просит).
+EMAIL_PII_KEYS = ('name', 'phone', 'email', 'contact_handle', 'comment', 'referrer', 'page_url')
 SUBJECT_MAX = 200
 # CR, LF, VT, FF, разделители строк Unicode: в теме им не место (инъекция заголовков).
 _LINE_BREAKS = re.compile(r'[\r\n\x0b\x0c\x1c-\x1e\x85\u2028\u2029]+')
@@ -155,10 +159,35 @@ def broker_emails() -> list[str]:
     return result
 
 
+def _email_source(lead: Lead) -> str:
+    """Источник без ПДн: UTM-метки или только домен referrer (путь и query могут содержать что угодно)."""
+    utm = lead.utm or {}
+    parts = [str(utm[k]) for k in ('source', 'medium', 'campaign') if utm.get(k)]
+    if parts:
+        return ' / '.join(parts)
+    try:
+        host = urlsplit(lead.referrer or '').hostname
+    except ValueError:
+        host = None
+    return host or DIRECT
+
+
+def email_context(lead: Lead) -> dict[str, str]:
+    """Контекст письма брокеру (9.56): `raw_context` без полей клиента, источник без пути и query."""
+    ctx = raw_context(lead)
+    for key in EMAIL_PII_KEYS:
+        ctx[key] = ''
+    ctx['source_details'] = _email_source(lead)
+    # Подпись авто пишет клиент: переводы строк в теле дали бы ему свои строки в письме брокеру.
+    ctx['car'] = _LINE_BREAKS.sub(' ', ctx['car'])
+    return ctx
+
+
 def render_new_lead_email(lead: Lead, cfg: LeadNotificationSettings) -> tuple[str, str]:
     """Тема и текст письма брокеру. Письмо текстовое: значения вставляются как есть, без html.escape.
-    Неизвестный плейсхолдер даёт пустую строку; переводы строк в теме заменяются пробелом."""
-    raw = defaultdict(str, raw_context(lead))
+    Неизвестный плейсхолдер даёт пустую строку; переводы строк в теме заменяются пробелом.
+    Имя, телефон, email, контакт в мессенджере, комментарий клиента в письмо не попадают (9.56)."""
+    raw = defaultdict(str, email_context(lead))
     subject_tpl = cfg.email_subject_template if cfg.email_subject_template.strip() else FALLBACK_EMAIL_SUBJECT
     body_tpl = cfg.email_body_template if cfg.email_body_template.strip() else FALLBACK_EMAIL_BODY
     subject = _LINE_BREAKS.sub(' ', subject_tpl.format_map(raw)).strip()[:SUBJECT_MAX]

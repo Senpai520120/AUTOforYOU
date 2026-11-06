@@ -53,10 +53,14 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
 
     result = _telegram_step(self, lead, cfg, force)
     # Повтор Telegram (self.retry) сюда не доходит: письмо идёт после окончательного итога.
-    if result['status'] not in ('in_progress', 'already_sent') and (
-            result['status'] != NotifyStatus.SENT or force):
-        # Аргумент - только id заявки: учёт упавших задач (8.9) хранит аргументы.
-        notify_broker_email.delay(lead_id, force=force)
+    status = result['status']
+    if status != 'in_progress':
+        telegram_covered = status in ('already_sent', NotifyStatus.SENT) and not force
+        # 9.56: «email завжди» - письмо уходит и при доставленном Telegram; дубль исключает
+        # идемпотентность notify_broker_email по email_status.
+        if cfg.email_always or not telegram_covered:
+            # Аргумент - только id заявки: учёт упавших задач (8.9) хранит аргументы.
+            notify_broker_email.delay(lead_id, force=force)
     return result
 
 

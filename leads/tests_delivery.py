@@ -62,7 +62,8 @@ class EmailFallbackTests(EmailBase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [BROKER_MAIL])
         self.assertIn(lead.public_id, mail.outbox[0].subject)
-        self.assertIn(PHONE, mail.outbox[0].body)
+        self.assertNotIn(PHONE, mail.outbox[0].body)  # 9.56: письмо без ПДн
+        self.assertIn(lead.public_id, mail.outbox[0].body)
         lead.refresh_from_db()
         self.assertEqual(lead.email_status, NotifyStatus.SENT)
         self.assertIsNotNone(lead.email_sent_at)
@@ -167,15 +168,15 @@ class EmailFallbackTests(EmailBase):
 
 class EmailRenderTests(EmailBase):
     def test_header_injection_stripped_from_subject(self):
-        self.cfg.email_subject_template = '{id} {name}'
-        lead = self.create_lead(name='Ivan\r\nBcc: x@y')
+        self.cfg.email_subject_template = '{id} {car}'
+        lead = self.create_lead(vehicle_label='Camry\r\nBcc: x@y')
         subject, body = notify.render_new_lead_email(lead, self.cfg)
         self.assertNotRegex(subject, r'[\r\n]')
-        self.assertIn('Ivan Bcc: x@y', subject)
-        self.assertIn('Ivan\r\nBcc: x@y', body)
+        self.assertIn('Camry Bcc: x@y', subject)
 
     def test_unicode_line_separators_stripped(self):
-        lead = self.create_lead(name='A B\x0bC')
+        self.cfg.email_subject_template = '{car}'
+        lead = self.create_lead(vehicle_label='A B\x0bC')
         subject, _ = notify.render_new_lead_email(lead, self.cfg)
         self.assertNotRegex(subject, '[ \x0b]')
 
@@ -186,8 +187,8 @@ class EmailRenderTests(EmailBase):
         self.assertEqual(notify.render_new_lead_email(lead, self.cfg), ('S', f'ab {lead.public_id}'))
 
     def test_values_are_not_html_escaped(self):
-        self.cfg.email_body_template = '{comment}'
-        lead = self.create_lead(comment='<b>&')
+        self.cfg.email_body_template = '{car}'
+        lead = self.create_lead(vehicle_label='<b>&')
         self.assertEqual(notify.render_new_lead_email(lead, self.cfg)[1], '<b>&')
 
     def test_empty_templates_use_fallback(self):
@@ -196,11 +197,13 @@ class EmailRenderTests(EmailBase):
         lead = self.create_lead()
         subject, body = notify.render_new_lead_email(lead, self.cfg)
         self.assertEqual(subject, f'Нова заявка {lead.public_id}')
-        self.assertIn(PHONE, body)
+        self.assertNotIn(PHONE, body)
+        self.assertIn(lead.public_id, body)
 
     def test_default_templates_come_from_migration(self):
         cfg = LeadNotificationSettings.get_solo()
-        self.assertIn('{phone}', cfg.email_body_template)
+        self.assertNotIn('{phone}', cfg.email_body_template)  # 0011: дефолт без ПДн
+        self.assertIn('{cabinet_url}', cfg.email_body_template)
         self.assertIn('{id}', cfg.email_subject_template)
 
     def test_settings_validation(self):

@@ -101,14 +101,24 @@ class LeadNotificationSettings(models.Model):
     notify_brokers_in_app = models.BooleanField('Сповіщення брокерам на сайті', default=True)
     broker_emails = models.TextField(
         'Резервний email брокера', blank=True, validators=[validate_email_lines],
-        help_text='По одній адресі в рядку. Лист іде, якщо Telegram не налаштовано чи не доставив. '
+        help_text='По одній адресі в рядку. Лист іде, якщо Telegram не налаштовано чи не доставив '
+                  '(або завжди, якщо ввімкнено «Листа брокеру надсилати завжди»). '
                   'Порожньо → BROKER_NOTIFY_EMAIL з .env')
+    email_always = models.BooleanField(
+        'Листа брокеру надсилати завжди', default=False,
+        help_text='Вимкнено: лист іде лише коли Telegram не доставив. Увімкнено: лист іде завжди, незалежно від '
+                  'Telegram. У листі немає імені, телефону, email, контакту в месенджері та коментаря клієнта: '
+                  'лише номер заявки, авто, сума і посилання в адмінку та кабінет. Якщо Telegram доставив, а лист '
+                  'не дійшов, повторно він не надсилається автоматично: помилка видна в заявці (адмінка).')
     email_subject_template = models.CharField(
         'Тема листа', max_length=200, blank=True, validators=[validate_template],
-        help_text='Ті самі плейсхолдери, що й у шаблоні Telegram, але без HTML. Переноси рядків видаляються.')
+        help_text='Ті самі плейсхолдери, що й у шаблоні Telegram, але без HTML. Переноси рядків видаляються. '
+                  'У листі {name} {phone} {email} {contact_handle} {comment} {referrer} {page_url} завжди порожні.')
     email_body_template = models.TextField(
         'Текст листа', blank=True, validators=[validate_template],
-        help_text='Звичайний текст (без HTML), значення вставляються як є. Плейсхолдери як у шаблоні Telegram.')
+        help_text='Звичайний текст (без HTML), значення вставляються як є. Плейсхолдери як у шаблоні Telegram, '
+                  'але персональні поля ({name} {phone} {email} {contact_handle} {comment} {referrer} {page_url}) '
+                  'у листі завжди порожні.')
 
     class Meta:
         verbose_name = 'Налаштування сповіщень про заявки'
