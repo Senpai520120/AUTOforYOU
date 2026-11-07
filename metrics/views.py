@@ -11,7 +11,7 @@ from .services import record_metric
 @extend_schema(
     tags=['metrics'],
     summary='Клієнтська подія-лічильник',
-    description='Лише calculator_visit і mobile_bar_click. Без ПДн, IP і user-agent не зберігаються. 204 без тіла.',
+    description='Лише calculator_visit, landing_visit і mobile_bar_click. Без ПДн, IP і user-agent не зберігаються. 204 без тіла.',
     request=MetricEventSerializer,
     responses={204: None, 400: None, 429: None},
 )

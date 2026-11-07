@@ -5,6 +5,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import LeadForm from '@/components/leads/LeadForm';
 import LandingCalc from '@/components/landing/LandingCalc';
 import LandingMobileBar, { LANDING_FORM_ID } from '@/components/landing/LandingMobileBar';
+import LandingVisitTracker from '@/components/landing/LandingVisitTracker';
 import { calculatorHref, getLanding } from '@/lib/landings';
 import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
@@ -92,6 +93,7 @@ export default async function LandingPage({ params }: Params) {
       </p>
 
       <LandingMobileBar />
+      <LandingVisitTracker />
     </div>
   );
 }

@@ -4,6 +4,7 @@ from django.db import models
 class MetricKey(models.TextChoices):
     """Ключи счётчиков. Новый ключ - одной строкой (8.8 и этап 9 расширяют перечень)."""
     CALCULATOR_VISIT = 'calculator_visit', 'Візит калькулятора'
+    LANDING_VISIT = 'landing_visit', 'Візит лендингу'
     CALCULATION = 'calculation', 'Розрахунок'
     LEAD = 'lead', 'Заявка'
     REGISTRATION = 'registration', 'Реєстрація'

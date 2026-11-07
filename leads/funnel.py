@@ -29,15 +29,19 @@ def month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
     return start, end
 
 
-def funnel(year: int, month: int) -> dict:
-    start, end = month_bounds(year, month)
-    qs = Lead.objects.filter(created_at__gte=start, created_at__lt=end)
-
+def source_counts(qs) -> list[tuple[str, int]]:
+    """Заявки по utm_source, сначала самые частые. Без метки - «пряме»."""
     by_source: dict[str, int] = {}
     for row in qs.values('utm__source').annotate(n=Count('pk')):
         value = row['utm__source']
         key = value if isinstance(value, str) and value else DIRECT
         by_source[key] = by_source.get(key, 0) + row['n']
+    return sorted(by_source.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def funnel(year: int, month: int) -> dict:
+    start, end = month_bounds(year, month)
+    qs = Lead.objects.filter(created_at__gte=start, created_at__lt=end)
 
     partner_counts = {row['partner_status']: row['n'] for row in qs.values('partner_status').annotate(n=Count('pk'))}
     by_partner = [(NOT_SET, partner_counts.get('', 0))] + [
@@ -47,6 +51,6 @@ def funnel(year: int, month: int) -> dict:
         'month': f'{year:04d}-{month:02d}',
         'total': qs.count(),
         'hot': qs.filter(qualification=Qualification.HOT).count(),
-        'by_source': sorted(by_source.items(), key=lambda kv: (-kv[1], kv[0])),
+        'by_source': source_counts(qs),
         'by_partner_status': by_partner,
     }

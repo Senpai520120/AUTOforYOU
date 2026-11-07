@@ -30,6 +30,21 @@ test('відкриття /calculator надсилає один POST {key:calcula
   });
 });
 
+test('відкриття лендингу надсилає один POST {key:landing_visit} без cookie, перезавантаження — не надсилає', async ({ page }) => {
+  const reqPromise = page.waitForRequest(isMetric);
+  await page.goto('/prigon/e2e-toyota-camry');
+  const req = await reqPromise;
+  expect(req.postDataJSON()).toEqual({ key: 'landing_visit' });
+  const headers = await req.allHeaders();
+  expect(headers['cookie']).toBeUndefined();
+  expect(headers['authorization']).toBeUndefined();
+
+  await expectNoRequest(page, isMetric, async () => {
+    await page.reload();
+    await expect(page.getByTestId('landing-h1')).toBeVisible();
+  });
+});
+
 test('збій сервера лічильників не ламає калькулятор', async ({ page }) => {
   await page.route(/\/api\/v1\/metrics\/event\//, (route) => route.abort());
   await page.goto('/calculator');

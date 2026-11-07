@@ -30,6 +30,15 @@
 
 ---
 
+## Задача 9.50: визиты лендингов и отчёт о воронке (2026-11-06)
+
+- Ключ `landing_visit`: один POST за вкладку на `/prigon/[slug]`, без cookie.
+- `metrics/reports.py`, команда `weekly_funnel_report` (`--days`, `--dry-run`), beat по понедельникам в 09:00, Telegram (`FUNNEL_REPORT_CHAT_ID`) и email (`FUNNEL_REPORT_EMAIL`).
+- В отчёте только счётчики, порогов в коде нет: репозиторий публичный. Депозит и выкуп — события журнала за период, не когорта.
+- Ревью безопасности (2026-11-07): источник с длинным рядом цифр в отчёте показывается как «(приховано)»: `clean_attribution` пропускает цифры, а это может быть телефон. Telegram — доставка «хотя бы раз», копия содержит только счётчики.
+- Проверки 2026-11-07: backend 2941 тест (2 падают только на Windows, `test_entrypoint_refuses_debug_*`), `tsc` и `npm run build` чистые, Playwright `metrics` 4 из 4. Факт: 2 сессии.
+- Для владельца: заполнить две переменные (`docs/LAUNCH_CHECKLIST.md`).
+
 ## Задача 9.51: точность сборов аукционов (2026-11-06) — ◐
 
 - Сетки Copart (public и licensed до 25 авто в год) и IAA (public) сняты со страниц аукционов в `pricing/data/*.csv` (`source_url`, `checked_at`); сид читает CSV. Расхождения закрыты: Copart environmental $15, IAA service fee $105 с 01.10.2026, новый title handling $20 (IAA), virtual bid по цене и титулу (берём Live Bid, он дороже).

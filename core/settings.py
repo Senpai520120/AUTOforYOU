@@ -631,6 +631,12 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': _crontab(minute='*/10'),
         'options': {'expires': 540},
     },
+    # Отчёт о воронке владельцу: понедельник 09:00 по Киеву (9.50). expires: после простоя не шлём устаревший
+    'weekly-funnel-report': {
+        'task': 'metrics.tasks.send_weekly_funnel_report',
+        'schedule': _crontab(day_of_week=1, hour=9, minute=0),
+        'options': {'expires': 86400},
+    },
     # Очистка старых анонимных расчётов (2.6, 02-S2)
     'purge-anonymous-calculations-daily': {
         'task': 'pricing.tasks.purge_anonymous_calculations',
@@ -709,6 +715,9 @@ TELEGRAM_BROKER_CHAT_ID = os.environ.get('TELEGRAM_BROKER_CHAT_ID', '')
 LEAD_JOURNAL_CHAT_ID = os.environ.get('LEAD_JOURNAL_CHAT_ID', '')
 # Надёжность доставки заявки брокеру (2.12): запасной email (основной - в админке), период и лимит досыла.
 BROKER_NOTIFY_EMAIL = os.environ.get('BROKER_NOTIFY_EMAIL', '')
+# Еженедельный отчёт о воронке владельцу (9.50): пустое значение выключает канал.
+FUNNEL_REPORT_CHAT_ID = os.environ.get('FUNNEL_REPORT_CHAT_ID', '').strip()
+FUNNEL_REPORT_EMAIL = os.environ.get('FUNNEL_REPORT_EMAIL', '').strip()
 LEAD_NOTIFY_RETRY_MINUTES = _positive_int_env('LEAD_NOTIFY_RETRY_MINUTES', 10)
 LEAD_NOTIFY_MAX_ATTEMPTS = _positive_int_env('LEAD_NOTIFY_MAX_ATTEMPTS', 5)
 
@@ -779,6 +788,8 @@ if _TESTING:
     TELEGRAM_BROKER_CHAT_ID = ''
     LEAD_JOURNAL_CHAT_ID = ''
     BROKER_NOTIFY_EMAIL = ''
+    FUNNEL_REPORT_CHAT_ID = ''
+    FUNNEL_REPORT_EMAIL = ''
     LEAD_NOTIFY_RETRY_MINUTES = 10
     LEAD_NOTIFY_MAX_ATTEMPTS = 5
     LOT_PHOTO_ALLOWED_HOSTS = []

@@ -134,6 +134,12 @@ class MetricEventApiTests(APITestCase):
         self.assertEqual(resp.content, b'')
         self.assertEqual(value('calculator_visit'), 1)
 
+    def test_landing_visit_204_and_plus_one(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.post({'key': 'landing_visit'})
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(value('landing_visit'), 1)
+
     def test_mobile_bar_click(self):
         with self.captureOnCommitCallbacks(execute=True):
             resp = self.post({'key': 'mobile_bar_click'})

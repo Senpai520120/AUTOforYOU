@@ -4,9 +4,8 @@ import { API_URL } from '@/lib/config';
  * Без cookie і ідентифікаторів, fire-and-forget: помилки глушаться, на UX не впливають.
  */
 const ENDPOINT = '/api/v1/metrics/event/';
-const VISIT_FLAG = 'metric_calculator_visit';
 
-export type ClientMetricKey = 'calculator_visit' | 'mobile_bar_click';
+export type ClientMetricKey = 'calculator_visit' | 'landing_visit' | 'mobile_bar_click';
 
 export function sendMetric(key: ClientMetricKey): void {
   if (typeof window === 'undefined') return;
@@ -24,13 +23,22 @@ export function sendMetric(key: ClientMetricKey): void {
   }
 }
 
-/** Візит калькулятора: один раз за вкладку (sessionStorage, без cookie). */
-export function trackCalculatorVisitOnce(): void {
+/** Один раз за вкладку (sessionStorage, без cookie). */
+function trackVisitOnce(key: ClientMetricKey): void {
+  const flag = `metric_${key}`;
   try {
-    if (window.sessionStorage.getItem(VISIT_FLAG)) return;
-    window.sessionStorage.setItem(VISIT_FLAG, '1');
+    if (window.sessionStorage.getItem(flag)) return;
+    window.sessionStorage.setItem(flag, '1');
   } catch {
     // sessionStorage недоступний (приватний режим): рахуємо візит без прапора
   }
-  sendMetric('calculator_visit');
+  sendMetric(key);
+}
+
+export function trackCalculatorVisitOnce(): void {
+  trackVisitOnce('calculator_visit');
+}
+
+export function trackLandingVisitOnce(): void {
+  trackVisitOnce('landing_visit');
 }
