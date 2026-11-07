@@ -105,7 +105,7 @@ class LocalListingAdmin(admin.ModelAdmin):
         'seller_type', 'agreed_to_rules', 'has_contact_in_text', 'moderated_by', 'created_at',
     ]
     list_filter = ['status', 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region', 'has_contact_in_text']
-    search_fields = ['make', 'model', 'owner__email', 'contact_phone']
+    search_fields = ['make', 'model', 'owner__email', 'contact_phone', 'source_channel']
     readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
     inlines = [LocalListingImageInline]
     raw_id_fields = ['owner', 'region', 'city', 'moderated_by']
@@ -117,7 +117,7 @@ class LocalListingAdmin(admin.ModelAdmin):
                 'owner', 'make', 'model', 'year', 'mileage_km', 'engine_cc',
                 'fuel_type', 'transmission', 'body_type', 'condition',
                 'price', 'currency', 'price_type',
-                'region', 'city', 'description', 'contact_phone', 'seller_type',
+                'region', 'city', 'description', 'contact_phone', 'seller_type', 'source_channel',
             ),
         }),
         ('Статус і модерація', {
@@ -148,7 +148,7 @@ class LocalListingAdmin(admin.ModelAdmin):
     # можна переписати власника, статус, відмітки модерації, телефон і тип продавця.
     _MODERATOR_READONLY = [
         'owner', 'status', 'moderated_by', 'moderated_at', 'promoted_until',
-        'expires_at', 'seller_type', 'contact_phone',
+        'expires_at', 'seller_type', 'contact_phone', 'source_channel',
     ]
 
     ATTRIBUTION_FIELDS = ('utm', 'referrer', 'entry_page_url')

@@ -86,8 +86,9 @@ class LocalListingListSerializer(serializers.ModelSerializer):
             'owner_name', 'images',
             'expires_at', 'promoted_until', 'bumped_at',
             'created_at', 'updated_at',
-            'seller_has_badge',
+            'seller_has_badge', 'source_channel',
         ]
+        read_only_fields = ['source_channel']  # 9.57: ставит только staff в админке
         # contact_phone intentionally excluded from public list
 
     @extend_schema_field(serializers.CharField())

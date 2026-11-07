@@ -9,6 +9,7 @@ import { localApi } from '@/api/local';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
 import ReportButton from '@/components/reports/ReportButton';
+import ChannelBadge from '@/components/local/ChannelBadge';
 import { useC2C } from '@/components/c2c/C2CProvider';
 
 const PLACEHOLDER_SVG =
@@ -167,6 +168,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               {listing.seller_has_badge && (
                 <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-semibold">✓ Перевірений продавець</span>
               )}
+              <ChannelBadge channel={listing.source_channel} />
             </div>
             {listing.seller_has_badge && listing.seller_avg_rating && (
               <div className="mt-1 text-xs text-slate-500 flex items-center gap-1">

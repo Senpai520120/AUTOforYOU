@@ -281,6 +281,8 @@ export interface LocalListing {
   promoted_until: string | null;
   bumped_at: string | null;
   seller_has_badge: boolean;
+  /** 9.57: канал Telegram, звідки staff вніс оголошення (без @); порожньо - немає. */
+  source_channel?: string;
   seller_avg_rating?: number | null;
   seller_deal_count?: number;
   created_at: string;

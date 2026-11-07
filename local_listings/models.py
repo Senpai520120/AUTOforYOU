@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -85,6 +86,14 @@ class PromotionTariff(models.Model):
 
 
 # ─── Оголошення ───────────────────────────────────────────────────────────────
+
+# Имя канала Telegram без @ (9.57): латиница, цифры, _; 5-32 символа, первая - буква. Из него строится ссылка t.me.
+TELEGRAM_CHANNEL_RE = r'^[A-Za-z][A-Za-z0-9_]{4,31}\Z'
+validate_telegram_channel = RegexValidator(
+    TELEGRAM_CHANNEL_RE,
+    "Лише ім'я каналу Telegram: латиниця, цифри та _, 5-32 символи, перша літера - буква (без @ і посилань).",
+)
+
 
 class LocalListing(models.Model):
     class FuelType(models.TextChoices):
@@ -201,6 +210,13 @@ class LocalListing(models.Model):
     # ── Антиспам ──
     has_contact_in_text = models.BooleanField(default=False, db_index=True, verbose_name='Контакт у тексті (антиспам)')
 
+    # 9.57: канал Telegram, откуда staff внёс объявление (пилот каналов). Публично показывается бейдж «від @канал».
+    source_channel = models.CharField(
+        max_length=32, blank=True, validators=[validate_telegram_channel], verbose_name='Канал-джерело (@username)',
+        help_text='Без @ і посилань. Лише для оголошень, внесених вручну за письмовою згодою каналу; '
+                  "це ім'я каналу, а не особистий акаунт людини.",
+    )
+
     # Источник визита на момент подачи (2.14): не меняется при редактировании, в API не отдаётся.
     utm = models.JSONField('UTM', default=dict, blank=True, editable=False)
     referrer = models.CharField('Реферер', max_length=500, blank=True, editable=False)
@@ -224,6 +240,11 @@ class LocalListing(models.Model):
             models.Index(fields=['region'], name='ll_region_idx'),
             models.Index(fields=['fuel_type'], name='ll_fuel_idx'),
         ]
+
+    def clean_fields(self, exclude=None):
+        # Админ вводит «@name»: нормализуем до проверки формата.
+        self.source_channel = (self.source_channel or '').strip().removeprefix('@')
+        super().clean_fields(exclude=exclude)
 
     def save(self, *args, **kwargs):
         if not self.pk and self.expires_at is None:

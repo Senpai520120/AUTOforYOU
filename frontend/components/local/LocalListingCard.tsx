@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { LocalListing } from '@/lib/types';
+import ChannelBadge from '@/components/local/ChannelBadge';
 
 const FUEL_LABELS: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид', gas: 'Газ',
@@ -41,6 +42,7 @@ export default function LocalListingCard({ listing, priority = false }: { listin
         )}
       </Link>
       <div className="p-4">
+        <ChannelBadge channel={listing.source_channel} className="mb-2" />
         <Link href={`/local/${listing.id}`} className="hover:text-blue-700">
           <h2 className="font-semibold text-slate-900 text-sm leading-snug">
             {listing.make} {listing.model} {listing.year}
