@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { test, expect, storageStatePath } from './fixtures';
+import { expectNoRequest } from './helpers/network';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
 const GPS_PHOTO = path.join(__dirname, 'fixtures', 'car-gps.jpg');
@@ -50,7 +51,8 @@ test.describe('Фото оголошення: продавець', () => {
     }
   });
 
-  const counter = (n: number) => `Фото (${n}/15)`;
+  // 4.2: лічильник з підказкою лімітів — «Фото (1/15 · jpg/png/webp · до 8 МБ)».
+  const counter = (n: number) => new RegExp(`^Фото \\(${n}/15 ·`);
 
   test('JPEG з GPS: фото з’являється, файл без EXIF, uuid-ім’я, nosniff', async ({ page }) => {
     const source = fs.readFileSync(GPS_PHOTO);
@@ -98,13 +100,15 @@ test.describe('Фото оголошення: продавець', () => {
     expect((await rejectedHtml).status()).toBe(400);
     await expect(page.getByText(/evil\.jpg: Файл не є зображенням/)).toBeVisible();
 
-    const rejectedBig = page.waitForResponse(
-      (r) => r.url().endsWith(`/listings/${listingId}/images/`) && r.request().method() === 'POST',
-    );
+    // 4.2: файл понад ліміт відсікає форма (ліміт з /local/config/), запиту на сервер немає.
+    // Серверну перевірку розміру покривають backend-тести core/uploads.
     const big = Buffer.concat([fs.readFileSync(GPS_PHOTO), Buffer.alloc(OVER_LIMIT_BYTES)]);
-    await input.setInputFiles({ name: 'huge.jpg', mimeType: 'image/jpeg', buffer: big });
-    expect((await rejectedBig).status()).toBe(400);
-    await expect(page.getByText(/huge\.jpg: Файл завеликий/)).toBeVisible();
+    await expectNoRequest(
+      page,
+      (r) => r.url().endsWith(`/listings/${listingId}/images/`) && r.method() === 'POST',
+      () => input.setInputFiles({ name: 'huge.jpg', mimeType: 'image/jpeg', buffer: big }),
+    );
+    await expect(page.getByText(/«huge\.jpg»: файл більший за 8 МБ/)).toBeVisible();
 
     await expect(page.getByText(counter(initialIds.length))).toBeVisible();
   });
