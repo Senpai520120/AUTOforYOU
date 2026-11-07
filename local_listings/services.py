@@ -14,7 +14,6 @@ from django.utils import timezone
 
 from audit.models import AuditAction
 from audit.services import log_action
-
 from integrations.email import send_email
 
 from .models import LocalListing

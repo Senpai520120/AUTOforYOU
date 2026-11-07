@@ -2,12 +2,12 @@ from django.urls import path
 
 from .views import (
     CityListView,
+    LocalConfigView,
     LocalListingContactView,
     LocalListingDetailView,
     LocalListingImageDetailView,
     LocalListingImageUploadView,
     LocalListingListCreateView,
-    LocalConfigView,
     LocalListingPromoteView,
     MyListingDetailView,
     MyListingsView,
