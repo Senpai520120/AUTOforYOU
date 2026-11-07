@@ -53,6 +53,13 @@
 - Автотест вклада баннера в LCP не добавлен: без throttling кандидат LCP в баннере в Playwright не воспроизводится (проверено мутацией: возврат `text-sm` тест не краснил), поэтому пустой тест не оставлен. Добавлен тест «site-settings недоступен: банер показывается и работает».
 - Осталось: подтвердить LCP на реальном сервере (пункт в LAUNCH_CHECKLIST), разобраться с `/`.
 
+## Задача 9.47: сетевой предохранитель в воркерах --parallel (2026-11-07)
+
+- Причина: при spawn (Windows, macOS) воркер стартует без патча `socket` родителя, при fork он наследовал его. Правка: установка предохранителя вынесена в `install_network_guard()` (идемпотентно), её вызывает основной процесс и хук `process_setup` у `GuardedParallelTestSuite`; `IsolatedDiscoverRunner.parallel_test_suite` указывает на него.
+- `tblib==3.2.2` добавлен в `requirements.txt` (единственный файл зависимостей: его же ставят CI, `pip-audit -r requirements.txt` и Docker-образ; пакет без зависимостей). Без `tblib` Django не передаёт traceback исключений из воркеров.
+- Тест `tests/test_parallel_guard.py` запускает отдельный процесс `manage.py test tests.probe_parallel_guard --parallel 2` с принудительным spawn; зонд доказывает, что он в воркере (`multiprocessing.parent_process()`) и что соединение заблокировано. Мутации (убрать хук, убрать установку, убрать `parallel_test_suite`) делают тест красным.
+- Локально на Windows `--parallel 4` работает (spawn): `core` + `tests` 274 теста OK, полный прогон — см. отчёт. На Linux (fork) в CI проверка идёт через тот же тест (spawn принудительно), отдельный `--parallel` прогон в CI не добавлялся.
+
 ## Задача 9.58: scripts/e2e-run и флаг E2E_RELAX_THROTTLES (2026-11-07)
 
 - `scripts/e2e-run.sh` (+ `.ps1`, запускает Git Bash): сверка ключей `.env.e2e` с шаблоном (печатаются только имена), `docker compose down` без `-v`, подъём e2e-стека, FLUSHALL, seed, Playwright с аргументами, затем всегда cleanup и возврат dev-стека; код возврата = код Playwright. Shell-тест сверки в `check-infra.sh` (`shell-tests`).
