@@ -313,6 +313,7 @@
 - [ ] `EMAIL_VERIFICATION_REQUIRED` (по умолчанию `true`), `EMAIL_VERIFY_TTL_HOURS` (48), `CAPTCHA_FORM_TOKEN_MAX_AGE` (3600), `SITE_URL=https://<домен>` и SMTP — иначе письма подтверждения не уходят (задача 1.6). Существующие аккаунты помечены подтвердившими (Q12). Проверка: зарегистрироваться → пришло письмо → ссылка подтверждает аккаунт.
 - [ ] `ANTISPAM_MODE` — **в prod `hard`** (ANSWERS, шаг 7; задачи 8.5, 4.7): прод-шаблон `.env.example` уже содержит `hard`, локальный `.env.docker.example` — `soft`. Значения `soft` / `hard` / `off`. На ВОЛНЕ-1 переписка и подача объявлений закрыты флагами, поэтому `hard` ничего не ломает; `launch_check` при `DEBUG=false` и значении не `hard` возвращает ошибку.
   *Проверка:* `launch_check` — строка `ANTISPAM_MODE=hard`.
+- [ ] Переписка (задача 4.7, можно не трогать): `THROTTLE_MESSAGES_RATE` (старт диалогов, 30/hour), `THROTTLE_MESSAGES_REPLY_RATE` (ответы, 120/hour), `MESSAGES_PAGE_SIZE` (сообщений в порции, 50). Тексты уведомлений — админка «Шаблони сповіщень» (плейсхолдеры `{listing}`, `{sender}`, `{preview}`, `{rating}`).
   *Проверка:* `launch_check` проверяет `ANTISPAM_MODE`; в админке/настройках видно `hard`.
 - [ ] `PHONE_LOG_IP_SALT` — соль HMAC-хэша IP гостя (задача 4.5, ANSWERS «IP гостя»: в БД хранится только хэш, не сам IP). *Где взять:* случайная строка, например `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Менять соль нельзя без потери истории лимитов. **[ВОЛНА-2]**
   *Проверка:* при пустой соли `launch_check` выдаёт ошибку, а показ телефона гостю отвечает 503.

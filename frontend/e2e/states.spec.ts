@@ -82,7 +82,7 @@ test.describe('Порожні стани (23-P46)', () => {
 
   const EMPTY: { path: string; api: string; body: unknown; text: string; c2c: boolean }[] = [
     { path: '/me/favorites', api: '**/api/v1/favorites/', body: [], text: 'Тут будуть збережені оголошення.', c2c: false },
-    { path: '/me/messages', api: '**/api/v1/messages/conversations/', body: [], text: 'Немає діалогів.', c2c: true },
+    { path: '/me/messages', api: '**/api/v1/messages/conversations/?page=*', body: { count: 0, next: null, previous: null, results: [] }, text: 'Немає діалогів.', c2c: true },
     { path: '/me/local-listings', api: '**/api/v1/local/my-listings/', body: { count: 0, results: [] }, text: 'Оголошень ще немає', c2c: true },
     { path: '/me/saved-searches', api: '**/api/v1/saved-searches/', body: [], text: 'Немає збережених пошуків.', c2c: true },
   ];
@@ -106,7 +106,7 @@ test.describe('Відкат мутацій при помилці (23-P39, 08-Q7)
       id, type: 'new_message', title: `[E2E] Сповіщення ${id}`, text: '', link: '', is_read: false,
       created_at: new Date().toISOString(),
     });
-    await page.route('**/api/v1/notifications/', route => json(route, [item(1), item(2)]));
+    await page.route('**/api/v1/notifications/?page=*', route => json(route, { count: 2, next: null, previous: null, results: [item(1), item(2)] }));
     await page.route('**/api/v1/notifications/mark-read/', fail500);
     await page.goto('/me/notifications');
     await expect(page.getByText('[E2E] Сповіщення 1')).toBeVisible();
@@ -195,17 +195,18 @@ test.describe('C2C: регіони, редагування, тарифи (10-Q7)
     await expect(page.locator('select')).toHaveCount(0);
   });
 
+  // 4.2: сторінка редагування вантажить оголошення власника з my-listings/<pk>/.
   test('/local/<чужий id>/edit → 404: «Оголошення не знайдено», URL не змінився', async ({ page }) => {
-    await page.route('**/api/v1/local/listings/999999/', route => json(route, { detail: 'Not found.' }, 404));
+    await page.route('**/api/v1/local/my-listings/999999/', route => json(route, { detail: 'Not found.' }, 404));
     await page.goto('/local/999999/edit');
     await expect(page.getByText('Оголошення не знайдено')).toBeVisible();
     await expect(page).toHaveURL(/\/local\/999999\/edit$/);
   });
 
-  test('/local/<id>/edit → 403: «Немає доступу»', async ({ page }) => {
-    await page.route('**/api/v1/local/listings/999998/', route => json(route, { detail: 'Forbidden' }, 403));
+  test('/local/<id>/edit → 403: «не знайдено або ви не власник»', async ({ page }) => {
+    await page.route('**/api/v1/local/my-listings/999998/', route => json(route, { detail: 'Forbidden' }, 403));
     await page.goto('/local/999998/edit');
-    await expect(page.getByText('Немає доступу').first()).toBeVisible();
+    await expect(page.getByText('Оголошення не знайдено або ви не власник')).toBeVisible();
   });
 
   test('PromoteModal: порожній список тарифів → «Просування тимчасово недоступне»', async ({ page }) => {

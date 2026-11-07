@@ -370,6 +370,8 @@ export interface ConversationDetail {
   subject_url: string;
   participants: MessageParticipant[];
   messages: ChatMessage[];
+  /** Є раніші повідомлення: підвантажити через ?before=<id першого> (4.7). */
+  has_earlier: boolean;
   created_at: string;
   last_message_at: string;
 }

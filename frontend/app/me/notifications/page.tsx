@@ -27,12 +27,34 @@ export default function NotificationsPage() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(() => {
     setBusy(true);
     setError(null);
-    getNotifications().then(setItems).catch(setError).finally(() => setBusy(false));
+    getNotifications(1)
+      .then(data => { setItems(data.results); setPage(1); setHasMore(Boolean(data.next)); })
+      .catch(setError)
+      .finally(() => setBusy(false));
   }, []);
+
+  // 06-C7: пагінація замість обрізання до 50.
+  const loadMore = async () => {
+    setLoadingMore(true);
+    setActionError(null);
+    try {
+      const data = await getNotifications(page + 1);
+      setItems(prev => [...prev, ...data.results.filter(n => !prev.some(p => p.id === n.id))]);
+      setPage(page + 1);
+      setHasMore(Boolean(data.next));
+    } catch (e) {
+      setActionError(getErrorMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     if (user) load();
@@ -124,6 +146,14 @@ export default function NotificationsPage() {
               </button>
             </li>
           ))}
+          {hasMore && (
+            <li className="text-center pt-2">
+              <button type="button" onClick={loadMore} disabled={loadingMore}
+                className="text-sm text-blue-700 hover:underline disabled:opacity-50">
+                {loadingMore ? 'Завантаження…' : 'Показати ще'}
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </div>

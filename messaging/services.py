@@ -5,14 +5,22 @@
 Імпортні оголошення → покупець ↔ брокер (перший broker, інакше перший admin).
                       Ці діалоги бачать лише broker і admin (не просто is_staff).
 """
+import logging
+
 from django.contrib.auth import get_user_model
-from django.db import transaction
-from django.db.models import Q
+from django.db import IntegrityError, transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from users.display import public_display_name
 
+from .exceptions import ContactsInTextError, ConversationClosed, RecipientDeleted
 from .models import Conversation, Message
+
+logger = logging.getLogger(__name__)
+
+CONVERSATION_CLOSED = 'Діалог закрито: оголошення продане або зняте.'
+RECIPIENT_DELETED = 'Користувач видалений'
 
 User = get_user_model()
 
@@ -57,14 +65,10 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
         if listing.owner_id == initiator.pk:
             raise ValueError('Не можна писати самому собі.')
 
-        conv = Conversation.objects.filter(
-            initiator=initiator, local_listing=listing
-        ).first()
-        if conv:
+        conv, created = _get_or_create(initiator, local_listing=listing)
+        if not created:
             msg, _ = _add_message(initiator, conv, first_text)
             return conv, False, msg
-
-        conv = Conversation.objects.create(initiator=initiator, local_listing=listing)
         conv.participants.set([initiator.pk, listing.owner_id])
 
     elif listing_type == 'imported':
@@ -82,14 +86,10 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
         ):
             raise ListingUnavailable('Оголошення не знайдено.')
 
-        conv = Conversation.objects.filter(
-            initiator=initiator, imported_listing=listing
-        ).first()
-        if conv:
+        conv, created = _get_or_create(initiator, imported_listing=listing)
+        if not created:
             msg, _ = _add_message(initiator, conv, first_text)
             return conv, False, msg
-
-        conv = Conversation.objects.create(initiator=initiator, imported_listing=listing)
         admin = _first_admin()
         participants = [initiator.pk] + ([admin.pk] if admin else [])
         conv.participants.set(participants)
@@ -100,8 +100,42 @@ def get_or_create_conversation(initiator, listing_type: str, listing_id: int, fi
     return conv, True, msg
 
 
+def _get_or_create(initiator, **listing):
+    """(conversation, created). Двойной клик «Написати» - существующий диалог, а не 500 (06-Q9, E6)."""
+    conv = Conversation.objects.filter(initiator=initiator, **listing).first()
+    if conv:
+        return conv, False
+    try:
+        with transaction.atomic():
+            return Conversation.objects.create(initiator=initiator, **listing), True
+    except IntegrityError:
+        conv = Conversation.objects.filter(initiator=initiator, **listing).first()
+        if conv is None:
+            raise  # другое ограничение - не гонка двойного клика
+        return conv, False
+
+
+def incoming_q(user, prefix=''):
+    """Какие сообщения «входящие» для user (E3).
+
+    Инициатор (покупатель) читает всё, что пишут ему. Остальные (продавец, брокеры, админ) - только
+    сообщения инициатора: ответы коллеги-брокера покупателю не считаются и не помечаются ими.
+    """
+    initiator = f'{prefix}conversation__initiator'
+    return (
+        (Q(**{initiator: user}) & ~Q(**{f'{prefix}sender': user}))
+        | (~Q(**{initiator: user}) & Q(**{f'{prefix}sender_id': F(f'{initiator}_id')}))
+    )
+
+
 def send_message_to_conversation(sender, conversation: Conversation, text: str):
-    """Returns (message, detected_contacts_list). Raises PermissionError if not participant."""
+    """Returns (message, detected_contacts_list).
+
+    Raises PermissionError (не участник), ConversationClosed (объявление продано/снято, E5),
+    RecipientDeleted (собеседник удалил аккаунт, Q3), ContactsInTextError (антиспам hard).
+    """
+    from local_listings.models import LocalListing
+
     is_participant = conversation.participants.filter(pk=sender.pk).exists()
     is_admin_imported = (
         handles_imports(sender)
@@ -109,20 +143,33 @@ def send_message_to_conversation(sender, conversation: Conversation, text: str):
     )
     if not is_participant and not is_admin_imported:
         raise PermissionError('Ви не є учасником цього діалогу.')
+    # E5: писать можно, пока объявление active или на модерации (pending); проданное, снятое, отклонённое,
+    # истёкшее или удалённое (local_listing стал NULL) - диалог закрыт. Статусы 4.3 добавятся сюда же.
+    ll = conversation.local_listing
+    if conversation.imported_listing_id is None and (
+        ll is None or ll.status not in (LocalListing.Status.ACTIVE, LocalListing.Status.PENDING)
+    ):
+        raise ConversationClosed(CONVERSATION_CLOSED)
+    others = conversation.participants.exclude(pk=sender.pk)
+    if conversation.local_listing_id and others.exists() and not others.filter(deleted_at__isnull=True).exists():
+        raise RecipientDeleted(RECIPIENT_DELETED)
     return _add_message(sender, conversation, text)
 
 
 def mark_as_read(user, conversation: Conversation) -> int:
-    """Позначити всі вхідні як прочитані. Повертає кількість оновлених."""
+    """Позначити вхідні як прочитані. Повертає кількість оновлених.
+
+    E3, 06-Q11: «вхідні» - за incoming_q; брокер (учасник чи ні) позначає лише повідомлення покупця,
+    відповіді колег покупцю лишаються непрочитаними для покупця.
+    """
     return Message.objects.filter(
-        conversation=conversation,
-        read_at__isnull=True,
-    ).exclude(sender=user).update(read_at=timezone.now())
+        incoming_q(user), conversation=conversation, read_at__isnull=True,
+    ).update(read_at=timezone.now())
 
 
 def unread_count_for_user(user) -> int:
     """Загальна кількість непрочитаних повідомлень для користувача."""
-    qs = Message.objects.filter(read_at__isnull=True).exclude(sender=user)
+    qs = Message.objects.filter(incoming_q(user), read_at__isnull=True)
     if handles_imports(user):
         qs = qs.filter(
             Q(conversation__participants=user)
@@ -143,7 +190,7 @@ def _add_message(sender, conversation: Conversation, text: str):
     detected = detect_contacts(text) if antispam_mode != 'off' else []
 
     if detected and antispam_mode == 'hard':
-        raise PermissionError('Повідомлення містить контактні дані (телефон, посилання). Видаліть їх.')
+        raise ContactsInTextError()
 
     msg = Message.objects.create(conversation=conversation, sender=sender, text=text)
     Conversation.objects.filter(pk=conversation.pk).update(last_message_at=msg.created_at)
@@ -152,55 +199,24 @@ def _add_message(sender, conversation: Conversation, text: str):
 
 
 def _notify_recipients(sender, conversation: Conversation, message: Message) -> None:
-    try:
-        from integrations.tasks import send_notification
-    except ImportError:
-        send_notification = None
-
-    try:
-        from notifications.models import Notification as NotifModel
-        from notifications.services import create_notification
-    except ImportError:
-        create_notification = None
-        NotifModel = None
+    """Уведомления через notifications.notify: текст - шаблон new_message, Telegram после коммита (4.7)."""
+    from notifications.services import notify
 
     if conversation.local_listing_id and conversation.local_listing:
         ll = conversation.local_listing
-        subject_label = f'{ll.make} {ll.model} {ll.year}'
-        conv_link = f'/me/messages?conv={conversation.pk}'
+        listing_label = f'{ll.make} {ll.model} {ll.year}'
     elif conversation.imported_listing_id:
-        subject_label = f'Оголошення #{conversation.imported_listing_id}'
-        conv_link = f'/me/messages?conv={conversation.pk}'
+        listing_label = f'Оголошення #{conversation.imported_listing_id}'
     else:
-        subject_label = 'оголошення'
-        conv_link = '/me/messages'
+        listing_label = 'оголошення'
+    link = f'/me/messages?conv={conversation.pk}'
+    context = {'sender': public_display_name(sender), 'listing': listing_label, 'preview': message.text[:80]}
 
-    sender_label = public_display_name(sender)
-    preview = message.text[:80]
-    tg_text = f'Нове повідомлення від {sender_label} по {subject_label}:\n«{preview}»'
-    notif_title = f'Нове повідомлення від {sender_label}'
-    notif_text = f'{subject_label}: «{preview}»'
-
-    recipients = list(conversation.participants.exclude(pk=sender.pk))
+    recipient_ids = set(conversation.participants.exclude(pk=sender.pk).values_list('pk', flat=True))
     # Для імпортних — додатково брокери й адміни, які не є учасниками
     if conversation.imported_listing_id:
-        existing_ids = {r.pk for r in recipients} | {sender.pk}
-        extra_admins = User.objects.brokers_and_admins().exclude(pk__in=existing_ids)
-        for admin in extra_admins:
-            _send_one(admin.pk, tg_text, notif_title, notif_text, conv_link, send_notification, create_notification, NotifModel)
-
-    for recipient in recipients:
-        _send_one(recipient.pk, tg_text, notif_title, notif_text, conv_link, send_notification, create_notification, NotifModel)
-
-
-def _send_one(user_id, tg_text, notif_title, notif_text, link, send_notification, create_notification, NotifModel):
-    if create_notification and NotifModel:
-        try:
-            create_notification(user_id, NotifModel.Type.NEW_MESSAGE, notif_title, notif_text, link)
-        except Exception:
-            pass
-    if send_notification:
-        try:
-            send_notification.delay(user_id, tg_text)
-        except Exception:
-            pass
+        recipient_ids |= set(
+            User.objects.brokers_and_admins().exclude(pk=sender.pk).values_list('pk', flat=True)
+        )
+    for user_id in sorted(recipient_ids):
+        notify(user_id, 'new_message', context, link)

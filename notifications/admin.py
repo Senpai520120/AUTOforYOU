@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Notification
+from .models import Notification, NotificationTemplate
 
 
 @admin.register(Notification)
@@ -14,3 +14,9 @@ class NotificationAdmin(admin.ModelAdmin):
     @admin.action(description='Позначити прочитаними')
     def mark_all_read(self, request, queryset):
         queryset.update(is_read=True)
+
+
+@admin.register(NotificationTemplate)
+class NotificationTemplateAdmin(admin.ModelAdmin):
+    list_display = ['code', 'title', 'updated_at']
+    readonly_fields = ['updated_at']

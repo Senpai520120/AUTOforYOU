@@ -70,31 +70,43 @@ class ConversationListSerializer(serializers.ModelSerializer):
         return '/'
 
     def get_other_participant(self, obj):
+        # Из prefetch participants, без запроса на каждый диалог (06-Q6).
         user = self._user()
-        other = obj.participants.exclude(pk=user.pk).first()
+        other = next((p for p in obj.participants.all() if p.pk != user.pk), None)
         return ParticipantSerializer(other).data if other else None
 
+    @extend_schema_field(serializers.CharField())
     def get_last_message_text(self, obj):
-        msgs = list(obj.messages.all())
-        return msgs[-1].text[:100] if msgs else ''
+        text = getattr(obj, 'last_text', None)
+        return (text or '')[:100]
 
+    @extend_schema_field(serializers.IntegerField())
     def get_unread_count(self, obj):
-        user = self._user()
-        return sum(
-            1 for m in obj.messages.all()
-            if m.read_at is None and m.sender_id != user.pk
-        )
+        return getattr(obj, 'unread', 0) or 0
 
 
 class ConversationDetailSerializer(serializers.ModelSerializer):
     subject_title = serializers.SerializerMethodField()
     subject_url = serializers.SerializerMethodField()
     participants = ParticipantSerializer(many=True, read_only=True)
-    messages = MessageSerializer(many=True, read_only=True)
+    messages = serializers.SerializerMethodField()
+    has_earlier = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
-        fields = ['id', 'subject_title', 'subject_url', 'participants', 'messages', 'created_at', 'last_message_at']
+        fields = [
+            'id', 'subject_title', 'subject_url', 'participants', 'messages', 'has_earlier',
+            'created_at', 'last_message_at',
+        ]
+
+    @extend_schema_field(MessageSerializer(many=True))
+    def get_messages(self, obj):
+        # Порция последних MESSAGES_PAGE_SIZE сообщений (или более ранних по ?before=) - выбирает view.
+        return MessageSerializer(self.context.get('messages', []), many=True).data
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_has_earlier(self, obj):
+        return bool(self.context.get('has_earlier', False))
 
     def get_subject_title(self, obj):
         if obj.local_listing:

@@ -56,13 +56,13 @@ test.describe('Сторонній не бачить і не змінює чуж�
   test('dealer відкриває діалог buyer↔seller: помилка, тексту листування немає', async ({ browser, api }) => {
     const convs = await (await api('buyer')).get('/api/v1/messages/conversations/');
     expect(convs.status()).toBe(200);
-    const convId = (await convs.json())[0].id;
+    const convId = (await convs.json()).results[0].id;  // 4.7: список посторінковий
 
     const ctx = await browser.newContext({ storageState: storageStatePath('dealer') });
     const page = await ctx.newPage();
     await page.addInitScript(consentInit);
     await page.goto(`/me/messages?conv=${convId}`);
-    await expect(page.getByRole('alert').getByText('Не знайдено')).toBeVisible();
+    await expect(page.getByText('Немає доступу до цієї розмови')).toBeVisible();  // 4.7
     await expect(page.getByText('[E2E] Здравствуйте!')).toHaveCount(0);
     await ctx.close();
   });

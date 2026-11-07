@@ -354,6 +354,8 @@ REST_FRAMEWORK = {
         'user': _THROTTLE_USER,
         'expensive': _THROTTLE_EXPENSIVE,
         'messages': os.environ.get('THROTTLE_MESSAGES_RATE', '30/hour'),
+        # Ответы в существующем диалоге (4.7, 06-S6): отдельный лимит от старта диалогов.
+        'messages_reply': os.environ.get('THROTTLE_MESSAGES_REPLY_RATE', '120/hour'),
         'contact': os.environ.get('THROTTLE_CONTACT_RATE', '20/hour'),
         # Загрузка фото (задача 1.10): каждый запрос — декодирование и пересохранение картинок.
         'uploads': os.environ.get('THROTTLE_UPLOADS_RATE', '30/hour'),
@@ -600,6 +602,8 @@ RESILIENT_TASK_MAX_RETRIES = int(os.environ.get('RESILIENT_TASK_MAX_RETRIES', '3
 # true: сообщение подтверждается после выполнения - при падении воркера задача не теряется (возможен повтор).
 RESILIENT_TASK_ACKS_LATE = os.environ.get('RESILIENT_TASK_ACKS_LATE', 'true').lower() in ('true', '1', 'yes')
 FAILED_TASK_RETENTION_DAYS = int(os.environ.get('FAILED_TASK_RETENTION_DAYS', '90'))
+# Сообщений в одной порции переписки (4.7, 06-Q6): последние N, раньше - по ?before=<id>.
+MESSAGES_PAGE_SIZE = max(1, int(os.environ.get('MESSAGES_PAGE_SIZE', '50') or 50))
 # Срок хранения журнала аудита (1.13), дней. 0 = без ограничения (до решения юриста, Q3.6).
 AUDIT_LOG_RETENTION_DAYS = max(0, int(os.environ.get('AUDIT_LOG_RETENTION_DAYS', '0') or 0))
 # Строки аргументов длиннее (или с пробелами - тексты) пишутся только как <str:длина>.

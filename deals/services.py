@@ -7,18 +7,14 @@ from users.display import public_display_name
 from .models import Deal, Review
 
 
-def _notify(user_id: int, ntype: str, title: str, text: str, link: str):
-    try:
-        from notifications.services import create_notification
-        # add new types gracefully if not yet in model
-        create_notification(user_id, ntype, title, text, link)
-    except Exception:
-        pass
-    try:
-        from integrations.tasks import send_notification
-        send_notification.delay(user_id, f'{title}\n{text}')
-    except Exception:
-        pass
+def _listing_label(listing) -> str:
+    return f'{listing.make} {listing.model} {listing.year}'
+
+
+def _notify(user_id: int, ntype: str, context: dict):
+    # Тексты - в NotificationTemplate (4.7, 06-C5); Telegram после коммита, ошибки в лог (06-Q5, 06-Q7).
+    from notifications.services import notify
+    notify(user_id, ntype, context, '/me/deals')
 
 
 @transaction.atomic
@@ -52,14 +48,7 @@ def propose_deal(listing, seller, buyer_id: int) -> Deal:
         buyer_id=buyer_id,
     )
 
-    _notify(
-        buyer_id,
-        'deal_proposed',
-        'Пропозиція угоди',
-        f'Продавець {public_display_name(seller)} пропонує підтвердити угоду за оголошенням '
-        f'{listing.make} {listing.model} {listing.year}.',
-        '/me/deals',
-    )
+    _notify(buyer_id, 'deal_proposed', {'sender': public_display_name(seller), 'listing': _listing_label(listing)})
     return deal
 
 
@@ -81,14 +70,7 @@ def confirm_deal(deal: Deal, buyer) -> Deal:
         status=LocalListing.Status.SOLD
     )
 
-    _notify(
-        deal.seller_id,
-        'deal_confirmed',
-        'Угоду підтверджено',
-        f'Покупець підтвердив угоду за оголошенням '
-        f'{deal.listing.make} {deal.listing.model} {deal.listing.year}.',
-        '/me/deals',
-    )
+    _notify(deal.seller_id, 'deal_confirmed', {'listing': _listing_label(deal.listing)})
     return deal
 
 
@@ -104,14 +86,7 @@ def cancel_deal(deal: Deal, user) -> Deal:
     deal.save(update_fields=['status'])
 
     other_id = deal.seller_id if user.pk == deal.buyer_id else deal.buyer_id
-    _notify(
-        other_id,
-        'deal_cancelled',
-        'Угоду скасовано',
-        f'Учасник скасував угоду за оголошенням '
-        f'{deal.listing.make} {deal.listing.model} {deal.listing.year}.',
-        '/me/deals',
-    )
+    _notify(other_id, 'deal_cancelled', {'listing': _listing_label(deal.listing)})
     return deal
 
 
@@ -133,13 +108,7 @@ def create_review(deal: Deal, author, rating: int, text: str = '') -> Review:
         text=text,
     )
 
-    _notify(
-        deal.seller_id,
-        'review_received',
-        'Новий відгук',
-        f'Покупець залишив відгук {rating}★ про вас.',
-        '/me/deals',
-    )
+    _notify(deal.seller_id, 'review_received', {'rating': rating})
     return review
 
 

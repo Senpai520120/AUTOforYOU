@@ -423,7 +423,7 @@ class DealsNoEmailLeakTest(TestCase):
         from unittest.mock import patch
 
         from notifications.models import Notification
-        with patch('integrations.tasks.send_notification.delay') as tg:
+        with patch('integrations.tasks.send_notification.delay') as tg,                 self.captureOnCommitCallbacks(execute=True):
             propose_deal(self.listing, self.seller, self.buyer.pk)
         note = Notification.objects.get(user=self.buyer, type=Notification.Type.DEAL_PROPOSED)
         self._assert_clean(note.title + note.text)

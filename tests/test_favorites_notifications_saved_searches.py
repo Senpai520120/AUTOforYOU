@@ -2,7 +2,7 @@
 Tests for C2C-промт 4: favorites, notifications, saved_searches.
 """
 from django.test import TestCase
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APITestCase
 
 from favorites.models import Favorite
 from local_listings.models import City, LocalListing, Region
@@ -68,13 +68,13 @@ class TestNotificationAPI(SetupMixin):
         self.auth(self.buyer)
         r = self.client.get('/api/v1/notifications/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(r.data), 1)
+        self.assertEqual(r.data['count'], 1)
 
     def test_other_user_cannot_see(self):
         create_notification(self.buyer.pk, Notification.Type.NEW_MESSAGE, 'Test', '')
         self.auth(self.seller)
         r = self.client.get('/api/v1/notifications/')
-        self.assertEqual(len(r.data), 0)
+        self.assertEqual(r.data['count'], 0)
 
     def test_unread_count_api(self):
         create_notification(self.buyer.pk, Notification.Type.LISTING_APPROVED, 'OK', '')
@@ -290,3 +290,52 @@ class TestSavedSearchTask(SetupMixin):
         check_saved_searches()
         n = Notification.objects.filter(user=self.buyer, type=Notification.Type.SAVED_SEARCH_MATCH).first()
         self.assertIsNone(n)
+
+
+# ── Задача 4.7: пагинация, mark-read, шаблоны ────────────────────────────────
+
+class TestNotifications47(APITestCase):
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.user = make_user()
+        self.client.force_authenticate(self.user)
+
+    def test_list_paginated(self):
+        Notification.objects.bulk_create(
+            Notification(user=self.user, type=Notification.Type.NEW_MESSAGE, title=f'n{i}') for i in range(60))
+        r = self.client.get('/api/v1/notifications/')
+        self.assertEqual(r.data['count'], 60)
+        self.assertIsNotNone(r.data['next'])
+
+    def test_mark_read_validation_and_counts(self):
+        mine = create_notification(self.user.pk, Notification.Type.NEW_MESSAGE, 'mine')
+        create_notification(self.user.pk, Notification.Type.NEW_MESSAGE, 'mine2')
+        other = create_notification(make_user().pk, Notification.Type.NEW_MESSAGE, 'other')
+        url = '/api/v1/notifications/mark-read/'
+        self.assertEqual(self.client.post(url, {'id': 'abc'}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(url, {'id': other.pk}, format='json').data, {'marked': 0})
+        other.refresh_from_db()
+        self.assertFalse(other.is_read)
+        self.assertEqual(self.client.post(url, {'id': mine.pk}, format='json').data, {'marked': 1})
+        self.assertEqual(self.client.post(url, {'all': True}, format='json').data, {'marked': 1})
+
+    def test_template_change_changes_text(self):
+        from notifications.models import NotificationTemplate
+        from notifications.services import notify
+        NotificationTemplate.objects.update_or_create(
+            code='deal_confirmed', defaults={'title': 'Готово: {listing}', 'text': 'Т'})
+        with self.captureOnCommitCallbacks(execute=False):
+            notify(self.user.pk, 'deal_confirmed', {'listing': 'BMW X5 2019'})
+        self.assertEqual(Notification.objects.get(user=self.user).title, 'Готово: BMW X5 2019')
+
+    def test_broken_template_falls_back_and_logs(self):
+        from notifications.models import NotificationTemplate
+        from notifications.services import notify
+        NotificationTemplate.objects.update_or_create(
+            code='deal_confirmed', defaults={'title': 'Біда {unknown} {listing.__class__}', 'text': ''})
+        with self.assertLogs('notifications.services', level='ERROR'), \
+                self.captureOnCommitCallbacks(execute=False):
+            notify(self.user.pk, 'deal_confirmed', {'listing': 'BMW X5 2019'})
+        self.assertEqual(Notification.objects.get(user=self.user).title, 'Угоду підтверджено')

@@ -1821,6 +1821,8 @@ paths:
   /api/v1/messages/conversations/:
     get:
       operationId: v1_messages_conversations_list
+      description: Фиксированное число запросов независимо от числа диалогов (06-Q6,
+        E4).
       tags:
       - v1
       security:
@@ -1839,6 +1841,11 @@ paths:
     get:
       operationId: v1_messages_conversations_retrieve
       parameters:
+      - in: query
+        name: before
+        schema:
+          type: integer
+        description: 'id сообщения: порция более ранних'
       - in: path
         name: id
         schema:
@@ -1948,7 +1955,7 @@ paths:
           description: No response body
   /api/v1/notifications/:
     get:
-      operationId: v1_notifications_retrieve
+      operationId: v1_notifications_list
       tags:
       - v1
       security:
@@ -1956,19 +1963,41 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+          description: ''
   /api/v1/notifications/mark-read/:
     post:
       operationId: v1_notifications_mark_read_create
-      description: 'Body: {id: <int>} or {all: true}'
+      description: 'Body: {id: <int>} or {all: true}. Ответ {"marked": <число отмеченных>}
+        (06-Q8, E7).'
       tags:
       - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
       security:
       - jwtAuth: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkReadResult'
+          description: ''
   /api/v1/notifications/unread-count/:
     get:
       operationId: v1_notifications_unread_count_retrieve
@@ -3133,6 +3162,9 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
+        has_earlier:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3142,6 +3174,7 @@ components:
           format: date-time
       required:
       - created_at
+      - has_earlier
       - id
       - messages
       - participants
@@ -3169,7 +3202,7 @@ components:
           type: string
           format: date-time
         unread_count:
-          type: string
+          type: integer
           readOnly: true
       required:
       - id
@@ -4455,6 +4488,22 @@ components:
           format: uri
           minLength: 1
           description: URL лота на Copart/IAAI для Apify-импорта
+    MarkReadRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        all:
+          type: boolean
+          default: false
+    MarkReadResult:
+      type: object
+      properties:
+        marked:
+          type: integer
+      required:
+      - marked
     MemberTypeEnum:
       enum:
       - public
@@ -4502,6 +4551,54 @@ components:
       - month
       - three_months
       - later
+      type: string
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/NotificationTypeEnum'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+        link:
+          type: string
+          readOnly: true
+        is_read:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - is_read
+      - link
+      - text
+      - title
+      - type
+    NotificationTypeEnum:
+      enum:
+      - new_message
+      - listing_approved
+      - listing_rejected
+      - listing_expiring
+      - saved_search_match
+      - deal_proposed
+      - deal_confirmed
+      - deal_cancelled
+      - review_received
+      - new_lead
+      - lead_undelivered
       type: string
     PaginatedBrokerLeadListList:
       type: object

@@ -530,7 +530,7 @@ class TestImportedConversationsVisibility(TestCase):
     def _ids(self, user):
         resp = auth_client(user).get(CONVERSATIONS_URL)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        return [c['id'] for c in resp.data]
+        return [c['id'] for c in resp.data['results']]  # 4.7: список пагинирован
 
     def test_broker_sees_imported_conversation(self):
         self.assertEqual(self._ids(self.broker), [self.conv.pk])
@@ -578,7 +578,8 @@ class TestImportedConversationNotifications(TestCase):
         make_dealer()
         buyer = make_user()
         listing = make_listing(make_vehicle(), make_user())
-        with mock.patch('integrations.tasks.send_notification') as task:
+        # 4.7: Telegram уходит после коммита (transaction.on_commit).
+        with mock.patch('integrations.tasks.send_notification') as task, self.captureOnCommitCallbacks(execute=True):
             get_or_create_conversation(buyer, 'imported', listing.pk, 'Привіт')
         recipients = [c.args[0] for c in task.delay.call_args_list]
         self.assertCountEqual(recipients, [broker.pk, admin.pk])

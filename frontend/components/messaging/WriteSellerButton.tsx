@@ -6,6 +6,7 @@ import { startConversation } from '@/api/messages';
 import Modal from '@/components/ui/Modal';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { isEmailNotVerified } from '@/lib/email-verify';
+import { ApiError, getErrorMessage } from '@/lib/errors';
 
 interface Props {
   listingType: 'local' | 'imported';
@@ -45,8 +46,12 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
         setLoading(false);
         return;
       }
-      const err = e as { data?: { detail?: string } };
-      setError(err?.data?.detail ?? 'Помилка. Спробуйте ще раз.');
+      // 4.7: антиспам (400 {text}), ліміт 429, причина сервера; введений текст не губиться.
+      const data = e instanceof ApiError ? (e.data as { text?: string[]; detail?: string } | null) : null;
+      if (e instanceof ApiError && e.status === 429) setError('Забагато повідомлень, зачекайте');
+      else if (data?.text?.length) setError(data.text.join(' '));
+      else if (e instanceof ApiError && e.status < 500 && typeof data?.detail === 'string') setError(data.detail);
+      else setError(getErrorMessage(e));
       setLoading(false);
     }
   };
