@@ -166,6 +166,9 @@ def check_flags() -> list:
         findings.append(Finding(WARNING, 'PAYMENTS_ENABLED=true (режим розробки)'))
     else:
         findings.append(Finding(OK, 'PAYMENTS_ENABLED=false'))
+    if os.environ.get('E2E_SEED_ALLOWED', '').strip().lower() == 'true' and prod:
+        findings.append(Finding(ERROR, 'E2E_SEED_ALLOWED=true: дозвіл e2e_seed і послаблення лімітів лише для e2e-стека, '
+                                       'на сервері його треба прибрати з .env (задача 9.58)'))
     if getattr(settings, 'E2E_RELAX_THROTTLES_REQUESTED', False) and prod:
         findings.append(Finding(ERROR, 'E2E_RELAX_THROTTLES=true: прапорець послаблення лімітів лише для e2e-стека, '
                                        'на сервері його треба прибрати з .env (задача 9.58)'))

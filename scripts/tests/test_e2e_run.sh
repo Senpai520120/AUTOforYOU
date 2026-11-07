@@ -25,6 +25,7 @@ cat > "$EXAMPLE" << 'EOF'
 # COMMENTED_KEY=1
 POSTGRES_PASSWORD=e2e_local_db_pass
 SECRET_KEY=
+# пустое значение: ключ есть, сверка смотрит только на ключи
 E2E_RELAX_THROTTLES=true
 E2E_SEED_ALLOWED=true
 
@@ -37,6 +38,7 @@ run() { local rc=0 out; out=$(check_env_keys "$1" "$2" 2>&1) || rc=$?; echo "$rc
 cat > "$ENVF" << 'EOF'
 POSTGRES_PASSWORD=другой
 SECRET_KEY=
+# пустое значение: ключ есть, сверка смотрит только на ключи
 E2E_RELAX_THROTTLES=false
 E2E_SEED_ALLOWED=true
 LOGIN_MAX_FAILURES=9
