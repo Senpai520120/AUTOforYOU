@@ -166,6 +166,11 @@ def check_flags() -> list:
         findings.append(Finding(WARNING, 'PAYMENTS_ENABLED=true (режим розробки)'))
     else:
         findings.append(Finding(OK, 'PAYMENTS_ENABLED=false'))
+    if getattr(settings, 'E2E_RELAX_THROTTLES_REQUESTED', False) and prod:
+        findings.append(Finding(ERROR, 'E2E_RELAX_THROTTLES=true: прапорець послаблення лімітів лише для e2e-стека, '
+                                       'на сервері його треба прибрати з .env (задача 9.58)'))
+    elif getattr(settings, 'E2E_RELAX_THROTTLES_REQUESTED', False):
+        findings.append(Finding(WARNING, 'E2E_RELAX_THROTTLES=true (режим розробки): ліміти послаблено'))
     if _flag('PAYMENTS_LEGACY_CHECKOUT_ENABLED') and prod:
         findings.append(Finding(ERROR, 'PAYMENTS_LEGACY_CHECKOUT_ENABLED=true: старий checkout (сума від клієнта) '
                                        'має бути закритий (знахідка F2, задача 1.15)'))

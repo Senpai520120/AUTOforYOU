@@ -155,6 +155,7 @@
 - [ ] `THROTTLE_DATA_EXPORT_RATE` — можно не трогать (задача 1.8, выгрузка данных профиля).
 - [ ] `OIDC_ENABLED` — вход через SSO (Keycloak + AD, задача SSO-1). На запуске **`false`**, если своего Keycloak нет. Включаете — задайте все: `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` (секрет, никому не показывать), `OIDC_BROWSER_URL`, `OIDC_BACKEND_URL` (пусто = как браузерный), `OIDC_ISSUER` (пусто = браузерный), `OIDC_REDIRECT_URI=https://<домен>/api/v1/auth/oidc/callback/`, `OIDC_POST_LOGOUT_REDIRECT_URI=https://<домен>/`. `OIDC_CREATE_USERS` — только `false` (иначе ошибка старта). Привилегированных связать `manage.py link_oidc_user <email>=<sub>`. *Проверка:* README, раздел «Вхід через SSO».
 - [ ] `E2E_SEED_ALLOWED` — **на проде не задавать** (или `false`) (задача 0.4). *Проверка:* `docker compose exec backend python manage.py e2e_seed` на проде падает с `CommandError`. `E2E_PASSWORD` на проде не нужен.
+- [ ] `E2E_RELAX_THROTTLES` — **на проде не задавать** (или `false`) (задача 9.58): один флаг ослабляет лимиты DRF только для e2e-стека (работает лишь при `E2E_SEED_ALLOWED=true`). `launch_check` сообщает об ошибке, если он включён. *Проверка:* `grep E2E_RELAX_THROTTLES .env` на сервере ничего не показывает или показывает `false`; `python manage.py launch_check` без этой ошибки.
 
 ### 2.2. База данных, кэш, очереди
 

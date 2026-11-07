@@ -108,7 +108,7 @@ run_quiet() {
 
 check_shell_tests() {
     local bad=0 t
-    for t in test_backup_rotation test_deploy test_check_memory; do
+    for t in test_backup_rotation test_deploy test_check_memory test_e2e_run; do
         echo "-- $t"
         if is_windows; then
             need_docker || return 1

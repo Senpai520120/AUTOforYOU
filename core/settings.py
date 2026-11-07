@@ -382,6 +382,14 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
+# 9.58: один флаг для e2e-стека вместо набора THROTTLE_*_RATE; действует только при E2E_SEED_ALLOWED=true.
+# E2E_RELAX_THROTTLES_REQUESTED нужен launch_check: на проде флаг не должен быть включён даже «вхолостую».
+from core.throttle_relax import relax_rates, relax_requested  # noqa: E402
+
+E2E_RELAX_THROTTLES_REQUESTED = relax_requested(os.environ)
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], E2E_RELAX_THROTTLES = relax_rates(
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], os.environ)
+
 # 01-S15: схема и Swagger/Redoc в проде только для admin-роли; API_DOCS_PUBLIC=true открывает всем.
 API_DOCS_PUBLIC = os.environ.get('API_DOCS_PUBLIC', 'false').lower() in ('true', '1', 'yes')
 SPECTACULAR_SETTINGS = {

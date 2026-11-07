@@ -121,6 +121,17 @@ npx playwright test
 | `npm run test:e2e:report` | HTML-звіт останнього прогону |
 | `npm run test:e2e:codegen` | Запис дій у код |
 
+### Запуск e2e однією командою (задача 9.58)
+
+```powershell
+scripts\e2e-run.ps1 e2e/lead.spec.ts --project=chromium     # PowerShell (потрібен Git Bash)
+./scripts/e2e-run.sh --grep @smoke                             # Git Bash / Linux
+```
+
+Скрипт звіряє ключі `.env.e2e` із `.env.e2e.example` (друкує лише назви відсутніх ключів, не значення; одноразово `cp .env.e2e.example .env.e2e`), зупиняє dev-стек `docker compose down` **без `-v`**, піднімає e2e-стек, робить `FLUSHALL` і `e2e_seed`, запускає Playwright з вашими аргументами (`E2E_PASSWORD` береться з `.env.e2e`, не друкується), а потім завжди (навіть після падіння) виконує `scripts/e2e-cleanup.sh` і `docker compose up -d --scale bot=0`. Код повернення — код Playwright (`2` — не вистачає ключів у `.env.e2e`).
+
+Ліміти DRF у e2e-стеку послаблює один прапорець `E2E_RELAX_THROTTLES=true` у `.env.e2e.example` (діє лише разом з `E2E_SEED_ALLOWED=true`; не послаблює блокування входу `LOGIN_*` і ліміт `client_errors`). На сервері його не вмикати: `launch_check` повідомить про помилку.
+
 ### E2E-стек (окремий compose-проект)
 
 Боєвий `.env` не використовується: беремо `.env.docker.example` + `E2E_SEED_ALLOWED=true`, `SECURE_SSL_REDIRECT=false` (у стека немає TLS, інакше API редіректить на https), `E2E_PASSWORD=<випадковий>` (лише для тестового стека).
