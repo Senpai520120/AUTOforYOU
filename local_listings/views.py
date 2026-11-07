@@ -17,7 +17,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, serializers, status
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -25,7 +25,7 @@ from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from core.c2c import payments_enabled
-from core.uploads import ImageUploadError, max_bytes_from_setting, sanitize_image
+from core.uploads import ImageUploadError, allowed_formats, max_bytes_from_setting, sanitize_image
 from integrations.services import decode_vin
 from integrations.validators import normalize_vin
 from metrics.models import MetricKey
@@ -207,6 +207,52 @@ class MyListingsView(generics.ListAPIView):
 
     def get_queryset(self):
         return _base_queryset().filter(owner=self.request.user).order_by('-created_at')
+
+
+@extend_schema(
+    tags=['local'],
+    summary='Моє оголошення (для редагування)',
+    description='Оголошення власника в будь-якому статусі разом із його телефоном (10-Q1). '
+                'Чужим - 404, анониму - 401. Модератор бачить будь-яке.',
+)
+class MyListingDetailView(generics.RetrieveAPIView):
+    serializer_class = LocalListingOwnerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.has_perm('local_listings.moderate_locallisting'):
+            return _base_queryset()
+        return _base_queryset().filter(owner=user)
+
+
+class LocalConfigSerializer(serializers.Serializer):
+    max_photos = serializers.IntegerField()
+    photo_max_size_mb = serializers.FloatField()
+    allowed_types = serializers.ListField(child=serializers.CharField())
+    max_active_listings = serializers.IntegerField()
+    posting_open = serializers.BooleanField()
+
+
+@extend_schema(
+    tags=['local'],
+    summary='Ліміти форми оголошення',
+    description='Ліміти фото й оголошень з налаштувань сервера (фронт не хардкодить). posting_open - чи може '
+                'поточний користувач подавати оголошення (флаг C2C_PUBLIC_POSTING_ENABLED або staff).',
+    responses=LocalConfigSerializer,
+)
+class LocalConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        max_bytes = max_bytes_from_setting('LOCAL_LISTING_PHOTO_MAX_SIZE_MB')
+        return Response({
+            'max_photos': int(settings.LOCAL_LISTING_MAX_PHOTOS),
+            'photo_max_size_mb': round(max_bytes / (1024 * 1024), 2),
+            'allowed_types': [f'image/{fmt.lower()}' for fmt in allowed_formats()],
+            'max_active_listings': int(settings.LOCAL_LISTING_MAX_ACTIVE or 0),
+            'posting_open': posting_allowed(request.user),
+        })
 
 
 @extend_schema_view(

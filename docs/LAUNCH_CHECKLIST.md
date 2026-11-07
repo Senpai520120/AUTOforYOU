@@ -533,7 +533,7 @@
 
 Значения по умолчанию рабочие; подтвердите или измените (переменные — раздел 2.11).
 
-- [ ] **Лимиты объявлений:** `LOCAL_LISTING_MAX_ACTIVE` (10 — лимит бесплатных активных объявлений частника), `LOCAL_LISTING_MAX_PHOTOS` (15), `LOCAL_LISTING_PHOTO_MAX_SIZE_MB` (8), `LOCAL_LISTING_MIN_PHOTOS` (1), `LOCAL_LISTING_DESCRIPTION_MAX`.
+- [ ] **Лимиты объявлений:** `LOCAL_LISTING_MAX_ACTIVE` (10 — лимит бесплатных активных объявлений частника), `LOCAL_LISTING_MAX_PHOTOS` (15), `LOCAL_LISTING_PHOTO_MAX_SIZE_MB` (8), `LOCAL_LISTING_MIN_PHOTOS` (1), `LOCAL_LISTING_DESCRIPTION_MAX`. Фронт берёт лимиты фото и объявлений из `GET /api/v1/local/config/` — после смены значений пересборка фронта не нужна (задача 4.2). Лимит активных не действует на admin/модератора/внутренний staff (засев), но действует на брокера.
 - [ ] **Срок публикации 60 дней** (решение владельца) — настройка админки (`LOCAL_LISTING_EXPIRY_DAYS`, если остаётся в `.env` — значение 60), отсчёт от одобрения.
 - [ ] **Продление бесплатное** — `LISTING_FREE_RENEWALS` (0 = без лимита, платных продлений нет).
 - [ ] **Пороги напоминаний** — за N дней до окончания (`LOCAL_LISTING_EXPIRY_WARN_DAYS`, сейчас 3) и в день окончания (`LISTING_EXPIRY_REMIND_ON_DAY`).

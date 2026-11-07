@@ -26,6 +26,7 @@ from tests.factories import (
     auth_client,
     make_local_listing,
     make_moderator,
+    make_region_city,
     make_staff,
     make_user,
     nhtsa_response,
@@ -1428,3 +1429,181 @@ class TestModerationRaceWithBlock(APITestCase):
             approve_listing(listing, make_moderator())
         listing.refresh_from_db()
         self.assertEqual(listing.status, LocalListing.Status.PENDING)
+
+
+# ─── Задача 4.2: форма объявления ─────────────────────────────────────────────
+
+@override_settings(C2C_PUBLIC_POSTING_ENABLED=True)
+class TestListingForm42(APITestCase):
+    PHONE = '+380501112233'
+
+    def setUp(self):
+        cache.clear()
+        self.owner = make_user()
+        self.listing = make_local_listing(self.owner, status=LocalListing.Status.ACTIVE,
+                                          price='15000', contact_phone=self.PHONE, description='Гарне авто')
+        self.url = f'/api/v1/local/listings/{self.listing.pk}/'
+        self.client_owner = auth_client(self.owner)
+
+    def _patch(self, data):
+        return self.client_owner.patch(self.url, data, format='json')
+
+    # 10-Q1
+    def test_patch_without_phone_keeps_phone(self):
+        resp = self._patch({'price': '16000'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.contact_phone, self.PHONE)
+
+    def test_patch_empty_phone_rejected(self):
+        resp = self._patch({'contact_phone': ''})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('contact_phone', resp.json())
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.contact_phone, self.PHONE)
+
+    def test_patch_garbage_phone_rejected(self):
+        resp = self._patch({'contact_phone': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('contact_phone', resp.json())
+
+    def test_patch_local_phone_format_accepted(self):
+        resp = self._patch({'contact_phone': '0671234567'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_owner_detail_returns_phone(self):
+        resp = self.client_owner.get(f'/api/v1/local/my-listings/{self.listing.pk}/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.json()['contact_phone'], self.PHONE)
+
+    def test_owner_detail_hidden_from_others(self):
+        resp = auth_client(make_user()).get(f'/api/v1/local/my-listings/{self.listing.pk}/')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_owner_detail_anonymous_401(self):
+        resp = APIClient().get(f'/api/v1/local/my-listings/{self.listing.pk}/')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_public_detail_hides_phone_even_for_owner(self):
+        resp = self.client_owner.get(self.url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIsNone(resp.json()['contact_phone'])
+
+    # 10-Q3
+    def test_phone_only_change_keeps_active(self):
+        self._patch({'contact_phone': '+380671234567'})
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.ACTIVE)
+
+    def test_same_values_keep_active(self):
+        self._patch({'make': 'Toyota', 'model': 'Camry', 'year': 2020, 'price': '15000.00',
+                     'description': '  Гарне авто  ', 'contact_phone': self.PHONE})
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.ACTIVE)
+
+    def test_changed_price_goes_to_pending(self):
+        self._patch({'price': '15500'})
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.PENDING)
+
+    # 05-Q10
+    def test_is_owner_flag(self):
+        self.assertTrue(self.client_owner.get(self.url).json()['is_owner'])
+        self.assertFalse(auth_client(make_user()).get(self.url).json()['is_owner'])
+        self.assertFalse(APIClient().get(self.url).json()['is_owner'])
+
+    # 10-Q4
+    @override_settings(ANTISPAM_MODE='hard')
+    def test_create_with_contact_in_description_field_error(self):
+        region, city = make_region_city()
+        resp = auth_client(make_user()).post('/api/v1/local/listings/', {
+            'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
+            'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+            'description': 'Дзвоніть +380501234567', 'contact_phone': self.PHONE,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('description', resp.json())
+
+    @override_settings(LOCAL_LISTING_MAX_ACTIVE=1)
+    def test_active_limit_is_non_field_error(self):
+        region, city = make_region_city()
+        resp = self.client_owner.post('/api/v1/local/listings/', {
+            'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
+            'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('ліміт', resp.json()['non_field_errors'][0])
+
+    @override_settings(LOCAL_LISTING_MAX_ACTIVE=1)
+    def test_active_limit_not_applied_to_staff(self):
+        staff = make_staff()
+        make_local_listing(staff)
+        region, city = make_region_city()
+        resp = auth_client(staff).post('/api/v1/local/listings/', {
+            'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
+            'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+
+class TestLocalConfig42(APITestCase):
+
+    @override_settings(LOCAL_LISTING_MAX_PHOTOS=7, LOCAL_LISTING_PHOTO_MAX_SIZE_MB=3, LOCAL_LISTING_MAX_ACTIVE=4,
+                       C2C_PUBLIC_POSTING_ENABLED=False)
+    def test_config_values_and_posting_flag(self):
+        data = APIClient().get('/api/v1/local/config/').json()
+        self.assertEqual(data['max_photos'], 7)
+        self.assertEqual(data['photo_max_size_mb'], 3)
+        self.assertEqual(data['max_active_listings'], 4)
+        self.assertIn('image/jpeg', data['allowed_types'])
+        self.assertFalse(data['posting_open'])
+        self.assertFalse(auth_client(make_user()).get('/api/v1/local/config/').json()['posting_open'])
+        self.assertTrue(auth_client(make_staff()).get('/api/v1/local/config/').json()['posting_open'])
+
+    @override_settings(C2C_PUBLIC_POSTING_ENABLED=True)
+    def test_posting_open_when_flag_on(self):
+        self.assertTrue(auth_client(make_user()).get('/api/v1/local/config/').json()['posting_open'])
+
+
+@override_settings(C2C_PUBLIC_POSTING_ENABLED=True)
+class TestListingForm42Review(APITestCase):
+    """Ревью 4.2: права owner-эндпоинта, currency существенна, лимит для брокера."""
+
+    def setUp(self):
+        cache.clear()
+        self.listing = make_local_listing(make_user(), contact_phone='+380501112233', currency='UAH')
+        self.url = f'/api/v1/local/my-listings/{self.listing.pk}/'
+
+    def test_moderator_sees_foreign_listing_with_phone(self):
+        resp = auth_client(make_moderator()).get(self.url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.json()['contact_phone'], '+380501112233')
+
+    def test_broker_and_plain_staff_get_404(self):
+        from tests.factories import make_broker
+        self.assertEqual(auth_client(make_broker()).get(self.url).status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(auth_client(make_staff()).get(self.url).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_currency_change_goes_to_pending(self):
+        resp = auth_client(self.listing.owner).patch(
+            f'/api/v1/local/listings/{self.listing.pk}/', {'currency': 'USD'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.PENDING)
+
+    @override_settings(LOCAL_LISTING_MAX_ACTIVE=1)
+    def test_broker_is_limited(self):
+        from tests.factories import make_broker
+        broker = make_broker()
+        make_local_listing(broker)
+        region, city = make_region_city()
+        resp = auth_client(broker).post('/api/v1/local/listings/', {
+            'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
+            'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('non_field_errors', resp.json())

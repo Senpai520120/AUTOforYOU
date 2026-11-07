@@ -148,6 +148,7 @@ class TestEveryWriteEndpointHasPostingPermission(TestCase):
 
     NOT_POSTING = {
         'local-listing-contact', 'local-listing-promote', 'local-my-listings', 'local-tariffs',
+        'local-my-listing-detail', 'local-config',  # только чтение (4.2)
         'local-regions', 'local-cities', 'local-vin-prefill',  # vin-prefill проверяет posting_allowed внутри get()
     }
     WRITE_VIEWS = {

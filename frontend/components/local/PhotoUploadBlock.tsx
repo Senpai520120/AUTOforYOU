@@ -2,15 +2,18 @@
 import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { localApi } from '@/api/local';
-import { LocalListingImage } from '@/lib/types';
+import { LocalConfig, LocalListingImage } from '@/lib/types';
+import { ApiError, firstDataMessage } from '@/lib/errors';
+import { checkPhotos, photoHint } from './photo-limits';
 
 interface Props {
   listingId: number;
+  config: LocalConfig;
   initial?: LocalListingImage[];
   onChange?: (imgs: LocalListingImage[]) => void;
 }
 
-export default function PhotoUploadBlock({ listingId, initial = [], onChange }: Props) {
+export default function PhotoUploadBlock({ listingId, config, initial = [], onChange }: Props) {
   const [images, setImages] = useState<LocalListingImage[]>(initial);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -22,17 +25,19 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
   }
 
   async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    setError('');
+    const { accepted, error: checkError } = checkPhotos(Array.from(e.target.files ?? []), config, images.length);
+    setError(checkError);
+    if (!accepted.length) {
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
     setUploading(true);
     try {
-      const created = await localApi.uploadImages(listingId, files);
+      const created = await localApi.uploadImages(listingId, accepted);
       update([...images, ...created]);
     } catch (err: unknown) {
-      const apiErr = err as { data?: { detail?: string | string[] } };
-      const detail = apiErr?.data?.detail;
-      setError(Array.isArray(detail) ? detail.join(' ') : (detail ?? 'Помилка завантаження.'));
+      const fromServer = err instanceof ApiError && err.status < 500 ? firstDataMessage(err.data) : null;
+      setError(fromServer ?? 'Помилка завантаження.');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -64,12 +69,12 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-slate-700">
-          Фото ({images.length}/15)
+          Фото ({photoHint(config, images.length)})
         </p>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          disabled={uploading || images.length >= 15}
+          disabled={uploading || images.length >= config.max_photos}
           className="text-sm bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors"
         >
           {uploading ? 'Завантаження...' : '+ Додати фото'}
@@ -77,7 +82,7 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={config.allowed_types.join(',')}
           multiple
           className="hidden"
           onChange={handleFiles}
@@ -85,19 +90,20 @@ export default function PhotoUploadBlock({ listingId, initial = [], onChange }: 
       </div>
 
       {error && (
-        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           {error}
         </p>
       )}
 
       {images.length === 0 ? (
-        <div
+        <button
+          type="button"
           onClick={() => inputRef.current?.click()}
-          className="border-2 border-dashed border-slate-200 rounded-xl h-32 flex flex-col items-center justify-center gap-2 text-slate-400 cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
+          className="w-full border-2 border-dashed border-slate-200 rounded-xl h-32 flex flex-col items-center justify-center gap-2 text-slate-400 cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
         >
           <span className="text-3xl" aria-hidden="true">📷</span>
-          <span className="text-sm">Клацніть або перетягніть фото (jpg/png/webp, до 8 МБ)</span>
-        </div>
+          <span className="text-sm">Клацніть, щоб додати фото ({photoHint(config, 0).split(' · ').slice(1).join(', ')})</span>
+        </button>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {images.map((img, idx) => (

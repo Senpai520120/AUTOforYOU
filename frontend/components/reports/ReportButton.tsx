@@ -4,6 +4,7 @@ import Modal from '@/components/ui/Modal';
 import { useAuth } from '@/lib/auth-context';
 import { reportsApi } from '@/api/reports';
 import { ReportReason } from '@/lib/types';
+import { ApiError, firstDataMessage, getErrorMessage } from '@/lib/errors';
 
 interface Props {
   listingId?: number;
@@ -46,8 +47,9 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
       });
       setDone(true);
     } catch (err: unknown) {
-      const msg = (err as { detail?: string })?.detail || 'Не вдалося подати скаргу.';
-      setError(msg);
+      // 10-Q6: причина відмови сервера з err.data (detail, non_field_errors, перше поле).
+      const fromServer = err instanceof ApiError && err.status < 500 ? firstDataMessage(err.data) : null;
+      setError(fromServer ?? (err instanceof ApiError ? getErrorMessage(err) : 'Не вдалося подати скаргу.'));
     } finally {
       setLoading(false);
     }

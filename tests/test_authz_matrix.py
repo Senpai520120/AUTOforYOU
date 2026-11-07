@@ -94,6 +94,7 @@ PUBLIC = {
     'local-vin-prefill': 'подсказка по VIN',
     'local-regions': 'справочник',
     'local-cities': 'справочник',
+    'local-config': 'лимиты формы объявления из настроек (4.2), без ПДн',
     'seller-rating': 'публичный рейтинг, 404 без активных объявлений (06-S12)',
     'site-settings': 'публичные настройки сайта',
     'content-how-it-works': 'публичные тексты «Як працює пригон» (2.13): только активные записи, без служебных полей',
@@ -351,6 +352,9 @@ MATRIX: list[Case] = [
          state=st_payments, roles={'broker': 403, 'staff': 403, 'moderator': 400},
          note='пустой tariff: права пройдены (400), платёж не создаётся; 201 - local_listings.tests'),
     Case('local-my-listings', 'get', other=200, ids=_ids('listing', 'listing_pending')),
+    Case('local-my-listing-detail', 'get', kwargs=lambda c: {'pk': c.listing_pending}, other=404,
+         roles={'broker': 404, 'staff': 404, 'moderator': 200},
+         note='своё объявление с телефоном для редактирования (4.2); модератор - по праву moderate'),
 
     # ---- прочее ----------------------------------------------------------------------
     Case('vin-report', 'get', kwargs=lambda c: {'vin': 'SHORT'}, owner_code=400, other=400, csrf=False,

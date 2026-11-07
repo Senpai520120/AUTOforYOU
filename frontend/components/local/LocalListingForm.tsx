@@ -5,10 +5,70 @@ import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { isEmailNotVerified } from '@/lib/email-verify';
-import { Region, City, LocalListing, LocalListingImage } from '@/lib/types';
+import { Region, City, LocalConfig, LocalListing } from '@/lib/types';
+import { ApiError, getErrorMessage } from '@/lib/errors';
+import { getAttribution } from '@/lib/attribution';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingState from '@/components/ui/LoadingState';
 import PhotoUploadBlock from './PhotoUploadBlock';
+import { checkPhotos, photoHint } from './photo-limits';
+
+/** Поля з місцем для помилки у формі; решта ключів відповіді — у загальному блоці з назвою поля. */
+const FIELD_LABELS: Record<string, string> = {
+  make: 'Марка', model: 'Модель', year: 'Рік', mileage_km: 'Пробіг', engine_cc: "Об'єм двигуна",
+  fuel_type: 'Тип палива', transmission: 'КПП', body_type: 'Тип кузова', condition: 'Стан',
+  price: 'Ціна', currency: 'Валюта', price_type: 'Тип ціни', region: 'Область', city: 'Місто',
+  description: 'Опис', contact_phone: 'Телефон', agreed_to_rules: 'Правила', seller_type: 'Тип продавця',
+  images: 'Фото',
+};
+const INLINE_FIELDS = new Set([
+  'make', 'model', 'year', 'mileage_km', 'engine_cc', 'price', 'region', 'city',
+  'description', 'contact_phone', 'agreed_to_rules',
+]);
+
+function joinMessages(v: unknown): string {
+  if (Array.isArray(v)) return v.map(joinMessages).filter(Boolean).join(' ');
+  if (v && typeof v === 'object') return Object.values(v as Record<string, unknown>).map(joinMessages).join(' ');
+  return v == null ? '' : String(v);
+}
+
+/** 10-Q4: будь-яка відповідь з помилкою стає видимою — поле, загальний блок або текст статусу. */
+function mapFormErrors(err: unknown): Record<string, string> {
+  if (!(err instanceof ApiError)) return { _general: getErrorMessage(err) };
+  if (err.status === 429) return { _general: 'Забагато спроб. Спробуйте за кілька хвилин' };
+  if (err.status >= 500) return { _general: getErrorMessage(err) };
+  const data = err.data;
+  if (Array.isArray(data) || typeof data === 'string') {
+    return { _general: joinMessages(data) || getErrorMessage(err) };
+  }
+  if (!data || typeof data !== 'object') return { _general: getErrorMessage(err) };
+  const mapped: Record<string, string> = {};
+  const general: string[] = [];
+  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+    const text = joinMessages(v);
+    if (!text) continue;
+    if (INLINE_FIELDS.has(k)) mapped[k] = text;
+    else if (k === 'detail' || k === 'non_field_errors') general.push(text);
+    else general.push(`${FIELD_LABELS[k] ?? k}: ${text}`);
+  }
+  if (general.length) mapped._general = general.join(' ');
+  if (!Object.keys(mapped).length) mapped._general = getErrorMessage(err);
+  return mapped;
+}
+
+/** Лише поля, значення яких відрізняється від початкового (ціна — як число). */
+function diffPayload(payload: Record<string, unknown>, initial: Partial<LocalListing>): Record<string, unknown> {
+  const init = initial as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    const before = init[k];
+    const same = k === 'price'
+      ? Number(v) === Number(before)
+      : String(v ?? '') === String(before ?? '');
+    if (!same) out[k] = v;
+  }
+  return out;
+}
 
 /** Превью файлу: URL створюється один раз на файл і звільняється при видаленні/розмонтуванні. */
 function FileThumb({ file, alt }: { file: File; alt: string }) {
@@ -24,15 +84,18 @@ function FileThumb({ file, alt }: { file: File; alt: string }) {
   return <img src={url} alt={alt} width={160} height={160} className="object-cover w-full h-full" />;
 }
 
-function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void }) {
+function CreateModePhotoPicker({ config, onChange }: { config: LocalConfig; onChange: (files: File[]) => void }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selected = Array.from(e.target.files ?? []);
-    const next = [...files, ...selected].slice(0, 15);
+    const { accepted, error: checkError } = checkPhotos(Array.from(e.target.files ?? []), config, files.length);
+    setError(checkError);
+    const next = [...files, ...accepted];
     setFiles(next);
     onChange(next);
+    e.target.value = '';
   }
 
   function remove(idx: number) {
@@ -47,14 +110,15 @@ function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          disabled={files.length >= 15}
+          disabled={files.length >= config.max_photos}
           className="text-sm bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors"
         >
           + Вибрати фото
         </button>
-        <span className="text-xs text-slate-600">{files.length}/15 · jpg/png/webp · до 8 МБ</span>
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={handleChange} />
+        <span className="text-xs text-slate-600">{photoHint(config, files.length)}</span>
+        <input ref={inputRef} type="file" accept={config.allowed_types.join(',')} multiple className="hidden" onChange={handleChange} />
       </div>
+      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
       {files.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {files.map((f, i) => (
@@ -93,6 +157,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsLoaded, setRegionsLoaded] = useState(false);
   const [regionsError, setRegionsError] = useState<unknown>(null);
+  const [config, setConfig] = useState<LocalConfig | null>(null);
   const [cities, setCities] = useState<City[]>([]);
 
   const [make, setMake] = useState(initial?.make ?? '');
@@ -130,7 +195,10 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const loadRegions = useCallback(() => {
     setRegionsError(null);
     setRegionsLoaded(false);
-    localApi.regions().then(setRegions).catch(setRegionsError).finally(() => setRegionsLoaded(true));
+    Promise.all([localApi.regions(), localApi.config()])
+      .then(([r, c]) => { setRegions(r); setConfig(c); })
+      .catch(setRegionsError)
+      .finally(() => setRegionsLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -169,28 +237,38 @@ export default function LocalListingForm({ initial, listingId }: Props) {
     setSubmitting(true);
     setErrors({});
     setNotVerified(false);
-    const payload = {
+    const payload: Record<string, unknown> = {
       make, model, year: Number(year), mileage_km: Number(mileageKm),
       engine_cc: engineCc ? Number(engineCc) : null,
       fuel_type: fuelType, transmission, body_type: bodyType, condition,
       price, currency, price_type: priceType,
       region: Number(region), city: Number(city),
       description, contact_phone: contactPhone,
-      ...(!isEdit ? { agreed_to_rules: agreedToRules } : {}),
     };
     try {
       if (isEdit) {
-        await localApi.update(listingId, payload);
+        // 10-Q3: лише змінені поля — незмінене не відправляє оголошення на повторну модерацію.
+        const changed = diffPayload(payload, initial ?? {});
+        if (Object.keys(changed).length) await localApi.update(listingId, changed);
         router.push(`/local/${listingId}`);
       } else {
-        const created = await localApi.create(payload);
+        const attribution = getAttribution();
+        const created = await localApi.create({
+          ...payload,
+          agreed_to_rules: agreedToRules,
+          ...(Object.keys(attribution).length ? { attribution } : {}),
+        });
         setCreatedListingId(created.id);
         trackEvent('listing_submit', { source: 'listing' });
         if (pendingFiles.length > 0) {
           try {
             await localApi.uploadImages(created.id, pendingFiles);
-          } catch {
-            setPhotoError('Оголошення створено, але фото не завантажились. Додайте їх у «Мої оголошення».');
+          } catch (err: unknown) {
+            // 10-Q5: причина сервера (тип, розмір, ліміт) — на екрані успіху, не перекривається.
+            const text = err instanceof ApiError && err.status < 500
+              ? Object.values(mapFormErrors(err)).join(' ')
+              : getErrorMessage(err);
+            setPhotoError(`Оголошення створено, але фото не завантажились: ${text}`);
           }
         }
         setSubmitted(true);
@@ -201,16 +279,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         setNotVerified(true);
         return;
       }
-      const apiError = err as { data?: Record<string, string[]> };
-      if (apiError?.data) {
-        const mapped: Record<string, string> = {};
-        for (const [k, v] of Object.entries(apiError.data)) {
-          mapped[k] = Array.isArray(v) ? v.join(' ') : String(v);
-        }
-        setErrors(mapped);
-      } else {
-        setErrors({ _general: 'Сталася помилка. Перевірте поля та спробуйте знову.' });
-      }
+      setErrors(mapFormErrors(err));
     } finally {
       setSubmitting(false);
     }
@@ -228,6 +297,14 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         <p className="text-sm text-blue-700 mb-4">
           Ми перевіримо оголошення і опублікуємо його незабаром. Ви отримаєте сповіщення.
         </p>
+        {photoError && (
+          <div role="alert" className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-3 text-sm mb-4 text-left">
+            <p>{photoError}</p>
+            {createdListingId && (
+              <a href={`/local/${createdListingId}/edit`} className="underline font-semibold">Додати фото</a>
+            )}
+          </div>
+        )}
         <a href="/me/local-listings" className="text-blue-700 underline text-sm">
           Переглянути мої оголошення →
         </a>
@@ -237,7 +314,16 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
   // Без списку областей форма не відправиться: показуємо помилку з повтором, а не порожній select.
   if (regionsError) return <ErrorState error={regionsError} onRetry={loadRegions} />;
-  if (!regionsLoaded) return <LoadingState />;
+  if (!regionsLoaded || !config) return <LoadingState />;
+  if (!isEdit && !config.posting_open) {
+    return (
+      <div role="status" className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center">
+        <p className="text-slate-700">
+          Подача оголошень поки доступна лише за запрошенням. Напишіть нам — ми додамо ваше оголошення.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
@@ -288,7 +374,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
         <div>
           <label htmlFor={fid('year')} className={labelCls}>Рік *</label>
-          <input id={fid('year')} aria-invalid={!!errors.year} aria-describedby={errors.year ? fid('err-year') : undefined} className={inputCls} type="number" value={year} onChange={e => setYear(e.target.value)} required placeholder="2020" min={1900} max={2026} />
+          <input id={fid('year')} aria-invalid={!!errors.year} aria-describedby={errors.year ? fid('err-year') : undefined} className={inputCls} type="number" value={year} onChange={e => setYear(e.target.value)} required placeholder="2020" min={1900} max={new Date().getFullYear() + 1} />
           {errors.year && <p id={fid('err-year')} role="alert" className={errCls}>{errors.year}</p>}
         </div>
         <div>
@@ -298,7 +384,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
         <div>
           <label htmlFor={fid('engine_cc')} className={labelCls}>Об&apos;єм двигуна, куб.см</label>
-          <input id={fid('engine_cc')} className={inputCls} type="number" value={engineCc} onChange={e => setEngineCc(e.target.value)} placeholder="2000" min={0} />
+          <input id={fid('engine_cc')} aria-invalid={!!errors.engine_cc} aria-describedby={errors.engine_cc ? fid('err-engine_cc') : undefined} className={inputCls} type="number" value={engineCc} onChange={e => setEngineCc(e.target.value)} placeholder="2000" min={0} />
+          {errors.engine_cc && <p id={fid('err-engine_cc')} role="alert" className={errCls}>{errors.engine_cc}</p>}
         </div>
         <div>
           <label htmlFor={fid('fuel_type')} className={labelCls}>Тип палива *</label>
@@ -395,10 +482,11 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         {isEdit && createdListingId ? (
           <PhotoUploadBlock
             listingId={createdListingId}
+            config={config}
             initial={(initial as LocalListing | undefined)?.images ?? []}
           />
         ) : (
-          <CreateModePhotoPicker onChange={setPendingFiles} />
+          <CreateModePhotoPicker config={config} onChange={setPendingFiles} />
         )}
         {photoError && <p role="alert" className="text-xs text-red-600 mt-1">{photoError}</p>}
       </div>
@@ -410,8 +498,11 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           rows={5}
           value={description}
           onChange={e => setDescription(e.target.value)}
+          aria-invalid={!!errors.description}
+          aria-describedby={errors.description ? fid('err-description') : undefined}
           placeholder="Розкажіть детальніше про автомобіль..."
         />
+        {errors.description && <p id={fid('err-description')} role="alert" className={errCls}>{errors.description}</p>}
       </div>
 
       <div>
@@ -421,8 +512,11 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           type="tel"
           value={contactPhone}
           onChange={e => setContactPhone(e.target.value)}
-          placeholder="+38 050 123 45 67"
+          aria-invalid={!!errors.contact_phone}
+          aria-describedby={errors.contact_phone ? fid('err-contact_phone') : undefined}
+          placeholder="+380501234567"
         />
+        {errors.contact_phone && <p id={fid('err-contact_phone')} role="alert" className={errCls}>{errors.contact_phone}</p>}
         <p className="text-xs text-slate-600 mt-1">Показується тільки авторизованим покупцям</p>
       </div>
 

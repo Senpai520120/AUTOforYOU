@@ -1,4 +1,5 @@
 import datetime
+import re
 
 from django.conf import settings
 from django.utils import timezone
@@ -8,7 +9,11 @@ from rest_framework import serializers
 from users.display import public_display_name
 
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
-from .services import SUBSTANTIVE_FIELDS
+from .permissions import is_staff_or_admin
+from .services import is_substantive_change
+
+PHONE_FORMAT_ERROR = 'Телефон у форматі +380XXXXXXXXX або 0XXXXXXXXX.'
+PHONE_RE = re.compile(r'^(\+380\d{9}|0\d{9})$')
 
 
 def _confirmed_deals(obj) -> int:
@@ -153,6 +158,12 @@ class LocalListingOwnerSerializer(LocalListingDetailSerializer):
     class Meta(LocalListingDetailSerializer.Meta):
         fields = LocalListingDetailSerializer.Meta.fields + ['expiry_warned']
 
+    def to_representation(self, instance):
+        # 10-Q1: владельцу (и модератору) - его телефон; публичный detail по-прежнему отдаёт null.
+        data = super().to_representation(instance)
+        data['contact_phone'] = instance.contact_phone
+        return data
+
 
 def _listing_source(raw) -> dict:
     from core.attribution import clean_attribution
@@ -194,7 +205,27 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         region = attrs.get('region')
         if city and region and city.region_id != region.id:
             raise serializers.ValidationError({'city': 'Місто не належить до вказаної області.'})
+        self._check_active_limit()
         return attrs
+
+    def _check_active_limit(self):
+        """Лимит active + pending (10-Q4: в validate, ответ - non_field_errors). 0 = без лимита.
+
+        На staff не распространяется: в «засеве» объявления вносит staff (решение владельца после промта 02).
+        Брокер - участник рынка, хоть и is_staff: лимит для него действует (ревью 4.2).
+        """
+        max_active = int(getattr(settings, 'LOCAL_LISTING_MAX_ACTIVE', 10) or 0)
+        owner = self.context['request'].user
+        if max_active <= 0 or (is_staff_or_admin(owner) and not owner.is_broker):
+            return
+        active_count = LocalListing.objects.filter(
+            owner=owner, status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+        ).count()
+        if active_count >= max_active:
+            raise serializers.ValidationError(
+                f'Досягнуто ліміт активних оголошень ({max_active}). '
+                f'Закрийте або видаліть існуючі перед подачею нового.'
+            )
 
     def validate_seller_type(self, value):
         # 05-Q22: статус «дилер» самостійно не обирається - тільки верифікований дилер.
@@ -221,19 +252,7 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
 
         agreed = validated_data.pop('agreed_to_rules')
         validated_data.update(_listing_source(validated_data.pop('attribution', None)))
-        max_active = getattr(settings, 'LOCAL_LISTING_MAX_ACTIVE', 10)
         owner = self.context['request'].user
-
-        # Рахуємо active + pending (щоб уникнути обходу ліміту через spam pending)
-        active_count = LocalListing.objects.filter(
-            owner=owner,
-            status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
-        ).count()
-        if active_count >= max_active:
-            raise serializers.ValidationError(
-                f'Досягнуто ліміт активних оголошень ({max_active}). '
-                f'Закрийте або видаліть існуючі перед подачею нового.'
-            )
 
         validated_data['owner'] = owner
         validated_data['status'] = LocalListing.Status.PENDING
@@ -272,6 +291,15 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'city': 'Місто не належить до вказаної області.'})
         return attrs
 
+    def validate_contact_phone(self, value):
+        # 10-Q1: телефон не затирается пустой строкой; отсутствие поля в PATCH его не меняет.
+        value = (value or '').strip().replace(' ', '')
+        if not value:
+            raise serializers.ValidationError("Вкажіть телефон для зв'язку.")
+        if not PHONE_RE.match(value):
+            raise serializers.ValidationError(PHONE_FORMAT_ERROR)
+        return value
+
     def validate_status(self, value):
         # Власник може тільки знімати/продавати — не модерувати
         allowed_owner = {LocalListing.Status.HIDDEN, LocalListing.Status.SOLD}
@@ -285,7 +313,7 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         from .antispam import detect_contacts
 
         current_status = instance.status
-        substantive_changed = bool(SUBSTANTIVE_FIELDS & set(validated_data.keys()))
+        substantive_changed = is_substantive_change(instance, validated_data)
 
         # Суттєва правка active → ремодерація
         if substantive_changed and current_status == LocalListing.Status.ACTIVE:

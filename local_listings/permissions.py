@@ -11,7 +11,7 @@ Write-эндпоинты подачи (Grep по local_listings/urls.py), на �
 - PATCH/DELETE listings/<pk>/images/<id>/ LocalListingImageDetailView  - главное фото, удаление фото
 - GET   vin-prefill/<vin>/                VinPrefillView               - помощник формы подачи (ходит в NHTSA);
                                          публичный (AllowAny), поэтому проверка `posting_allowed` внутри get()
-Не затрагиваются: чтение каталога и карточки, contact, my-listings, tariffs, regions, cities;
+Не затрагиваются: чтение каталога и карточки, contact, my-listings (и my-listings/<pk>/), config, tariffs, regions, cities;
 promote закрыт отдельно (middleware в засеве, PAYMENTS_ENABLED).
 """
 from rest_framework.permissions import SAFE_METHODS, BasePermission

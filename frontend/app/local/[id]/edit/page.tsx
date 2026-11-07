@@ -22,7 +22,8 @@ export default function EditLocalListingPage() {
   const load = useCallback(() => {
     setFetching(true);
     setError(null);
-    localApi.detail(id).then(setListing).catch(setError).finally(() => setFetching(false));
+    // 10-Q1: ендпоінт власника віддає його телефон; чуже оголошення - 404 (10-S5).
+    localApi.ownerDetail(id).then(setListing).catch(setError).finally(() => setFetching(false));
   }, [id]);
 
   useEffect(() => {
@@ -31,11 +32,14 @@ export default function EditLocalListingPage() {
 
   if (loading || !user || fetching) return <LoadingState />;
 
-  if (error instanceof ApiError && error.status === 404) {
-    return <EmptyState title="Оголошення не знайдено" action={{ label: 'До каталогу', href: '/ua' }} />;
-  }
-  if (error instanceof ApiError && error.status === 403) {
-    return <EmptyState title="Немає доступу" hint="Редагувати можна лише власні оголошення." action={{ label: 'Мої оголошення', href: '/me/local-listings' }} />;
+  if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
+    return (
+      <EmptyState
+        title="Оголошення не знайдено або ви не власник"
+        hint="Редагувати можна лише власні оголошення."
+        action={{ label: 'Мої оголошення', href: '/me/local-listings' }}
+      />
+    );
   }
   if (error) return <ErrorState error={error} onRetry={load} />;
   if (!listing) return null;

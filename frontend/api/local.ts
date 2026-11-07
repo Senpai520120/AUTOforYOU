@@ -3,6 +3,7 @@ import {
   LocalListing,
   LocalListingFilters,
   LocalListingImage,
+  LocalConfig,
   PromotionTariff,
   PromoteCheckout,
   PaginatedResponse,
@@ -44,6 +45,13 @@ export const localApi = {
 
   vinPrefill: (vin: string) =>
     apiGet<VinPrefillResult>(`/api/v1/local/vin-prefill/${vin}/`),
+
+  /** Своє оголошення з телефоном - для редагування (10-Q1). Чуже - 404. */
+  ownerDetail: (id: number) =>
+    apiGet<LocalListing>(`/api/v1/local/my-listings/${id}/`),
+
+  config: () =>
+    apiGet<LocalConfig>('/api/v1/local/config/'),
 
   myListings: () =>
     apiGet<PaginatedResponse<LocalListing>>('/api/v1/local/my-listings/'),

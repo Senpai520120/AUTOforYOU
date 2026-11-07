@@ -249,6 +249,15 @@ export interface LocalListingImage {
   is_primary: boolean;
 }
 
+/** Ліміти форми оголошення з сервера: GET /api/v1/local/config/ (задача 4.2). */
+export interface LocalConfig {
+  max_photos: number;
+  photo_max_size_mb: number;
+  allowed_types: string[];
+  max_active_listings: number;
+  posting_open: boolean;
+}
+
 export interface LocalListing {
   id: number;
   make: string;

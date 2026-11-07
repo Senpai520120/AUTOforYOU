@@ -2,11 +2,13 @@
 Сервісний шар для модерації місцевих оголошень.
 
 Суттєві поля (редагування → ремодерація):
-  make, model, year, price, description
+  make, model, year, price, currency, description
 Несуттєві (правка без ремодерації):
-  currency, price_type, contact_phone, mileage_km, engine_cc,
+  price_type, contact_phone, mileage_km, engine_cc,
   fuel_type, transmission, body_type, condition, region, city
 """
+from decimal import Decimal
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -18,7 +20,30 @@ from integrations.email import send_email
 from .models import LocalListing
 
 # Поля, редагування яких повертає active-оголошення на pending (ремодерація)
-SUBSTANTIVE_FIELDS = frozenset({'make', 'model', 'year', 'price', 'description'})
+# currency - тоже: 15000 UAH -> 15000 USD меняет цену в ~40 раз (ревью 4.2).
+SUBSTANTIVE_FIELDS = frozenset({'make', 'model', 'year', 'price', 'currency', 'description'})
+
+
+def _normalized(field, value):
+    if value is None:
+        return None
+    if field == 'price':
+        return Decimal(str(value))
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def is_substantive_change(instance: LocalListing, validated_data: dict) -> bool:
+    """Существенная правка - значение поля из SUBSTANTIVE_FIELDS реально изменилось (10-Q3).
+
+    Сравниваются значения, а не наличие ключей: форма может прислать поле с тем же значением
+    (цена `15000` и `15000.00`, текст с пробелами по краям).
+    """
+    return any(
+        _normalized(field, validated_data[field]) != _normalized(field, getattr(instance, field))
+        for field in SUBSTANTIVE_FIELDS if field in validated_data
+    )
 
 
 def _lock_unchanged(listing: LocalListing):

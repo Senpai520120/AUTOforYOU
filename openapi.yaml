@@ -1339,6 +1339,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListingCreate'
           description: ''
+  /api/v1/local/config/:
+    get:
+      operationId: v1_local_config_retrieve
+      description: Ліміти фото й оголошень з налаштувань сервера (фронт не хардкодить).
+        posting_open - чи може поточний користувач подавати оголошення (флаг C2C_PUBLIC_POSTING_ENABLED
+        або staff).
+      summary: Ліміти форми оголошення
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalConfig'
+          description: ''
   /api/v1/local/listings/:
     get:
       operationId: v1_local_listings_list
@@ -1649,6 +1669,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedLocalListingOwnerList'
+          description: ''
+  /api/v1/local/my-listings/{id}/:
+    get:
+      operationId: v1_local_my_listings_retrieve
+      description: Оголошення власника в будь-якому статусі разом із його телефоном
+        (10-Q1). Чужим - 404, анониму - 401. Модератор бачить будь-яке.
+      summary: Моє оголошення (для редагування)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalListingOwner'
           description: ''
   /api/v1/local/regions/:
     get:
@@ -3569,6 +3613,28 @@ components:
       - UAH
       - EUR
       type: string
+    LocalConfig:
+      type: object
+      properties:
+        max_photos:
+          type: integer
+        photo_max_size_mb:
+          type: number
+          format: double
+        allowed_types:
+          type: array
+          items:
+            type: string
+        max_active_listings:
+          type: integer
+        posting_open:
+          type: boolean
+      required:
+      - allowed_types
+      - max_active_listings
+      - max_photos
+      - photo_max_size_mb
+      - posting_open
     LocalListingCreate:
       type: object
       properties:
