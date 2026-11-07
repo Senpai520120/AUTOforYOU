@@ -1,5 +1,7 @@
 from django.db import models
 
+from core.uploads import SanitizedImageField, UuidUploadTo
+
 
 class Vehicle(models.Model):
     class FuelType(models.TextChoices):
@@ -39,7 +41,8 @@ class Vehicle(models.Model):
 
 class VehicleImage(models.Model):
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='vehicle_photos/', blank=True, null=True)
+    # Тип по содержимому, без EXIF, uuid-имя (задача 1.10, core/uploads.py).
+    image = SanitizedImageField(upload_to=UuidUploadTo('vehicle_photos'), blank=True, null=True)
     # фото в S3 — промт 7 (здесь хранится URL источника до переноса в хранилище)
     source_url = models.CharField(max_length=500, blank=True, verbose_name='URL источника фото')
     is_primary = models.BooleanField(default=False, verbose_name='Главное фото')

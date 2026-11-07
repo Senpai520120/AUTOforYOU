@@ -1,0 +1,23 @@
+# Вход через SSO (Keycloak + AD, задача SSO-1) - ТОЛЬКО для разработки.
+#   docker compose -f docker-compose.yml -f docker-compose.sso.yml up -d --build
+# Раньше нужно поднять стек Users & Roles (D:\Django-application-e2e, ветка feature/active-directory):
+# он создаёт сеть sso-shared, где Keycloak доступен как `keycloak`. Секрет client - OIDC_CLIENT_SECRET в .env.
+services:
+  backend:
+    networks:
+      - default
+      - sso-shared
+    environment:
+      OIDC_ENABLED: "true"
+      OIDC_CLIENT_ID: autoforyou
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?задайте OIDC_CLIENT_SECRET в .env (dev-значение - в README)}
+      # Браузер ходит на localhost:8080, backend - на keycloak:8080; iss в токенах всегда localhost (KC_HOSTNAME).
+      OIDC_BROWSER_URL: http://localhost:8080/realms/myapp
+      OIDC_BACKEND_URL: http://keycloak:8080/realms/myapp
+      OIDC_ISSUER: http://localhost:8080/realms/myapp
+      OIDC_REDIRECT_URI: http://localhost/api/v1/auth/oidc/callback/
+      OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost/
+
+networks:
+  sso-shared:
+    external: true

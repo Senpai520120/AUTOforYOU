@@ -1,4 +1,7 @@
+from django.http import Http404
 from rest_framework import serializers
+
+from core.c2c import c2c_public_posting_enabled
 
 from .models import Report
 
@@ -15,6 +18,10 @@ class ReportCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Вкажіть listing або reported_user.')
         if listing and reported_user:
             raise serializers.ValidationError('Вкажіть тільки одне: або listing, або reported_user.')
+
+        # 6.7: жалоба на C2C-объявление закрыта при выключенном разделе и в засеве (404, как у middleware).
+        if listing and not c2c_public_posting_enabled():
+            raise Http404
 
         reporter = self.context['request'].user
 

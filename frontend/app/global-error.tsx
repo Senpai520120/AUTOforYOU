@@ -1,5 +1,22 @@
 'use client';
 import { useEffect } from 'react';
+import { reportError } from '@/lib/reportError';
+
+// global-error замінює кореневий layout, тож globals.css тут немає: стилі inline (08-Q17).
+const S = {
+  body: {
+    margin: 0, minHeight: '100vh', display: 'flex', flexDirection: 'column' as const, alignItems: 'center',
+    justifyContent: 'center', textAlign: 'center' as const, padding: '0 16px', background: '#f8fafc',
+    fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', color: '#0f172a',
+  },
+  icon: { fontSize: 60, margin: '0 0 16px' },
+  title: { fontSize: 24, fontWeight: 700, margin: '0 0 8px' },
+  text: { color: '#64748b', margin: '0 0 32px' },
+  button: {
+    background: '#1d4ed8', color: '#fff', fontWeight: 600, padding: '12px 24px', border: 0,
+    borderRadius: 12, cursor: 'pointer', fontSize: 16,
+  },
+};
 
 export default function GlobalError({
   error,
@@ -9,21 +26,16 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    reportError(error);
   }, [error]);
 
   return (
     <html lang="uk">
-      <body className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-center px-4">
-        <p className="text-6xl mb-4">⚠</p>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Критична помилка</h2>
-        <p className="text-slate-500 mb-8">Будь ласка, оновіть сторінку.</p>
-        <button
-          onClick={reset}
-          className="bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl"
-        >
-          Оновити
-        </button>
+      <body style={S.body}>
+        <p style={S.icon}>⚠</p>
+        <h2 style={S.title}>Критична помилка</h2>
+        <p style={S.text}>Будь ласка, оновіть сторінку.</p>
+        <button onClick={reset} style={S.button}>Оновити</button>
       </body>
     </html>
   );

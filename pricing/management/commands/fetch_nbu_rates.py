@@ -9,11 +9,11 @@ Management-команда: обновляет ExchangeRate из API НБУ (бе
 на ДАТУ ОФОРМЛЕНИЯ (не «сегодня»), поэтому команда принимает дату явно.
 """
 from datetime import date
-from urllib.error import URLError
 
 from django.core.management.base import BaseCommand, CommandError
 
-from pricing.nbu import fetch_and_save_rates
+from pricing.nbu import refresh_rates
+from pricing.tasks import NBU_RETRYABLE
 
 
 class Command(BaseCommand):
@@ -37,9 +37,9 @@ class Command(BaseCommand):
             rate_date = date.today()
 
         try:
-            updated = fetch_and_save_rates(rate_date)
-        except URLError as exc:
-            raise CommandError(f'Ошибка запроса к НБУ: {exc}')
+            updated = refresh_rates(rate_date)
+        except NBU_RETRYABLE as exc:
+            raise CommandError(f'Ошибка запроса к НБУ: {type(exc).__name__}')
 
         if updated:
             for item in updated:

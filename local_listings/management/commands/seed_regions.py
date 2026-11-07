@@ -143,12 +143,19 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--clear', action='store_true', help='Видалити існуючі дані перед засівом')
+        parser.add_argument('--force', action='store_true',
+                            help='Досіяти відсутні області/міста і в непорожньому довіднику')
 
     def handle(self, *args, **options):
         if options['clear']:
             City.objects.all().delete()
             Region.objects.all().delete()
             self.stdout.write('Очищено.')
+
+        # 1.18 (E2): на старті контейнера довідник засівається лише порожній; видалене адміном не повертається.
+        if not options['force'] and Region.objects.exists():
+            self.stdout.write('Регіони: пропущено, довідник не порожній (--force щоб досіяти).')
+            return
 
         regions_created = 0
         cities_created = 0

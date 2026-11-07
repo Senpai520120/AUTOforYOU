@@ -1,60 +1,53 @@
 'use client';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getUnreadCount as getMsgUnread } from '@/api/messages';
 import { getUnreadCount as getNotifUnread } from '@/api/notifications';
+import { useVisibleInterval } from '@/lib/useVisibleInterval';
+import { useC2C } from '@/components/c2c/C2CProvider';
+import MobileNav, { getNavLinks } from '@/components/layout/MobileNav';
 
 export default function Header() {
   const { user, logout } = useAuth();
-  const router = useRouter();
+  const c2c = useC2C();
+  // Переписка закрита (C2C вимкнено або «засів») — іконки й опитування messages/unread-count немає.
+  const chatOpen = c2c.social;
   const [msgUnread, setMsgUnread] = useState(0);
   const [notifUnread, setNotifUnread] = useState(0);
 
+  const loadCounts = useCallback(() => {
+    if (chatOpen) getMsgUnread().then(d => setMsgUnread(d.unread_count)).catch(() => {});
+    getNotifUnread().then(d => setNotifUnread(d.unread_count)).catch(() => {});
+  }, [chatOpen]);
+
   useEffect(() => {
     if (!user) { setMsgUnread(0); setNotifUnread(0); return; }
-    let cancelled = false;
-    const load = () => {
-      getMsgUnread().then(d => { if (!cancelled) setMsgUnread(d.unread_count); }).catch(() => {});
-      getNotifUnread().then(d => { if (!cancelled) setNotifUnread(d.unread_count); }).catch(() => {});
-    };
-    load();
-    const interval = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [user]);
+    if (!chatOpen) setMsgUnread(0);
+    loadCounts();
+  }, [user, chatOpen, loadCounts]);
 
-  const handleLogout = () => {
-    logout();
-    router.push('/');
-  };
+  // Опит кожні 30 с; на прихованій вкладці пауза, при поверненні — одразу.
+  useVisibleInterval(loadCounts, 30000, !!user);
+
+  const navLinks = getNavLinks(user, c2c);
+  const handleLogout = () => { void logout(); };
 
   return (
-    <header className="bg-blue-900 text-white shadow-md">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
+    <header className="relative bg-blue-900 text-white shadow-md">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight shrink-0">
           <span className="text-amber-400">AUTO</span>
           <span>forYOU</span>
-          <span className="text-xs font-normal text-blue-300 ml-1">Перекупам UA</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-          <Link href="/listings" className="hover:text-amber-400 transition-colors">Пригін/аукціон</Link>
-          <Link href="/ua" className="hover:text-amber-400 transition-colors text-amber-300">Каталог Україна</Link>
-          <Link href="/calculator" className="hover:text-amber-400 transition-colors">Калькулятор</Link>
-          {/* Той самий признак, що й на бекенді (IsVerifiedDealerOrAdmin).
-              Раніше тут стояло user.role === 'admin' — користувач бачив
-              посилання на B2B-дошку, а у відповідь отримував 403. */}
-          {user && (user.is_verified_dealer || user.is_staff) ? (
-            <Link href="/b2b" className="hover:text-amber-400 transition-colors">B2B</Link>
-          ) : user ? (
-            <Link href="/dealers/apply" className="text-amber-300 hover:text-amber-400 transition-colors text-xs border border-amber-400/40 px-2 py-1 rounded">
-              B2B-доступ
-            </Link>
-          ) : null}
+          {navLinks.map(l => (
+            <Link key={l.href} href={l.href} className={`hover:text-amber-400 transition-colors ${l.className ?? ''}`}>{l.label}</Link>
+          ))}
         </nav>
 
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm min-w-0">
           {user ? (
             <>
               {/* Notifications bell */}
@@ -69,7 +62,7 @@ export default function Header() {
                 )}
               </Link>
               {/* Chat icon */}
-              <Link href="/me/messages" className="relative hover:text-amber-400 transition-colors" aria-label="Повідомлення">
+              {chatOpen && <Link href="/me/messages" className="relative hover:text-amber-400 transition-colors" aria-label="Повідомлення">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
@@ -78,13 +71,13 @@ export default function Header() {
                     {msgUnread > 9 ? '9+' : msgUnread}
                   </span>
                 )}
-              </Link>
-              <Link href="/me" className="hover:text-amber-400 transition-colors">
+              </Link>}
+              <Link href="/me" className="hover:text-amber-400 transition-colors hidden sm:inline truncate min-w-0 max-w-[16rem]">
                 {user.email.split('@')[0]}
               </Link>
               <button
                 onClick={handleLogout}
-                className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors"
+                className="hidden sm:inline-block bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded text-xs transition-colors shrink-0"
               >
                 Вийти
               </button>
@@ -100,6 +93,7 @@ export default function Header() {
               </Link>
             </>
           )}
+          <MobileNav links={navLinks} loggedIn={!!user} onLogout={handleLogout} />
         </div>
       </div>
     </header>

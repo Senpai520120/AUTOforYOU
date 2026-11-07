@@ -12,15 +12,15 @@ import { test, expect } from '@playwright/test';
 // відсутності банера ловила б футер і завжди була б хибною.
 const DEMO_BANNER = 'Тестові тарифи — розрахунок демонстраційний';
 
-test.describe('Каталог імпорту з США', () => {
-  test('сторінка каталогу відповідає 200 і рендерить заголовок', async ({ page }) => {
+test.describe('Каталог імпорту з США @smoke', () => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: сторінка каталогу відповідає 200 і рендерить заголовок', async ({ page }) => {
     const resp = await page.goto('/listings');
     expect(resp?.status()).toBe(200);
     await expect(page).toHaveTitle(/AUTOforYOU/);
     await expect(page.getByRole('heading', { name: 'Каталог автомобілів' })).toBeVisible();
   });
 
-  test('демо-банер на каталозі не показується', async ({ page }) => {
+  test.fixme('2.8 → модуль заморожено до 2.9/2.10/2.11/3.3: демо-банер на каталозі не показується', async ({ page }) => {
     // DemoBanner рендериться тільки на /calculator і всередині CalcBreakdown.
     // Раніше цей тест називався «demo banner is visible on catalog page»,
     // оголошував локатор банера і не перевіряв його — був зеленим завжди.
@@ -38,6 +38,7 @@ test.describe('Калькулятор вартості', () => {
     });
   });
 
+  // Банер — за is_demo з API (2.6): на сид-тарифах (неперевірених) він видно.
   test('форма містить підписані поля і демо-банер', async ({ page }) => {
     await page.goto('/calculator');
     await expect(page).toHaveTitle(/AUTOforYOU/);
@@ -61,23 +62,24 @@ test.describe('Калькулятор вартості', () => {
     // Раніше тут стояв if (count > 0) навколо кліку і waitForTimeout(3000):
     // тест був зеленим навіть якщо кнопки не існує, а розрахунок не відбувся.
     await expect(
-      page.getByRole('heading', { name: 'Детализация стоимости «под ключ»' }),
+      page.getByRole('heading', { name: 'Деталізація вартості «під ключ»' }),
     ).toBeVisible();
 
     for (const article of [
-      'Цена аукциона',
-      'Аукционный сбор',
-      'Логистика США',
-      'Морской фрахт',
-      'Пошлина 10%',
-      'НДС 20%',
-      'Пенсионный сбор',
+      'Ціна аукціону',
+      'Аукціонний збір',
+      'Логістика США',
+      'Морський фрахт',
+      'Мито 10%',
+      'ПДВ 20%',
     ]) {
       await expect(page.getByRole('cell', { name: article, exact: true })).toBeVisible();
     }
+    // Відсоток пенсійного збору — з applied_rates відповіді (2.6), а не з коду.
+    await expect(page.getByRole('cell', { name: /^Пенсійний збір \d+(\.\d+)?%$/ })).toBeVisible();
 
     // Підсумок має бути додатним числом, а не прочерком.
-    const total = page.getByRole('row').filter({ hasText: 'ИТОГО' });
+    const total = page.getByRole('row').filter({ hasText: 'РАЗОМ' });
     await expect(total).toBeVisible();
     await expect(total).not.toContainText('—');
   });

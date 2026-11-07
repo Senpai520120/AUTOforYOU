@@ -8,13 +8,15 @@ LiqPay API client — Python 3.12+.
 Официальный SDK (liqpay/sdk-python) — Python 2 only, поэтому реализуем
 протокол напрямую. Логика идентична SDK (~20 строк).
 
-Ключи из env: LIQPAY_PUBLIC_KEY, LIQPAY_PRIVATE_KEY.
-Sandbox: установить sandbox=1 в параметрах или LIQPAY_SANDBOX=true в env.
+Низкоуровневый протокол. Во вью клиент напрямую не используется: см. `payments/providers.py`
+(режимы `LIQPAY_MODE`, статус «не налаштовано»).
 """
 import base64
 import hashlib
+import hmac
 import json
-import os
+
+from integrations.base import is_placeholder
 
 LIQPAY_CHECKOUT_URL = 'https://www.liqpay.com/api/3/checkout'
 LIQPAY_API_URL = 'https://www.liqpay.com/api/3/request'
@@ -22,6 +24,10 @@ LIQPAY_API_URL = 'https://www.liqpay.com/api/3/request'
 
 class LiqPaySignatureError(Exception):
     pass
+
+
+class LiqPayNotConfigured(Exception):
+    """Ключ пустой или плейсхолдер: подпись с таким ключом подделывается кем угодно (F1, 1.15)."""
 
 
 class LiqPayClient:
@@ -34,9 +40,9 @@ class LiqPayClient:
     def from_settings(cls) -> 'LiqPayClient':
         from django.conf import settings as django_settings
         return cls(
-            public_key=getattr(django_settings, 'LIQPAY_PUBLIC_KEY', '') or os.environ.get('LIQPAY_PUBLIC_KEY', ''),
-            private_key=getattr(django_settings, 'LIQPAY_PRIVATE_KEY', '') or os.environ.get('LIQPAY_PRIVATE_KEY', ''),
-            sandbox=getattr(django_settings, 'LIQPAY_SANDBOX', True),
+            public_key=getattr(django_settings, 'LIQPAY_PUBLIC_KEY', ''),
+            private_key=getattr(django_settings, 'LIQPAY_PRIVATE_KEY', ''),
+            sandbox=getattr(django_settings, 'LIQPAY_SANDBOX', False),
         )
 
     # ── Подпись ───────────────────────────────────────────────────────────────
@@ -93,10 +99,13 @@ class LiqPayClient:
     def decode_callback(self, data: str, signature: str) -> dict:
         """
         Проверяет подпись колбэка LiqPay и возвращает распакованные данные.
-        Поднимает LiqPaySignatureError при несовпадении подписи.
+        Поднимает LiqPaySignatureError при несовпадении подписи и LiqPayNotConfigured при пустом/плейсхолдерном
+        приватном ключе (подпись пустым ключом = base64(sha1(data)) доступна любому).
         """
+        if is_placeholder(self.private_key):
+            raise LiqPayNotConfigured('LIQPAY_PRIVATE_KEY не задан.')
         expected = self._sign(data)
-        if expected != signature:
+        if not hmac.compare_digest(expected.encode('utf-8'), str(signature).encode('utf-8')):
             raise LiqPaySignatureError(
                 'Неверная подпись LiqPay — возможна подделка колбэка.'
             )
@@ -108,7 +117,7 @@ class LiqPayClient:
     def map_status(liqpay_status: str) -> str:
         _MAP = {
             'success': 'completed',
-            'sandbox': 'completed',
+            'sandbox': 'completed',  # засчитывается только при LIQPAY_SANDBOX=true: см. LiqPayProvider.map_status
             'wait_accept': 'pending',
             'processing': 'pending',
             'failure': 'failed',

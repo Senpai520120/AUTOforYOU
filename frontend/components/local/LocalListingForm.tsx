@@ -1,19 +1,101 @@
 'use client';
-import { useRef, useEffect, useState } from 'react';
+import { trackEvent } from '@/lib/analytics';
+import { useCallback, useId, useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
-import { Region, City, LocalListing, LocalListingImage } from '@/lib/types';
+import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import { isEmailNotVerified } from '@/lib/email-verify';
+import { Region, City, LocalConfig, LocalListing } from '@/lib/types';
+import { ApiError, getErrorMessage } from '@/lib/errors';
+import { getAttribution } from '@/lib/attribution';
+import ErrorState from '@/components/ui/ErrorState';
+import LoadingState from '@/components/ui/LoadingState';
 import PhotoUploadBlock from './PhotoUploadBlock';
+import { checkPhotos, photoHint } from './photo-limits';
 
-function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void }) {
+/** Поля з місцем для помилки у формі; решта ключів відповіді — у загальному блоці з назвою поля. */
+const FIELD_LABELS: Record<string, string> = {
+  make: 'Марка', model: 'Модель', year: 'Рік', mileage_km: 'Пробіг', engine_cc: "Об'єм двигуна",
+  fuel_type: 'Тип палива', transmission: 'КПП', body_type: 'Тип кузова', condition: 'Стан',
+  price: 'Ціна', currency: 'Валюта', price_type: 'Тип ціни', region: 'Область', city: 'Місто',
+  description: 'Опис', contact_phone: 'Телефон', agreed_to_rules: 'Правила', seller_type: 'Тип продавця',
+  images: 'Фото',
+};
+const INLINE_FIELDS = new Set([
+  'make', 'model', 'year', 'mileage_km', 'engine_cc', 'price', 'region', 'city',
+  'description', 'contact_phone', 'agreed_to_rules',
+]);
+
+function joinMessages(v: unknown): string {
+  if (Array.isArray(v)) return v.map(joinMessages).filter(Boolean).join(' ');
+  if (v && typeof v === 'object') return Object.values(v as Record<string, unknown>).map(joinMessages).join(' ');
+  return v == null ? '' : String(v);
+}
+
+/** 10-Q4: будь-яка відповідь з помилкою стає видимою — поле, загальний блок або текст статусу. */
+function mapFormErrors(err: unknown): Record<string, string> {
+  if (!(err instanceof ApiError)) return { _general: getErrorMessage(err) };
+  if (err.status === 429) return { _general: 'Забагато спроб. Спробуйте за кілька хвилин' };
+  if (err.status >= 500) return { _general: getErrorMessage(err) };
+  const data = err.data;
+  if (Array.isArray(data) || typeof data === 'string') {
+    return { _general: joinMessages(data) || getErrorMessage(err) };
+  }
+  if (!data || typeof data !== 'object') return { _general: getErrorMessage(err) };
+  const mapped: Record<string, string> = {};
+  const general: string[] = [];
+  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+    const text = joinMessages(v);
+    if (!text) continue;
+    if (INLINE_FIELDS.has(k)) mapped[k] = text;
+    else if (k === 'detail' || k === 'non_field_errors') general.push(text);
+    else general.push(`${FIELD_LABELS[k] ?? k}: ${text}`);
+  }
+  if (general.length) mapped._general = general.join(' ');
+  if (!Object.keys(mapped).length) mapped._general = getErrorMessage(err);
+  return mapped;
+}
+
+/** Лише поля, значення яких відрізняється від початкового (ціна — як число). */
+function diffPayload(payload: Record<string, unknown>, initial: Partial<LocalListing>): Record<string, unknown> {
+  const init = initial as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    const before = init[k];
+    const same = k === 'price'
+      ? Number(v) === Number(before)
+      : String(v ?? '') === String(before ?? '');
+    if (!same) out[k] = v;
+  }
+  return out;
+}
+
+/** Превью файлу: URL створюється один раз на файл і звільняється при видаленні/розмонтуванні. */
+function FileThumb({ file, alt }: { file: File; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} width={160} height={160} className="object-cover w-full h-full" />;
+}
+
+function CreateModePhotoPicker({ config, onChange }: { config: LocalConfig; onChange: (files: File[]) => void }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selected = Array.from(e.target.files ?? []);
-    const next = [...files, ...selected].slice(0, 15);
+    const { accepted, error: checkError } = checkPhotos(Array.from(e.target.files ?? []), config, files.length);
+    setError(checkError);
+    const next = [...files, ...accepted];
     setFiles(next);
     onChange(next);
+    e.target.value = '';
   }
 
   function remove(idx: number) {
@@ -28,27 +110,28 @@ function CreateModePhotoPicker({ onChange }: { onChange: (files: File[]) => void
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          disabled={files.length >= 15}
+          disabled={files.length >= config.max_photos}
           className="text-sm bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors"
         >
           + Вибрати фото
         </button>
-        <span className="text-xs text-slate-400">{files.length}/15 · jpg/png/webp · до 8 МБ</span>
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={handleChange} />
+        <span className="text-xs text-slate-600">{photoHint(config, files.length)}</span>
+        <input ref={inputRef} type="file" accept={config.allowed_types.join(',')} multiple className="hidden" onChange={handleChange} />
       </div>
+      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
       {files.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {files.map((f, i) => (
             <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={URL.createObjectURL(f)} alt={f.name} className="object-cover w-full h-full" />
+              <FileThumb file={f} alt={`Фото ${i + 1} з ${files.length}`} />
               {i === 0 && (
                 <span className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Головне</span>
               )}
               <button
                 type="button"
                 onClick={() => remove(i)}
-                className="absolute top-1 right-1 bg-white/90 hover:bg-white text-red-600 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1 right-1 bg-white/90 hover:bg-white text-red-600 text-xs font-bold w-8 h-8 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                aria-label="Видалити фото"
               >
                 ✕
               </button>
@@ -67,9 +150,14 @@ interface Props {
 
 export default function LocalListingForm({ initial, listingId }: Props) {
   const router = useRouter();
+  const baseId = useId();
+  const fid = (k: string) => `${baseId}-${k}`;
   const isEdit = !!listingId;
 
   const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsLoaded, setRegionsLoaded] = useState(false);
+  const [regionsError, setRegionsError] = useState<unknown>(null);
+  const [config, setConfig] = useState<LocalConfig | null>(null);
   const [cities, setCities] = useState<City[]>([]);
 
   const [make, setMake] = useState(initial?.make ?? '');
@@ -97,15 +185,25 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notVerified, setNotVerified] = useState(false);
 
   // photo upload: in edit mode listingId is known upfront; in create mode we get it after creation
   const [createdListingId, setCreatedListingId] = useState<number | null>(listingId ?? null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [photoError, setPhotoError] = useState('');
 
-  useEffect(() => {
-    localApi.regions().then(setRegions).catch(() => {});
+  const loadRegions = useCallback(() => {
+    setRegionsError(null);
+    setRegionsLoaded(false);
+    Promise.all([localApi.regions(), localApi.config()])
+      .then(([r, c]) => { setRegions(r); setConfig(c); })
+      .catch(setRegionsError)
+      .finally(() => setRegionsLoaded(true));
   }, []);
+
+  useEffect(() => {
+    loadRegions();
+  }, [loadRegions]);
 
   useEffect(() => {
     if (region) {
@@ -138,43 +236,50 @@ export default function LocalListingForm({ initial, listingId }: Props) {
     e.preventDefault();
     setSubmitting(true);
     setErrors({});
-    const payload = {
+    setNotVerified(false);
+    const payload: Record<string, unknown> = {
       make, model, year: Number(year), mileage_km: Number(mileageKm),
       engine_cc: engineCc ? Number(engineCc) : null,
       fuel_type: fuelType, transmission, body_type: bodyType, condition,
       price, currency, price_type: priceType,
       region: Number(region), city: Number(city),
       description, contact_phone: contactPhone,
-      ...(!isEdit ? { agreed_to_rules: agreedToRules } : {}),
     };
     try {
       if (isEdit) {
-        await localApi.update(listingId, payload);
+        // 10-Q3: лише змінені поля — незмінене не відправляє оголошення на повторну модерацію.
+        const changed = diffPayload(payload, initial ?? {});
+        if (Object.keys(changed).length) await localApi.update(listingId, changed);
         router.push(`/local/${listingId}`);
       } else {
-        const created = await localApi.create(payload);
+        const attribution = getAttribution();
+        const created = await localApi.create({
+          ...payload,
+          agreed_to_rules: agreedToRules,
+          ...(Object.keys(attribution).length ? { attribution } : {}),
+        });
         setCreatedListingId(created.id);
+        trackEvent('listing_submit', { source: 'listing' });
         if (pendingFiles.length > 0) {
           try {
             await localApi.uploadImages(created.id, pendingFiles);
-          } catch {
-            setPhotoError('Оголошення створено, але фото не завантажились. Додайте їх у «Мої оголошення».');
+          } catch (err: unknown) {
+            // 10-Q5: причина сервера (тип, розмір, ліміт) — на екрані успіху, не перекривається.
+            const text = err instanceof ApiError && err.status < 500
+              ? Object.values(mapFormErrors(err)).join(' ')
+              : getErrorMessage(err);
+            setPhotoError(`Оголошення створено, але фото не завантажились: ${text}`);
           }
         }
         setSubmitted(true);
         return;
       }
     } catch (err: unknown) {
-      const apiError = err as { data?: Record<string, string[]> };
-      if (apiError?.data) {
-        const mapped: Record<string, string> = {};
-        for (const [k, v] of Object.entries(apiError.data)) {
-          mapped[k] = Array.isArray(v) ? v.join(' ') : String(v);
-        }
-        setErrors(mapped);
-      } else {
-        setErrors({ _general: 'Сталася помилка. Перевірте поля та спробуйте знову.' });
+      if (isEmailNotVerified(err)) {
+        setNotVerified(true);
+        return;
       }
+      setErrors(mapFormErrors(err));
     } finally {
       setSubmitting(false);
     }
@@ -192,9 +297,30 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         <p className="text-sm text-blue-700 mb-4">
           Ми перевіримо оголошення і опублікуємо його незабаром. Ви отримаєте сповіщення.
         </p>
+        {photoError && (
+          <div role="alert" className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-3 text-sm mb-4 text-left">
+            <p>{photoError}</p>
+            {createdListingId && (
+              <a href={`/local/${createdListingId}/edit`} className="underline font-semibold">Додати фото</a>
+            )}
+          </div>
+        )}
         <a href="/me/local-listings" className="text-blue-700 underline text-sm">
           Переглянути мої оголошення →
         </a>
+      </div>
+    );
+  }
+
+  // Без списку областей форма не відправиться: показуємо помилку з повтором, а не порожній select.
+  if (regionsError) return <ErrorState error={regionsError} onRetry={loadRegions} />;
+  if (!regionsLoaded || !config) return <LoadingState />;
+  if (!isEdit && !config.posting_open) {
+    return (
+      <div role="status" className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center">
+        <p className="text-slate-700">
+          Подача оголошень поки доступна лише за запрошенням. Напишіть нам — ми додамо ваше оголошення.
+        </p>
       </div>
     );
   }
@@ -208,6 +334,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           <div className="flex gap-2">
             <input
               className={inputCls + ' flex-1 font-mono uppercase'}
+              aria-label="VIN"
               placeholder="Введіть 17-значний VIN"
               value={vin}
               onChange={e => setVin(e.target.value.toUpperCase())}
@@ -222,9 +349,11 @@ export default function LocalListingForm({ initial, listingId }: Props) {
               {vinLoading ? 'Завантаження...' : 'Заповнити за VIN'}
             </button>
           </div>
-          {vinError && <p className={errCls}>{vinError}</p>}
+          {vinError && <p role="alert" className={errCls}>{vinError}</p>}
         </div>
       )}
+
+      {notVerified && <EmailNotVerified />}
 
       {errors._general && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700" role="alert">
@@ -232,34 +361,35 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Марка *</label>
-          <input className={inputCls} value={make} onChange={e => setMake(e.target.value)} required placeholder="Toyota" />
-          {errors.make && <p className={errCls}>{errors.make}</p>}
+          <label htmlFor={fid('make')} className={labelCls}>Марка *</label>
+          <input id={fid('make')} aria-invalid={!!errors.make} aria-describedby={errors.make ? fid('err-make') : undefined} className={inputCls} value={make} onChange={e => setMake(e.target.value)} required placeholder="Toyota" />
+          {errors.make && <p id={fid('err-make')} role="alert" className={errCls}>{errors.make}</p>}
         </div>
         <div>
-          <label className={labelCls}>Модель *</label>
-          <input className={inputCls} value={model} onChange={e => setModel(e.target.value)} required placeholder="Camry" />
-          {errors.model && <p className={errCls}>{errors.model}</p>}
+          <label htmlFor={fid('model')} className={labelCls}>Модель *</label>
+          <input id={fid('model')} aria-invalid={!!errors.model} aria-describedby={errors.model ? fid('err-model') : undefined} className={inputCls} value={model} onChange={e => setModel(e.target.value)} required placeholder="Camry" />
+          {errors.model && <p id={fid('err-model')} role="alert" className={errCls}>{errors.model}</p>}
         </div>
         <div>
-          <label className={labelCls}>Рік *</label>
-          <input className={inputCls} type="number" value={year} onChange={e => setYear(e.target.value)} required placeholder="2020" min={1900} max={2026} />
-          {errors.year && <p className={errCls}>{errors.year}</p>}
+          <label htmlFor={fid('year')} className={labelCls}>Рік *</label>
+          <input id={fid('year')} aria-invalid={!!errors.year} aria-describedby={errors.year ? fid('err-year') : undefined} className={inputCls} type="number" value={year} onChange={e => setYear(e.target.value)} required placeholder="2020" min={1900} max={new Date().getFullYear() + 1} />
+          {errors.year && <p id={fid('err-year')} role="alert" className={errCls}>{errors.year}</p>}
         </div>
         <div>
-          <label className={labelCls}>Пробіг, км *</label>
-          <input className={inputCls} type="number" value={mileageKm} onChange={e => setMileageKm(e.target.value)} required placeholder="50000" min={0} />
-          {errors.mileage_km && <p className={errCls}>{errors.mileage_km}</p>}
+          <label htmlFor={fid('mileage_km')} className={labelCls}>Пробіг, км *</label>
+          <input id={fid('mileage_km')} aria-invalid={!!errors.mileage_km} aria-describedby={errors.mileage_km ? fid('err-mileage_km') : undefined} className={inputCls} type="number" value={mileageKm} onChange={e => setMileageKm(e.target.value)} required placeholder="50000" min={0} />
+          {errors.mileage_km && <p id={fid('err-mileage_km')} role="alert" className={errCls}>{errors.mileage_km}</p>}
         </div>
         <div>
-          <label className={labelCls}>Об&apos;єм двигуна, куб.см</label>
-          <input className={inputCls} type="number" value={engineCc} onChange={e => setEngineCc(e.target.value)} placeholder="2000" min={0} />
+          <label htmlFor={fid('engine_cc')} className={labelCls}>Об&apos;єм двигуна, куб.см</label>
+          <input id={fid('engine_cc')} aria-invalid={!!errors.engine_cc} aria-describedby={errors.engine_cc ? fid('err-engine_cc') : undefined} className={inputCls} type="number" value={engineCc} onChange={e => setEngineCc(e.target.value)} placeholder="2000" min={0} />
+          {errors.engine_cc && <p id={fid('err-engine_cc')} role="alert" className={errCls}>{errors.engine_cc}</p>}
         </div>
         <div>
-          <label className={labelCls}>Тип палива *</label>
-          <select className={inputCls} value={fuelType} onChange={e => setFuelType(e.target.value as typeof fuelType)} required>
+          <label htmlFor={fid('fuel_type')} className={labelCls}>Тип палива *</label>
+          <select id={fid('fuel_type')} className={inputCls} value={fuelType} onChange={e => setFuelType(e.target.value as typeof fuelType)} required>
             <option value="petrol">Бензин</option>
             <option value="diesel">Дизель</option>
             <option value="electric">Електро</option>
@@ -268,8 +398,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </select>
         </div>
         <div>
-          <label className={labelCls}>КПП *</label>
-          <select className={inputCls} value={transmission} onChange={e => setTransmission(e.target.value as typeof transmission)} required>
+          <label htmlFor={fid('transmission')} className={labelCls}>КПП *</label>
+          <select id={fid('transmission')} className={inputCls} value={transmission} onChange={e => setTransmission(e.target.value as typeof transmission)} required>
             <option value="auto">Автомат</option>
             <option value="manual">Механіка</option>
             <option value="cvt">Варіатор</option>
@@ -277,8 +407,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Тип кузова *</label>
-          <select className={inputCls} value={bodyType} onChange={e => setBodyType(e.target.value as typeof bodyType)} required>
+          <label htmlFor={fid('body_type')} className={labelCls}>Тип кузова *</label>
+          <select id={fid('body_type')} className={inputCls} value={bodyType} onChange={e => setBodyType(e.target.value as typeof bodyType)} required>
             <option value="sedan">Седан</option>
             <option value="suv">Позашляховик</option>
             <option value="hatchback">Хетчбек</option>
@@ -291,8 +421,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Стан *</label>
-          <select className={inputCls} value={condition} onChange={e => setCondition(e.target.value as typeof condition)} required>
+          <label htmlFor={fid('condition')} className={labelCls}>Стан *</label>
+          <select id={fid('condition')} className={inputCls} value={condition} onChange={e => setCondition(e.target.value as typeof condition)} required>
             <option value="used">Вживаний</option>
             <option value="new">Новий</option>
             <option value="damaged">Пошкоджений</option>
@@ -300,23 +430,23 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2">
-          <label className={labelCls}>Ціна *</label>
-          <input className={inputCls} type="number" value={price} onChange={e => setPrice(e.target.value)} required placeholder="500000" min={0} />
-          {errors.price && <p className={errCls}>{errors.price}</p>}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="sm:col-span-2">
+          <label htmlFor={fid('price')} className={labelCls}>Ціна *</label>
+          <input id={fid('price')} aria-invalid={!!errors.price} aria-describedby={errors.price ? fid('err-price') : undefined} className={inputCls} type="number" value={price} onChange={e => setPrice(e.target.value)} required placeholder="500000" min={0} />
+          {errors.price && <p id={fid('err-price')} role="alert" className={errCls}>{errors.price}</p>}
         </div>
         <div>
-          <label className={labelCls}>Валюта</label>
-          <select className={inputCls} value={currency} onChange={e => setCurrency(e.target.value as typeof currency)}>
+          <label htmlFor={fid('currency')} className={labelCls}>Валюта</label>
+          <select id={fid('currency')} className={inputCls} value={currency} onChange={e => setCurrency(e.target.value as typeof currency)}>
             <option value="UAH">UAH</option>
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
           </select>
         </div>
-        <div className="col-span-3">
-          <label className={labelCls}>Тип ціни</label>
-          <div className="flex gap-4">
+        <div className="sm:col-span-3">
+          <span id={fid('price_type')} className={labelCls}>Тип ціни</span>
+          <div role="radiogroup" aria-labelledby={fid('price_type')} className="flex gap-4">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="radio" value="fixed" checked={priceType === 'fixed'} onChange={() => setPriceType('fixed')} /> Фіксована
             </label>
@@ -327,60 +457,67 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Область *</label>
-          <select className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }} required>
+          <label htmlFor={fid('region')} className={labelCls}>Область *</label>
+          <select id={fid('region')} aria-invalid={!!errors.region} aria-describedby={errors.region ? fid('err-region') : undefined} className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }} required>
             <option value="">Оберіть область</option>
             {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
-          {errors.region && <p className={errCls}>{errors.region}</p>}
+          {errors.region && <p id={fid('err-region')} role="alert" className={errCls}>{errors.region}</p>}
         </div>
         <div>
-          <label className={labelCls}>Місто *</label>
-          <select className={inputCls} value={city} onChange={e => setCity(e.target.value)} required disabled={!region}>
+          <label htmlFor={fid('city')} className={labelCls}>Місто *</label>
+          <select id={fid('city')} aria-invalid={!!errors.city} aria-describedby={errors.city ? fid('err-city') : undefined} className={inputCls} value={city} onChange={e => setCity(e.target.value)} required disabled={!region}>
             <option value="">Оберіть місто</option>
             {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          {errors.city && <p className={errCls}>{errors.city}</p>}
+          {errors.city && <p id={fid('err-city')} role="alert" className={errCls}>{errors.city}</p>}
         </div>
       </div>
 
       {/* Photo block — edit mode: immediate upload; create mode: buffer until submit */}
       <div>
-        <label className={labelCls}>Фото</label>
+        <span className={labelCls}>Фото</span>
         {isEdit && createdListingId ? (
           <PhotoUploadBlock
             listingId={createdListingId}
+            config={config}
             initial={(initial as LocalListing | undefined)?.images ?? []}
           />
         ) : (
-          <CreateModePhotoPicker onChange={setPendingFiles} />
+          <CreateModePhotoPicker config={config} onChange={setPendingFiles} />
         )}
-        {photoError && <p className="text-xs text-red-600 mt-1">{photoError}</p>}
+        {photoError && <p role="alert" className="text-xs text-red-600 mt-1">{photoError}</p>}
       </div>
 
       <div>
-        <label className={labelCls}>Опис</label>
-        <textarea
+        <label htmlFor={fid('description')} className={labelCls}>Опис</label>
+        <textarea id={fid('description')}
           className={inputCls}
           rows={5}
           value={description}
           onChange={e => setDescription(e.target.value)}
+          aria-invalid={!!errors.description}
+          aria-describedby={errors.description ? fid('err-description') : undefined}
           placeholder="Розкажіть детальніше про автомобіль..."
         />
+        {errors.description && <p id={fid('err-description')} role="alert" className={errCls}>{errors.description}</p>}
       </div>
 
       <div>
-        <label className={labelCls}>Контактний телефон</label>
-        <input
+        <label htmlFor={fid('contact_phone')} className={labelCls}>Контактний телефон</label>
+        <input id={fid('contact_phone')}
           className={inputCls}
           type="tel"
           value={contactPhone}
           onChange={e => setContactPhone(e.target.value)}
-          placeholder="+38 050 123 45 67"
+          aria-invalid={!!errors.contact_phone}
+          aria-describedby={errors.contact_phone ? fid('err-contact_phone') : undefined}
+          placeholder="+380501234567"
         />
-        <p className="text-xs text-slate-400 mt-1">Показується тільки авторизованим покупцям</p>
+        {errors.contact_phone && <p id={fid('err-contact_phone')} role="alert" className={errCls}>{errors.contact_phone}</p>}
+        <p className="text-xs text-slate-600 mt-1">Показується тільки авторизованим покупцям</p>
       </div>
 
       {!isEdit && (
@@ -404,7 +541,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
               </a>
             </span>
           </label>
-          {errors.agreed_to_rules && <p className={errCls}>{errors.agreed_to_rules}</p>}
+          {errors.agreed_to_rules && <p id={fid('err-agreed_to_rules')} role="alert" className={errCls}>{errors.agreed_to_rules}</p>}
         </div>
       )}
 

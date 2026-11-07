@@ -8,10 +8,16 @@ from .models import Shipment, TrackingEvent
 
 class TrackingEventSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    # Защищённый URL (права проверяет TrackingEventPhotoView), не прямой /media/ (задача 1.10).
+    photo = serializers.SerializerMethodField()
 
     class Meta:
         model = TrackingEvent
         fields = ('id', 'status', 'status_display', 'note', 'photo', 'created_at')
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_photo(self, obj):
+        return obj.get_photo_url()
 
 
 class ShipmentSerializer(serializers.ModelSerializer):

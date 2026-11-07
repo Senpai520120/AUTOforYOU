@@ -2,16 +2,23 @@ import logging
 
 from celery import shared_task
 
+from core.c2c import c2c_public_posting_enabled
+from core.tasks import ResilientTask
+
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name='saved_searches.tasks.check_saved_searches')
+# ResilientTask (8.9): повторы при сетевых ошибках, окончательная неудача - в FailedTask и мониторинг.
+@shared_task(name='saved_searches.tasks.check_saved_searches', base=ResilientTask)
 def check_saved_searches():
     """
     Daily task: for each SavedSearch with notify=True, find LocalListings created
     after last_notified_at, create in-app Notification + send_notification.
     Idempotent: last_notified_at is updated after processing.
     """
+    # 6.7: сохранённые поиски закрыты и при выключенном разделе, и в «засеве» (middleware закрывает saved-searches/).
+    if not c2c_public_posting_enabled():
+        return {'skipped': 'c2c_disabled'}
     from django.utils import timezone
 
     from local_listings.models import LocalListing

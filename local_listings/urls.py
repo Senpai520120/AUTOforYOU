@@ -2,12 +2,14 @@ from django.urls import path
 
 from .views import (
     CityListView,
+    LocalConfigView,
     LocalListingContactView,
     LocalListingDetailView,
     LocalListingImageDetailView,
     LocalListingImageUploadView,
     LocalListingListCreateView,
     LocalListingPromoteView,
+    MyListingDetailView,
     MyListingsView,
     PromotionTariffListView,
     RegionListView,
@@ -22,6 +24,8 @@ urlpatterns = [
     path('listings/<int:pk>/images/<int:img_id>/', LocalListingImageDetailView.as_view(), name='local-listing-image-detail'),
     path('listings/<int:pk>/promote/', LocalListingPromoteView.as_view(), name='local-listing-promote'),
     path('my-listings/', MyListingsView.as_view(), name='local-my-listings'),
+    path('my-listings/<int:pk>/', MyListingDetailView.as_view(), name='local-my-listing-detail'),
+    path('config/', LocalConfigView.as_view(), name='local-config'),
     path('tariffs/', PromotionTariffListView.as_view(), name='local-tariffs'),
     path('vin-prefill/<str:vin>/', VinPrefillView.as_view(), name='local-vin-prefill'),
     path('regions/', RegionListView.as_view(), name='local-regions'),

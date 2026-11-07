@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import Modal from '@/components/ui/Modal';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { createSavedSearch } from '@/api/saved-searches';
@@ -7,6 +8,7 @@ import { createSavedSearch } from '@/api/saved-searches';
 export default function SaveSearchButton() {
   const { user } = useAuth();
   const router = useRouter();
+  const nameId = useId();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -61,22 +63,22 @@ export default function SaveSearchButton() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <Modal title="Зберегти пошук" onClose={() => setOpen(false)} maxWidth="max-w-sm">
+          <div>
             {done ? (
               <div className="text-center py-4">
-                <div className="text-4xl mb-2">✅</div>
+                <div className="text-4xl mb-2" aria-hidden="true">✅</div>
                 <p className="font-semibold text-slate-900">Пошук збережено!</p>
                 <p className="text-xs text-slate-500 mt-1">Перегляньте у «Збережені пошуки»</p>
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-bold text-slate-900 mb-3">Зберегти пошук</h2>
                 {error && (
-                  <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
+                  <div role="alert" className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
                 )}
-                <label className="block text-sm text-slate-700 mb-1">Назва</label>
+                <label htmlFor={nameId} className="block text-sm text-slate-700 mb-1">Назва</label>
                 <input
+                  id={nameId}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -110,7 +112,7 @@ export default function SaveSearchButton() {
               </>
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Головна</a> &rsaquo; <a href="{% url 'admin:leads_lead_changelist' %}">Заявки</a> &rsaquo; Воронка за місяць</div>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+  <form method="get">
+    <label for="month">Місяць (РРРР-ММ):</label>
+    <input type="text" id="month" name="month" value="{{ data.month }}" pattern="[0-9]{4}-[0-9]{2}" maxlength="7">
+    <input type="submit" value="Показати">
+  </form>
+  <h2>{{ data.month }}</h2>
+  <table>
+    <tr><th>Усього заявок</th><td data-testid="funnel-total">{{ data.total }}</td></tr>
+    <tr><th>Із них гарячих</th><td data-testid="funnel-hot">{{ data.hot }}</td></tr>
+  </table>
+  <h2>За джерелом (utm source)</h2>
+  <table>
+    <thead><tr><th>Джерело</th><th>Заявок</th></tr></thead>
+    <tbody>
+    {% for name, count in data.by_source %}
+      <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+    {% empty %}
+      <tr><td colspan="2">Немає заявок</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h2>За статусом партнера</h2>
+  <table>
+    <thead><tr><th>Статус</th><th>Заявок</th></tr></thead>
+    <tbody>
+    {% for name, count in data.by_partner_status %}
+      <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

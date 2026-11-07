@@ -1,11 +1,13 @@
 python-dotenv==1.2.2
-Django==6.0.6
-djangorestframework==3.17.1
+Django==6.0.9
+djangorestframework==3.18.3
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
-Pillow==12.2.0
+Pillow==13.0.0
 psycopg2-binary==2.9.12
-PyJWT==2.13.0
+PyJWT==2.15.1
+# RS256 для PyJWT: проверка подписи id_token Keycloak (SSO-1).
+cryptography==50.0.2
 drf-spectacular==0.29.0
 httpx==0.28.1
 liqpay==1.0
@@ -17,9 +19,14 @@ boto3==1.38.38
 django-redis==5.4.0
 # Промт 10: Celery (брокер Redis, переиспользует REDIS_URL; без него — eager mode)
 celery[redis]==5.4.0
+# kombu 5.7 требует redis-py>=6.1 (у нас 5.3.1 из django-redis) — воркер падает VersionMismatch (CI 2026-11-03)
+kombu==5.6.2
 django-celery-beat==2.9.0
 # flower==2.0.1  # опционально: мониторинг задач в dev (pip install flower вручную)
 # Промт 11: Telegram-бот (aiogram 3.x; без TELEGRAM_BOT_TOKEN бот не стартует, сайт работает)
 aiogram==3.29.0
 # Промт 15: WSGI-сервер для Docker/production (runserver НЕ використовується у Docker)
 gunicorn==26.0.0
+sentry-sdk[django,celery]==2.70.0
+# Тесты: manage.py test --parallel (задача 9.47): без tblib исключения из воркеров не передаются
+tblib==3.2.2

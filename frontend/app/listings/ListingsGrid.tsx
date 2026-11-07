@@ -41,8 +41,8 @@ export default function ListingsGrid({
     <>
       <p className="text-sm text-slate-500 mb-4">Знайдено: {data.count}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {data.results.map(l => (
-          <ListingCard key={l.id} listing={l} />
+        {data.results.map((l, i) => (
+          <ListingCard key={l.id} listing={l} priority={i === 0} />
         ))}
       </div>
 

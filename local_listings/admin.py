@@ -42,11 +42,18 @@ class CityAdmin(admin.ModelAdmin):
 
 # ─── Дії модерації ────────────────────────────────────────────────────────────
 
+def _can_moderate(request):
+    return request.user.has_perm('local_listings.moderate_locallisting')
+
+
 def approve_listings(modeladmin, request, queryset):
     """Масово одобрити вибрані оголошення (тільки pending)."""
+    if not _can_moderate(request):
+        modeladmin.message_user(request, 'Немає права модерувати оголошення.', messages.ERROR)
+        return
     count = 0
     for listing in queryset.filter(status=LocalListing.Status.PENDING):
-        approve_listing(listing, request.user)
+        approve_listing(listing, request.user, request=request)
         count += 1
     modeladmin.message_user(request, f'Опубліковано оголошень: {count}.', messages.SUCCESS)
 
@@ -56,11 +63,14 @@ approve_listings.short_description = 'Одобрити (→ active)'
 
 def reject_with_reason(modeladmin, request, queryset):
     """Відхилити вибрані оголошення з вказанням причини — проміжна форма."""
+    if not _can_moderate(request):
+        modeladmin.message_user(request, 'Немає права модерувати оголошення.', messages.ERROR)
+        return None
     if 'confirm' in request.POST:
         reason = request.POST.get('reason', '').strip() or 'Не відповідає правилам розміщення.'
         count = 0
         for listing in queryset.filter(status=LocalListing.Status.PENDING):
-            reject_listing(listing, request.user, reason)
+            reject_listing(listing, request.user, reason, request=request)
             count += 1
         modeladmin.message_user(request, f'Відхилено оголошень: {count}.', messages.WARNING)
         return HttpResponseRedirect(request.get_full_path())
@@ -95,7 +105,7 @@ class LocalListingAdmin(admin.ModelAdmin):
         'seller_type', 'agreed_to_rules', 'has_contact_in_text', 'moderated_by', 'created_at',
     ]
     list_filter = ['status', 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region', 'has_contact_in_text']
-    search_fields = ['make', 'model', 'owner__email', 'contact_phone']
+    search_fields = ['make', 'model', 'owner__email', 'contact_phone', 'source_channel']
     readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
     inlines = [LocalListingImageInline]
     raw_id_fields = ['owner', 'region', 'city', 'moderated_by']
@@ -107,7 +117,7 @@ class LocalListingAdmin(admin.ModelAdmin):
                 'owner', 'make', 'model', 'year', 'mileage_km', 'engine_cc',
                 'fuel_type', 'transmission', 'body_type', 'condition',
                 'price', 'currency', 'price_type',
-                'region', 'city', 'description', 'contact_phone', 'seller_type',
+                'region', 'city', 'description', 'contact_phone', 'seller_type', 'source_channel',
             ),
         }),
         ('Статус і модерація', {
@@ -133,6 +143,35 @@ class LocalListingAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    # Модератор (не superuser) змінює статус лише actions, а не формою: інакше через форму
+    # можна переписати власника, статус, відмітки модерації, телефон і тип продавця.
+    _MODERATOR_READONLY = [
+        'owner', 'status', 'moderated_by', 'moderated_at', 'promoted_until',
+        'expires_at', 'seller_type', 'contact_phone', 'source_channel',
+    ]
+
+    ATTRIBUTION_FIELDS = ('utm', 'referrer', 'entry_page_url')
+
+    def _can_see_attribution(self, request):
+        user = request.user
+        # Только право: доступ можно отозвать и у admin-роли (группа «Адміністратори» получает его в миграции).
+        return bool(user.is_active and user.has_perm('users.view_attribution'))
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is not None and self._can_see_attribution(request):
+            # Источник визита на момент подачи (2.14): только admin, только чтение.
+            fieldsets = (*fieldsets, ('Джерело візиту', {'fields': self.ATTRIBUTION_FIELDS, 'classes': ('collapse',)}))
+        return fieldsets
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            fields += [f for f in self._MODERATOR_READONLY if f not in fields]
+        if self._can_see_attribution(request):
+            fields += [f for f in self.ATTRIBUTION_FIELDS if f not in fields]
+        return fields
 
     @admin.display(description='Оголошення')
     def short_title(self, obj):

@@ -1,14 +1,18 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { localApi } from '@/api/local';
 import { Region, City } from '@/lib/types';
+import ErrorState from '@/components/ui/ErrorState';
 
 export default function LocalListingFilters() {
   const router = useRouter();
   const sp = useSearchParams();
+  const baseId = useId();
+  const fid = (k: string) => `${baseId}-${k}`;
 
   const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsError, setRegionsError] = useState<unknown>(null);
   const [cities, setCities] = useState<City[]>([]);
 
   const [make, setMake] = useState(sp.get('make') ?? '');
@@ -26,9 +30,14 @@ export default function LocalListingFilters() {
   const [search, setSearch] = useState(sp.get('search') ?? '');
   const [ordering, setOrdering] = useState(sp.get('ordering') ?? '-created_at');
 
-  useEffect(() => {
-    localApi.regions().then(setRegions).catch(() => {});
+  const loadRegions = useCallback(() => {
+    setRegionsError(null);
+    localApi.regions().then(setRegions).catch(setRegionsError);
   }, []);
+
+  useEffect(() => {
+    loadRegions();
+  }, [loadRegions]);
 
   useEffect(() => {
     if (region) {
@@ -71,22 +80,23 @@ export default function LocalListingFilters() {
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4">
+      {regionsError ? <ErrorState error={regionsError} onRetry={loadRegions} /> : null}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div>
-          <label className={labelCls}>Пошук</label>
-          <input className={inputCls} placeholder="Марка, модель..." value={search} onChange={e => setSearch(e.target.value)} />
+          <label htmlFor={fid('f1')} className={labelCls}>Пошук</label>
+          <input id={fid('f1')} className={inputCls} placeholder="Марка, модель..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Марка</label>
-          <input className={inputCls} placeholder="Toyota" value={make} onChange={e => setMake(e.target.value)} />
+          <label htmlFor={fid('f2')} className={labelCls}>Марка</label>
+          <input id={fid('f2')} className={inputCls} placeholder="Toyota" value={make} onChange={e => setMake(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Модель</label>
-          <input className={inputCls} placeholder="Camry" value={model} onChange={e => setModel(e.target.value)} />
+          <label htmlFor={fid('f3')} className={labelCls}>Модель</label>
+          <input id={fid('f3')} className={inputCls} placeholder="Camry" value={model} onChange={e => setModel(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Тип палива</label>
-          <select className={inputCls} value={fuel} onChange={e => setFuel(e.target.value)}>
+          <label htmlFor={fid('f4')} className={labelCls}>Тип палива</label>
+          <select id={fid('f4')} className={inputCls} value={fuel} onChange={e => setFuel(e.target.value)}>
             <option value="">Всі</option>
             <option value="petrol">Бензин</option>
             <option value="diesel">Дизель</option>
@@ -96,24 +106,24 @@ export default function LocalListingFilters() {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Рік від</label>
-          <input className={inputCls} type="number" placeholder="2010" value={yearMin} onChange={e => setYearMin(e.target.value)} />
+          <label htmlFor={fid('f5')} className={labelCls}>Рік від</label>
+          <input id={fid('f5')} className={inputCls} type="number" placeholder="2010" value={yearMin} onChange={e => setYearMin(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Рік до</label>
-          <input className={inputCls} type="number" placeholder="2024" value={yearMax} onChange={e => setYearMax(e.target.value)} />
+          <label htmlFor={fid('f6')} className={labelCls}>Рік до</label>
+          <input id={fid('f6')} className={inputCls} type="number" placeholder="2024" value={yearMax} onChange={e => setYearMax(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Ціна від</label>
-          <input className={inputCls} type="number" placeholder="100000" value={priceMin} onChange={e => setPriceMin(e.target.value)} />
+          <label htmlFor={fid('f7')} className={labelCls}>Ціна від, $</label>
+          <input id={fid('f7')} className={inputCls} type="number" placeholder="5000" value={priceMin} onChange={e => setPriceMin(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Ціна до</label>
-          <input className={inputCls} type="number" placeholder="1000000" value={priceMax} onChange={e => setPriceMax(e.target.value)} />
+          <label htmlFor={fid('f8')} className={labelCls}>Ціна до, $</label>
+          <input id={fid('f8')} className={inputCls} type="number" placeholder="30000" value={priceMax} onChange={e => setPriceMax(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>КПП</label>
-          <select className={inputCls} value={transmission} onChange={e => setTransmission(e.target.value)}>
+          <label htmlFor={fid('f9')} className={labelCls}>КПП</label>
+          <select id={fid('f9')} className={inputCls} value={transmission} onChange={e => setTransmission(e.target.value)}>
             <option value="">Всі</option>
             <option value="auto">Автомат</option>
             <option value="manual">Механіка</option>
@@ -122,8 +132,8 @@ export default function LocalListingFilters() {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Тип кузова</label>
-          <select className={inputCls} value={bodyType} onChange={e => setBodyType(e.target.value)}>
+          <label htmlFor={fid('f10')} className={labelCls}>Тип кузова</label>
+          <select id={fid('f10')} className={inputCls} value={bodyType} onChange={e => setBodyType(e.target.value)}>
             <option value="">Всі</option>
             <option value="sedan">Седан</option>
             <option value="suv">Позашляховик</option>
@@ -135,26 +145,26 @@ export default function LocalListingFilters() {
           </select>
         </div>
         <div>
-          <label className={labelCls}>Область</label>
-          <select className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }}>
+          <label htmlFor={fid('f11')} className={labelCls}>Область</label>
+          <select id={fid('f11')} className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }}>
             <option value="">Вся Україна</option>
             {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelCls}>Місто</label>
-          <select className={inputCls} value={city} onChange={e => setCity(e.target.value)} disabled={!region}>
+          <label htmlFor={fid('f12')} className={labelCls}>Місто</label>
+          <select id={fid('f12')} className={inputCls} value={city} onChange={e => setCity(e.target.value)} disabled={!region}>
             <option value="">Всі міста</option>
             {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelCls}>Пробіг до, км</label>
-          <input className={inputCls} type="number" placeholder="200000" value={mileageMax} onChange={e => setMileageMax(e.target.value)} />
+          <label htmlFor={fid('f13')} className={labelCls}>Пробіг до, км</label>
+          <input id={fid('f13')} className={inputCls} type="number" placeholder="200000" value={mileageMax} onChange={e => setMileageMax(e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>Сортування</label>
-          <select className={inputCls} value={ordering} onChange={e => setOrdering(e.target.value)}>
+          <label htmlFor={fid('f14')} className={labelCls}>Сортування</label>
+          <select id={fid('f14')} className={inputCls} value={ordering} onChange={e => setOrdering(e.target.value)}>
             <option value="-created_at">Новіші спочатку</option>
             <option value="created_at">Старіші спочатку</option>
             <option value="price">Ціна ↑</option>

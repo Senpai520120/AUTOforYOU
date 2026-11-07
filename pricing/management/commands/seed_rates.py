@@ -6,14 +6,21 @@
   Финальный расчёт подтверждает таможенный брокер.
 
 Ставки логистики (Copart/IAAI, фрахт) — ПЛЕЙСХОЛДЕРЫ, остаются блокерами.
-Запуск: python manage.py seed_rates
+Запуск: python manage.py seed_rates [--force]
+
+Безопасность старта контейнера (1.18, E1/E2): каждый справочник засевается только если его таблица
+пуста. Удалённые и закрытые админом записи не воскрешаются, дублей нет. Демо-курс - только при пустой
+ExchangeRate или NBU_MODE=demo. `--force` досоздаёт недостающие записи по ключу (без valid_from)
+и печатает, что создано.
 """
 from datetime import date
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from pricing.models import (
+    CustomsCalcRule,
     CustomsExciseRate,
     EuToUaDeliveryRate,
     ExchangeRate,
@@ -21,6 +28,7 @@ from pricing.models import (
     PensionFundBracket,
     UsLandRoute,
 )
+from pricing.rates_provider import DemoRateProvider
 
 # ПРОВЕРИТЬ — прожиточный минимум 2026 (Украина, грн/месяц)
 # https://minfin.com.ua/ua/economy/budget/subsistence/
@@ -28,9 +36,30 @@ LIVING_WAGE_UAH = Decimal('3028')
 
 
 class Command(BaseCommand):
-    help = 'Создаёт начальные тарифы (плейсхолдеры). Проверьте ставки растаможки!'
+    help = ('Создаёт начальные тарифы (плейсхолдеры) в пустых справочниках. '
+            '--force: досоздать недостающие записи. Проверьте ставки растаможки!')
+
+    def add_arguments(self, parser):
+        parser.add_argument('--force', action='store_true',
+                            help='Досоздать недостающие записи и в непустых справочниках')
+
+    def _should_seed(self, model, force):
+        """Пустая таблица (или --force) - сеять; иначе пропуск с сообщением."""
+        if force or not model.objects.exists():
+            return True
+        self.stdout.write(f'  {model.__name__}: пропущено, справочник не пуст.')
+        return False
+
+    def _ensure(self, model, key, defaults):
+        """Создать запись, если для ключа нет ни одной (любой период). Не get_or_create: нет MultipleObjectsReturned."""
+        if model.objects.filter(**key).exists():
+            return
+        model.objects.create(**key, **defaults)
+        self.created[model.__name__] = self.created.get(model.__name__, 0) + 1
 
     def handle(self, *args, **options):
+        force = options['force']
+        self.created = {}
         today = date.today()
 
         # --- Аукционные сборы ---
@@ -45,11 +74,10 @@ class Command(BaseCommand):
             ('california', 'houston', Decimal('900')),
             ('california', 'baltimore', Decimal('1100')),
         ]
-        for location, port, cost in routes:
-            UsLandRoute.objects.get_or_create(
-                auction_location=location, us_port=port,
-                defaults=dict(cost_usd=cost, valid_from=today)
-            )
+        if self._should_seed(UsLandRoute, force):
+            for location, port, cost in routes:
+                self._ensure(UsLandRoute, dict(auction_location=location, us_port=port),
+                             dict(cost_usd=cost, valid_from=today))
 
         # --- Морской фрахт ---
         ocean_routes = [
@@ -60,28 +88,30 @@ class Command(BaseCommand):
             ('new_jersey', 'klaipeda', Decimal('1050')),
             ('new_jersey', 'gdansk', Decimal('1000')),
         ]
-        for us_port, eu_port, cost in ocean_routes:
-            OceanFreightRate.objects.get_or_create(
-                us_port=us_port, eu_port=eu_port,
-                defaults=dict(cost_usd=cost, valid_from=today)
-            )
+        if self._should_seed(OceanFreightRate, force):
+            for us_port, eu_port, cost in ocean_routes:
+                self._ensure(OceanFreightRate, dict(us_port=us_port, eu_port=eu_port),
+                             dict(cost_usd=cost, valid_from=today))
 
         # --- Доставка ЕС → Украина ---
-        for eu_port, cost in [('klaipeda', Decimal('350')), ('gdansk', Decimal('300'))]:
-            EuToUaDeliveryRate.objects.get_or_create(
-                eu_port=eu_port,
-                defaults=dict(cost_usd=cost, valid_from=today)
-            )
+        if self._should_seed(EuToUaDeliveryRate, force):
+            for eu_port, cost in [('klaipeda', Decimal('350')), ('gdansk', Decimal('300'))]:
+                self._ensure(EuToUaDeliveryRate, dict(eu_port=eu_port),
+                             dict(cost_usd=cost, valid_from=today))
 
-        # --- Курсы валют ---
-        ExchangeRate.objects.get_or_create(
-            from_currency='USD', to_currency='UAH', date=today,
-            defaults=dict(rate=Decimal('41.50'))
-        )
-        ExchangeRate.objects.get_or_create(
-            from_currency='USD', to_currency='EUR', date=today,
-            defaults=dict(rate=Decimal('0.92'))
-        )
+        # --- Курсы валют: демо-курсы из DemoRateProvider с source='demo' (02-C8) ---
+        # E1: демо-курс не подменяет настоящий при рестарте контейнера. Только при пустой таблице,
+        # NBU_MODE=demo или --force; (from, to, date) уникален - существующий курс дня не трогаем.
+        demo_mode = getattr(settings, 'NBU_MODE', 'auto') == 'demo'
+        if force or demo_mode or not ExchangeRate.objects.exists():
+            for quote in DemoRateProvider().fetch(today):
+                self._ensure(
+                    ExchangeRate,
+                    dict(from_currency=quote.from_currency, to_currency=quote.to_currency, date=today),
+                    dict(rate=quote.rate, source=quote.source),
+                )
+        else:
+            self.stdout.write('  ExchangeRate: демо-курс пропущено, курсы уже есть.')
 
         # --- Ставки акциза ---
         # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026;
@@ -106,19 +136,19 @@ class Command(BaseCommand):
             ('phev',     0,    None, '0.0000',  '1.0000', '0.0000', '0.2000'),  # гибриды — уточнить у брокера
             ('hybrid',   0,    None, '5.0000',  None,     '0.1000', '0.2000'),  # HEV как бензин; уточнить у брокера
         ]
-        for fuel, cc_min, cc_max, eur_per_100cc, ev_kwh, duty, vat in excise_rates:
-            CustomsExciseRate.objects.get_or_create(
-                fuel_type=fuel,
-                engine_cc_min=cc_min,
-                engine_cc_max=cc_max,
-                defaults=dict(
-                    eur_per_100cc=Decimal(eur_per_100cc),
-                    ev_excise_eur_per_kwh=Decimal(ev_kwh) if ev_kwh else None,
-                    duty_rate=Decimal(duty),
-                    vat_rate=Decimal(vat),
-                    valid_from=today,
+        if self._should_seed(CustomsExciseRate, force):
+            for fuel, cc_min, cc_max, eur_per_100cc, ev_kwh, duty, vat in excise_rates:
+                self._ensure(
+                    CustomsExciseRate,
+                    dict(fuel_type=fuel, engine_cc_min=cc_min, engine_cc_max=cc_max),
+                    dict(
+                        eur_per_100cc=Decimal(eur_per_100cc),
+                        ev_excise_eur_per_kwh=Decimal(ev_kwh) if ev_kwh else None,
+                        duty_rate=Decimal(duty),
+                        vat_rate=Decimal(vat),
+                        valid_from=today,
+                    ),
                 )
-            )
 
         # --- Пенсионный сбор ---
         # Источник: ставки растаможки Украины, актуальны на янв–июнь 2026.
@@ -132,14 +162,20 @@ class Command(BaseCommand):
             (bracket_1,      bracket_2, Decimal('0.0400')),
             (bracket_2,      None,      Decimal('0.0500')),
         ]
-        for min_v, max_v, rate in pension_brackets:
-            PensionFundBracket.objects.get_or_create(
-                min_value_uah=min_v,
-                defaults=dict(max_value_uah=max_v, rate=rate, valid_from=today)
-            )
+        if self._should_seed(PensionFundBracket, force):
+            for min_v, max_v, rate in pension_brackets:
+                self._ensure(PensionFundBracket, dict(min_value_uah=min_v),
+                             dict(max_value_uah=max_v, rate=rate, valid_from=today))
 
+        # --- Правило растаможки (2.5, Q5): значения по умолчанию = прежние формулы, их подтверждает брокер ---
+        if not CustomsCalcRule.objects.exists():
+            CustomsCalcRule.objects.create(valid_from=date(2000, 1, 1))
+            self.created['CustomsCalcRule'] = 1
+
+        summary = ', '.join(f'{k}: {v}' for k, v in self.created.items()) or 'ничего'
+        self.stdout.write(f'Тарифы: создано - {summary}.')
         self.stdout.write(self.style.SUCCESS(
-            'Тарифы созданы. Ставки акциза/пошлины/НДС — актуальны на янв–июнь 2026. '
+            'Тарифы обработаны. Ставки акциза/пошлины/НДС — актуальны на янв–июнь 2026. '
             'Логистика (Copart/IAAI, фрахт) — плейсхолдеры, требуют уточнения у владельца. '
             'Прожиточный минимум (LIVING_WAGE_UAH) — ПРОВЕРИТЬ перед деплоем!'
         ))

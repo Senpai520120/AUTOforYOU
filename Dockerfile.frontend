@@ -1,34 +1,47 @@
 # ─── Stage 1: install dependencies ────────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:22.23-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # ─── Stage 2: build ────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22.23-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Baked at build time into client-side JS bundles.
 # For SSR, INTERNAL_API_URL (runtime) is used instead — see docker-compose.yml.
-ARG NEXT_PUBLIC_API_URL=http://localhost
+# Значень за замовчуванням НЕМАЄ: з порожнім значенням lib/config.ts валить збірку з поясненням (задача 6.4).
+# Адреси задаються в .env / .env.e2e / CI (docker-compose.yml бере їх звідти через `args:`).
+ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-ARG NEXT_PUBLIC_SITE_URL=http://localhost
+ARG NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_IMAGE_HOSTS=
+ENV NEXT_PUBLIC_IMAGE_HOSTS=$NEXT_PUBLIC_IMAGE_HOSTS
 
 RUN npm run build
 
-# ─── Stage 3: production runtime ───────────────────────────────────────────────
-FROM node:20-alpine AS runtime
+# ─── Stage 3: production runtime (output: 'standalone', задача 7.3) ───────────
+# Без dev-залежностей і повного node_modules: у standalone лише потрібні пакети.
+FROM node:22.23-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000 \
+    NEXT_TELEMETRY_DISABLED=1
 
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+# Шрифти для opengraph-image (читаються через process.cwd() в рантайме, задача 6.3b).
+COPY --from=builder /app/assets ./assets
+# Код і статика належать root (лише читання для node); писати node може тільки в .next/cache (кеш fetch/ISR).
+RUN mkdir -p /app/.next/cache && chown node:node /app/.next/cache
 
+USER node
 EXPOSE 3000
-CMD ["npm", "start"]
+# PID 1 = node (сигнали доходять без npm); у compose додатково init: true.
+CMD ["node", "server.js"]

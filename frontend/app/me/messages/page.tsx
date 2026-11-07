@@ -1,26 +1,48 @@
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getConversations, getConversation, sendMessage } from '@/api/messages';
-import type { ConversationSummary, ConversationDetail } from '@/lib/types';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import { ApiError, getErrorMessage } from '@/lib/errors';
+import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import { isEmailNotVerified } from '@/lib/email-verify';
+import { useVisibleInterval } from '@/lib/useVisibleInterval';
+import { timeAgo } from '@/lib/format';
+import type { ConversationSummary, ConversationDetail, ChatMessage } from '@/lib/types';
 
-function timeAgo(iso: string) {
-  const d = new Date(iso);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return 'щойно';
-  if (diff < 3600) return `${Math.floor(diff / 60)} хв тому`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} год тому`;
-  return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+/** 4.7: зрозумілий текст помилки відправки; 400 з полем text — під полем вводу. */
+function sendErrorText(err: unknown): { field?: string; general?: string } {
+  if (err instanceof ApiError) {
+    if (err.status === 429) return { general: 'Забагато повідомлень, зачекайте' };
+    const data = err.data as { text?: string[]; detail?: string } | null;
+    if (err.status === 400 && data?.text?.length) return { field: data.text.join(' ') };
+    if (err.status < 500 && typeof data?.detail === 'string') return { general: data.detail };
+  }
+  return { general: getErrorMessage(err) };
+}
+
+/** Опитування дає останню порцію: раніше підвантажені повідомлення зберігаємо. */
+function mergeLatest(prev: ChatMessage[], latest: ChatMessage[]): ChatMessage[] {
+  if (!latest.length) return prev;
+  const firstId = latest[0].id;
+  return [...prev.filter(m => m.id < firstId), ...latest];
 }
 
 export default function MessagesPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [convPage, setConvPage] = useState(1);
+  const [hasMoreConvs, setHasMoreConvs] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [fieldError, setFieldError] = useState('');
   const [active, setActive] = useState<ConversationDetail | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [text, setText] = useState('');
@@ -28,19 +50,21 @@ export default function MessagesPage() {
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState('');
+  const [notVerified, setNotVerified] = useState(false);
+  const [convError, setConvError] = useState<unknown>(null);
+  const [threadError, setThreadError] = useState<unknown>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   const loadConversations = useCallback(async () => {
+    setLoadingConvs(true);
+    setConvError(null);
     try {
-      const data = await getConversations();
-      setConversations(data);
-    } catch {
-      // silently ignore
+      const data = await getConversations(1);
+      setConversations(data.results);
+      setConvPage(1);
+      setHasMoreConvs(Boolean(data.next));
+    } catch (e) {
+      setConvError(e);
     } finally {
       setLoadingConvs(false);
     }
@@ -50,10 +74,38 @@ export default function MessagesPage() {
     if (user) loadConversations();
   }, [user, loadConversations]);
 
+  const loadMoreConversations = async () => {
+    setLoadingMore(true);
+    try {
+      const data = await getConversations(convPage + 1);
+      setConversations(prev => [...prev, ...data.results.filter(c => !prev.some(p => p.id === c.id))]);
+      setConvPage(convPage + 1);
+      setHasMoreConvs(Boolean(data.next));
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const loadEarlier = async () => {
+    if (!active || !active.messages.length) return;
+    setLoadingEarlier(true);
+    try {
+      const data = await getConversation(active.id, active.messages[0].id);
+      setActive(prev => prev ? { ...prev, messages: [...data.messages, ...prev.messages], has_earlier: data.has_earlier } : prev);
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setLoadingEarlier(false);
+    }
+  };
+
   const openConversation = useCallback(async (id: number) => {
     setActiveId(id);
     setLoadingThread(true);
     setActive(null);
+    setThreadError(null);
     try {
       const data = await getConversation(id);
       setActive(data);
@@ -61,8 +113,8 @@ export default function MessagesPage() {
       setConversations(prev =>
         prev.map(c => (c.id === id ? { ...c, unread_count: 0 } : c))
       );
-    } catch {
-      setError('Не вдалось завантажити діалог.');
+    } catch (e) {
+      setThreadError(e);
     } finally {
       setLoadingThread(false);
     }
@@ -76,23 +128,25 @@ export default function MessagesPage() {
     }
   }, [searchParams, user, openConversation]);
 
-  // poll active thread every 15s
-  useEffect(() => {
+  // poll active thread every 15s (пауза на прихованій вкладці, негайний запит при поверненні)
+  const pollThread = useCallback(() => {
     if (!activeId) return;
-    pollRef.current = setInterval(() => {
-      getConversation(activeId).then(data => {
-        setActive(data);
-        setConversations(prev =>
-          prev.map(c =>
-            c.id === activeId
-              ? { ...c, unread_count: 0, last_message_at: data.last_message_at, last_message_text: data.messages.at(-1)?.text.slice(0, 100) ?? c.last_message_text }
-              : c
-          )
-        );
-      }).catch(() => {});
-    }, 15000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    getConversation(activeId).then(data => {
+      setActive(prev => (prev && prev.id === data.id
+        ? { ...data, messages: mergeLatest(prev.messages, data.messages), has_earlier: prev.has_earlier }
+        : data));
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === activeId
+            ? { ...c, unread_count: 0, last_message_at: data.last_message_at, last_message_text: data.messages.at(-1)?.text.slice(0, 100) ?? c.last_message_text }
+            : c
+        )
+      );
+    }).catch(() => {
+      // Фоновий опитувальник: помилку не показуємо, наступний цикл повторить запит.
+    });
   }, [activeId]);
+  useVisibleInterval(pollThread, 15000, !!activeId);
 
   // scroll to bottom when messages change
   useEffect(() => {
@@ -102,6 +156,8 @@ export default function MessagesPage() {
   const handleSend = async () => {
     if (!text.trim() || !activeId || sending) return;
     setSending(true);
+    setNotVerified(false);
+    setFieldError('');
     try {
       const msg = await sendMessage(activeId, text.trim());
       setText('');
@@ -111,8 +167,14 @@ export default function MessagesPage() {
           c.id === activeId ? { ...c, last_message_text: msg.text.slice(0, 100), last_message_at: msg.created_at } : c
         )
       );
-    } catch {
-      setError('Не вдалось надіслати повідомлення.');
+    } catch (err) {
+      if (isEmailNotVerified(err)) setNotVerified(true);
+      else {
+        // Текст у полі не очищаємо: користувач виправляє і надсилає знову.
+        const { field, general } = sendErrorText(err);
+        if (field) setFieldError(field);
+        if (general) setError(general);
+      }
     } finally {
       setSending(false);
     }
@@ -122,7 +184,14 @@ export default function MessagesPage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  if (loading || !user) return null;
+  // На < md тред і список не стоять поруч: «назад» скидає активний діалог і ?conv=.
+  const backToList = () => {
+    setActiveId(null);
+    setActive(null);
+    router.push('/me/messages');
+  };
+
+  if (loading || !user) return <LoadingState />;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -133,8 +202,9 @@ export default function MessagesPage() {
       </div>
       <h1 className="text-xl font-bold text-slate-900 mb-4">Повідомлення</h1>
 
+      {notVerified && <EmailNotVerified className="mb-3" />}
       {error && (
-        <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+        <div role="alert" className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
           {error}
           <button className="ml-2 underline" onClick={() => setError('')}>×</button>
         </div>
@@ -142,15 +212,17 @@ export default function MessagesPage() {
 
       <div className="flex border border-slate-200 rounded-2xl overflow-hidden bg-white" style={{ minHeight: 480 }}>
         {/* Conversation list */}
-        <aside className="w-72 border-r border-slate-200 flex flex-col flex-shrink-0">
+        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-72 border-r border-slate-200 flex-col flex-shrink-0`}>
           <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">
             Діалоги
           </div>
           {loadingConvs ? (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Завантаження…</div>
+            <LoadingState size="md" />
+          ) : convError ? (
+            <div className="p-3"><ErrorState error={convError} onRetry={loadConversations} /></div>
           ) : conversations.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm px-4 text-center">
-              Немає діалогів.<br />Напишіть продавцю з картки оголошення.
+            <div className="flex-1 flex items-center justify-center px-4">
+              <EmptyState title="Немає діалогів." hint="Напишіть продавцю з картки оголошення." />
             </div>
           ) : (
             <ul className="flex-1 overflow-y-auto divide-y divide-slate-100">
@@ -162,7 +234,7 @@ export default function MessagesPage() {
                   >
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-medium text-slate-900 text-sm truncate">
-                        {conv.other_participant?.first_name || conv.other_participant?.email?.split('@')[0] || 'Менеджер'}
+                        {conv.other_participant?.display_name || 'Менеджер'}
                       </span>
                       {conv.unread_count > 0 && (
                         <span className="bg-blue-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
@@ -176,25 +248,47 @@ export default function MessagesPage() {
                   </button>
                 </li>
               ))}
+              {hasMoreConvs && (
+                <li className="p-3 text-center">
+                  <button type="button" onClick={loadMoreConversations} disabled={loadingMore}
+                    className="text-sm text-blue-700 hover:underline disabled:opacity-50">
+                    {loadingMore ? 'Завантаження…' : 'Показати ще'}
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </aside>
 
         {/* Thread */}
-        <div className="flex-1 flex flex-col">
+        <div className={`${activeId ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`}>
           {!activeId ? (
             <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
               Оберіть діалог
             </div>
           ) : loadingThread ? (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-              Завантаження…
+            <LoadingState size="md" />
+          ) : threadError ? (
+            <div className="p-4">
+              <button type="button" onClick={backToList} className="md:hidden mb-3 text-sm text-blue-700 hover:underline">← Діалоги</button>
+              {threadError instanceof ApiError && (threadError.status === 404 || threadError.status === 403) ? (
+                <EmptyState title="Немає доступу до цієї розмови" hint="Розмову не знайдено або ви не її учасник." />
+              ) : (
+                <ErrorState error={threadError} onRetry={() => openConversation(activeId)} />
+              )}
             </div>
           ) : active ? (
             <>
               {/* Thread header */}
-              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
-                <div>
+              <div className="px-3 sm:px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={backToList}
+                  className="md:hidden shrink-0 text-sm text-blue-700 hover:underline min-h-8"
+                >
+                  ← Діалоги
+                </button>
+                <div className="min-w-0">
                   <div className="font-semibold text-slate-900 text-sm">{active.subject_title}</div>
                   <Link href={active.subject_url} className="text-xs text-blue-600 hover:underline">
                     Переглянути оголошення →
@@ -204,13 +298,22 @@ export default function MessagesPage() {
                   onClick={() => openConversation(activeId)}
                   className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition-colors"
                   title="Оновити"
+                  aria-label="Оновити діалог"
                 >
-                  ↻
+                  <span aria-hidden="true">↻</span>
                 </button>
               </div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                {active.has_earlier && (
+                  <div className="text-center">
+                    <button type="button" onClick={loadEarlier} disabled={loadingEarlier}
+                      className="text-xs text-blue-700 hover:underline disabled:opacity-50">
+                      {loadingEarlier ? 'Завантаження…' : 'Завантажити раніші'}
+                    </button>
+                  </div>
+                )}
                 {active.messages.length === 0 ? (
                   <div className="text-center text-slate-400 text-sm mt-8">Немає повідомлень</div>
                 ) : (
@@ -218,7 +321,7 @@ export default function MessagesPage() {
                     const isMine = msg.sender === user.id;
                     return (
                       <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${isMine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'}`}>
+                        <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2 text-sm ${isMine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'}`}>
                           {!isMine && (
                             <div className="text-xs font-semibold mb-1 text-slate-500">{msg.sender_name}</div>
                           )}
@@ -237,14 +340,18 @@ export default function MessagesPage() {
 
               {/* Input */}
               <div className="px-5 py-3 border-t border-slate-100 flex gap-2 items-end">
-                <textarea
-                  value={text}
-                  onChange={e => setText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Написати повідомлення… (Enter — надіслати)"
-                  rows={2}
-                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
+                <div className="flex-1">
+                  <textarea
+                    value={text}
+                    onChange={e => setText(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    aria-label="Повідомлення" placeholder="Написати повідомлення… (Enter — надіслати)"
+                    aria-invalid={!!fieldError}
+                    rows={2}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                  {fieldError && <p role="alert" className="text-xs text-red-600 mt-1">{fieldError}</p>}
+                </div>
                 <button
                   onClick={handleSend}
                   disabled={!text.trim() || sending}

@@ -1,10 +1,12 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useId } from 'react';
 
 export default function ListingFilters() {
   const router = useRouter();
   const params = useSearchParams();
+  const baseId = useId();
+  const fid = (k: string) => `${baseId}-${k}`;
 
   const update = useCallback((key: string, value: string) => {
     const p = new URLSearchParams(params.toString());
@@ -16,8 +18,8 @@ export default function ListingFilters() {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap gap-3 items-end">
       <div>
-        <label className="block text-xs font-semibold text-slate-600 mb-1">Статус</label>
-        <select
+        <label htmlFor={fid('f1')} className="block text-xs font-semibold text-slate-600 mb-1">Статус</label>
+        <select id={fid('f1')}
           className="border border-slate-300 rounded px-2 py-1.5 text-sm"
           value={params.get('status') ?? ''}
           onChange={e => update('status', e.target.value)}
@@ -29,8 +31,8 @@ export default function ListingFilters() {
         </select>
       </div>
       <div>
-        <label className="block text-xs font-semibold text-slate-600 mb-1">Топливо</label>
-        <select
+        <label htmlFor={fid('f2')} className="block text-xs font-semibold text-slate-600 mb-1">Топливо</label>
+        <select id={fid('f2')}
           className="border border-slate-300 rounded px-2 py-1.5 text-sm"
           value={params.get('fuel_type') ?? ''}
           onChange={e => update('fuel_type', e.target.value)}
@@ -38,13 +40,13 @@ export default function ListingFilters() {
           <option value="">Все</option>
           <option value="petrol">Бензин</option>
           <option value="diesel">Дизель</option>
-          <option value="electric">Электро</option>
+          <option value="electric">Електро</option>
           <option value="hybrid">Гибрид</option>
         </select>
       </div>
       <div>
-        <label className="block text-xs font-semibold text-slate-600 mb-1">Макс. цена ($)</label>
-        <input
+        <label htmlFor={fid('f3')} className="block text-xs font-semibold text-slate-600 mb-1">Макс. цена ($)</label>
+        <input id={fid('f3')}
           type="number"
           className="border border-slate-300 rounded px-2 py-1.5 text-sm w-28"
           placeholder="без лимита"
@@ -53,8 +55,8 @@ export default function ListingFilters() {
         />
       </div>
       <div>
-        <label className="block text-xs font-semibold text-slate-600 mb-1">Поиск</label>
-        <input
+        <label htmlFor={fid('f4')} className="block text-xs font-semibold text-slate-600 mb-1">Поиск</label>
+        <input id={fid('f4')}
           type="text"
           className="border border-slate-300 rounded px-2 py-1.5 text-sm w-44"
           placeholder="марка, модель, VIN"

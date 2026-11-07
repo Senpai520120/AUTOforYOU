@@ -1,19 +1,22 @@
 from rest_framework.permissions import BasePermission
 
 
-class IsVerifiedDealerOrAdmin(BasePermission):
+def can_view_wholesale(user):
     """
-    Wholesale-контент видят только верифицированные дилеры и администраторы.
+    Wholesale видят верифицированные дилеры и администраторы (role=admin+is_staff
+    или superuser). is_staff сам по себе прав не даёт: его имеют broker и moderator
+    ради доступа в Django Admin.
+    """
+    return bool(
+        user
+        and user.is_authenticated
+        and (user.is_verified_dealer or user.is_admin_role)
+    )
 
-    Признак администратора — is_staff, а не role. Поле role пользователь
-    указывает сам при регистрации, и раньше значение 'admin' открывало
-    эту доску кому угодно.
-    """
-    message = 'Доступ только для верифицированных перекупщиков.'
+
+class IsVerifiedDealerOrAdmin(BasePermission):
+    """Wholesale-контент видят только верифицированные дилеры и администраторы."""
+    message = 'Доступ лише для верифікованих перекупників.'
 
     def has_permission(self, request, view):
-        return (
-            request.user and
-            request.user.is_authenticated and
-            (request.user.is_verified_dealer or request.user.is_staff)
-        )
+        return can_view_wholesale(request.user)

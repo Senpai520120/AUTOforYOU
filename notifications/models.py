@@ -13,6 +13,8 @@ class Notification(models.Model):
         DEAL_CONFIRMED = 'deal_confirmed', 'Угода підтверджена'
         DEAL_CANCELLED = 'deal_cancelled', 'Угода скасована'
         REVIEW_RECEIVED = 'review_received', 'Новий відгук'
+        NEW_LEAD = 'new_lead', 'Нова заявка брокеру'
+        LEAD_UNDELIVERED = 'lead_undelivered', 'Заявку не доставлено брокеру'
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -28,6 +30,25 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        # Счётчик непрочитанных и список без полного скана (4.7, 06-Q13).
+        indexes = [models.Index(fields=['user', 'is_read'], name='notif_user_is_read_idx')]
 
     def __str__(self):
         return f'[{self.type}] {self.title} → {self.user_id}'
+
+
+class NotificationTemplate(models.Model):
+    """Текст уведомления, редактируемый в админке (4.7, 06-C5). Плейсхолдеры - в notifications/defaults.py."""
+    code = models.CharField(max_length=30, choices=Notification.Type.choices, unique=True, verbose_name='Тип')
+    title = models.CharField(max_length=255, verbose_name='Заголовок',
+                             help_text='Плейсхолдери: {listing}, {sender}, {preview}, {rating}')
+    text = models.TextField(blank=True, verbose_name='Текст',
+                            help_text='Плейсхолдери: {listing}, {sender}, {preview}, {rating}')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Шаблон сповіщення'
+        verbose_name_plural = 'Шаблони сповіщень'
+
+    def __str__(self):
+        return self.get_code_display()

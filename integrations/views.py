@@ -1,3 +1,6 @@
+import logging
+
+from django.http import Http404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import permissions, status
@@ -5,17 +8,37 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from core.modules import module_enabled
+from users.permissions import IsAdminRole
+
 from .importer import import_lot
 from .models import RegistryReport, VinReport
 from .providers import (
+    REGISTRY_ERROR_MESSAGE,
     ManualLotProvider,
-    NHTSAVinDecodeProvider,
+    UnconfiguredVinProvider,
     get_auction_history_provider,
     get_lot_provider,
     get_opendatabot_provider,
     get_vin_provider,
 )
 from .serializers import LotImportRequestSerializer
+from .services import decode_vin
+from .validators import VIN_ERROR_MESSAGE, is_valid_vin, normalize_vin
+
+logger = logging.getLogger(__name__)
+
+
+class VinReportsFlagMixin:
+    """Платные VIN-отчёты и реестры заморожены (VIN_REPORTS_ENABLED=false): 404 всем, включая staff.
+
+    Проверка в initial() идёт до аутентификации, поэтому аноним получает 404, а не 401.
+    """
+
+    def initial(self, request, *args, **kwargs):
+        if not module_enabled('vin_reports'):
+            raise Http404
+        super().initial(request, *args, **kwargs)
 
 
 @extend_schema(
@@ -31,7 +54,7 @@ from .serializers import LotImportRequestSerializer
         400: OpenApiResponse(description='Некорректный VIN'),
     },
 )
-class VinReportView(APIView):
+class VinReportView(VinReportsFlagMixin, APIView):
     # Тот же уровень защиты, что и у RegistryReportView: внутри дергается
     # Opendatabot — платный внешний API. Раньше вью была без permission_classes
     # (то есть AllowAny из настроек) и без «дорогого» throttle: аноним мог
@@ -42,9 +65,14 @@ class VinReportView(APIView):
 
     # noinspection PyMethodMayBeStatic
     def get(self, request, vin: str):
-        vin = vin.upper().strip()
-        if len(vin) != 17:
-            return Response({'error': 'VIN должен содержать ровно 17 символов.'}, status=status.HTTP_400_BAD_REQUEST)
+        vin = normalize_vin(vin)
+        if not is_valid_vin(vin):
+            return Response({'error': VIN_ERROR_MESSAGE}, status=status.HTTP_400_BAD_REQUEST)
+
+        provider = get_vin_provider()
+        if isinstance(provider, UnconfiguredVinProvider):
+            # Прод без провайдера отчётов: ни фейковых полей, ни обращений к другим провайдерам.
+            return Response({**provider.get_report(vin), 'cached': False})
 
         # Проверяем кэш
         cached = VinReport.objects.filter(vin=vin, provider='stub').first()
@@ -52,7 +80,7 @@ class VinReportView(APIView):
             return Response({**cached.report_data, 'cached': True, 'cache_id': cached.pk})
 
         # Получаем от провайдеров
-        vin_data = get_vin_provider().get_report(vin)
+        vin_data = provider.get_report(vin)
         auction_data = get_auction_history_provider().get_history(vin)
         ua_data = get_opendatabot_provider().get_vehicle_info(vin)
 
@@ -86,35 +114,17 @@ class VinReportView(APIView):
     responses={
         200: OpenApiResponse(description='Технические данные из NHTSA vPIC'),
         400: OpenApiResponse(description='Некорректный VIN'),
+        503: OpenApiResponse(description='NHTSA недоступен или VIN_DECODE_MODE=off'),
     },
 )
 class VinDecodeView(APIView):
+    permission_classes = [permissions.AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'expensive'
 
     def get(self, request, vin: str):
-        vin = vin.upper().strip()
-        if len(vin) != 17:
-            return Response(
-                {'error': 'VIN должен содержать ровно 17 символов.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        cached = VinReport.objects.filter(vin=vin, provider='nhtsa_vpic').first()
-        if cached:
-            return Response({**cached.report_data, 'cached': True, 'cache_id': cached.pk})
-
-        data = NHTSAVinDecodeProvider().decode(vin)
-
-        if 'error' not in data or data.get('make'):
-            VinReport.objects.create(
-                vin=vin,
-                provider='nhtsa_vpic',
-                report_data=data,
-                demo=False,
-            )
-
-        return Response({**data, 'cached': False})
+        payload, http_status = decode_vin(normalize_vin(vin))
+        return Response(payload, status=http_status)
 
 
 @extend_schema(
@@ -137,7 +147,7 @@ class VinDecodeView(APIView):
         400: OpenApiResponse(description='Некоректний VIN або не вказано ані VIN, ані номер'),
     },
 )
-class RegistryReportView(APIView):
+class RegistryReportView(VinReportsFlagMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'expensive'
@@ -162,15 +172,28 @@ class RegistryReportView(APIView):
         # Cache lookup
         cached = None
         if vin_clean:
-            cached = RegistryReport.objects.filter(vin=vin_clean, provider=provider_name).first()
+            cached = RegistryReport.objects.filter(vin=vin_clean, provider=provider_name).exclude(payload__has_key='error').first()
         elif plate:
-            cached = RegistryReport.objects.filter(plate=plate, provider=provider_name).first()
+            cached = RegistryReport.objects.filter(plate=plate, provider=provider_name).exclude(payload__has_key='error').first()
 
         if cached:
             return Response({**cached.payload, 'cached': True, 'cache_id': cached.pk})
 
         # Fetch from provider
         data = get_opendatabot_provider().get_vehicle_info(vin=vin_clean, plate=plate)
+
+        if data.get('configured') is False:
+            return Response(
+                {'configured': False, 'message': data.get('message', REGISTRY_ERROR_MESSAGE)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if data.get('error'):
+            # Ошибку не кэшируем и не раздаём из кэша.
+            return Response(
+                {'error': data['error'], 'message': data.get('message', REGISTRY_ERROR_MESSAGE)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         RegistryReport.objects.create(
             vin=vin_clean,
@@ -204,7 +227,7 @@ class RegistryReportView(APIView):
     },
 )
 class LotImportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminRole]
 
     def post(self, request):
         ser = LotImportRequestSerializer(data=request.data)
@@ -226,7 +249,8 @@ class LotImportView(APIView):
         try:
             vehicle, listing, created = import_lot(lot_data, seller=request.user)
         except ValueError as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning('Імпорт лоту відхилено: %s', type(exc).__name__)
+            return Response({'error': 'Не вдалося імпортувати лот. Перевірте дані.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
             {

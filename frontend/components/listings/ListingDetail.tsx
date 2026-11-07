@@ -6,6 +6,8 @@ import { Listing } from '@/lib/types';
 import Badge from '@/components/ui/Badge';
 import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
+import LeadForm from '@/components/leads/LeadForm';
+import { useC2C } from '@/components/c2c/C2CProvider';
 
 const FUEL: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид',
@@ -15,14 +17,17 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
   const v = listing.vehicle_detail;
   const imgs = v.images;
   const [imgIdx, setImgIdx] = useState(0);
+  const [leadOpen, setLeadOpen] = useState(false);
+  // Переписка закрита → лише «Залишити заявку» (контакт по лоту іде через брокера).
+  const chatOpen = useC2C().social;
 
   const currentImg = imgs[imgIdx];
   const imgSrc = currentImg?.image || currentImg?.source_url || null;
 
   return (
     <div>
-      <Link href="/listings" className="text-blue-600 text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
-        ← Каталог
+      <Link href="/" className="text-blue-600 text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
+        ← На головну
       </Link>
 
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -107,12 +112,20 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
 
           <div className="mt-6 flex flex-col gap-3">
             <Link
-              href={`/calculator?price=${listing.price}&engine_cc=${v.engine_cc}&fuel_type=${v.fuel_type}&year=${v.year}`}
+              href={calculatorHref(listing.id, v)}
               className="bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm text-center"
             >
               Порахувати вартість
             </Link>
-            <WriteSellerButton listingType="imported" listingId={listing.id} />
+            <button type="button" onClick={() => setLeadOpen(true)} aria-expanded={leadOpen}
+              className="border border-blue-700 text-blue-700 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm">
+              Залишити заявку
+            </button>
+            {leadOpen && (
+              <LeadForm source="listing" listingId={listing.id}
+                vehicleLabel={`${v.year} ${v.make} ${v.model}`} onNew={() => setLeadOpen(false)} newLabel="Закрити" />
+            )}
+            {chatOpen && <WriteSellerButton listingType="imported" listingId={listing.id} />}
             <div className="flex justify-center">
               <HeartButton listingType="imported" listingId={listing.id} />
             </div>
@@ -121,4 +134,12 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
       </div>
     </div>
   );
+}
+
+// 09-Q3: у лота немає ціни аукціону — у калькулятор ідуть лише параметри авто і id лота.
+function calculatorHref(listingId: number, v: { engine_cc: number | null; fuel_type: string; year: number; source_auction: string }): string {
+  const q = new URLSearchParams({ fuel_type: v.fuel_type, year: String(v.year), listing: String(listingId) });
+  if (v.engine_cc) q.set('engine_cc', String(v.engine_cc));
+  if (v.source_auction === 'copart' || v.source_auction === 'iaai') q.set('auction', v.source_auction);
+  return `/calculator?${q.toString()}`;
 }

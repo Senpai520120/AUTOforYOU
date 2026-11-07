@@ -10,7 +10,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase
+
+from tests.base import CleanCacheTestCase
 
 from .calculator import (
     AuctionFeeBreakdown,
@@ -520,27 +522,68 @@ class TestIAAIPercentTier(SimpleTestCase):
         self.assertEqual(result.total, D('1200.00') + D('95.00') + D('15.00') + D('75.00'))
 
 
-class TestAuctionFeeBoundary(SimpleTestCase):
-    """Проверка выбора тиера на границах диапазона."""
+class TestAuctionFeeBoundary(CleanCacheTestCase):
+    """
+    Выбор тира на границах диапазона через pricing.calculator.lookup_tier.
+    Тиры создаются в setUpTestData (не seed). Если lookup_tier сравнивает
+    границу неверно (>= вместо >), соответствующий тест краснеет.
+    """
 
-    def test_flat_fee_exact_bid_min(self):
-        """bid == bid_min → должен попасть в тиер."""
-        tier = _tier(fee_flat='335.00')
-        result = calc_auction_fees(D('2500'), tier, [])
-        self.assertEqual(result.buyer_fee, D('335.00'))
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import date
 
-    def test_flat_fee_exact_bid_max(self):
-        """bid == bid_max → должен попасть в тиер."""
-        tier = _tier(fee_flat='335.00')
-        result = calc_auction_fees(D('2999'), tier, [])
-        self.assertEqual(result.buyer_fee, D('335.00'))
+        from pricing.models import AuctionFeeTier
+        AuctionFeeTier.objects.all().delete()  # изоляция от возможных seed-строк
+        common = dict(
+            auction='copart', member_type='broker', payment_type='secured',
+            title_type='any', valid_from=date(2000, 1, 1),
+        )
+        cls.tier_low = AuctionFeeTier.objects.create(
+            bid_min=D('1000.00'), bid_max=D('1999.99'), fee_flat=D('100.00'), **common)
+        cls.tier_high = AuctionFeeTier.objects.create(
+            bid_min=D('2000.00'), bid_max=D('2999.99'), fee_flat=D('200.00'), **common)
 
-    def test_percent_fee_rounding(self):
-        """Проверяем округление ROUND_HALF_UP при %."""
-        tier = _tier(fee_percent='0.0600')
-        # 8333 * 0.06 = 499.98 → 499.98 (нет округления)
-        result = calc_auction_fees(D('8333'), tier, [])
-        self.assertEqual(result.buyer_fee, D('499.98'))
+    def _lookup(self, bid):
+        from datetime import date
+
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        return lookup_tier(pricing_cache.get_auction_fee_tiers(), 'copart', D(str(bid)), 'broker', 'secured', 'any',
+                           date.today())
+
+    def test_bid_equal_min_selects_tier(self):
+        """bid == bid_min -> попадает в этот тир (bid_min включительно)."""
+        self.assertEqual(self._lookup('2000.00'), self.tier_high)
+        self.assertEqual(self._lookup('1000.00'), self.tier_low)
+
+    def test_bid_equal_max_selects_tier(self):
+        """bid == bid_max -> всё ещё этот тир (bid_max включительно)."""
+        self.assertEqual(self._lookup('1999.99'), self.tier_low)
+        self.assertEqual(self._lookup('2999.99'), self.tier_high)
+
+    def test_bid_above_max_selects_next_tier(self):
+        """bid_max + 0.01 -> следующий тир; выше последнего тира тира нет."""
+        self.assertEqual(self._lookup('2000.00'), self.tier_high)
+        self.assertIsNone(self._lookup('3000.00'))
+
+    def test_bid_below_min_selects_previous_tier(self):
+        """bid_min - 0.01 -> предыдущий тир; ниже первого тира тира нет."""
+        self.assertEqual(self._lookup('1999.99'), self.tier_low)
+        self.assertIsNone(self._lookup('999.99'))
+
+    def test_selected_tier_fee_applied(self):
+        """Выбранный на границе тир реально определяет сбор."""
+        tier = self._lookup('1999.99')
+        self.assertEqual(calc_auction_fees(D('1999.99'), tier, []).buyer_fee, D('100.00'))
+        tier = self._lookup('2000.00')
+        self.assertEqual(calc_auction_fees(D('2000.00'), tier, []).buyer_fee, D('200.00'))
+
+    def test_percent_fee_round_half_up(self):
+        """1000.50 * 0.0100 = 10.005 -> 10.01 (HALF_EVEN дал бы 10.00)."""
+        tier = _tier(fee_percent='0.0100')
+        result = calc_auction_fees(D('1000.50'), tier, [])
+        self.assertEqual(result.buyer_fee, D('10.01'))
 
 
 class TestAuctionFeeBreakdownAllDecimal(SimpleTestCase):
@@ -567,22 +610,23 @@ class TestAuctionFeeNoFixedFees(SimpleTestCase):
         self.assertEqual(result.total, D('235.00'))
 
 
-class TestIAAITierBoundaryDB(TestCase):
+class TestIAAITierBoundaryDB(CleanCacheTestCase):
     """
     Границы IAAI-тиров из реальных seed-данных.
     $5000-$7499 → 8%;  $7500+ → 10%.
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpTestData(cls):
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
     def _tier(self, bid):
         from datetime import date
 
-        from pricing.views import _lookup_tier
-        return _lookup_tier('iaai', D(str(bid)), 'broker', 'secured', 'any', date.today())
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        return lookup_tier(pricing_cache.get_auction_fee_tiers(), 'iaai', D(str(bid)), 'broker', 'secured', 'any',
+                           date.today())
 
     def test_bid_7499_is_8pct(self):
         tier = self._tier(7499)
@@ -599,10 +643,11 @@ class TestIAAITierBoundaryDB(TestCase):
     def test_bid_12000_calc_buyer_fee(self):
         from datetime import date
 
-        from pricing.views import _lookup_fixed_fees
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_fixed_fees
         today = date.today()
         tier = self._tier(12000)
-        fixed = _lookup_fixed_fees('iaai', 'any', today)
+        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'iaai', 'any', today)
         result = calc_auction_fees(D('12000'), tier, fixed)
         self.assertEqual(result.buyer_fee, D('1200.00'))
 
@@ -626,16 +671,20 @@ class TestCalculateInputSerializerDefaults(SimpleTestCase):
         from pricing.serializers import CalculateInputSerializer
         s = CalculateInputSerializer(data=self._valid_data())
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data['member_type'], 'broker')
+        self.assertNotIn('member_type', s.validated_data)  # 02-C11: дефолт - FORM_DEFAULTS во view
+        from pricing.views import FORM_DEFAULTS
+        self.assertEqual(FORM_DEFAULTS['member_type'], 'broker')
 
     def test_default_payment_type_is_secured(self):
         from pricing.serializers import CalculateInputSerializer
         s = CalculateInputSerializer(data=self._valid_data())
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data['payment_type'], 'secured')
+        self.assertNotIn('payment_type', s.validated_data)
+        from pricing.views import FORM_DEFAULTS
+        self.assertEqual(FORM_DEFAULTS['payment_type'], 'secured')
 
 
-class TestLandedCostE2ECopartBroker(TestCase):
+class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
     """
     Интеграционный тест полной формулы «под ключ».
     Сценарий: Copart broker salvage secured $5000 petrol 2.0L 2018.
@@ -643,8 +692,7 @@ class TestLandedCostE2ECopartBroker(TestCase):
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUpTestData(cls):
         call_command('seed_rates', verbosity=0)
         call_command('seed_auction_fees', '--clear', verbosity=0)
 
@@ -653,10 +701,13 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
         from django.db.models import Q
 
+        from pricing import cache as pricing_cache
         from pricing.calculator import (
             LandedCostInputs,
             build_rate_snapshot_from_db,
             calculate_landed_cost,
+            lookup_fixed_fees,
+            lookup_tier,
         )
         from pricing.models import (
             CustomsExciseRate,
@@ -666,13 +717,13 @@ class TestLandedCostE2ECopartBroker(TestCase):
             PensionFundBracket,
             UsLandRoute,
         )
-        from pricing.views import _active_on, _lookup_fixed_fees, _lookup_tier
+        from pricing.views import _active_on
 
         today = date.today()
         bid = D('5000')
 
-        tier = _lookup_tier('copart', bid, 'broker', 'secured', 'salvage', today)
-        fixed = _lookup_fixed_fees('copart', 'salvage', today)
+        tier = lookup_tier(pricing_cache.get_auction_fee_tiers(), 'copart', bid, 'broker', 'secured', 'salvage', today)
+        fixed = lookup_fixed_fees(pricing_cache.get_auction_fixed_fees(), 'copart', 'salvage', today, bid)
         auction_fee = calc_auction_fees(bid, tier, fixed)
 
         us_land = _active_on(UsLandRoute.objects.filter(auction_location='general', us_port='houston'), today).first()
@@ -715,8 +766,8 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
     def test_auction_fee_total_includes_fixed(self):
         breakdown, _ = self._build()
-        # buyer $300 + gate salvage $95 + env $10 + vb $99 = $504
-        self.assertEqual(breakdown.auction_fee_usd, D('504.00'))
+        # buyer $300 + gate non-clean $95 + env $15 + virtual bid (live, $4000-5999.99) $125 = $535
+        self.assertEqual(breakdown.auction_fee_usd, D('535.00'))
 
     def test_customs_value_usd(self):
         breakdown, _ = self._build()
@@ -735,8 +786,8 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
     def test_total_usd_includes_all_components(self):
         breakdown, _ = self._build()
-        # $5000 + $504 + $500 + $1300 + $350 + $680 = $8334
-        self.assertEqual(breakdown.total_usd, D('8334.00'))
+        # $5000 + $535 + $500 + $1300 + $350 + $680 = $8365
+        self.assertEqual(breakdown.total_usd, D('8365.00'))
 
     def test_total_uah_positive_and_above_usd_equivalent(self):
         breakdown, rates = self._build()
@@ -760,12 +811,8 @@ class TestLandedCostE2ECopartBroker(TestCase):
 
 # ── Кэш справочников + инвалидация ───────────────────────────────────────────
 
-class TestPricingCacheInvalidation(TestCase):
+class TestPricingCacheInvalidation(CleanCacheTestCase):
     """Изменение ставки в БД → кэш сброшен → следующий запрос берёт новое значение."""
-
-    def setUp(self):
-        from django.core.cache import cache
-        cache.clear()
 
     def test_save_exchange_rate_invalidates_cache(self):
         from django.core.cache import cache
@@ -844,16 +891,12 @@ class TestPricingCacheInvalidation(TestCase):
 
 # ── Celery-задача: fetch_nbu_rates_task ───────────────────────────────────────
 
-class TestFetchNbuRatesTask(TestCase):
+class TestFetchNbuRatesTask(CleanCacheTestCase):
     """
     fetch_nbu_rates_task должна:
     1) Сохранить курсы в ExchangeRate (USD/UAH, EUR/UAH, USD/EUR).
     2) Сбросить кэш pricing:exchange_rates после записи.
     """
-
-    def setUp(self):
-        from django.core.cache import cache
-        cache.clear()
 
     def _nbu_side_effect(self, url, *args, **kwargs):
         """Возвращает фиктивный ответ НБУ в зависимости от valcode в URL."""
@@ -882,7 +925,7 @@ class TestFetchNbuRatesTask(TestCase):
         get_exchange_rates()
         self.assertIsNotNone(cache.get(KEYS['exchange']))
 
-        with patch('pricing.nbu.urlopen', side_effect=self._nbu_side_effect):
+        with patch('pricing.rates_provider.urlopen', side_effect=self._nbu_side_effect):
             result = fetch_nbu_rates_task()
 
         # Курсы сохранены
@@ -912,6 +955,347 @@ class TestFetchNbuRatesTask(TestCase):
 
         from pricing.tasks import fetch_nbu_rates_task
 
-        with patch('pricing.nbu.urlopen', side_effect=URLError('timeout')):
+        with patch('pricing.rates_provider.urlopen', side_effect=URLError('timeout')):
             with self.assertRaises((URLError, Retry)):
                 fetch_nbu_rates_task()
+
+
+# ── 23-D3: кэш тарифов не переживает класс с seed ────────────────────────────
+
+class TestNoStaleTiersAfterSeededClass(CleanCacheTestCase):
+    """
+    Тарифов в БД нет → lookup_tier возвращает None, а API расчёта отвечает
+    «нет тарифов» (422), даже если кэш был «отравлен» объектами удалённых
+    seed-строк (так выглядит состояние после класса с seed в setUpClass).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from datetime import date
+
+        from django.core.cache import cache
+
+        from pricing.cache import KEYS
+        # Имитируем хвост предыдущего класса: в кэше лежит живой на вид тир.
+        cache.set(KEYS['tiers'], [SimpleNamespace(
+            auction='iaai', member_type='broker', payment_type='secured',
+            title_type='any', bid_min=D('0'), bid_max=None,
+            valid_from=date(2000, 1, 1), valid_to=None,
+        )])
+        super().setUpClass()  # базовый класс обязан сбросить кэш
+
+    def test_no_stale_tiers_after_seeded_class(self):
+        from datetime import date
+
+        from rest_framework.test import APIClient
+
+        from pricing import cache as pricing_cache
+        from pricing.calculator import lookup_tier
+        from pricing.models import AuctionFeeTier
+
+        self.assertFalse(AuctionFeeTier.objects.exists())
+        self.assertIsNone(
+            lookup_tier(pricing_cache.get_auction_fee_tiers(), 'iaai', D('7500'), 'broker', 'secured', 'any',
+                        date.today())
+        )
+        resp = APIClient().post('/api/v1/pricing/calculate/', {
+            'auction': 'iaai',
+            'auction_price_usd': '7500',
+            'engine_cc': 2000,
+            'fuel_type': 'petrol',
+            'vehicle_year': 2018,
+            'member_type': 'broker',
+            'payment_type': 'secured',
+            'title_type': 'salvage',
+            'us_port': 'houston',
+            'eu_port': 'klaipeda',
+        }, format='json')
+        self.assertEqual(resp.status_code, 422, getattr(resp, 'data', None))
+
+
+class TestSeedStartupSafety(CleanCacheTestCase):
+    """1.18 (E1, E2): сид на старте контейнера не затирает и не воскрешает реальные данные."""
+
+    TABLES = None
+
+    @staticmethod
+    def _models():
+        from .models import (
+            AuctionFeeTier,
+            AuctionFixedFee,
+            CustomsCalcRule,
+            CustomsExciseRate,
+            EuToUaDeliveryRate,
+            ExchangeRate,
+            OceanFreightRate,
+            PensionFundBracket,
+            UsLandRoute,
+        )
+        return (UsLandRoute, OceanFreightRate, EuToUaDeliveryRate, ExchangeRate, CustomsExciseRate,
+                PensionFundBracket, CustomsCalcRule, AuctionFeeTier, AuctionFixedFee)
+
+    def _counts(self):
+        return {m.__name__: m.objects.count() for m in self._models()}
+
+    def _seed(self, *args, command='seed_rates'):
+        from io import StringIO
+        out = StringIO()
+        call_command(command, *args, stdout=out)
+        return out.getvalue()
+
+    # --- E1 ---
+    def test_e1_real_rate_yesterday_no_demo_today(self):
+        from datetime import date, timedelta
+
+        from .models import ExchangeRate
+        yesterday = date.today() - timedelta(days=1)
+        ExchangeRate.objects.create(from_currency='USD', to_currency='UAH', rate=D('44'), date=yesterday, source='nbu')
+        self._seed()
+        self.assertEqual(ExchangeRate.objects.count(), 1)
+        self.assertFalse(ExchangeRate.objects.filter(date=date.today()).exists())
+
+    def test_e1_empty_db_creates_demo(self):
+        from .models import ExchangeRate
+        self._seed()
+        self.assertEqual(set(ExchangeRate.objects.values_list('source', flat=True)), {'demo'})
+        self.assertEqual(ExchangeRate.objects.count(), 2)
+
+    def test_e1_demo_mode_adds_demo_despite_real_rate(self):
+        from datetime import date, timedelta
+
+        from django.test import override_settings
+
+        from .models import ExchangeRate
+        ExchangeRate.objects.create(from_currency='USD', to_currency='UAH', rate=D('44'),
+                                    date=date.today() - timedelta(days=1), source='nbu')
+        with override_settings(NBU_MODE='demo'):
+            self._seed()
+        self.assertTrue(ExchangeRate.objects.filter(date=date.today(), source='demo').exists())
+
+    # --- E2 ---
+    def test_e2_closed_and_new_rate_no_error_no_additions(self):
+        from datetime import date, timedelta
+
+        from .models import UsLandRoute
+        self._seed()
+        before = self._counts()
+        old = UsLandRoute.objects.get(auction_location='general', us_port='houston')
+        old.valid_from = date.today() - timedelta(days=30)
+        old.valid_to = date.today() - timedelta(days=1)
+        old.save()
+        UsLandRoute.objects.create(auction_location='general', us_port='houston', cost_usd=D('555'),
+                                   valid_from=date.today())
+        before['UsLandRoute'] += 1
+        self._seed()  # раньше: MultipleObjectsReturned
+        self.assertEqual(self._counts(), before)
+
+    def test_e2_deleted_placeholder_not_resurrected(self):
+        from .models import CustomsExciseRate, PensionFundBracket, UsLandRoute
+        self._seed()
+        UsLandRoute.objects.filter(auction_location='general', us_port='houston').delete()
+        CustomsExciseRate.objects.filter(fuel_type='hybrid').delete()
+        PensionFundBracket.objects.filter(rate=D('0.05')).delete()
+        self._seed()
+        self.assertFalse(UsLandRoute.objects.filter(auction_location='general', us_port='houston').exists())
+        self.assertFalse(CustomsExciseRate.objects.filter(fuel_type='hybrid').exists())
+        self.assertFalse(PensionFundBracket.objects.filter(rate=D('0.05')).exists())
+
+    def test_e2_auction_fees_deleted_not_resurrected_and_closed_ok(self):
+        from datetime import date, timedelta
+
+        from .models import AuctionFeeTier, AuctionFixedFee
+        self._seed(command='seed_auction_fees')
+        before = self._counts()
+        AuctionFixedFee.objects.filter(auction='copart', fee_type='gate', title_type='clean').delete()
+        tier = AuctionFeeTier.objects.filter(auction='copart').first()
+        tier.valid_from = date.today() - timedelta(days=30)
+        tier.valid_to = date.today() - timedelta(days=1)
+        tier.save()
+        AuctionFeeTier.objects.create(
+            auction=tier.auction, member_type=tier.member_type, payment_type=tier.payment_type,
+            title_type=tier.title_type, bid_min=tier.bid_min, bid_max=tier.bid_max, fee_flat=D('1'),
+            valid_from=date.today())
+        out = self._seed(command='seed_auction_fees')
+        after = self._counts()
+        self.assertEqual(after['AuctionFixedFee'], before['AuctionFixedFee'] - 1)
+        self.assertEqual(after['AuctionFeeTier'], before['AuctionFeeTier'] + 1)
+        self.assertIn('пропущено', out)
+
+    def test_e2_empty_fills_all_tables(self):
+        self._seed()
+        self._seed(command='seed_auction_fees')
+        for name, n in self._counts().items():
+            self.assertGreater(n, 0, name)
+
+    def test_e2_idempotent_double_call(self):
+        self._seed()
+        self._seed(command='seed_auction_fees')
+        first = self._counts()
+        self._seed()
+        self._seed(command='seed_auction_fees')
+        self.assertEqual(self._counts(), first)
+
+    def test_e2_force_restores_missing_and_reports(self):
+        from .models import UsLandRoute
+        self._seed()
+        UsLandRoute.objects.filter(auction_location='general', us_port='houston').delete()
+        before = self._counts()
+        out = self._seed('--force')
+        self.assertTrue(UsLandRoute.objects.filter(auction_location='general', us_port='houston').exists())
+        self.assertEqual(self._counts()['UsLandRoute'], before['UsLandRoute'] + 1)
+        self.assertIn('создано', out)
+
+    def test_e2_force_with_closed_and_new_rate_no_error(self):
+        from datetime import date, timedelta
+
+        from .models import UsLandRoute
+        self._seed()
+        old = UsLandRoute.objects.get(auction_location='general', us_port='houston')
+        old.valid_from = date.today() - timedelta(days=30)
+        old.valid_to = date.today() - timedelta(days=1)
+        old.save()
+        UsLandRoute.objects.create(auction_location='general', us_port='houston', cost_usd=D('555'),
+                                   valid_from=date.today())
+        n = UsLandRoute.objects.count()
+        self._seed('--force')
+        self.assertEqual(UsLandRoute.objects.count(), n)
+
+    def test_e2_partial_table_not_topped_up(self):
+        """Таблица не пуста (админ оставил одну запись) - досева нет."""
+        from .models import UsLandRoute
+        self._seed()
+        UsLandRoute.objects.exclude(auction_location='general', us_port='houston').delete()
+        self._seed()
+        self.assertEqual(UsLandRoute.objects.count(), 1)
+
+    def test_e2_regions_seed_only_when_empty(self):
+        from local_listings.models import City, Region
+        self._seed(command='seed_regions')
+        self.assertGreater(Region.objects.count(), 20)
+        Region.objects.filter(name='Львівська область').delete()
+        regions, cities = Region.objects.count(), City.objects.count()
+        self._seed(command='seed_regions')
+        self.assertEqual((Region.objects.count(), City.objects.count()), (regions, cities))
+        self._seed('--force', command='seed_regions')
+        self.assertTrue(Region.objects.filter(name='Львівська область').exists())
+
+
+class TestAuctionFeeTierOverlap(CleanCacheTestCase):
+    """2.17 (E9): clean() отклоняет пересечение диапазонов bid_min..bid_max (границы включительные)."""
+
+    MSG = 'Діапазон перетинається з існуючим тиром'
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import date
+
+        from pricing.models import AuctionFeeTier
+        AuctionFeeTier.objects.all().delete()
+        cls.key = dict(auction='copart', member_type='public', payment_type='secured', title_type='any')
+        cls.low = AuctionFeeTier.objects.create(
+            bid_min=D('0'), bid_max=D('999.99'), fee_flat=D('50'), valid_from=date(2025, 1, 1), **cls.key)
+
+    def _tier(self, bid_min, bid_max, valid_from='2025-01-01', valid_to=None, **over):
+        from datetime import date
+
+        from pricing.models import AuctionFeeTier
+        return AuctionFeeTier(
+            bid_min=D(bid_min), bid_max=D(bid_max) if bid_max is not None else None, fee_flat=D('10'),
+            valid_from=date.fromisoformat(valid_from), valid_to=date.fromisoformat(valid_to) if valid_to else None,
+            **{**self.key, **over})
+
+    def test_overlapping_range_rejected(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('500', '1500').full_clean()
+
+    def test_open_ended_overlap_rejected(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('900', None).full_clean()
+
+    def test_shared_boundary_value_rejected(self):
+        # границы включительные: 0-999.99 и 999.99-... делят ставку 999.99
+        from django.core.exceptions import ValidationError
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('999.99', None).full_clean()
+
+    def test_new_max_equal_existing_min_rejected(self):
+        from datetime import date
+
+        from django.core.exceptions import ValidationError
+
+        from pricing.models import AuctionFeeTier
+        AuctionFeeTier.objects.create(**{**self.key, 'member_type': 'broker'}, bid_min=D('1000'), bid_max=None,
+                                      fee_flat=D('90'), valid_from=date(2025, 1, 1))
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            self._tier('500', '1000', member_type='broker').full_clean()
+
+    def test_adjacent_range_allowed(self):
+        self._tier('1000', None).full_clean()
+
+    def test_other_key_period_not_conflicting(self):
+        self._tier('500', '1500', auction='iaai').full_clean()
+        self._tier('500', '1500', member_type='broker').full_clean()
+        self._tier('500', '1500', valid_from='2024-01-01', valid_to='2024-12-31').full_clean()
+
+    def test_editing_existing_tier_does_not_clash_with_itself(self):
+        self.low.fee_flat = D('55')
+        self.low.full_clean()
+
+    def test_edit_into_overlap_rejected(self):
+        from datetime import date
+
+        from django.core.exceptions import ValidationError
+
+        from pricing.models import AuctionFeeTier
+        high = AuctionFeeTier.objects.create(
+            bid_min=D('1000'), bid_max=None, fee_flat=D('90'), valid_from=date(2025, 1, 1), **self.key)
+        high.bid_min = D('800')
+        with self.assertRaisesMessage(ValidationError, self.MSG):
+            high.full_clean()
+
+    def test_system_check_lists_existing_overlaps_without_changing_data(self):
+        from datetime import date
+
+        from pricing.apps import check_auction_fee_tier_overlaps
+        from pricing.models import AuctionFeeTier
+        self.assertEqual(check_auction_fee_tier_overlaps(databases=['default']), [])
+        bad = AuctionFeeTier.objects.create(  # в обход clean()
+            bid_min=D('500'), bid_max=D('800'), fee_flat=D('1'), valid_from=date(2025, 1, 1), **self.key)
+        self.assertEqual(check_auction_fee_tier_overlaps(), [])  # обычный `check` (без --database) в БД не ходит
+        found = check_auction_fee_tier_overlaps(databases=['default'])
+        self.assertEqual([w.id for w in found], ['pricing.W001'])
+        self.assertIn(f'id={bad.pk}', found[0].msg)
+        self.assertEqual(AuctionFeeTier.objects.count(), 2)
+
+
+class TestCalculationDateNotInFuture(CleanCacheTestCase):
+    """2.17 (E10): будущая calculation_date - 400, ставок в ответе нет."""
+
+    URL = '/api/v1/pricing/calculate/'
+
+    def _payload(self, calc_date):
+        return {'auction_price_usd': '5000', 'engine_cc': 2000, 'fuel_type': 'petrol',
+                'vehicle_year': 2018, 'calculation_date': calc_date.isoformat()}
+
+    def test_tomorrow_rejected_for_anonymous(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+        from rest_framework.test import APIClient
+        resp = APIClient().post(self.URL, self._payload(timezone.localdate() + timedelta(days=1)), format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {'calculation_date': ['Дата не може бути в майбутньому']})
+
+    def test_today_and_yesterday_pass_validation(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from pricing.serializers import CalculateInputSerializer
+        today = timezone.localdate()
+        for d in (today, today - timedelta(days=1)):
+            with self.subTest(date=d):
+                ser = CalculateInputSerializer(data=self._payload(d))
+                self.assertTrue(ser.is_valid(), ser.errors)
