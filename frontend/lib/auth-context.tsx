@@ -93,6 +93,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (err instanceof ApiError && err.status === 400 && body?.code === 'captcha_failed') {
         throw new LoginError('Перевірку не пройдено. Спробуйте ще раз.', true);
       }
+      if (err instanceof ApiError && err.status === 401 && body?.code === 'account_blocked') {
+        // 1.13: лише за правильного пароля; причину блокування не показуємо.
+        throw new LoginError('Акаунт заблоковано. Зверніться до підтримки', !!body.captcha_required);
+      }
       if (err instanceof ApiError && err.status === 401 && body?.captcha_required) {
         throw new LoginError('Невірний email або пароль', true);
       }

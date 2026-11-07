@@ -117,25 +117,96 @@ def revoke_all_sessions(user):
         user.session_version = locked.session_version
 
 
-def ban_user(user):
-    """Бан: is_banned, is_active=False, сессии отозваны. Возвращает False, если уже забанен."""
-    if user.is_banned:
-        return False
+BLOCK_REASON_REQUIRED = "Причину блокування вказати обов'язково"
+UNBLOCK_REASON_REQUIRED = "Причину розблокування вказати обов'язково"
+
+
+def _hide_listings_of(user):
+    """Скрывает объявления заблокированного. Единая точка: в 4.3 вместо hidden - blocked."""
+    from local_listings.models import LocalListing
+    return LocalListing.objects.filter(
+        owner=user, status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
+    ).update(status=LocalListing.Status.HIDDEN)
+
+
+def block_user(target, actor, reason, request=None):
+    """Блокировка (1.13): UserBlock + is_banned/is_active, отзыв сессий, скрытие объявлений, журнал.
+
+    Возвращает UserBlock или None, если пользователь уже заблокирован. Staff, суперпользователя
+    и самого себя блокировать нельзя (сначала снять роль). Причина обязательна.
+    Договорённость с 1.8: обезличивание не удаляет UserBlock и строку пользователя, а хеширует
+    email для защиты от повторной регистрации (реализация хеша - в 1.8).
+    """
+    from django.core.exceptions import ValidationError
+
+    from audit.models import AuditAction
+    from audit.services import log_action
+
+    from .models import UserBlock
+
+    reason = (reason or '').strip()
+    if not reason:
+        raise ValidationError(BLOCK_REASON_REQUIRED)
+    if actor is not None and actor.pk == target.pk:
+        raise ValidationError('Не можна заблокувати самого себе.')
     with transaction.atomic():
-        user.is_banned = True
-        user.is_active = False
-        user.save(update_fields=['is_banned', 'is_active'])
-        revoke_all_sessions(user)
-    return True
+        locked = get_user_model().objects.select_for_update().get(pk=target.pk)
+        if locked.is_staff or locked.is_superuser:
+            raise ValidationError('Співробітника не можна заблокувати: спершу зніміть роль.')
+        if UserBlock.objects.filter(user=locked, unblocked_at__isnull=True).exists():
+            return None
+        before = {'is_banned': locked.is_banned, 'is_active': locked.is_active}
+        block = UserBlock.objects.create(user=locked, reason=reason, blocked_by=actor)
+        locked.is_banned = True
+        locked.is_active = False
+        locked.save(update_fields=['is_banned', 'is_active'])
+        revoke_all_sessions(locked)
+        hidden = _hide_listings_of(locked)
+        log_action(
+            actor, AuditAction.USER_BLOCK, locked, reason=reason, request=request, before=before,
+            after={'is_banned': True, 'is_active': False, 'hidden_listings': hidden, 'block_id': block.pk},
+        )
+    target.is_banned, target.is_active = True, False
+    target.session_version = locked.session_version
+    return block
 
 
-def unban_user(user):
-    """Разбан возвращает is_active только тому, кого забанил ban_user (is_banned=True)."""
-    if not user.is_banned:
-        return False
-    user.is_banned = False
-    user.is_active = True
-    user.save(update_fields=['is_banned', 'is_active'])
+def unblock_user(target, actor, reason, request=None):
+    """Разблокировка (1.13): закрывает активный UserBlock, снимает флаги, пишет журнал.
+
+    Возвращает True, если пользователь был заблокирован. Объявления не возвращаются автоматически:
+    их возвращает модератор осознанно. is_active возвращается только заблокированным (is_banned).
+    """
+    from django.core.exceptions import ValidationError
+
+    from audit.models import AuditAction
+    from audit.services import log_action
+
+    from .models import UserBlock
+
+    reason = (reason or '').strip()
+    if not reason:
+        raise ValidationError(UNBLOCK_REASON_REQUIRED)
+    with transaction.atomic():
+        locked = get_user_model().objects.select_for_update().get(pk=target.pk)
+        block = UserBlock.objects.select_for_update().filter(user=locked, unblocked_at__isnull=True).first()
+        if block is None and not locked.is_banned:
+            return False
+        if block is not None:
+            block.unblocked_at = timezone.now()
+            block.unblocked_by = actor
+            block.unblock_reason = reason
+            block.save(update_fields=['unblocked_at', 'unblocked_by', 'unblock_reason'])
+        before = {'is_banned': locked.is_banned, 'is_active': locked.is_active}
+        locked.is_banned = False
+        # Обезличенный (1.8) аккаунт остаётся неактивным: разблокировка лишь закрывает блокировку.
+        locked.is_active = locked.deleted_at is None
+        locked.save(update_fields=['is_banned', 'is_active'])
+        log_action(
+            actor, AuditAction.USER_UNBLOCK, locked, reason=reason, request=request, before=before,
+            after={'is_banned': False, 'is_active': locked.is_active, 'block_id': getattr(block, 'pk', None)},
+        )
+    target.is_banned, target.is_active = False, locked.is_active
     return True
 
 
@@ -314,16 +385,17 @@ ROLE_GROUPS = {
 }
 
 
-def _audit(actor, user, action, role):
-    # Точка расширения под журнал аудита (Н-8); пока - стандартный логгер.
-    logging.getLogger('audit').info(
-        'role %s: actor=%s user=%s role=%s',
-        action, getattr(actor, 'pk', None), user.pk, role,
-    )
+def _audit(actor, user, action, role, request=None):
+    # Журнал аудита (1.13): та же транзакция, что и смена роли (assign_role/revoke_role - atomic).
+    from audit.models import AuditAction
+    from audit.services import log_action
+
+    code = AuditAction.USER_ROLE_ASSIGN if action == 'assign' else AuditAction.USER_ROLE_REVOKE
+    log_action(actor, code, user, request=request, after={'role': role, 'current_role': user.role})
 
 
 @transaction.atomic
-def assign_role(user, role, actor=None) -> bool:
+def assign_role(user, role, actor=None, request=None) -> bool:
     """
     Назначает broker/moderator: role + группа + is_staff (доступ в админку).
     Идемпотентно. Возвращает True, если что-то изменилось.
@@ -344,12 +416,12 @@ def assign_role(user, role, actor=None) -> bool:
     user.is_staff = True
     user.save(update_fields=['role', 'is_staff'])
     user.groups.add(group)
-    _audit(actor, user, 'assign', role)
+    _audit(actor, user, 'assign', role, request)
     return True
 
 
 @transaction.atomic
-def revoke_role(user, role, actor=None) -> bool:
+def revoke_role(user, role, actor=None, request=None) -> bool:
     """
     Снимает broker/moderator: роль возвращается к dealer (если верифицирован)
     или buyer, группа убирается, is_staff снимается (кроме суперпользователя
@@ -368,7 +440,7 @@ def revoke_role(user, role, actor=None) -> bool:
     user.save(update_fields=['role', 'is_staff'])
     if role == 'broker':
         _release_import_conversations(user)
-    _audit(actor, user, 'revoke', role)
+    _audit(actor, user, 'revoke', role, request)
     return True
 
 

@@ -1,6 +1,9 @@
 from rest_framework.test import APITestCase
 
-from tests.factories import auth_client, make_local_listing, make_user
+from audit.models import AuditAction, AuditLog
+from local_listings.models import LocalListing
+from tests.base import CleanCacheTestCase
+from tests.factories import auth_client, make_local_listing, make_staff, make_user
 
 from .models import Report
 
@@ -72,3 +75,67 @@ class TestReportCreate(APITestCase):
             'reason': 'fraud',
         }, format='json')
         self.assertEqual(r.status_code, 400)
+
+
+class TestReportAdminActionsAudit(CleanCacheTestCase):
+    """1.13: действия по жалобам пишут журнал с автором; без права change действий нет."""
+    URL = '/admin/reports/report/'
+
+    def setUp(self):
+        super().setUp()
+        self.admin = make_staff(superuser=True)
+        self.owner = make_user('owner-rep@test.com')
+        self.listing = make_local_listing(self.owner)
+        self.report = Report.objects.create(reporter=make_user(), listing=self.listing, reason='fraud')
+
+    def _post(self, user, action, **extra):
+        self.client.force_login(user)
+        return self.client.post(self.URL, {'action': action, '_selected_action': [self.report.pk], **extra})
+
+    def test_hide_listing_logs_listing_and_report(self):
+        resp = self._post(self.admin, 'hide_listing')
+        self.assertEqual(resp.status_code, 302)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.HIDDEN)
+        hide = AuditLog.objects.get(action=AuditAction.LISTING_HIDE)
+        self.assertEqual(hide.actor, self.admin)
+        self.assertEqual(hide.target_id, str(self.listing.pk))
+        self.assertIn(f'report#{self.report.pk}', hide.reason)
+        review = AuditLog.objects.get(action=AuditAction.REPORT_REVIEW)
+        self.assertEqual(review.after, {'status': Report.Status.REVIEWED})
+
+    def test_dismiss_logs(self):
+        self._post(self.admin, 'dismiss_report')
+        self.report.refresh_from_db()
+        self.assertEqual(self.report.status, Report.Status.DISMISSED)
+        row = AuditLog.objects.get(action=AuditAction.REPORT_DISMISS)
+        self.assertEqual(row.actor, self.admin)
+        self.assertEqual(row.target_id, str(self.report.pk))
+
+    def test_ban_reported_user_requires_reason(self):
+        resp = self._post(self.admin, 'ban_reported_user', apply='1', reason='')
+        self.assertContains(resp, 'Причину блокування вказати обов&#x27;язково')
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.is_banned)
+        self.assertFalse(AuditLog.objects.filter(action=AuditAction.USER_BLOCK).exists())
+
+    def test_ban_reported_user_blocks_with_reason_and_logs(self):
+        resp = self._post(self.admin, 'ban_reported_user', apply='1', reason='Шахрайство за скаргою')
+        self.assertEqual(resp.status_code, 302)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.is_banned)
+        self.assertEqual(self.owner.blocks.get().reason, 'Шахрайство за скаргою')
+        row = AuditLog.objects.get(action=AuditAction.USER_BLOCK)
+        self.assertEqual(row.actor, self.admin)
+        self.report.refresh_from_db()
+        self.assertEqual(self.report.status, Report.Status.REVIEWED)
+
+    def test_view_only_staff_has_no_actions(self):
+        from django.contrib.auth.models import Permission
+        staff = make_staff()
+        staff.user_permissions.add(Permission.objects.get(codename='view_report'))
+        resp = self._post(staff, 'dismiss_report')
+        self.assertEqual(resp.status_code, 200)
+        self.report.refresh_from_db()
+        self.assertEqual(self.report.status, Report.Status.NEW)
+        self.assertFalse(AuditLog.objects.exists())

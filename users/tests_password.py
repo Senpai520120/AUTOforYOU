@@ -383,7 +383,8 @@ class TestRevokeService(PasswordTestCase):
 class TestBanAdminAction(PasswordTestCase):
 
     def _run(self, action, users):
-        request = RequestFactory().post('/admin/users/customuser/')
+        # 1.13: действие требует причину (промежуточная форма); здесь причина уже введена.
+        request = RequestFactory().post('/admin/users/customuser/', {'apply': '1', 'reason': 'Спам'})
         request.user = make_staff(superuser=True)
         request._messages = mock.Mock()
         model_admin = CustomUserAdmin(User, admin_site)
@@ -519,11 +520,11 @@ class TestSessionVersion(PasswordTestCase):
         self.assertEqual(RefreshToken(refreshed.cookies['refresh'].value)['sv'], 1)
 
     def test_ban_unban_old_refresh_and_access_stay_dead(self):
-        from .services import ban_user, unban_user
+        from .services import block_user, unblock_user
         user = make_user('owner@test.com')
         refresh, access = _session(user)
-        ban_user(user)
-        unban_user(user)
+        block_user(user, None, 'Спам')
+        unblock_user(user, None, 'Помилка')
         user.refresh_from_db()
         self.assertTrue(user.is_active)
         self.assertEqual(self.client.post(REFRESH_URL, {'refresh': refresh}, format='json').status_code,
@@ -567,7 +568,7 @@ class TestReportBanAndAdminForm(PasswordTestCase):
         refresh, access = _session(victim)
         reports = [Report.objects.create(reporter=reporter, reported_user=u, reason='fraud')
                    for u in (victim, boss)]
-        request = RequestFactory().post('/admin/')
+        request = RequestFactory().post('/admin/', {'apply': '1', 'reason': 'Шахрайство'})
         request.user = boss
         request._messages = mock.Mock()
         ban_reported_user(CustomUserAdmin(User, admin_site), request,

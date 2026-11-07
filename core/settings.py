@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     'metrics',
     'content',
     'landings',
+    'audit',
     # Проект, не приложение: подключён только ради management-команд (monitoring_test, 7.6). Моделей нет.
     'core',
 
@@ -599,6 +600,8 @@ RESILIENT_TASK_MAX_RETRIES = int(os.environ.get('RESILIENT_TASK_MAX_RETRIES', '3
 # true: сообщение подтверждается после выполнения - при падении воркера задача не теряется (возможен повтор).
 RESILIENT_TASK_ACKS_LATE = os.environ.get('RESILIENT_TASK_ACKS_LATE', 'true').lower() in ('true', '1', 'yes')
 FAILED_TASK_RETENTION_DAYS = int(os.environ.get('FAILED_TASK_RETENTION_DAYS', '90'))
+# Срок хранения журнала аудита (1.13), дней. 0 = без ограничения (до решения юриста, Q3.6).
+AUDIT_LOG_RETENTION_DAYS = max(0, int(os.environ.get('AUDIT_LOG_RETENTION_DAYS', '0') or 0))
 # Строки аргументов длиннее (или с пробелами - тексты) пишутся только как <str:длина>.
 FAILED_TASK_ARG_MAX_LEN = int(os.environ.get('FAILED_TASK_ARG_MAX_LEN', '64'))
 CELERY_TIMEZONE = 'Europe/Kyiv'
@@ -676,6 +679,11 @@ CELERY_BEAT_SCHEDULE = {
     'purge-failed-tasks-daily': {
         'task': 'task_ledger.tasks.purge_failed_tasks',
         'schedule': _crontab(hour=4, minute=10),
+    },
+    # Чистка журнала аудита старше AUDIT_LOG_RETENTION_DAYS (1.13); при 0 ничего не удаляет
+    'purge-audit-log-daily': {
+        'task': 'audit.tasks.purge_audit_log',
+        'schedule': _crontab(hour=4, minute=20),
     },
     # Досыл журнала заявок в группу с партнёром (2.15), порог возраста - в админке
     'resend-lead-journal': {

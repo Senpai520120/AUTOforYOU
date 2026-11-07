@@ -1,40 +1,92 @@
+from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin import helpers
 from django.contrib.auth.admin import UserAdmin
+from django.core.exceptions import ValidationError
+from django.template.response import TemplateResponse
+from django.utils import timezone
+from django.utils.html import format_html, format_html_join
 
-from .models import ConsentRecord, CustomUser, DealerApplication, TrustedShop
+from .models import ConsentRecord, CustomUser, DealerApplication, TrustedShop, UserBlock
 from .services import (
+    BLOCK_REASON_REQUIRED,
+    UNBLOCK_REASON_REQUIRED,
     AccountDeletionError,
     anonymize_user,
     approve_application,
     assign_role,
-    ban_user,
+    block_user,
     reject_application,
     revoke_all_sessions,
     revoke_role,
-    unban_user,
+    unblock_user,
 )
 
 
+class ReasonForm(forms.Form):
+    reason = forms.CharField(
+        label='Причина', required=False, max_length=2000,
+        widget=forms.Textarea(attrs={'rows': 3, 'cols': 60}),
+    )
+
+
+def ask_reason(modeladmin, request, queryset, *, title, prompt, required_error):
+    """Промежуточная страница причины для действия админки (1.13).
+
+    Возвращает (reason, None), когда причина введена, иначе (None, TemplateResponse с формой).
+    Пустая причина - форма снова с ошибкой, действие ничего не делает.
+    """
+    error = ''
+    if 'apply' in request.POST:
+        form = ReasonForm(request.POST)
+        if form.is_valid() and form.cleaned_data['reason'].strip():
+            return form.cleaned_data['reason'].strip(), None
+        error = required_error
+    else:
+        form = ReasonForm()
+    context = {
+        **modeladmin.admin_site.each_context(request),
+        'title': title,
+        'prompt': prompt,
+        'form': form,
+        'error': error,
+        'objects': list(queryset),
+        'action': request.POST.get('action', ''),
+        'opts': modeladmin.model._meta,
+        'action_checkbox_name': helpers.ACTION_CHECKBOX_NAME,
+    }
+    return None, TemplateResponse(request, 'admin/action_reason.html', context)
+
+
+@admin.action(permissions=['change'], description='Заблокувати вибраних користувачів (з причиною)')
 def ban_users(modeladmin, request, queryset):
-    from local_listings.models import LocalListing
-    count = 0
-    for user in queryset.exclude(is_superuser=True):
-        if ban_user(user):  # бан + отзыв всех сессий (01-S12)
-            LocalListing.objects.filter(
-                owner=user,
-                status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
-            ).update(status=LocalListing.Status.HIDDEN)
-            count += 1
-    modeladmin.message_user(request, f'Забанено: {count}.', messages.WARNING)
+    reason, response = ask_reason(
+        modeladmin, request, queryset, title='Блокування користувачів',
+        prompt='Вкажіть причину блокування', required_error=BLOCK_REASON_REQUIRED,
+    )
+    if response is not None:
+        return response
+    done = skipped = 0
+    for user in queryset:
+        try:
+            done += bool(block_user(user, request.user, reason, request=request))
+        except ValidationError:
+            skipped += 1  # staff, суперкористувач або сам себе
+    modeladmin.message_user(
+        request, f'Заблоковано: {done}. Пропущено (співробітники або ви самі): {skipped}.', messages.WARNING,
+    )
 
-ban_users.short_description = 'Забанити вибраних користувачів'
 
-
+@admin.action(permissions=['change'], description='Розблокувати вибраних користувачів (з причиною)')
 def unban_users(modeladmin, request, queryset):
-    count = sum(unban_user(user) for user in queryset.filter(is_banned=True))
-    modeladmin.message_user(request, f'Розбанено: {count}.', messages.SUCCESS)
-
-unban_users.short_description = 'Розбанити вибраних користувачів'
+    reason, response = ask_reason(
+        modeladmin, request, queryset, title='Розблокування користувачів',
+        prompt='Вкажіть причину розблокування', required_error=UNBLOCK_REASON_REQUIRED,
+    )
+    if response is not None:
+        return response
+    count = sum(unblock_user(user, request.user, reason, request=request) for user in queryset)
+    modeladmin.message_user(request, f'Розблоковано: {count}.', messages.SUCCESS)
 
 
 class DeletedFilter(admin.SimpleListFilter):
@@ -66,8 +118,8 @@ class CustomUserAdmin(UserAdmin):
         'anonymize',
     ]
     # role и is_verified_dealer меняются только actions/сервисом, не формой.
-    # is_banned - только через actions/ban_user (отзыв сессий, скрытие объявлений).
-    readonly_fields = ('role', 'is_verified_dealer', 'is_banned', 'deletion_scheduled_at', 'deleted_at')
+    # is_banned - только через actions/block_user (UserBlock, журнал, отзыв сессий, скрытие объявлений).
+    readonly_fields = ('role', 'is_verified_dealer', 'is_banned', 'block_history', 'deletion_scheduled_at', 'deleted_at')
 
     PRIVILEGE_FIELDS = ('is_superuser', 'is_staff', 'groups', 'user_permissions')
     ATTRIBUTION_FIELDS = ('first_touch_utm', 'first_touch_referrer', 'first_touch_entry_url')
@@ -100,6 +152,27 @@ class CustomUserAdmin(UserAdmin):
             return False
         return super().has_change_permission(request, obj)
 
+    @admin.display(description='Історія блокувань')
+    def block_history(self, obj):
+        # Только чтение (1.13): причина видна лишь staff в админке. Не inline - формсет ломал бы POST формы.
+        blocks = list(UserBlock.objects.filter(user=obj).select_related('blocked_by', 'unblocked_by')) if obj else []
+        if not blocks:
+            return '—'
+        return format_html_join(
+            '', '<p>{} · {} · «{}»{}</p>',
+            (
+                (
+                    timezone.localtime(b.blocked_at).strftime('%Y-%m-%d %H:%M'),
+                    b.blocked_by or 'система',
+                    b.reason,
+                    format_html(' — розблоковано {} ({}): «{}»',
+                                timezone.localtime(b.unblocked_at).strftime('%Y-%m-%d %H:%M'),
+                                b.unblocked_by or 'система', b.unblock_reason) if b.unblocked_at else '',
+                )
+                for b in blocks
+            ),
+        )
+
     def has_delete_permission(self, request, obj=None):
         # Удаление каскадом стёрло бы сделки, переписку и отзывы второй стороны (06-S11):
         # вместо него - действие «Анонімізувати» (тот же сервис, что у API).
@@ -129,13 +202,13 @@ class CustomUserAdmin(UserAdmin):
         if not request.user.is_superuser:
             self.message_user(request, 'Ролі призначає лише суперкористувач.', messages.ERROR)
             return
-        n = sum(func(u, role, request.user) for u in queryset)
+        n = sum(func(u, role, request.user, request=request) for u in queryset)
         self.message_user(request, f'{text}: {n}.', level)
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Личные данные', {'fields': ('first_name', 'last_name', 'phone')}),
-        ('Роль и статус', {'fields': ('role', 'is_verified_dealer', 'is_banned', 'is_email_verified')}),
+        ('Роль и статус', {'fields': ('role', 'is_verified_dealer', 'is_banned', 'block_history', 'is_email_verified')}),
         ('Права', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Даты', {'fields': ('last_login', 'deletion_scheduled_at', 'deleted_at')}),
     )

@@ -320,3 +320,48 @@ class ConsentRecord(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ImmutableError('Записи журналу згод не видаляються.')
+
+
+class UserBlock(models.Model):
+    """Блокировка пользователя с причиной и автором (1.13, C6.4).
+
+    Активная — строка с unblocked_at IS NULL (не больше одной на пользователя). История хранится.
+    user — PROTECT: блокировка переживает попытку удаления; обезличивание (1.8) строку
+    пользователя не удаляет, поэтому причина блокировки сохраняется.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='blocks', verbose_name='Користувач',
+    )
+    reason = models.TextField(verbose_name='Причина блокування')
+    blocked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Заблокував',
+    )
+    blocked_at = models.DateTimeField(default=timezone.now, verbose_name='Заблоковано')
+    unblocked_at = models.DateTimeField(null=True, blank=True, verbose_name='Розблоковано')
+    unblocked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Розблокував',
+    )
+    unblock_reason = models.TextField(blank=True, verbose_name='Причина розблокування')
+
+    class Meta:
+        ordering = ['-blocked_at', '-pk']
+        verbose_name = 'Блокування'
+        verbose_name_plural = 'Блокування'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user'], condition=models.Q(unblocked_at__isnull=True),
+                name='userblock_one_active_per_user',
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(reason=''), name='userblock_reason_not_empty',
+            ),
+        ]
+
+    def __str__(self):
+        return f'block#{self.pk} user#{self.user_id}'
+
+    @property
+    def is_active(self):
+        return self.unblocked_at is None

@@ -133,6 +133,8 @@ class CookieTokenObtainView(TokenObtainPairView):
             return Response(
                 {
                     'detail': exc.detail,
+                    # account_blocked (1.13) - только при верном пароле; иначе общий no_active_account.
+                    'code': exc.get_codes(),
                     'captcha_required': count >= settings.CAPTCHA_LOGIN_AFTER_FAILURES,
                 },
                 status=status.HTTP_401_UNAUTHORIZED,

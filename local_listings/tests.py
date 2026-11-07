@@ -1368,3 +1368,63 @@ class TestOwnerNameAndIsOwner(APITestCase):
 
     def test_is_owner_false_for_anonymous(self):
         self.assertIs(self.client.get(self.detail).data['is_owner'], False)
+
+
+class TestModerationAuditLog(APITestCase):
+    """1.13: модерация пишет журнал, повторная модерация не затирает прошлые записи."""
+
+    def setUp(self):
+        self.moderator = make_moderator()
+        self.listing = make_local_listing(make_user(), status=LocalListing.Status.PENDING)
+
+    def test_approve_and_reject_logged_history_kept(self):
+        from audit.models import AuditAction, AuditLog
+        with patch('local_listings.services._notify_owner'):
+            approve_listing(self.listing, self.moderator)
+            reject_listing(self.listing, self.moderator, 'Фото не того авто')
+        rows = AuditLog.objects.filter(target_type='local_listings.locallisting', target_id=str(self.listing.pk))
+        approve = rows.get(action=AuditAction.LISTING_APPROVE)
+        reject = rows.get(action=AuditAction.LISTING_REJECT)
+        self.assertEqual(approve.actor, self.moderator)
+        self.assertEqual(approve.before, {'status': 'pending'})
+        self.assertEqual(approve.after, {'status': 'active'})
+        self.assertEqual(reject.reason, 'Фото не того авто')
+        self.assertEqual(reject.before, {'status': 'active'})
+        self.assertEqual(reject.actor_role_snapshot, 'moderator')
+
+    def test_audit_failure_rolls_back_moderation(self):
+        with patch('audit.services.AuditLog.objects.create', side_effect=RuntimeError('db down')), \
+                patch('local_listings.services._notify_owner') as notify:
+            with self.assertRaisesMessage(RuntimeError, 'db down'):
+                approve_listing(self.listing, self.moderator)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.PENDING)
+        notify.assert_not_called()
+
+
+class TestModerationRaceWithBlock(APITestCase):
+    """Ревью 1.13: объявление, скрытое блокировкой после выборки, не становится active."""
+
+    def test_stale_pending_not_approved_after_block(self):
+        from audit.models import AuditAction, AuditLog
+        from users.services import block_user
+        owner = make_user()
+        listing = make_local_listing(owner, status=LocalListing.Status.PENDING)
+        stale = LocalListing.objects.get(pk=listing.pk)  # выборка экшена до блокировки
+        block_user(owner, None, 'Спам')
+        with patch('local_listings.services._notify_owner') as notify:
+            approve_listing(stale, make_moderator())
+            reject_listing(stale, make_moderator(), 'x')
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, LocalListing.Status.HIDDEN)
+        notify.assert_not_called()
+        self.assertFalse(AuditLog.objects.filter(
+            action__in=[AuditAction.LISTING_APPROVE, AuditAction.LISTING_REJECT]).exists())
+
+    def test_banned_owner_pending_not_approved(self):
+        owner = make_user(is_banned=True)
+        listing = make_local_listing(owner, status=LocalListing.Status.PENDING)
+        with patch('local_listings.services._notify_owner'):
+            approve_listing(listing, make_moderator())
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, LocalListing.Status.PENDING)

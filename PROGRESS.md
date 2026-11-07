@@ -30,6 +30,16 @@
 
 ---
 
+## Задача 1.13: журнал аудита и блокировки пользователей (2026-11-07)
+
+- Приложение `audit`: `AuditLog` только на добавление (`save`/`delete`/`queryset.update`/`delete` бросают `ImmutableAuditLog`), `audit.services.log_action` в той же транзакции, IP — только HMAC. Пишут: блокировка/разблокировка, назначение/снятие ролей, `approve_listing`/`reject_listing`, экшены жалоб. Журнал в админке видят только admin-роль (с `is_staff`) и superuser; add/change/delete нет никому; публичного API нет.
+- `users.UserBlock` (история, одна активная блокировка — частичный `UniqueConstraint`, причина не пустая — `CheckConstraint`, `user` — `PROTECT`) + data-миграция для уже забаненных. `block_user`/`unblock_user` вместо `ban_user`/`unban_user`; staff, суперпользователя и себя блокировать нельзя; объявления скрывает `_hide_listings_of` (в 4.3 — `blocked`).
+- Договорённость с 1.8: обезличивание не удаляет `UserBlock` и строку пользователя; хеш email для защиты от повторной регистрации — в 1.8. Разблокировка обезличенного не возвращает `is_active`.
+- Экшены админки требуют право `change` и причину (промежуточная форма `users/templates/admin/action_reason.html`). Вход заблокированного с верным паролем: «Акаунт заблоковано. Зверніться до підтримки» (`code=account_blocked`), с неверным — общий ответ и столько же хешей пароля (тайминг).
+- Ревью безопасности: критичного нет; «важно» исправлено — тайминг входа, гонка «одобрение после блокировки» (`select_for_update` и сверка статуса в `approve_listing`/`reject_listing`). Вне раздела «Файлы» по необходимости: `users/views.py` (`code` в 401), `frontend/lib/auth-context.tsx` (текст), `.env.docker.example`.
+- Проверки: backend 2990 тестов, падают только 2 Windows-теста `test_entrypoint_refuses_debug_*`; `tsc`, `npm run build` чистые; Playwright `moderation-audit` (chromium): 2 прошли, 3 `fixme`. Факт: 1 сессия (оценка 2).
+- Для владельца: (1) e2e с admin и заблокированным — `fixme`, нужны `admin@e2e.test` и `blocked@e2e.test` в `e2e_seed` (как 3.1/3.4a); (2) у группы «Адміністратори» нет `change_customuser`, поэтому блокирует пока только superuser — выдать право миграцией или оставить так; (3) желательно из ревью: отдельный ключ HMAC для IP вместо `SECRET_KEY`, триггер PostgreSQL против UPDATE журнала.
+
 ## Задача 9.50: визиты лендингов и отчёт о воронке (2026-11-06)
 
 - Ключ `landing_visit`: один POST за вкладку на `/prigon/[slug]`, без cookie.

@@ -920,7 +920,9 @@ class TestRoleAdminHardening(TestCase):
         resp = self.client.post('/admin/users/customuser/', {
             'action': 'assign_broker', '_selected_action': [target.pk],
         })
-        self.assertEqual(resp.status_code, status.HTTP_302_FOUND)  # действие недоступно
+        # 1.13: все действия требуют change - формы действий нет, POST просто показывает список.
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertNotContains(resp, 'name="action"')
         target.refresh_from_db()
         self.assertEqual(target.role, 'buyer')
 
@@ -936,15 +938,18 @@ class TestRoleAdminHardening(TestCase):
         assign_role(user, 'moderator')
         self.assertEqual(list(user.groups.values_list('name', flat=True)), ['Модератори'])
 
-    def test_ban_excludes_only_superusers(self):
+    def test_ban_skips_staff_and_superusers(self):
+        # 1.13: сотрудников и суперпользователя не блокируют (сначала снять роль).
         from users.admin import ban_users
+        request = mock.MagicMock()
+        request.POST = {'apply': '1', 'reason': 'Спам'}
+        request.user = make_staff(superuser=True)
         staff = make_staff()
-        ban_users(mock.MagicMock(), mock.MagicMock(), User.objects.filter(pk=staff.pk))
-        staff.refresh_from_db()
-        self.assertTrue(staff.is_banned)
         su = make_staff(superuser=True)
-        ban_users(mock.MagicMock(), mock.MagicMock(), User.objects.filter(pk=su.pk))
+        ban_users(mock.MagicMock(), request, User.objects.filter(pk__in=[staff.pk, su.pk]))
+        staff.refresh_from_db()
         su.refresh_from_db()
+        self.assertFalse(staff.is_banned)
         self.assertFalse(su.is_banned)
 
     def test_moderator_cannot_change_owner_via_change_form(self):
@@ -1570,3 +1575,280 @@ class UkrainianMessagesTests(APITestCase):
         resp = self.client.put(LOGOUT_URL, {}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertEqual(str(resp.data['detail']), 'Метод "PUT" не дозволений.')
+
+
+# ─── Блокировки и журнал (1.13) ──────────────────────────────────────────────
+
+@override_settings(CAPTCHA_PROVIDER='off', CAPTCHA_ON_LOGIN=False)
+class TestUserBlock(CleanCacheTestCase):
+
+    def setUp(self):
+        super().setUp()
+        from local_listings.models import LocalListing
+        self.LL = LocalListing
+        self.admin = make_admin_role()
+        self.victim = make_user('victim-block@test.com')
+
+    def _block(self, reason='Спам'):
+        from users.services import block_user
+        return block_user(self.victim, self.admin, reason)
+
+    def test_block_sets_flags_revokes_hides_and_logs(self):
+        from audit.models import AuditAction, AuditLog
+        from users.models import UserBlock
+        active = make_local_listing(self.victim, status=self.LL.Status.ACTIVE)
+        pending = make_local_listing(self.victim, status=self.LL.Status.PENDING)
+        sold = make_local_listing(self.victim, status=self.LL.Status.SOLD)
+        version = self.victim.session_version
+        block = self._block()
+        self.victim.refresh_from_db()
+        self.assertTrue(self.victim.is_banned)
+        self.assertFalse(self.victim.is_active)
+        self.assertGreater(self.victim.session_version, version)
+        self.assertEqual(block.reason, 'Спам')
+        self.assertEqual(block.blocked_by, self.admin)
+        self.assertEqual(UserBlock.objects.get(user=self.victim, unblocked_at__isnull=True), block)
+        for listing, expected in ((active, 'hidden'), (pending, 'hidden'), (sold, 'sold')):
+            listing.refresh_from_db()
+            self.assertEqual(listing.status, expected)
+        row = AuditLog.objects.get(action=AuditAction.USER_BLOCK)
+        self.assertEqual(row.actor, self.admin)
+        self.assertEqual(row.reason, 'Спам')
+        self.assertEqual(row.after['hidden_listings'], 2)
+
+    def test_empty_reason_rejected(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaisesMessage(ValidationError, "Причину блокування вказати обов'язково"):
+            self._block('   ')
+        self.victim.refresh_from_db()
+        self.assertFalse(self.victim.is_banned)
+
+    def test_staff_superuser_and_self_rejected(self):
+        from django.core.exceptions import ValidationError
+
+        from users.services import block_user
+        with self.assertRaisesMessage(ValidationError, 'Співробітника не можна заблокувати'):
+            block_user(make_staff(), self.admin, 'x')
+        with self.assertRaisesMessage(ValidationError, 'Співробітника не можна заблокувати'):
+            block_user(make_staff(superuser=True), self.admin, 'x')
+        with self.assertRaisesMessage(ValidationError, 'самого себе'):
+            block_user(self.admin, self.admin, 'x')
+
+    def test_repeat_block_does_not_create_second_active(self):
+        from users.models import UserBlock
+        self.assertIsNotNone(self._block())
+        self.assertIsNone(self._block('Ще раз'))
+        self.assertEqual(UserBlock.objects.filter(user=self.victim, unblocked_at__isnull=True).count(), 1)
+
+    def test_db_constraint_one_active_block(self):
+        from django.db import IntegrityError, transaction
+
+        from users.models import UserBlock
+        UserBlock.objects.create(user=self.victim, reason='a')
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            UserBlock.objects.create(user=self.victim, reason='b')
+
+    def test_db_constraint_reason_not_empty(self):
+        from django.db import IntegrityError, transaction
+
+        from users.models import UserBlock
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            UserBlock.objects.create(user=self.victim, reason='')
+
+    def test_unblock_closes_block_logs_and_keeps_listings_hidden(self):
+        from audit.models import AuditAction, AuditLog
+        from users.services import unblock_user
+        listing = make_local_listing(self.victim, status=self.LL.Status.ACTIVE)
+        block = self._block()
+        self.assertTrue(unblock_user(self.victim, self.admin, 'Помилка модератора'))
+        block.refresh_from_db()
+        self.victim.refresh_from_db()
+        listing.refresh_from_db()
+        self.assertIsNotNone(block.unblocked_at)
+        self.assertEqual(block.unblocked_by, self.admin)
+        self.assertEqual(block.unblock_reason, 'Помилка модератора')
+        self.assertFalse(self.victim.is_banned)
+        self.assertTrue(self.victim.is_active)
+        self.assertEqual(listing.status, 'hidden')
+        self.assertEqual(AuditLog.objects.get(action=AuditAction.USER_UNBLOCK).reason, 'Помилка модератора')
+        # история сохраняется, новая блокировка возможна
+        self.assertIsNotNone(self._block('Знову'))
+        self.assertEqual(self.victim.blocks.count(), 2)
+
+    def test_unblock_requires_reason_and_skips_not_blocked(self):
+        from django.core.exceptions import ValidationError
+
+        from users.services import unblock_user
+        with self.assertRaisesMessage(ValidationError, "Причину розблокування вказати обов'язково"):
+            unblock_user(self.victim, self.admin, '')
+        self.assertFalse(unblock_user(self.victim, self.admin, 'x'))
+
+    def test_audit_failure_rolls_back_block(self):
+        from users.models import UserBlock
+        with mock.patch('audit.services.AuditLog.objects.create', side_effect=RuntimeError('db down')):
+            with self.assertRaisesMessage(RuntimeError, 'db down'):
+                self._block()
+        self.victim.refresh_from_db()
+        self.assertFalse(self.victim.is_banned)
+        self.assertFalse(UserBlock.objects.exists())
+
+    def test_login_blocked_shows_text_without_reason(self):
+        self._block('Секретна причина')
+        resp = self.client.post('/api/v1/auth/token/', {'email': self.victim.email, 'password': TEST_PASSWORD},
+                                content_type='application/json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(resp.json()['detail'], 'Акаунт заблоковано. Зверніться до підтримки')
+        self.assertEqual(resp.json()['code'], 'account_blocked')
+        self.assertNotIn('Секретна', resp.content.decode())
+
+    def test_login_blocked_wrong_password_is_generic(self):
+        self._block()
+        resp = self.client.post('/api/v1/auth/token/', {'email': self.victim.email, 'password': 'wrong-pass-1'},
+                                content_type='application/json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertNotIn('заблоковано', resp.content.decode())
+        self.assertEqual(resp.json()['code'], 'no_active_account')
+
+    def test_old_access_token_rejected_after_block(self):
+        client = auth_client(self.victim)
+        self.assertEqual(client.get('/api/v1/auth/profile/').status_code, status.HTTP_200_OK)
+        self._block()
+        self.assertEqual(client.get('/api/v1/auth/profile/').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_role_assign_and_revoke_logged(self):
+        from audit.models import AuditAction, AuditLog
+        from users.services import assign_role, revoke_role
+        user = make_user()
+        assign_role(user, 'moderator', self.admin)
+        revoke_role(user, 'moderator', self.admin)
+        assign = AuditLog.objects.get(action=AuditAction.USER_ROLE_ASSIGN, target_id=str(user.pk))
+        self.assertEqual(assign.actor, self.admin)
+        self.assertEqual(assign.after['role'], 'moderator')
+        self.assertTrue(AuditLog.objects.filter(action=AuditAction.USER_ROLE_REVOKE, target_id=str(user.pk)).exists())
+
+
+class TestUserBlockBackfillMigration(TestCase):
+
+    def test_backfill_creates_block_for_banned_only_once(self):
+        import importlib
+
+        from django.apps import apps
+
+        from users.models import UserBlock
+        mig = importlib.import_module('users.migrations.0023_userblock_backfill')
+        banned = make_user(is_banned=True, is_active=False)
+        make_user()
+        mig.backfill(apps, None)
+        mig.backfill(apps, None)  # повторный запуск не дублирует
+        block = UserBlock.objects.get()
+        self.assertEqual(block.user, banned)
+        self.assertEqual(block.reason, 'Заблоковано до впровадження журналу')
+        self.assertIsNone(block.blocked_by)
+        mig.unbackfill(apps, None)
+        self.assertFalse(UserBlock.objects.exists())
+
+
+class TestBlockAdminAction(CleanCacheTestCase):
+    URL = '/admin/users/customuser/'
+
+    def setUp(self):
+        super().setUp()
+        self.admin = make_staff(superuser=True)
+        self.victim = make_user('victim-admin@test.com')
+        self.client.force_login(self.admin)
+
+    def _post(self, **extra):
+        return self.client.post(self.URL, {'action': 'ban_users', '_selected_action': [self.victim.pk], **extra})
+
+    def test_first_step_shows_reason_form(self):
+        resp = self._post()
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Вкажіть причину блокування')
+        self.victim.refresh_from_db()
+        self.assertFalse(self.victim.is_banned)
+
+    def test_empty_reason_shows_error_and_blocks_nobody(self):
+        resp = self._post(apply='1', reason='  ')
+        self.assertContains(resp, 'Причину блокування вказати обов&#x27;язково')
+        self.victim.refresh_from_db()
+        self.assertFalse(self.victim.is_banned)
+
+    def test_with_reason_blocks_and_logs_actor(self):
+        from audit.models import AuditAction, AuditLog
+        resp = self._post(apply='1', reason='Шахрайство')
+        self.assertEqual(resp.status_code, 302)
+        self.victim.refresh_from_db()
+        self.assertTrue(self.victim.is_banned)
+        row = AuditLog.objects.get(action=AuditAction.USER_BLOCK)
+        self.assertEqual(row.actor, self.admin)
+        self.assertEqual(row.reason, 'Шахрайство')
+        self.assertEqual(len(row.ip_hash), 64)
+
+    def test_change_page_shows_block_history(self):
+        self._post(apply='1', reason='Шахрайство')
+        resp = self.client.get(f'{self.URL}{self.victim.pk}/change/')
+        self.assertContains(resp, 'Шахрайство')
+
+    def test_unban_action_with_reason(self):
+        self._post(apply='1', reason='Шахрайство')
+        resp = self.client.post(self.URL, {'action': 'unban_users', '_selected_action': [self.victim.pk],
+                                           'apply': '1', 'reason': 'Оскаржено'})
+        self.assertEqual(resp.status_code, 302)
+        self.victim.refresh_from_db()
+        self.assertFalse(self.victim.is_banned)
+
+
+@override_settings(CAPTCHA_PROVIDER='off', CAPTCHA_ON_LOGIN=False)
+class TestBlockedLoginTiming(CleanCacheTestCase):
+    """Ревью 1.13: неудачный вход хеширует пароль одинаковое число раз для любого email."""
+
+    def _hashes(self, email):
+        from django.contrib.auth.hashers import PBKDF2PasswordHasher
+        cache.clear()
+        with mock.patch.object(PBKDF2PasswordHasher, 'encode', autospec=True,
+                               side_effect=PBKDF2PasswordHasher.encode) as enc:
+            resp = self.client.post('/api/v1/auth/token/', {'email': email, 'password': 'wrong-pass-1'},
+                                    content_type='application/json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        return enc.call_count
+
+    @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.PBKDF2PasswordHasher'])
+    def test_same_hash_count_for_blocked_plain_and_missing(self):
+        from users.services import block_user
+        plain = make_user('plain-timing@test.com')
+        blocked = make_user('blocked-timing@test.com')
+        block_user(blocked, None, 'Спам')
+        counts = {self._hashes(e) for e in (plain.email, blocked.email, 'missing-timing@test.com')}
+        self.assertEqual(len(counts), 1, counts)
+
+
+class TestUnblockAnonymized(TestCase):
+
+    def test_unblock_keeps_anonymized_inactive(self):
+        from django.utils import timezone
+
+        from users.services import block_user, unblock_user
+        user = make_user()
+        block_user(user, None, 'Спам')
+        User.objects.filter(pk=user.pk).update(deleted_at=timezone.now())
+        self.assertTrue(unblock_user(user, None, 'Помилка'))
+        user.refresh_from_db()
+        self.assertFalse(user.is_banned)
+        self.assertFalse(user.is_active)
+        self.assertIsNotNone(user.blocks.get().unblocked_at)
+
+
+class TestBanActionsNeedChangePermission(CleanCacheTestCase):
+
+    def test_view_only_staff_cannot_block(self):
+        staff = make_staff()
+        staff.user_permissions.add(Permission.objects.get(codename='view_customuser'))
+        victim = make_user()
+        self.client.force_login(staff)
+        resp = self.client.post('/admin/users/customuser/', {
+            'action': 'ban_users', '_selected_action': [victim.pk], 'apply': '1', 'reason': 'x',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertNotContains(resp, 'ban_users')
+        victim.refresh_from_db()
+        self.assertFalse(victim.is_banned)

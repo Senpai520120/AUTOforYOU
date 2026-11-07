@@ -53,7 +53,7 @@ def approve_listings(modeladmin, request, queryset):
         return
     count = 0
     for listing in queryset.filter(status=LocalListing.Status.PENDING):
-        approve_listing(listing, request.user)
+        approve_listing(listing, request.user, request=request)
         count += 1
     modeladmin.message_user(request, f'Опубліковано оголошень: {count}.', messages.SUCCESS)
 
@@ -70,7 +70,7 @@ def reject_with_reason(modeladmin, request, queryset):
         reason = request.POST.get('reason', '').strip() or 'Не відповідає правилам розміщення.'
         count = 0
         for listing in queryset.filter(status=LocalListing.Status.PENDING):
-            reject_listing(listing, request.user, reason)
+            reject_listing(listing, request.user, reason, request=request)
             count += 1
         modeladmin.message_user(request, f'Відхилено оголошень: {count}.', messages.WARNING)
         return HttpResponseRedirect(request.get_full_path())
