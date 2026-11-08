@@ -15,6 +15,7 @@ class Notification(models.Model):
         REVIEW_RECEIVED = 'review_received', 'Новий відгук'
         NEW_LEAD = 'new_lead', 'Нова заявка брокеру'
         LEAD_UNDELIVERED = 'lead_undelivered', 'Заявку не доставлено брокеру'
+        CONTACT_ANOMALY = 'contact_anomaly', 'Масовий перегляд телефонів'
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

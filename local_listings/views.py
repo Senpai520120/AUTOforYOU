@@ -18,7 +18,7 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, serializers, status
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied, Throttled
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
@@ -26,6 +26,7 @@ from rest_framework.views import APIView
 
 from core.c2c import payments_enabled
 from core.uploads import ImageUploadError, allowed_formats, max_bytes_from_setting, sanitize_image
+from integrations.captcha import DisabledVerifier, get_captcha_verifier, require_captcha
 from integrations.services import decode_vin
 from integrations.validators import normalize_vin
 from metrics.models import MetricKey
@@ -46,6 +47,8 @@ from .serializers import (
     PromotionTariffSerializer,
     RegionSerializer,
 )
+from .services import record_contact_view
+from .throttles import ContactDailyThrottle, GuestAnonThrottle, GuestContactThrottle, ip_hash
 
 
 def _seller_stats_annotations():
@@ -413,28 +416,95 @@ class LocalListingImageDetailView(APIView):
 
 # ─── Контакт (захист телефону) ───────────────────────────────────────────────
 
-@extend_schema(
-    tags=['local'],
-    summary='Отримати телефон продавця (тільки авторизований)',
-    description='Повертає contact_phone. Обмеження: 20 запитів/год на акаунт.',
-)
-class LocalListingContactView(APIView):
-    """GET /api/v1/local/listings/<id>/contact/ — повертає телефон тільки авторизованому."""
-    permission_classes = [permissions.IsAuthenticated]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'contact'
+def _throttled(throttle):
+    """429 с текстом лимита без английского «Expected available in…»; Retry-After остаётся."""
+    message = getattr(throttle, 'message', None)
+    if message is None:
+        return Throttled(wait=throttle.wait())
+    exc = Throttled(detail=message)
+    wait = throttle.wait()
+    exc.wait = None if wait is None else max(1, int(wait))
+    return exc
 
-    def get(self, request, pk):
-        # Тільки ACTIVE. Раніше сюди входив і PENDING — телефон продавця
-        # віддавався до того, як оголошення пройшло модерацію.
-        listing = get_object_or_404(
-            LocalListing,
-            pk=pk,
-            status=LocalListing.Status.ACTIVE,
-        )
+
+class _ContactPhoneSerializer(serializers.Serializer):
+    contact_phone = serializers.CharField(allow_null=True)
+
+
+class _GuestContactSerializer(serializers.Serializer):
+    captcha_token = serializers.CharField(required=False, allow_blank=True)
+    website = serializers.CharField(required=False, allow_blank=True)
+
+
+class LocalListingContactView(APIView):
+    """Телефон продавця (4.5a, F3.2, 05-S6).
+
+    GET - авторизованому: ліміти ``contact`` (година) і ``contact_daily`` (доба).
+    POST - гостю після капчі: порядок перевірок throttle → honeypot → капча → active → журнал і номер;
+    будь-яка відмова до останнього кроку номер не розкриває і журнал не пише.
+    Номер віддається лише active-оголошенню (інакше 404, без запису). Кожен показ - у ``ContactView``.
+    """
+    guest_throttle = None
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
+    def get_throttles(self):
+        user = getattr(self.request, 'user', None)
+        if user is not None and user.is_authenticated:
+            self.throttle_scope = 'contact'
+            return [ScopedRateThrottle(), ContactDailyThrottle()]
+        # Гість: загальний anon (ключ - HMAC IP) проти перебору капчі; добовий ліміт показів - у post().
+        return [GuestAnonThrottle()]
+
+    def check_throttles(self, request):
+        for throttle in self.get_throttles():
+            if not throttle.allow_request(request, self):
+                raise _throttled(throttle)
+
+    def _active_listing(self, pk):
+        # Тільки ACTIVE: pending/sold/hidden/expired/rejected - 404 (телефон не віддається до модерації).
+        return get_object_or_404(LocalListing, pk=pk, status=LocalListing.Status.ACTIVE)
+
+    def _reveal(self, listing, **who):
+        record_contact_view(listing, **who)
         if listing.contact_phone:
             record_metric(MetricKey.PHONE_VIEW)
         return Response({'contact_phone': listing.contact_phone or None})
+
+    @extend_schema(tags=['local'], summary='Телефон продавця (авторизованому)', responses=_ContactPhoneSerializer)
+    def get(self, request, pk):
+        return self._reveal(self._active_listing(pk), user=request.user)
+
+    @extend_schema(tags=['local'], summary='Телефон продавця гостю після капчі', request=_GuestContactSerializer,
+                   responses=_ContactPhoneSerializer)
+    def post(self, request, pk):
+        if request.user.is_authenticated:
+            return self.get(request, pk)
+        if not settings.PHONE_LOG_IP_SALT:
+            # Без солі не порахувати ні ліміт, ні журнал гостя: показ закритий, номер не віддається.
+            return Response(
+                {'detail': 'Показ телефону гостям тимчасово недоступний. Увійдіть, щоб побачити номер.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if isinstance(get_captcha_verifier(), DisabledVerifier):
+            # CAPTCHA_PROVIDER=off: гостю без перевірки номер не віддаємо (ревью 4.5a).
+            return Response(
+                {'detail': 'Показ телефону гостям тимчасово недоступний. Увійдіть, щоб побачити номер.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        throttle = GuestContactThrottle()
+        if not throttle.allow_request(request, self):  # слот займається атомарно
+            raise _throttled(throttle)
+        try:
+            require_captcha(request, request.data, point='guest_phone')
+            listing = self._active_listing(pk)
+        except Exception:
+            throttle.release()  # показу не було - слот повертається
+            raise
+        return self._reveal(listing, ip_hash=ip_hash(throttle.get_ident(request)))
 
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────

@@ -261,6 +261,37 @@ class LocalListing(models.Model):
         return f'{self.make} {self.model} {self.year} — {self.price} {self.currency} [{self.status}]'
 
 
+class ContactView(models.Model):
+    """Факт показа телефона (4.5a, 05-S6). Ни номера, ни user-agent, ни IP в открытом виде.
+
+    Гость: user=None, is_guest=True, ip_hash - HMAC-SHA256(PHONE_LOG_IP_SALT, ip). Хранится
+    CONTACT_VIEW_RETENTION_DAYS дней (cleanup_contact_views).
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='contact_views', verbose_name='Користувач',
+    )
+    is_guest = models.BooleanField(default=False, verbose_name='Гість')
+    ip_hash = models.CharField(max_length=64, blank=True, db_index=True, verbose_name='Хеш IP')
+    listing = models.ForeignKey(
+        LocalListing, on_delete=models.CASCADE, related_name='contact_views', verbose_name='Оголошення',
+    )
+    created_at = models.DateTimeField(default=timezone.now, db_index=True, verbose_name='Коли')
+
+    class Meta:
+        verbose_name = 'Перегляд телефону'
+        verbose_name_plural = 'Перегляди телефонів'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at'], name='cv_user_created_idx'),
+            models.Index(fields=['listing', 'created_at'], name='cv_listing_created_idx'),
+        ]
+
+    def __str__(self):
+        who = f'гість {self.ip_hash[:8]}' if self.is_guest else f'#{self.user_id}'
+        return f'{who} → оголошення #{self.listing_id}'
+
+
 class LocalListingImage(models.Model):
     listing = models.ForeignKey(
         LocalListing, on_delete=models.CASCADE, related_name='images', verbose_name='Оголошення'

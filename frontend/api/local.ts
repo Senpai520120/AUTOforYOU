@@ -76,4 +76,8 @@ export const localApi = {
 
   getContact: (listingId: number) =>
     apiGet<{ contact_phone: string | null }>(`/api/v1/local/listings/${listingId}/contact/`),
+
+  /** 4.5a: гість отримує номер після капчі (captcha_token + honeypot-поле website). */
+  getContactAsGuest: (listingId: number, captcha: { captcha_token?: string; website: string }) =>
+    apiPost<{ contact_phone: string | null }>(`/api/v1/local/listings/${listingId}/contact/`, captcha),
 };

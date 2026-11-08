@@ -54,7 +54,7 @@ def render_template(code: str, context: dict) -> tuple[str, str]:
         return fallback[0], ''
 
 
-def notify(user_id: int, ntype: str, context: dict, link: str = '') -> None:
+def notify(user_id: int, ntype: str, context: dict, link: str = '', *, telegram: bool = True) -> None:
     """Единая отправка уведомления (4.7, 06-Q5/06-Q7).
 
     In-app - в текущей транзакции; Telegram - после коммита (transaction.on_commit), иначе при откате
@@ -78,4 +78,5 @@ def notify(user_id: int, ntype: str, context: dict, link: str = '') -> None:
         except Exception:
             logger.exception('telegram notification failed: type=%s user=%s', ntype, user_id)
 
-    transaction.on_commit(_send_telegram)
+    if telegram:
+        transaction.on_commit(_send_telegram)

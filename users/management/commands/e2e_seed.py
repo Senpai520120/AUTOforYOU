@@ -157,6 +157,8 @@ class Command(BaseCommand):
                     'body_type': 'sedan', 'price': Decimal('9000'), 'currency': 'USD',
                     'region': region, 'city': city, 'status': status,
                     'agreed_to_rules': True,
+                    # 4.5a: номер для e2e/c2c-phone.spec.ts (показ вошедшему и гостю после капчи)
+                    'contact_phone': '+380671112233',
                     # 9.57: бейдж «від @канал» на карточке (e2e/channel-badge.spec.ts)
                     'source_channel': 'afy_e2e_channel' if status == LocalListing.Status.ACTIVE else '',
                 },

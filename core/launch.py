@@ -217,6 +217,22 @@ def check_captcha() -> list:
     return findings
 
 
+def check_phone_log_salt() -> list:
+    """4.5a (Н-33): соль HMAC для IP гостя. Без неё гостю 503; равная SECRET_KEY - ротация ключа ломает журнал.
+
+    Режим ВОЛНЫ-1: пустая соль при открытом разделе - предупреждение (гостям просто нет телефона, утечки нет);
+    ошибкой для ВОЛНЫ-2 её делает 7.7b.
+    """
+    salt = str(getattr(settings, 'PHONE_LOG_IP_SALT', '') or '')
+    if salt and salt == settings.SECRET_KEY:
+        return [Finding(ERROR, 'PHONE_LOG_IP_SALT збігається з SECRET_KEY: задайте окрему випадкову сіль')]
+    if not salt:
+        level = WARNING if c2c_enabled() else INFO
+        return [Finding(level, 'PHONE_LOG_IP_SALT не задано: гостям телефон не показується (503), '
+                               'згенеруйте сіль і додайте в .env')]
+    return [Finding(OK, 'PHONE_LOG_IP_SALT: задано')]
+
+
 def check_integrations() -> list:
     """Статусы интеграций из реестра 3.1 (без БД и без сети)."""
     from integrations.registry import get_statuses
@@ -434,7 +450,7 @@ def run_checks(wave: int = 1, seed_threshold: int | None = None) -> list:
         raise ValueError('режим 2 - задача 7.7b')
     findings = []
     for check in (
-        check_required_vars, check_flags, check_captcha, check_integrations, check_carvertical_url,
+        check_required_vars, check_flags, check_captcha, check_phone_log_salt, check_integrations, check_carvertical_url,
         check_site_settings, check_tariffs, check_roles, check_lead_notifications, check_photo_mode,
         check_backup_mark, check_metrics_and_tasks,
     ):

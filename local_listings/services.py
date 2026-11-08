@@ -140,3 +140,79 @@ def _listing_url(listing: LocalListing) -> str:
     from django.conf import settings
     site = getattr(settings, 'SITE_URL', 'http://localhost:3000')
     return f'{site}/local/{listing.pk}'
+
+
+# ─── Журнал показов телефона (4.5a, 05-S6) ───────────────────────────────────
+
+def _mask_email(email: str) -> str:
+    """ivan.petrenko@gmail.com -> iv…@gmail.com: модератору хватает для узнавания, полный адрес - в админке."""
+    local, _, domain = (email or '').partition('@')
+    if not domain:
+        return '…'
+    return f'{local[:2]}…@{domain}'
+
+
+def moderator_ids() -> list[int]:
+    """Получатели сигналов модерации: активные с правом moderate_locallisting (группа или лично) и superuser."""
+    from django.contrib.auth import get_user_model
+    from django.contrib.auth.models import Permission
+    from django.db.models import Q
+
+    perm = Permission.objects.filter(codename='moderate_locallisting', content_type__app_label='local_listings').first()
+    q = Q(is_superuser=True)
+    if perm is not None:
+        q |= Q(groups__permissions=perm) | Q(user_permissions=perm)
+    return list(
+        get_user_model().objects.filter(q, is_active=True, deleted_at__isnull=True)
+        .values_list('pk', flat=True).distinct()
+    )
+
+
+def record_contact_view(listing: LocalListing, *, user=None, ip_hash: str = '') -> None:
+    """Записать показ и проверить порог аномалии. Пользователь: повтор того же объявления за час - без записи.
+
+    Гость: запись на каждый показ (is_guest=True, только хэш IP). Номер, user-agent и IP не пишутся.
+    """
+    from datetime import timedelta
+
+    from django.conf import settings
+
+    from .models import ContactView
+
+    now = timezone.now()
+    if user is not None:
+        if ContactView.objects.filter(user=user, listing=listing, created_at__gte=now - timedelta(hours=1)).exists():
+            return
+        ContactView.objects.create(user=user, listing=listing, created_at=now)
+        scope = {'user': user}
+    else:
+        ContactView.objects.create(is_guest=True, ip_hash=ip_hash, listing=listing, created_at=now)
+        scope = {'ip_hash': ip_hash, 'is_guest': True}
+
+    threshold = settings.CONTACT_VIEW_ALERT_THRESHOLD
+    distinct = (
+        ContactView.objects.filter(created_at__gte=now - timedelta(days=1), **scope)
+        .values('listing_id').distinct().count()
+    )
+    if threshold > 0 and distinct >= threshold:
+        _alert_anomaly(user=user, ip_hash=ip_hash, count=distinct)
+
+
+def _alert_anomaly(*, user, ip_hash: str, count: int) -> None:
+    """Одно in-app уведомление модераторам в сутки на пользователя/хэш (cache.add - атомарная отметка)."""
+    from django.core.cache import cache
+
+    from notifications.services import notify
+
+    if user is not None:
+        mark = f'contact_anomaly:user:{user.pk}'
+        who = f'Користувач #{user.pk} ({_mask_email(user.email)})'
+        link = f'/admin/local_listings/contactview/?user__id__exact={user.pk}'
+    else:
+        mark = f'contact_anomaly:ip:{ip_hash}'
+        who = f'Гість (хеш {ip_hash[:8]}…)'
+        link = f'/admin/local_listings/contactview/?q={ip_hash[:8]}'
+    if not cache.add(mark, 1, timeout=86400):
+        return
+    for moderator_id in moderator_ids():
+        notify(moderator_id, 'contact_anomaly', {'who': who, 'count': count}, link, telegram=False)

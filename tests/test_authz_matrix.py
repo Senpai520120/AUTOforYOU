@@ -113,6 +113,8 @@ PUBLIC = {
 PUBLIC_METHODS = {
     'local-listing-list': {'get'},
     'local-listing-detail': {'get'},
+    # 4.5a: гость получает телефон ACTIVE-объявления после капчи и в пределах суточного лимита по хэшу IP
+    'local-listing-contact': {'post'},
 }
 HANDLER_METHODS = ('get', 'post', 'put', 'patch', 'delete')
 
@@ -337,7 +339,7 @@ MATRIX: list[Case] = [
          state=st_listings, roles={'broker': 403, 'staff': 403, 'moderator': 204},
          note='решение владельца: модератор через API может править и удалять; в админке delete нет'),
     Case('local-listing-contact', 'get', kwargs=lambda c: {'pk': c.listing}, other=200,
-         note='телефон ACTIVE-объявления виден любому вошедшему по дизайну; лимит/показ гостю - 4.5'),
+         note='телефон ACTIVE-объявления виден любому вошедшему по дизайну; гостю - POST с капчей (4.5a)'),
     Case('local-listing-contact', 'get', kwargs=lambda c: {'pk': c.listing_pending}, owner_code=404, other=404,
          variant='pending', note='телефон не отдаётся до модерации'),
     Case('local-listing-images', 'post', kwargs=lambda c: {'pk': c.listing}, owner_code=201, other=403,

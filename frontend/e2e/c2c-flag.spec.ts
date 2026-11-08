@@ -126,10 +126,11 @@ test.describe('Засев (C2C on, подача закрыта)', () => {
       await expect(page.getByRole('banner').locator('a[href="/ua"]')).toBeVisible();
     });
 
-    test('карточка: гость видит приглашение войти, кнопок связи нет', async ({ page }) => {
+    test('карточка: гость видит «Показати телефон», кнопок связи нет', async ({ page }) => {
       test.skip(listingId === null, 'в каталоге нет объявлений (запустите e2e_seed)');
       await page.goto(`/local/${listingId}`);
-      await expect(page.getByRole('link', { name: 'Увійдіть, щоб побачити телефон' })).toHaveAttribute('href', '/login');
+      // 4.5a: гість бачить «Показати телефон» (капча), номера в розмітці немає.
+      await expect(page.getByRole('button', { name: 'Показати телефон' })).toBeVisible();
       for (const name of [/Написати/, /Запропонувати угоду/, /Поскаржитися/]) {
         await expect(page.getByRole('button', { name })).toHaveCount(0);
         await expect(page.getByRole('link', { name })).toHaveCount(0);
@@ -218,9 +219,9 @@ test.describe('Полный режим (ВОЛНА-2: оба флага on)', ()
     expect(await (await request.get('/sitemap.xml')).text()).toContain('/ua');
   });
 
-  test('карточка: гость видит приглашение войти', async ({ page }) => {
+  test('карточка: гость видит «Показати телефон»', async ({ page }) => {
     test.skip(listingId === null, 'в каталоге нет объявлений');
     await page.goto(`/local/${listingId}`);
-    await expect(page.getByRole('link', { name: 'Увійдіть, щоб побачити телефон' })).toHaveAttribute('href', '/login');
+    await expect(page.getByRole('button', { name: 'Показати телефон' })).toBeVisible();
   });
 });

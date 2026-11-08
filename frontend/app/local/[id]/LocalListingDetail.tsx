@@ -10,6 +10,7 @@ import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
 import ReportButton from '@/components/reports/ReportButton';
 import ChannelBadge from '@/components/local/ChannelBadge';
+import GuestPhoneReveal, { guestPhoneError } from '@/components/local/GuestPhoneReveal';
 import { useC2C } from '@/components/c2c/C2CProvider';
 
 const PLACEHOLDER_SVG =
@@ -66,18 +67,14 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   ].filter(Boolean) as { label: string; value: string | number }[];
 
   const handleShowPhone = async () => {
-    if (!user) {
-      window.location.href = '/login';
-      return;
-    }
     setPhoneLoading(true);
     setPhoneError('');
     try {
       const data = await localApi.getContact(listing.id);
       setPhone(data.contact_phone || 'Номер не вказано');
       trackEvent('phone_reveal', { source: 'listing' });
-    } catch {
-      setPhoneError('Не вдалося завантажити номер. Спробуйте ще раз.');
+    } catch (err) {
+      setPhoneError(guestPhoneError(err)); // 429 - текст добового ліміту з сервера
     } finally {
       setPhoneLoading(false);
     }
@@ -186,12 +183,10 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                   {phone}
                 </a>
               ) : !user ? (
-                <Link
-                  href="/login"
-                  className="block w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
-                >
-                  Увійдіть, щоб побачити телефон
-                </Link>
+                <GuestPhoneReveal
+                  listingId={listing.id}
+                  onPhone={(p) => { setPhone(p); trackEvent('phone_reveal', { source: 'listing' }); }}
+                />
               ) : (
                 <button
                   onClick={handleShowPhone}

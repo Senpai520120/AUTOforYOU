@@ -1543,8 +1543,14 @@ paths:
   /api/v1/local/listings/{id}/contact/:
     get:
       operationId: v1_local_listings_contact_retrieve
-      description: 'Повертає contact_phone. Обмеження: 20 запитів/год на акаунт.'
-      summary: Отримати телефон продавця (тільки авторизований)
+      description: |-
+        Телефон продавця (4.5a, F3.2, 05-S6).
+
+        GET - авторизованому: ліміти ``contact`` (година) і ``contact_daily`` (доба).
+        POST - гостю після капчі: порядок перевірок throttle → honeypot → капча → active → журнал і номер;
+        будь-яка відмова до останнього кроку номер не розкриває і журнал не пише.
+        Номер віддається лише active-оголошенню (інакше 404, без запису). Кожен показ - у ``ContactView``.
+      summary: Телефон продавця (авторизованому)
       parameters:
       - in: path
         name: id
@@ -1558,7 +1564,51 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/_ContactPhone'
+          description: ''
+    post:
+      operationId: v1_local_listings_contact_create
+      description: |-
+        Телефон продавця (4.5a, F3.2, 05-S6).
+
+        GET - авторизованому: ліміти ``contact`` (година) і ``contact_daily`` (доба).
+        POST - гостю після капчі: порядок перевірок throttle → honeypot → капча → active → журнал і номер;
+        будь-яка відмова до останнього кроку номер не розкриває і журнал не пише.
+        Номер віддається лише active-оголошенню (інакше 404, без запису). Кожен показ - у ``ContactView``.
+      summary: Телефон продавця гостю після капчі
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/_GuestContactRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/_GuestContactRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/_GuestContactRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/_ContactPhone'
+          description: ''
   /api/v1/local/listings/{id}/images/:
     post:
       operationId: v1_local_listings_images_create
@@ -4599,6 +4649,7 @@ components:
       - review_received
       - new_lead
       - lead_undelivered
+      - contact_anomaly
       type: string
     PaginatedBrokerLeadListList:
       type: object
@@ -5771,6 +5822,21 @@ components:
           title: Главное фото
       required:
       - id
+    _ContactPhone:
+      type: object
+      properties:
+        contact_phone:
+          type: string
+          nullable: true
+      required:
+      - contact_phone
+    _GuestContactRequest:
+      type: object
+      properties:
+        captcha_token:
+          type: string
+        website:
+          type: string
   securitySchemes:
     cookieAuth:
       type: apiKey

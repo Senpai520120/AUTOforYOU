@@ -79,3 +79,15 @@ def expire_listings():
         )
         count += 1
     return f'expired={count}'
+
+
+@shared_task
+def cleanup_contact_views():
+    """4.5a (05-S6): журнал показов телефона старше CONTACT_VIEW_RETENTION_DAYS удаляется (раз в сутки)."""
+    from django.conf import settings
+
+    from .models import ContactView
+
+    cutoff = timezone.now() - timedelta(days=settings.CONTACT_VIEW_RETENTION_DAYS)
+    deleted, _ = ContactView.objects.filter(created_at__lt=cutoff).delete()
+    return {'deleted': deleted}

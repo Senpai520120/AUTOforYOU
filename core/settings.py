@@ -357,6 +357,10 @@ REST_FRAMEWORK = {
         # Ответы в существующем диалоге (4.7, 06-S6): отдельный лимит от старта диалогов.
         'messages_reply': os.environ.get('THROTTLE_MESSAGES_REPLY_RATE', '120/hour'),
         'contact': os.environ.get('THROTTLE_CONTACT_RATE', '20/hour'),
+        # 4.5a (05-S6): суточный лимит показов телефона на аккаунт вдобавок к почасовому.
+        'contact_daily': os.environ.get('THROTTLE_CONTACT_DAILY_RATE', '60/day'),
+        # 4.5a (F3.2, Н-33): показов телефона гостю в сутки; ключ - HMAC IP (local_listings/throttles.py).
+        'contact_guest': os.environ.get('THROTTLE_CONTACT_GUEST_DAILY_RATE', '10/day'),
         # Загрузка фото (задача 1.10): каждый запрос — декодирование и пересохранение картинок.
         'uploads': os.environ.get('THROTTLE_UPLOADS_RATE', '30/hour'),
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
@@ -493,6 +497,14 @@ LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
 # Пусто — общий UPLOAD_IMAGE_MAX_SIZE_MB (задача 1.10).
 LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '') or 0) or None
 LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'))
+
+# Журнал показов телефона (4.5a, 05-S6, Н-33). IP гостя хранится только как HMAC с этой солью;
+# пустая соль - гостю 503 без номера, launch_check ругается. Не SECRET_KEY: его ротация не должна ломать журнал.
+PHONE_LOG_IP_SALT = os.environ.get('PHONE_LOG_IP_SALT', '').strip()
+# Сколько разных объявлений за сутки у одного пользователя/хэша IP - сигнал модераторам.
+CONTACT_VIEW_ALERT_THRESHOLD = int(os.environ.get('CONTACT_VIEW_ALERT_THRESHOLD', '30'))
+# Сколько дней хранится журнал показов (очистка - local_listings.tasks.cleanup_contact_views).
+CONTACT_VIEW_RETENTION_DAYS = int(os.environ.get('CONTACT_VIEW_RETENTION_DAYS', '90'))
 
 # ─── Внешние API ──────────────────────────────────────────────────────────────
 # Opendatabot — реестры авто Украины. Без ключа → demo=True, не падает.
@@ -665,6 +677,11 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': _crontab(hour=9, minute=15),
     },
     # Авто-зняття прострочених оголошень
+    'cleanup-contact-views-daily': {
+        'task': 'local_listings.tasks.cleanup_contact_views',
+        'schedule': _crontab(hour=4, minute=30),
+        'options': {'expires': 86400},
+    },
     'expire-listings-daily': {
         'task': 'local_listings.tasks.expire_listings',
         'schedule': _crontab(hour=9, minute=20),

@@ -3,7 +3,7 @@ from django.contrib.admin import helpers
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 
-from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
+from .models import City, ContactView, LocalListing, LocalListingImage, PromotionTariff, Region
 from .services import approve_listing, reject_listing
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────
@@ -233,3 +233,68 @@ class ModerationQueueAdmin(admin.ModelAdmin):
     @admin.display(description='Власник')
     def owner_email(self, obj):
         return obj.owner.email
+
+
+# ─── Перегляди телефонів (4.5a, 05-S6) ────────────────────────────────────────
+
+@admin.register(ContactView)
+class ContactViewAdmin(admin.ModelAdmin):
+    """Журнал показів телефону: лише читання, лише модератор (право moderate_locallisting) або superuser.
+
+    Номера, user-agent і IP тут немає; у гостя - тільки хеш IP. Фільтр за користувачем/оголошенням -
+    з посилання сповіщення (?user__id__exact=…) або пошуком «=id».
+    """
+    list_display = ['created_at', 'who', 'listing', 'views_per_day']
+    list_filter = [('created_at', admin.DateFieldListFilter), 'is_guest']
+    search_fields = ['=user__id', '=listing__id', 'ip_hash']
+    list_select_related = ['user', 'listing']
+    date_hierarchy = 'created_at'
+    list_per_page = 100
+
+    def get_queryset(self, request):
+        from datetime import timedelta
+
+        from django.db.models import Count, OuterRef, Subquery
+        from django.utils import timezone
+
+        since = timezone.now() - timedelta(days=1)
+        per_user = (
+            ContactView.objects.filter(user=OuterRef('user'), created_at__gte=since)
+            .order_by().values('user').annotate(n=Count('pk')).values('n')
+        )
+        per_guest = (
+            ContactView.objects.filter(is_guest=True, ip_hash=OuterRef('ip_hash'), created_at__gte=since)
+            .order_by().values('ip_hash').annotate(n=Count('pk')).values('n')
+        )
+        return super().get_queryset(request).annotate(
+            _per_user=Subquery(per_user[:1]), _per_guest=Subquery(per_guest[:1]),
+        )
+
+    @admin.display(description='Хто')
+    def who(self, obj):
+        if obj.is_guest:
+            return f'Гість (хеш {obj.ip_hash[:8]}…)'
+        return obj.user or '—'
+
+    @admin.display(description='Переглядів за добу')
+    def views_per_day(self, obj):
+        return (obj._per_guest if obj.is_guest else obj._per_user) or 0
+
+    def _allowed(self, request):
+        user = request.user
+        return user.is_active and (user.is_superuser or user.has_perm('local_listings.moderate_locallisting'))
+
+    def has_module_permission(self, request):
+        return self._allowed(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._allowed(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
