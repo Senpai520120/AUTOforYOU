@@ -115,11 +115,12 @@ class CustomUserAdmin(UserAdmin):
     ordering = ('-created_at',)
     actions = [
         ban_users, unban_users, 'assign_broker', 'revoke_broker', 'assign_moderator', 'revoke_moderator',
-        'anonymize',
+        'anonymize', 'reset_phone_verification',
     ]
     # role и is_verified_dealer меняются только actions/сервисом, не формой.
     # is_banned - только через actions/block_user (UserBlock, журнал, отзыв сессий, скрытие объявлений).
-    readonly_fields = ('role', 'is_verified_dealer', 'is_banned', 'block_history', 'deletion_scheduled_at', 'deleted_at')
+    readonly_fields = ('role', 'is_verified_dealer', 'is_banned', 'block_history', 'deletion_scheduled_at', 'deleted_at',
+                       'verified_phone', 'phone_verified_at')
 
     PRIVILEGE_FIELDS = ('is_superuser', 'is_staff', 'groups', 'user_permissions')
     ATTRIBUTION_FIELDS = ('first_touch_utm', 'first_touch_referrer', 'first_touch_entry_url')
@@ -205,9 +206,15 @@ class CustomUserAdmin(UserAdmin):
         n = sum(func(u, role, request.user, request=request) for u in queryset)
         self.message_user(request, f'{text}: {n}.', level)
 
+    @admin.action(permissions=['change'], description='Скинути підтвердження телефону')
+    def reset_phone_verification(self, request, queryset):
+        # 4.10: поддержка освобождает номер (например, «номер уже подтверждён на другом аккаунте»).
+        n = queryset.exclude(phone_verified_at=None).update(verified_phone=None, phone_verified_at=None)
+        self.message_user(request, f'Підтвердження телефону скинуто: {n}.', messages.SUCCESS)
+
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Личные данные', {'fields': ('first_name', 'last_name', 'phone')}),
+        ('Личные данные', {'fields': ('first_name', 'last_name', 'phone', 'verified_phone', 'phone_verified_at')}),
         ('Роль и статус', {'fields': ('role', 'is_verified_dealer', 'is_banned', 'block_history', 'is_email_verified')}),
         ('Права', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Даты', {'fields': ('last_login', 'deletion_scheduled_at', 'deleted_at')}),

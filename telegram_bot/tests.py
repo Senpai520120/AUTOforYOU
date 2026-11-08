@@ -367,8 +367,9 @@ class BotAccountLinkTest(BotRuntimeTestCase):
         token.refresh_from_db()
         self.assertEqual(self.user.telegram_id, TG_USER_ID)
         self.assertTrue(token.used)
-        [reply] = self.replies()
+        reply, ask = self.replies()  # 4.10: после привязки бот просит поделиться контактом
         self.assertIn('успішно', reply)
+        self.assertIn('Поділитися контактом', ask)
 
     def test_token_cannot_be_reused(self):
         token = self._token()
@@ -746,7 +747,7 @@ class BotLinkConflictTest(BotRuntimeTestCase):
         self.user.save(update_fields=['telegram_id'])
         token = self._token()
         self.assertEqual(self.send(f'/start link_{token.token}').status_code, 200)
-        [reply] = self.replies()
+        reply, _ask = self.replies()  # 4.10: + просьба поделиться контактом
         self.assertIn('уже прив\'язано до вашого акаунту', reply)
 
     def test_second_update_with_same_token_gets_expired(self):
@@ -754,7 +755,7 @@ class BotLinkConflictTest(BotRuntimeTestCase):
         self.send(f'/start link_{token.token}', update_id=1)
         self.send(f'/start link_{token.token}', update_id=2, from_id=TG_USER_ID + 1)
         self.assertIn('успішно', self.replies()[0])
-        self.assertIn('застаріло', self.replies()[1])
+        self.assertIn('застаріло', self.replies()[2])  # [1] - просьба поделиться контактом (4.10)
 
     def test_token_redeemed_in_parallel_does_not_link(self):
         """Хендлер прочитал токен валидным, но параллельный апдейт успел его погасить: привязки нет."""

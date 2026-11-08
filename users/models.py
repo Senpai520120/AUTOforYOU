@@ -66,6 +66,10 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.BUYER, verbose_name='Роль')
     is_verified_dealer = models.BooleanField(default=False, verbose_name='Верифицированный дилер')
     telegram_id = models.BigIntegerField(null=True, blank=True, unique=True, verbose_name='Telegram ID')
+    # 4.10: телефон, подтверждённый собственным контактом в Telegram (E.164, уникален). `phone` выше - из профиля.
+    verified_phone = models.CharField(max_length=16, null=True, blank=True, unique=True,
+                                      verbose_name='Підтверджений телефон')
+    phone_verified_at = models.DateTimeField(null=True, blank=True, verbose_name='Телефон підтверджено')
     agreed_to_terms_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата згоди з умовами')
     is_banned = models.BooleanField(default=False, verbose_name='Забанений')
     is_email_verified = models.BooleanField(default=False, verbose_name='Email підтверджено')

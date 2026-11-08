@@ -1,9 +1,16 @@
 import logging
 import uuid
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    Message,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 
 from telegram_bot.formatting import listing_card_html
 from telegram_bot.texts import aget_text
@@ -165,3 +172,34 @@ async def _handle_link_token(message: Message, token_str: str) -> None:
         'ok': 'link_ok', 'already': 'link_already', 'taken': 'link_taken', 'expired': 'link_expired',
     }.get(result, 'link_invalid')
     await message.answer(await aget_text(key), parse_mode='HTML')
+    if result in ('ok', 'already'):
+        await _ask_contact(message)
+
+
+# ─── Подтверждение телефона контактом (4.10) ─────────────────────────────────
+
+async def _ask_contact(message: Message) -> None:
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=await aget_text('btn_share_contact'), request_contact=True)]],
+        resize_keyboard=True, one_time_keyboard=True,
+    )
+    await message.answer(await aget_text('phone_ask'), reply_markup=kb, parse_mode='HTML')
+
+
+@router.message(F.contact, F.chat.type == 'private')
+async def on_contact(message: Message) -> None:
+    from asgiref.sync import sync_to_async
+
+    from telegram_bot.phone_verify import TelegramContactVerifier
+
+    contact = message.contact
+    if message.from_user is None or contact is None:
+        return
+    result = await sync_to_async(TelegramContactVerifier().confirm)(
+        telegram_id=message.from_user.id, contact_user_id=contact.user_id, phone_number=contact.phone_number,
+    )
+    key = {
+        'ok': 'phone_ok', 'not_own': 'phone_not_own', 'not_linked': 'phone_not_linked', 'taken': 'phone_taken',
+    }.get(result, 'phone_bad')
+    logger.info('phone verify via telegram: result=%s', result)  # без номера и id
+    await message.answer(await aget_text(key), reply_markup=ReplyKeyboardRemove(), parse_mode='HTML')

@@ -39,6 +39,8 @@ def _profile(user):
         'is_verified_dealer': user.is_verified_dealer,
         'is_email_verified': user.is_email_verified,
         'telegram_linked': user.telegram_id is not None,
+        'verified_phone': user.verified_phone or '',
+        'phone_verified_at': user.phone_verified_at,
         'created_at': user.created_at,
         'agreed_to_terms_at': user.agreed_to_terms_at,
         'deletion_scheduled_at': user.deletion_scheduled_at,

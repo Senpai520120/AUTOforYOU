@@ -510,6 +510,8 @@ LOCAL_LISTING_THUMB_MAX_SIDE = int(os.environ.get('LOCAL_LISTING_THUMB_MAX_SIDE'
 KATOTTG_FILE = os.environ.get('KATOTTG_FILE', '').strip()
 CITY_SEARCH_MIN_CHARS = int(os.environ.get('CITY_SEARCH_MIN_CHARS', '2'))
 CITY_SEARCH_LIMIT = int(os.environ.get('CITY_SEARCH_LIMIT', '20'))
+# 4.10: SMS-подтверждение телефона - этап «Рост»; пока любой вызов SmsVerifier -> NotConfigured.
+SMS_VERIFY_ENABLED = os.environ.get('SMS_VERIFY_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 # Длина комментария к жалобе (4.13, B8).
 REPORT_COMMENT_MAX_LENGTH = int(os.environ.get('REPORT_COMMENT_MAX_LENGTH', '1000'))
 

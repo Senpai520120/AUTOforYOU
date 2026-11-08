@@ -5801,6 +5801,14 @@ components:
           type: string
           nullable: true
           readOnly: true
+        phone_verified:
+          type: boolean
+          readOnly: true
+        verified_phone:
+          type: string
+          readOnly: true
+          nullable: true
+          title: Підтверджений телефон
       required:
       - created_at
       - deletion_scheduled_for
@@ -5810,8 +5818,10 @@ components:
       - is_email_verified
       - is_staff
       - is_verified_dealer
+      - phone_verified
       - role
       - telegram_id
+      - verified_phone
     UserProfileRequest:
       type: object
       properties:

@@ -98,13 +98,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
     is_admin_role = serializers.BooleanField(read_only=True)
     # Дата окончательного удаления в период отмены (1.8): баннер «Акаунт буде видалено <дата>».
     deletion_scheduled_for = serializers.SerializerMethodField()
+    # 4.10: признак для шага «Підтвердіть телефон» (сам номер - только владельцу, в своём профиле).
+    phone_verified = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = (
             'id', 'email', 'first_name', 'last_name', 'phone', 'role',
             'is_verified_dealer', 'is_staff', 'is_admin_role', 'is_email_verified',
-            'created_at', 'telegram_id', 'deletion_scheduled_for',
+            'created_at', 'telegram_id', 'deletion_scheduled_for', 'phone_verified', 'verified_phone',
         )
         # Пустой телефон разрешён (DRF не запускает валидаторы на пустой строке), 01-S17.
         extra_kwargs = {'phone': {'validators': [UA_PHONE_VALIDATOR]}}
@@ -118,8 +120,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
         # на B2B-доску, а в ответ получал 403.
         read_only_fields = (
             'id', 'email', 'role', 'is_verified_dealer', 'is_staff',
-            'is_admin_role', 'is_email_verified', 'created_at', 'telegram_id',
+            'is_admin_role', 'is_email_verified', 'created_at', 'telegram_id', 'verified_phone',
         )
+
+    def get_phone_verified(self, obj) -> bool:
+        return obj.phone_verified_at is not None
 
     def get_deletion_scheduled_for(self, obj) -> str | None:
         from .services import deletion_due_at

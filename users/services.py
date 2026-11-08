@@ -352,6 +352,8 @@ def anonymize_user(user, *, due_before=None) -> bool:
         # обезличивание (unique email).
         locked.email = f'deleted-{uuid.uuid4().hex}@deleted.invalid'
         locked.first_name = locked.last_name = locked.phone = ''
+        locked.verified_phone = None  # 4.10: номер освобождается, подтверждение снимается
+        locked.phone_verified_at = None
         if locked.telegram_id:
             OutboxMessage.objects.filter(provider='telegram', recipient=str(locked.telegram_id)).delete()
         locked.telegram_id = None
