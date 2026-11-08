@@ -2,7 +2,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useId, useState } from 'react';
 import { localApi } from '@/api/local';
-import { Region, City } from '@/lib/types';
+import { CityOption, LocalConfig, Region } from '@/lib/types';
+import CityAutocomplete from './CityAutocomplete';
 import ErrorState from '@/components/ui/ErrorState';
 
 export default function LocalListingFilters() {
@@ -13,7 +14,9 @@ export default function LocalListingFilters() {
 
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsError, setRegionsError] = useState<unknown>(null);
-  const [cities, setCities] = useState<City[]>([]);
+  const [config, setConfig] = useState<LocalConfig | null>(null);
+  // 8.2: місто — пошуком у межах області; у URL лишається id.
+  const [cityOption, setCityOption] = useState<CityOption | null>(null);
 
   const [make, setMake] = useState(sp.get('make') ?? '');
   const [model, setModel] = useState(sp.get('model') ?? '');
@@ -40,13 +43,28 @@ export default function LocalListingFilters() {
   }, [loadRegions]);
 
   useEffect(() => {
-    if (region) {
-      localApi.cities(Number(region)).then(setCities).catch(() => setCities([]));
-    } else {
-      setCities([]);
-      setCity('');
-    }
-  }, [region]);
+    localApi.config().then(setConfig).catch(() => setConfig(null));
+  }, []);
+
+  // Посилання з ?city=<id>: підпис беремо зі швидкого списку області (великі міста), інакше — нейтральний.
+  const initialCity = sp.get('city');
+  const initialRegion = sp.get('region');
+  useEffect(() => {
+    if (!initialCity || !initialRegion) return;
+    let alive = true;
+    localApi.cities(Number(initialRegion))
+      .then((rows) => rows.find((c) => String(c.id) === initialCity))
+      .catch(() => undefined)
+      .then((c) => {
+        if (!alive) return;
+        setCityOption({
+          id: Number(initialCity), name: c?.name ?? 'Обраний населений пункт', region: Number(initialRegion),
+          region_name: c?.region_name ?? '', district_name: c?.district_name ?? '',
+          label: c ? [c.name, c.region_name].filter(Boolean).join(' · ') : 'Обраний населений пункт',
+        });
+      });
+    return () => { alive = false; };
+  }, [initialCity, initialRegion]);
 
   function apply() {
     const p = new URLSearchParams();
@@ -146,17 +164,28 @@ export default function LocalListingFilters() {
         </div>
         <div>
           <label htmlFor={fid('f11')} className={labelCls}>Область</label>
-          <select id={fid('f11')} className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }}>
+          <select id={fid('f11')} className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); setCityOption(null); }}>
             <option value="">Вся Україна</option>
             {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </div>
         <div>
-          <label htmlFor={fid('f12')} className={labelCls}>Місто</label>
-          <select id={fid('f12')} className={inputCls} value={city} onChange={e => setCity(e.target.value)} disabled={!region}>
-            <option value="">Всі міста</option>
-            {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CityAutocomplete
+            id={fid('f12')}
+            label="Населений пункт"
+            labelClassName={labelCls}
+            inputClassName={inputCls}
+            placeholder="Усі населені пункти"
+            value={cityOption}
+            regionId={region ? Number(region) : undefined}
+            minChars={config?.city_search_min_chars ?? 2}
+            limit={config?.city_search_limit ?? 20}
+            onChange={(opt) => {
+              setCityOption(opt);
+              setCity(opt ? String(opt.id) : '');
+              if (opt) setRegion(String(opt.region));
+            }}
+          />
         </div>
         <div>
           <label htmlFor={fid('f13')} className={labelCls}>Пробіг до, км</label>

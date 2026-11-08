@@ -231,6 +231,17 @@ export interface City {
   slug: string;
   region: number;
   region_name: string;
+  district_name?: string;
+}
+
+/** 8.2: підказка пошуку населеного пункту (GET /local/cities/). */
+export interface CityOption {
+  id: number;
+  name: string;
+  region: number;
+  region_name: string;
+  district_name: string;
+  label: string;
 }
 
 export type LocalFuelType = 'petrol' | 'diesel' | 'electric' | 'hybrid' | 'gas';
@@ -256,6 +267,9 @@ export interface LocalConfig {
   allowed_types: string[];
   max_active_listings: number;
   posting_open: boolean;
+  /** 8.2: ліміти пошуку населеного пункту (старий бекенд може не віддавати). */
+  city_search_min_chars?: number;
+  city_search_limit?: number;
 }
 
 export interface LocalListing {

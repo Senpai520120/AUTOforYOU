@@ -187,8 +187,9 @@ test.describe('C2C: регіони, редагування, тарифи (10-Q7)
     test.skip(!(flags.c2c_enabled && flags.c2c_public_posting_enabled), 'подача оголошень вимкнена');
   });
 
-  test('/local/new: regions → 500 → ErrorState замість порожнього select', async ({ page }) => {
-    await page.route('**/api/v1/local/regions/', fail500);
+  // 8.2: форма вантажить лише /local/config/ (області підставляє пошук населеного пункту)
+  test('/local/new: config → 500 → ErrorState замість порожньої форми', async ({ page }) => {
+    await page.route('**/api/v1/local/config/', fail500);
     await page.goto('/local/new');
     await expect(page.getByText(UNAVAILABLE)).toBeVisible();
     await expect(page.getByRole('button', { name: RETRY })).toBeVisible();

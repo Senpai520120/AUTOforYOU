@@ -9,6 +9,7 @@ import {
   PaginatedResponse,
   Region,
   City,
+  CityOption,
   VinPrefillResult,
 } from '@/lib/types';
 
@@ -42,6 +43,14 @@ export const localApi = {
 
   cities: (regionId: number) =>
     apiGet<City[]>(`/api/v1/local/regions/${regionId}/cities/`),
+
+  /** 8.2: пошук населеного пункту (автодоповнення); ліміти — з config(). */
+  searchCities: (params: { q: string; region?: number; limit?: number }, signal?: AbortSignal) => {
+    const qs = new URLSearchParams({ q: params.q });
+    if (params.region) qs.set('region', String(params.region));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return apiFetch<CityOption[]>(`/api/v1/local/cities/?${qs.toString()}`, { signal });
+  },
 
   vinPrefill: (vin: string) =>
     apiGet<VinPrefillResult>(`/api/v1/local/vin-prefill/${vin}/`),

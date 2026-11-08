@@ -28,10 +28,9 @@ async function fillRequired(page: Page, make: string) {
   await page.getByLabel('Рік').fill('2019');
   await page.getByLabel('Пробіг, км').fill('90000');
   await page.getByLabel('Ціна').fill('12000');
-  await page.getByLabel('Область').selectOption({ index: 1 });
-  const city = page.getByLabel('Місто');
-  await expect(city.locator('option').nth(1)).toBeAttached();
-  await city.selectOption({ index: 1 });
+  // 8.2: населений пункт — пошуком, область підставляється сама
+  await page.getByRole('combobox', { name: 'Населений пункт *' }).fill('Вінниц');
+  await page.getByRole('option', { name: /^Вінниця/ }).click();
   await page.getByLabel('Опис').fill('[E2E] Звичайний опис без контактів');
   await page.getByLabel('Контактний телефон').fill('+380501112233');
   await page.getByRole('checkbox').check();

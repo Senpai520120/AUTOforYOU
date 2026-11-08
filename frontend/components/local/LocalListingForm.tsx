@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { isEmailNotVerified } from '@/lib/email-verify';
-import { Region, City, LocalConfig, LocalListing } from '@/lib/types';
+import { CityOption, LocalConfig, LocalListing } from '@/lib/types';
+import CityAutocomplete from './CityAutocomplete';
 import { ApiError, getErrorMessage } from '@/lib/errors';
 import { getAttribution } from '@/lib/attribution';
 import ErrorState from '@/components/ui/ErrorState';
@@ -154,11 +155,9 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const fid = (k: string) => `${baseId}-${k}`;
   const isEdit = !!listingId;
 
-  const [regions, setRegions] = useState<Region[]>([]);
   const [regionsLoaded, setRegionsLoaded] = useState(false);
   const [regionsError, setRegionsError] = useState<unknown>(null);
   const [config, setConfig] = useState<LocalConfig | null>(null);
-  const [cities, setCities] = useState<City[]>([]);
 
   const [make, setMake] = useState(initial?.make ?? '');
   const [model, setModel] = useState(initial?.model ?? '');
@@ -174,6 +173,16 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const [priceType, setPriceType] = useState(initial?.price_type ?? 'fixed');
   const [region, setRegion] = useState(String(initial?.region ?? ''));
   const [city, setCity] = useState(String(initial?.city ?? ''));
+  // 8.2: населений пункт обирається пошуком; область підставляється з обраного пункту.
+  const [cityOption, setCityOption] = useState<CityOption | null>(
+    initial?.city && initial.city_name
+      ? {
+        id: initial.city, name: initial.city_name, region: initial.region ?? 0,
+        region_name: initial.region_name ?? '', district_name: '',
+        label: [initial.city_name, initial.region_name].filter(Boolean).join(' · '),
+      }
+      : null,
+  );
   const [description, setDescription] = useState(initial?.description ?? '');
   const [contactPhone, setContactPhone] = useState(initial?.contact_phone ?? '');
   const [agreedToRules, setAgreedToRules] = useState(false);
@@ -195,8 +204,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const loadRegions = useCallback(() => {
     setRegionsError(null);
     setRegionsLoaded(false);
-    Promise.all([localApi.regions(), localApi.config()])
-      .then(([r, c]) => { setRegions(r); setConfig(c); })
+    localApi.config()
+      .then(setConfig)
       .catch(setRegionsError)
       .finally(() => setRegionsLoaded(true));
   }, []);
@@ -204,14 +213,6 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   useEffect(() => {
     loadRegions();
   }, [loadRegions]);
-
-  useEffect(() => {
-    if (region) {
-      localApi.cities(Number(region)).then(setCities).catch(() => setCities([]));
-    } else {
-      setCities([]);
-    }
-  }, [region]);
 
   async function handleVinPrefill() {
     if (vin.length !== 17) { setVinError('VIN має бути 17 символів'); return; }
@@ -234,6 +235,10 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!cityOption) {
+      setErrors({ city: 'Оберіть населений пункт зі списку' });
+      return;
+    }
     setSubmitting(true);
     setErrors({});
     setNotVerified(false);
@@ -457,23 +462,23 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor={fid('region')} className={labelCls}>Область *</label>
-          <select id={fid('region')} aria-invalid={!!errors.region} aria-describedby={errors.region ? fid('err-region') : undefined} className={inputCls} value={region} onChange={e => { setRegion(e.target.value); setCity(''); }} required>
-            <option value="">Оберіть область</option>
-            {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
-          {errors.region && <p id={fid('err-region')} role="alert" className={errCls}>{errors.region}</p>}
-        </div>
-        <div>
-          <label htmlFor={fid('city')} className={labelCls}>Місто *</label>
-          <select id={fid('city')} aria-invalid={!!errors.city} aria-describedby={errors.city ? fid('err-city') : undefined} className={inputCls} value={city} onChange={e => setCity(e.target.value)} required disabled={!region}>
-            <option value="">Оберіть місто</option>
-            {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          {errors.city && <p id={fid('err-city')} role="alert" className={errCls}>{errors.city}</p>}
-        </div>
+      <div>
+        <CityAutocomplete
+          id={fid('city')}
+          label="Населений пункт *"
+          labelClassName={labelCls}
+          inputClassName={inputCls}
+          value={cityOption}
+          required
+          minChars={config.city_search_min_chars ?? 2}
+          limit={config.city_search_limit ?? 20}
+          error={errors.city || errors.region}
+          onChange={(opt) => {
+            setCityOption(opt);
+            setCity(opt ? String(opt.id) : '');
+            setRegion(opt ? String(opt.region) : '');
+          }}
+        />
       </div>
 
       {/* Photo block — edit mode: immediate upload; create mode: buffer until submit */}
