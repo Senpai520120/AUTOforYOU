@@ -30,6 +30,14 @@
 
 ---
 
+## Задача 8.2 (сессия 1 из 2): населённые пункты КАТОТТГ — бэкенд (2026-11-08)
+
+- Модель: `Region.katottg/is_active`, `City.katottg/category/district_name/hromada_name/search_name/is_major/is_active`, индексы `search_name` и (`region`, `is_major`); миграция `0012` заполняет `search_name` и ставит `is_major` существующим городам (id не меняются).
+- `local_listings/places.py` — `normalize_place_name` (регистр, апострофы, дефисы, пробелы). Команда `import_katottg --file [--dry-run] [--deactivate-missing]`: CSV нормализованного формата (колонки — в docstring команды), сопоставление по коду, старые записи — по (область, имя) с сохранением id, одноимённым — slug с хвостом кода, `--deactivate-missing` не трогает пункты с объявлениями. `seed_regions` без дублей и с `is_major`; `entrypoint.sh` импортирует только при `KATOTTG_FILE`. Фикстура `fixtures/katottg_sample.csv` — синтетическая, реальный реестр в репо нет.
+- API: `GET /api/v1/local/cities/?q=&region=&limit=` (AllowAny, лимит `city_search`, начало слова выше вхождения, крупные выше, только активные, без кодов); `/regions/<id>/cities/` без `q` — только крупные, с `q` — поиск; `/local/config/` отдаёт `city_search_min_chars` и `city_search_limit`. Новый выбор неактивного пункта — 400, старые объявления открываются. Админка: поиск по коду, фильтры, `autocomplete_fields` у объявления.
+- Не сделано (сессия 2): `CityAutocomplete` в форме и фильтре, `city-search.spec.ts`, конвертер реального файла реестра (когда владелец положит файл). До этого форма показывает в списке только крупные города (сёла после импорта ищутся только через API).
+- Тесты: `local_listings/tests_places.py` 28 (мутации: фильтр `is_active` в поиске, сопоставление старых городов по имени — ловятся); полный backend 3117, падают только 2 известных Windows-теста; e2e `c2c-listing-form`, `c2c-flag`, `states`, `c2c-messaging` — 62 passed. Ревью безопасности не требуется (справочник, риск обычный).
+
 ## Задача 6.6: нижняя панель действий на мобильной карточке (2026-11-08)
 
 - `MobileActionBar` (`< md`, fixed, safe-area, над баннером cookie через `--cookie-banner-h`, прячется при фокусе в поле ввода, z-40 ниже модалок, сам добавляет нижний отступ). На карточке C2C (active, не владелец; у вошедшего — только когда признак владельца уже загружен): «Подзвонити» и «Написати».

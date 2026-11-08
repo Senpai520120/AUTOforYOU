@@ -37,6 +37,7 @@ from .filters import LocalListingFilter
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .permissions import POSTING_CLOSED_DETAIL, CanPostLocalListing, posting_allowed
 from .serializers import (
+    CitySearchSerializer,
     CitySerializer,
     LocalListingCreateSerializer,
     LocalListingDetailSerializer,
@@ -255,6 +256,9 @@ class LocalConfigView(APIView):
             'allowed_types': [f'image/{fmt.lower()}' for fmt in allowed_formats()],
             'max_active_listings': int(settings.LOCAL_LISTING_MAX_ACTIVE or 0),
             'posting_open': posting_allowed(request.user),
+            # 8.2: лимиты поиска населённого пункта - фронт их не хардкодит.
+            'city_search_min_chars': int(settings.CITY_SEARCH_MIN_CHARS),
+            'city_search_limit': int(settings.CITY_SEARCH_LIMIT),
         })
 
 
@@ -289,15 +293,77 @@ class RegionListView(generics.ListAPIView):
     pagination_class = None
 
 
-@extend_schema(tags=['local'], summary='Міста за областю')
+def search_cities(q: str, region_id=None, limit=None):
+    """Поиск пункта (8.2): сначала начало слова, затем вхождение; внутри - крупные выше, потом по имени.
+
+    Короче CITY_SEARCH_MIN_CHARS - пусто. Только is_active. Не больше CITY_SEARCH_LIMIT.
+    """
+    from django.db.models import Case, When
+
+    from .places import normalize_place_name
+
+    term = normalize_place_name(q)
+    if len(term) < int(settings.CITY_SEARCH_MIN_CHARS):
+        return City.objects.none()
+    cap = int(settings.CITY_SEARCH_LIMIT)
+    limit = cap if limit is None else max(1, min(int(limit), cap))
+    qs = City.objects.filter(is_active=True, search_name__contains=term).select_related('region')
+    if region_id is not None:
+        qs = qs.filter(region_id=region_id)
+    word_start = Q(search_name__startswith=term) | Q(search_name__contains=f' {term}') | Q(
+        search_name__contains=f'-{term}')
+    return qs.annotate(
+        _rank=Case(When(word_start, then=Value(0)), default=Value(1), output_field=IntegerField()),
+    ).order_by('_rank', '-is_major', 'name', 'pk')[:limit]
+
+
+def _int_param(request, name):
+    raw = request.query_params.get(name)
+    if raw in (None, ''):
+        return None
+    if not (raw.isascii() and raw.isdigit() and len(raw) <= 18):
+        raise serializers.ValidationError({name: 'Очікується ціле число.'})
+    return int(raw)
+
+
+@extend_schema(
+    tags=['local'], summary='Пошук населеного пункту',
+    parameters=[
+        OpenApiParameter('q', OpenApiTypes.STR, description='Частина назви (не коротше CITY_SEARCH_MIN_CHARS)'),
+        OpenApiParameter('region', OpenApiTypes.INT, required=False),
+        OpenApiParameter('limit', OpenApiTypes.INT, required=False),
+    ],
+)
+class CitySearchView(generics.ListAPIView):
+    """GET /api/v1/local/cities/?q=&region=&limit= - автодополнение населённого пункта (8.2)."""
+    serializer_class = CitySearchSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'city_search'
+
+    def get_queryset(self):
+        return search_cities(
+            self.request.query_params.get('q', ''),
+            region_id=_int_param(self.request, 'region'),
+            limit=_int_param(self.request, 'limit'),
+        )
+
+
+@extend_schema(tags=['local'], summary='Міста за областю',
+               parameters=[OpenApiParameter('q', OpenApiTypes.STR, required=False)])
 class CityListView(generics.ListAPIView):
+    """Без q - только крупные города области (быстрый список); с q - поиск по области (8.2)."""
     serializer_class = CitySerializer
     permission_classes = [permissions.AllowAny]
     pagination_class = None
 
     def get_queryset(self):
         region_id = self.kwargs.get('region_id')
-        return City.objects.filter(region_id=region_id).select_related('region')
+        q = self.request.query_params.get('q', '')
+        if q:
+            return search_cities(q, region_id=region_id)
+        return City.objects.filter(region_id=region_id, is_major=True, is_active=True).select_related('region')
 
 
 # ─── Фото оголошень ───────────────────────────────────────────────────────────

@@ -63,7 +63,20 @@ class CitySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = City
-        fields = ['id', 'name', 'slug', 'region', 'region_name']
+        fields = ['id', 'name', 'slug', 'region', 'region_name', 'district_name']
+
+
+class CitySearchSerializer(serializers.ModelSerializer):
+    """Подсказка автодополнения (8.2): без кодов КАТОТТГ и служебных полей."""
+    region_name = serializers.CharField(source='region.name', read_only=True)
+    label = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = City
+        fields = ['id', 'name', 'region', 'region_name', 'district_name', 'label']
+
+
+CITY_INACTIVE = 'Населений пункт недоступний для вибору.'
 
 
 class LocalListingImageSerializer(serializers.ModelSerializer):
@@ -202,6 +215,8 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         city = attrs.get('city')
+        if city is not None and not city.is_active:
+            raise serializers.ValidationError({'city': CITY_INACTIVE})
         region = attrs.get('region')
         if city and region and city.region_id != region.id:
             raise serializers.ValidationError({'city': 'Місто не належить до вказаної області.'})
@@ -286,6 +301,10 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         city = attrs.get('city', getattr(self.instance, 'city', None))
+        # 8.2: новый выбор - только активный пункт; старое объявление с отключённым пунктом правится как раньше.
+        if 'city' in attrs and attrs['city'] is not None and not attrs['city'].is_active \
+                and attrs['city'].pk != getattr(self.instance, 'city_id', None):
+            raise serializers.ValidationError({'city': CITY_INACTIVE})
         region = attrs.get('region', getattr(self.instance, 'region', None))
         if city and region and city.region_id != region.id:
             raise serializers.ValidationError({'city': 'Місто не належить до вказаної області.'})

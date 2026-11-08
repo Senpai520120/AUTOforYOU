@@ -474,9 +474,10 @@ class TestRegionsAPI(APITestCase):
 
     def test_cities_by_region(self):
         region = Region.objects.create(name='Тест-регіон', slug='test-reg-api')
-        City.objects.create(region=region, name='Тест-місто', slug='test-city-api')
+        City.objects.create(region=region, name='Тест-місто', slug='test-city-api', is_major=True)
+        City.objects.create(region=region, name='Тест-село', slug='test-village-api')  # 8.2: не в быстром списке
         r = self.client.get(f'/api/v1/local/regions/{region.pk}/cities/')
-        self.assertEqual(len(r.data), 1)
+        self.assertEqual([c['name'] for c in r.data], ['Тест-місто'])
 
 
 # ─── Тест: фото оголошень ─────────────────────────────────────────────────────

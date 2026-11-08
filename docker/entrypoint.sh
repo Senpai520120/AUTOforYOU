@@ -32,6 +32,12 @@ run_seed() {
 }
 
 run_seed seed_regions
+# 8.2: полный справочник населённых пунктов - только если владелец положил файл реестра (KATOTTG_FILE в .env).
+if [ -n "${KATOTTG_FILE:-}" ]; then
+    run_seed import_katottg
+else
+    echo "[entrypoint] KATOTTG_FILE не задан - импорт населённых пунктов пропущен (работает список seed_regions)"
+fi
 run_seed seed_rates
 run_seed seed_auction_fees
 

@@ -1339,6 +1339,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListingCreate'
           description: ''
+  /api/v1/local/cities/:
+    get:
+      operationId: v1_local_cities_list
+      description: GET /api/v1/local/cities/?q=&region=&limit= - автодополнение населённого
+        пункта (8.2).
+      summary: Пошук населеного пункту
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Частина назви (не коротше CITY_SEARCH_MIN_CHARS)
+      - in: query
+        name: region
+        schema:
+          type: integer
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CitySearch'
+          description: ''
   /api/v1/local/config/:
     get:
       operationId: v1_local_config_retrieve
@@ -1766,8 +1801,14 @@ paths:
   /api/v1/local/regions/{region_id}/cities/:
     get:
       operationId: v1_local_regions_cities_list
+      description: Без q - только крупные города области (быстрый список); с q - поиск
+        по области (8.2).
       summary: Міста за областю
       parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
       - in: path
         name: region_id
         schema:
@@ -3148,12 +3189,47 @@ components:
         region_name:
           type: string
           readOnly: true
+        district_name:
+          type: string
+          title: Район
+          maxLength: 100
       required:
       - id
       - name
       - region
       - region_name
       - slug
+    CitySearch:
+      type: object
+      description: 'Подсказка автодополнения (8.2): без кодов КАТОТТГ и служебных
+        полей.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          title: Місто
+          maxLength: 100
+        region:
+          type: integer
+          title: Область
+        region_name:
+          type: string
+          readOnly: true
+        district_name:
+          type: string
+          title: Район
+          maxLength: 100
+        label:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - label
+      - name
+      - region
+      - region_name
     ClientErrorRequest:
       type: object
       properties:

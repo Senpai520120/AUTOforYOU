@@ -363,6 +363,8 @@ REST_FRAMEWORK = {
         'contact_guest': os.environ.get('THROTTLE_CONTACT_GUEST_DAILY_RATE', '10/day'),
         # 4.13 (B8): жалоб на аккаунт в час - не дать засорить очередь модерации.
         'reports': os.environ.get('THROTTLE_REPORTS_RATE', '10/hour'),
+        # 8.2: поиск населённых пунктов (автодополнение, гость и вошедший; на IP/пользователя).
+        'city_search': os.environ.get('THROTTLE_CITY_SEARCH_RATE', '120/min'),
         # Загрузка фото (задача 1.10): каждый запрос — декодирование и пересохранение картинок.
         'uploads': os.environ.get('THROTTLE_UPLOADS_RATE', '30/hour'),
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
@@ -499,6 +501,11 @@ LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
 # Пусто — общий UPLOAD_IMAGE_MAX_SIZE_MB (задача 1.10).
 LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '') or 0) or None
 LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'))
+# Населённые пункты (8.2): путь к CSV реестра КАТОТТГ (пусто - импорт на старте пропускается),
+# минимум символов и максимум подсказок поиска (фронт берёт их из /local/config/).
+KATOTTG_FILE = os.environ.get('KATOTTG_FILE', '').strip()
+CITY_SEARCH_MIN_CHARS = int(os.environ.get('CITY_SEARCH_MIN_CHARS', '2'))
+CITY_SEARCH_LIMIT = int(os.environ.get('CITY_SEARCH_LIMIT', '20'))
 # Длина комментария к жалобе (4.13, B8).
 REPORT_COMMENT_MAX_LENGTH = int(os.environ.get('REPORT_COMMENT_MAX_LENGTH', '1000'))
 

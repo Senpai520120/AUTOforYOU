@@ -21,9 +21,14 @@ class PromotionTariffAdmin(admin.ModelAdmin):
 
 @admin.register(Region)
 class RegionAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug']
+    list_display = ['name', 'slug', 'katottg', 'is_active']
+    list_filter = ['is_active']
     prepopulated_fields = {'slug': ('name',)}
-    search_fields = ['name']
+    search_fields = ['name', 'katottg']
+
+    def get_readonly_fields(self, request, obj=None):
+        # 8.2: код КАТОТТГ после импорта меняет только import_katottg
+        return ['katottg'] if obj is not None and obj.katottg else []
 
 
 class CityInline(admin.TabularInline):
@@ -34,10 +39,16 @@ class CityInline(admin.TabularInline):
 
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
-    list_display = ['name', 'region', 'slug']
-    list_filter = ['region']
+    list_display = ['name', 'district_name', 'region', 'category', 'is_major', 'is_active']
+    list_filter = ['region', 'is_major', 'is_active']
+    list_select_related = ['region']
+    list_per_page = 100
     prepopulated_fields = {'slug': ('name',)}
-    search_fields = ['name', 'region__name']
+    search_fields = ['name', 'search_name', 'katottg', 'region__name']
+    exclude = ['search_name']
+
+    def get_readonly_fields(self, request, obj=None):
+        return ['katottg'] if obj is not None and obj.katottg else []
 
 
 # ─── Дії модерації ────────────────────────────────────────────────────────────
@@ -108,7 +119,9 @@ class LocalListingAdmin(admin.ModelAdmin):
     search_fields = ['make', 'model', 'owner__email', 'contact_phone', 'source_channel']
     readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
     inlines = [LocalListingImageInline]
-    raw_id_fields = ['owner', 'region', 'city', 'moderated_by']
+    raw_id_fields = ['owner', 'moderated_by']
+    # 8.2: десятки тысяч пунктов - поиск вместо списка
+    autocomplete_fields = ['region', 'city']
     actions = [approve_listings, reject_with_reason]
 
     fieldsets = (

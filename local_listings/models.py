@@ -34,6 +34,9 @@ def price_to_usd(price, currency, rates=None, on_date=None):
 class Region(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name='Область')
     slug = models.SlugField(max_length=100, unique=True)
+    # 8.2: код КАТОТТГ (null - запись из seed_regions до импорта реестра).
+    katottg = models.CharField(max_length=32, unique=True, null=True, blank=True, verbose_name='Код КАТОТТГ')
+    is_active = models.BooleanField(default=True, verbose_name='Доступна для вибору')
 
     class Meta:
         verbose_name = 'Область'
@@ -45,15 +48,44 @@ class Region(models.Model):
 
 
 class City(models.Model):
+    """Населений пункт (8.2): місто, селище, село з реєстру КАТОТТГ або з seed_regions (до імпорту).
+
+    ``id`` не змінюється при імпорті: оголошення посилаються на пункт з PROTECT.
+    """
     region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='cities', verbose_name='Область')
     name = models.CharField(max_length=100, verbose_name='Місто')
     slug = models.SlugField(max_length=100)
+    katottg = models.CharField(max_length=32, unique=True, null=True, blank=True, verbose_name='Код КАТОТТГ')
+    # Код виду пункту з файлу джерела (місто, селище, село...) - значення не хардкодяться.
+    category = models.CharField(max_length=16, blank=True, verbose_name='Вид пункту')
+    district_name = models.CharField(max_length=100, blank=True, verbose_name='Район')
+    hromada_name = models.CharField(max_length=150, blank=True, verbose_name='Громада')
+    search_name = models.CharField(max_length=100, blank=True, verbose_name="Ім'я для пошуку")
+    is_major = models.BooleanField(default=False, verbose_name='Велике місто (швидкий список)')
+    is_active = models.BooleanField(default=True, verbose_name='Доступний для вибору')
 
     class Meta:
         verbose_name = 'Місто'
         verbose_name_plural = 'Міста'
         ordering = ['name']
         unique_together = [('region', 'slug')]
+        indexes = [
+            models.Index(fields=['search_name'], name='city_search_name_idx'),
+            models.Index(fields=['region', 'is_major'], name='city_region_major_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        from .places import normalize_place_name
+        self.search_name = normalize_place_name(self.name)
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'name' in update_fields and 'search_name' not in update_fields:
+            kwargs['update_fields'] = [*update_fields, 'search_name']
+        super().save(*args, **kwargs)
+
+    @property
+    def label(self) -> str:
+        parts = [self.name, self.district_name, self.region.name if self.region_id else '']
+        return ' · '.join(p for p in parts if p)
 
     def __str__(self):
         return f'{self.name} ({self.region.name})'
