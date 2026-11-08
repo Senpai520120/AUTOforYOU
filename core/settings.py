@@ -361,6 +361,8 @@ REST_FRAMEWORK = {
         'contact_daily': os.environ.get('THROTTLE_CONTACT_DAILY_RATE', '60/day'),
         # 4.5a (F3.2, Н-33): показов телефона гостю в сутки; ключ - HMAC IP (local_listings/throttles.py).
         'contact_guest': os.environ.get('THROTTLE_CONTACT_GUEST_DAILY_RATE', '10/day'),
+        # 4.13 (B8): жалоб на аккаунт в час - не дать засорить очередь модерации.
+        'reports': os.environ.get('THROTTLE_REPORTS_RATE', '10/hour'),
         # Загрузка фото (задача 1.10): каждый запрос — декодирование и пересохранение картинок.
         'uploads': os.environ.get('THROTTLE_UPLOADS_RATE', '30/hour'),
         'login': os.environ.get('THROTTLE_LOGIN_RATE', '10/min'),
@@ -497,6 +499,8 @@ LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
 # Пусто — общий UPLOAD_IMAGE_MAX_SIZE_MB (задача 1.10).
 LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '') or 0) or None
 LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'))
+# Длина комментария к жалобе (4.13, B8).
+REPORT_COMMENT_MAX_LENGTH = int(os.environ.get('REPORT_COMMENT_MAX_LENGTH', '1000'))
 
 # Журнал показов телефона (4.5a, 05-S6, Н-33). IP гостя хранится только как HMAC с этой солью;
 # пустая соль - гостю 503 без номера, launch_check ругается. Не SECRET_KEY: его ротация не должна ломать журнал.

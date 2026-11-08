@@ -2192,6 +2192,8 @@ paths:
   /api/v1/reports/:
     post:
       operationId: v1_reports_create
+      description: 'Жалоба на объявление (4.13, B8): только вошедший с подтверждённым
+        email, свой лимит ``reports``.'
       tags:
       - v1
       requestBody:
@@ -5241,47 +5243,57 @@ components:
       - password2
     ReportCreate:
       type: object
+      description: |-
+        Жалоба на объявление (4.13, B8/B9).
+
+        B9: принимается только ACTIVE-объявление; несуществующее и недоступное (pending, hidden, rejected, ...)
+        дают один и тот же 404 «Оголошення не знайдено.» - по ответу не узнать, есть ли скрытое объявление.
+        ``reported_user`` от клиента не принимается: нарушитель - владелец объявления (админка берёт его из
+        ``listing.owner``), жалоба на произвольного пользователя без объявления невозможна.
       properties:
         id:
           type: integer
           readOnly: true
         listing:
           type: integer
-          nullable: true
-          title: Оголошення
-        reported_user:
-          type: integer
-          nullable: true
-          title: Скаржимося на користувача
+          maximum: 9223372036854775807
+          minimum: 1
+          format: int64
         reason:
           allOf:
           - $ref: '#/components/schemas/ReasonEnum'
           title: Причина
         comment:
           type: string
-          title: Коментар
+          default: ''
       required:
       - id
+      - listing
       - reason
     ReportCreateRequest:
       type: object
+      description: |-
+        Жалоба на объявление (4.13, B8/B9).
+
+        B9: принимается только ACTIVE-объявление; несуществующее и недоступное (pending, hidden, rejected, ...)
+        дают один и тот же 404 «Оголошення не знайдено.» - по ответу не узнать, есть ли скрытое объявление.
+        ``reported_user`` от клиента не принимается: нарушитель - владелец объявления (админка берёт его из
+        ``listing.owner``), жалоба на произвольного пользователя без объявления невозможна.
       properties:
         listing:
           type: integer
-          nullable: true
-          title: Оголошення
-        reported_user:
-          type: integer
-          nullable: true
-          title: Скаржимося на користувача
+          maximum: 9223372036854775807
+          minimum: 1
+          format: int64
         reason:
           allOf:
           - $ref: '#/components/schemas/ReasonEnum'
           title: Причина
         comment:
           type: string
-          title: Коментар
+          default: ''
       required:
+      - listing
       - reason
     Review:
       type: object

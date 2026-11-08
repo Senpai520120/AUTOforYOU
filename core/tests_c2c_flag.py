@@ -280,10 +280,12 @@ class TestSeedingMode(_ClientsMixin, TestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual([f['listing_type'] for f in resp.json()], ['imported'])
 
-    def test_report_on_user_is_not_closed(self):
+    def test_report_endpoint_is_not_closed_by_middleware(self):
+        # 4.13 (B9): жалобы без объявления больше нет - валидация отвечает 400, а не флаг 404.
         resp = auth_client(self.users['buyer']).post(
             '/api/v1/reports/', {'reported_user': make_user().pk, 'reason': 'spam', 'comment': 'x'}, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('listing', resp.json())
 
 
 @override_settings(**OPEN_ALL)
