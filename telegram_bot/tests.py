@@ -793,7 +793,7 @@ class BotLinkRaceTest(TransactionTestCase):
                 message = SimpleNamespace(from_user=SimpleNamespace(id=tg_id), answer=AsyncMock())
                 barrier.wait(timeout=10)
                 async_to_sync(_handle_link_token)(message, str(token.token))
-                replies.append(message.answer.await_args.args[0])
+                replies.append(message.answer.await_args_list[0].args[0])  # [1] - просьба о контакте (4.10)
             except Exception as exc:  # noqa: BLE001
                 errors.append(exc)
             finally:

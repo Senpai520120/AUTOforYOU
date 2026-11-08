@@ -80,9 +80,12 @@ test.describe('Телефон: гість після капчі (4.5a, F3.2)', (
   test('обхід: заповнене honeypot-поле — помилка перевірки, номер не показано', async ({ page, api }) => {
     const { id, phone: PHONE } = await seededListing(api);
     const reveal = await openGuestCaptcha(page, id);
-    // Бот заповнює приховане поле; людина його не бачить.
-    await page.locator('input[name="website"]').fill('http://spam', { force: true });
+    // Спершу капча готова (конфіг завантажено, поле honeypot змонтовано), інакше значення губиться при заміні поля.
     await expect(reveal).toBeEnabled({ timeout: 10_000 });
+    // Бот заповнює приховане поле; людина його не бачить.
+    const honeypot = page.locator('input[name="website"]');
+    await honeypot.fill('http://spam', { force: true });
+    await expect(honeypot).toHaveValue('http://spam');
     const response = page.waitForResponse(guestContactResponse(id));
     await reveal.click();
     expect((await response).status()).toBe(400);
