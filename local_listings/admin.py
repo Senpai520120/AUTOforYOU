@@ -4,7 +4,7 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 
 from .models import City, ContactView, LocalListing, LocalListingImage, PromotionTariff, Region
-from .services import approve_listing, reject_listing
+from .services import ListingNotReadyError, approve_listing, min_photos, reject_listing
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────
 
@@ -64,7 +64,11 @@ def approve_listings(modeladmin, request, queryset):
         return
     count = 0
     for listing in queryset.filter(status=LocalListing.Status.PENDING):
-        approve_listing(listing, request.user, request=request)
+        try:
+            approve_listing(listing, request.user, request=request)
+        except ListingNotReadyError as exc:  # 8.4: мало фото - статус не меняется
+            modeladmin.message_user(request, f'#{listing.pk}: {exc}', messages.ERROR)
+            continue
         count += 1
     modeladmin.message_user(request, f'Опубліковано оголошень: {count}.', messages.SUCCESS)
 
@@ -103,10 +107,34 @@ reject_with_reason.short_description = 'Відхилити (з причиною)
 
 # ─── Список оголошень (усі) ───────────────────────────────────────────────────
 
+class EnoughPhotosFilter(admin.SimpleListFilter):
+    """8.4: «Достатньо фото» - число фото против LOCAL_LISTING_MIN_PHOTOS."""
+    title = 'Достатньо фото'
+    parameter_name = 'enough_photos'
+
+    def lookups(self, request, model_admin):
+        return [('yes', 'Так'), ('no', 'Ні')]
+
+    def queryset(self, request, queryset):
+        from django.db.models import Count
+        if self.value() not in ('yes', 'no'):
+            return queryset
+        qs = queryset.annotate(_photos=Count('images', distinct=True))
+        need = min_photos()
+        return qs.filter(_photos__gte=need) if self.value() == 'yes' else qs.filter(_photos__lt=need)
+
+
 class LocalListingImageInline(admin.TabularInline):
     model = LocalListingImage
     extra = 1
-    readonly_fields = ['created_at']
+    fields = ['preview', 'image', 'is_primary', 'created_at']
+    readonly_fields = ['preview', 'created_at']
+
+    @admin.display(description='Мініатюра')
+    def preview(self, obj):
+        from django.utils.html import format_html
+        f = obj.thumbnail or obj.image
+        return format_html('<img src="{}" style="max-height:60px">', f.url) if f else '—'
 
 
 @admin.register(LocalListing)
@@ -115,7 +143,8 @@ class LocalListingAdmin(admin.ModelAdmin):
         'short_title', 'owner', 'status', 'region', 'city',
         'seller_type', 'agreed_to_rules', 'has_contact_in_text', 'moderated_by', 'created_at',
     ]
-    list_filter = ['status', 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region', 'has_contact_in_text']
+    list_filter = ['status', EnoughPhotosFilter, 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region',
+                   'has_contact_in_text']
     search_fields = ['make', 'model', 'owner__email', 'contact_phone', 'source_channel']
     readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
     inlines = [LocalListingImageInline]
@@ -204,7 +233,7 @@ class PendingLocalListingProxy(LocalListing):
 @admin.register(PendingLocalListingProxy)
 class ModerationQueueAdmin(admin.ModelAdmin):
     list_display = ['short_title', 'owner_email', 'region', 'price', 'currency', 'has_contact_in_text', 'created_at']
-    list_filter = ['region', 'fuel_type', 'has_contact_in_text']
+    list_filter = [EnoughPhotosFilter, 'region', 'fuel_type', 'has_contact_in_text']
     search_fields = ['make', 'model', 'owner__email']
     readonly_fields = [
         'owner', 'make', 'model', 'year', 'mileage_km', 'engine_cc',

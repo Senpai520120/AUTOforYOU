@@ -25,7 +25,13 @@ from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from core.c2c import payments_enabled
-from core.uploads import ImageUploadError, allowed_formats, max_bytes_from_setting, sanitize_image
+from core.uploads import (
+    ImageUploadError,
+    allowed_formats,
+    make_thumbnail,
+    max_bytes_from_setting,
+    sanitize_image,
+)
 from integrations.captcha import DisabledVerifier, get_captcha_verifier, require_captcha
 from integrations.services import decode_vin
 from integrations.validators import normalize_vin
@@ -48,7 +54,7 @@ from .serializers import (
     PromotionTariffSerializer,
     RegionSerializer,
 )
-from .services import record_contact_view
+from .services import min_photos, record_contact_view
 from .throttles import ContactDailyThrottle, GuestAnonThrottle, GuestContactThrottle, ip_hash
 
 
@@ -255,6 +261,7 @@ class LocalConfigView(APIView):
             'photo_max_size_mb': round(max_bytes / (1024 * 1024), 2),
             'allowed_types': [f'image/{fmt.lower()}' for fmt in allowed_formats()],
             'max_active_listings': int(settings.LOCAL_LISTING_MAX_ACTIVE or 0),
+            'min_photos': min_photos(),  # 8.4
             'posting_open': posting_allowed(request.user),
             # 8.2: лимиты поиска населённого пункта - фронт их не хардкодит.
             'city_search_min_chars': int(settings.CITY_SEARCH_MIN_CHARS),
@@ -409,9 +416,13 @@ class LocalListingImageUploadView(APIView):
         # Тип — по содержимому (content_type и расширение клиента игнорируются), EXIF снимается,
         # имя — uuid (задача 1.10). Сначала проверяются все файлы: всё или ничего.
         errors, cleaned = [], []
+        # 8.4: ресайз и миниатюра готовятся для всех файлов до записи (всё или ничего).
+        max_side = int(settings.LOCAL_LISTING_PHOTO_MAX_SIDE)
+        thumb_side = int(settings.LOCAL_LISTING_THUMB_MAX_SIDE)
         for f in files:
             try:
-                cleaned.append(sanitize_image(f, max_bytes=max_bytes))
+                content = sanitize_image(f, max_bytes=max_bytes, max_side=max_side)
+                cleaned.append((content, make_thumbnail(content, max_side=thumb_side)))
             except ImageUploadError as exc:
                 errors.append(f'{(f.name or "файл")[:100]}: {exc}')
         if errors:
@@ -421,9 +432,9 @@ class LocalListingImageUploadView(APIView):
         created = []
         try:
             with transaction.atomic():
-                for i, content in enumerate(cleaned):
+                for i, (content, thumb) in enumerate(cleaned):
                     is_primary = not has_primary and i == 0
-                    img = LocalListingImage(listing=listing, image=content, is_primary=is_primary)
+                    img = LocalListingImage(listing=listing, image=content, thumbnail=thumb, is_primary=is_primary)
                     created.append(img)  # до save(): файл пишется в pre_save, строка может не записаться
                     img.save()
                     if is_primary:
@@ -431,8 +442,9 @@ class LocalListingImageUploadView(APIView):
         except Exception:
             # Строки откатились — файлы, уже записанные в хранилище, не должны остаться сиротами.
             for img in created:
-                if img.image and img.image._committed:
-                    img.image.storage.delete(img.image.name)
+                for f in (img.image, img.thumbnail):
+                    if f and f._committed:
+                        f.storage.delete(f.name)
             raise
 
         return Response(
@@ -456,9 +468,16 @@ class LocalListingImageDetailView(APIView):
         return listing, img, None
 
     def delete(self, request, pk, img_id):
-        _, img, err = self._get(pk, img_id, request.user)
+        listing, img, err = self._get(pk, img_id, request.user)
         if err:
             return err
+        # 8.4: не опускать число фото ниже минимума (главное можно сначала заменить загрузкой нового).
+        need = min_photos()
+        if need and listing.images.count() - 1 < need:
+            return Response(
+                {'detail': f'Не можна видалити: потрібно щонайменше {need} фото.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         was_primary = img.is_primary
         img.delete()
         # якщо видалили головне — зробити наступне головним

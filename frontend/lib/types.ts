@@ -256,6 +256,8 @@ export type LocalSellerType = 'private' | 'dealer';
 export interface LocalListingImage {
   id: number;
   image: string | null;
+  /** 8.4: мініатюра для карток (null — фото до 8.4). */
+  thumbnail?: string | null;
   source_url: string;
   is_primary: boolean;
 }
@@ -267,6 +269,8 @@ export interface LocalConfig {
   allowed_types: string[];
   max_active_listings: number;
   posting_open: boolean;
+  /** 8.4: мінімум фото для схвалення (0 — без мінімуму). */
+  min_photos?: number;
   /** 8.2: ліміти пошуку населеного пункту (старий бекенд може не віддавати). */
   city_search_min_chars?: number;
   city_search_limit?: number;
@@ -299,6 +303,8 @@ export interface LocalListing {
   contact_phone: string | null;
   rejection_reason: string | null;
   images: LocalListingImage[];
+  /** 8.4: лише в кабінеті власника. */
+  photos_count?: number;
   expires_at: string | null;
   expiry_warned: boolean;
   promoted_until: string | null;

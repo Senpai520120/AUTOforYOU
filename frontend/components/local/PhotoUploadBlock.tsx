@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { localApi } from '@/api/local';
 import { LocalConfig, LocalListingImage } from '@/lib/types';
 import { ApiError, firstDataMessage } from '@/lib/errors';
-import { checkPhotos, photoHint } from './photo-limits';
+import { checkPhotos, minPhotosError, photoHint } from './photo-limits';
 
 interface Props {
   listingId: number;
@@ -65,8 +65,15 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
   const imgSrc = (img: LocalListingImage) =>
     img.image ?? img.source_url ?? '/placeholder-car.svg';
 
+  const missing = minPhotosError(config, images.length);
+
   return (
     <div className="space-y-3">
+      {missing && (
+        <p role="status" className="text-xs text-amber-800 bg-amber-100 border border-amber-300 rounded px-2 py-1">
+          {missing}, щоб оголошення пройшло модерацію.
+        </p>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-slate-700">
           Фото ({photoHint(config, images.length)})

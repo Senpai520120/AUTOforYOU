@@ -12,7 +12,7 @@ import { getAttribution } from '@/lib/attribution';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingState from '@/components/ui/LoadingState';
 import PhotoUploadBlock from './PhotoUploadBlock';
-import { checkPhotos, photoHint } from './photo-limits';
+import { checkPhotos, minPhotosError, photoHint } from './photo-limits';
 
 /** Поля з місцем для помилки у формі; решта ключів відповіді — у загальному блоці з назвою поля. */
 const FIELD_LABELS: Record<string, string> = {
@@ -237,6 +237,12 @@ export default function LocalListingForm({ initial, listingId }: Props) {
     e.preventDefault();
     if (!cityOption) {
       setErrors({ city: 'Оберіть населений пункт зі списку' });
+      return;
+    }
+    // 8.4: нове оголошення без мінімуму фото не відправляється (на модерації його не схвалять).
+    const photosMissing = !isEdit && config ? minPhotosError(config, pendingFiles.length) : null;
+    if (photosMissing) {
+      setPhotoError(photosMissing);
       return;
     }
     setSubmitting(true);

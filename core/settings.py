@@ -501,6 +501,10 @@ LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
 # Пусто — общий UPLOAD_IMAGE_MAX_SIZE_MB (задача 1.10).
 LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '') or 0) or None
 LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'))
+# 8.4: минимум фото для одобрения (0 - без минимума), максимальная сторона фото и миниатюры, px.
+LOCAL_LISTING_MIN_PHOTOS = int(os.environ.get('LOCAL_LISTING_MIN_PHOTOS', '1'))
+LOCAL_LISTING_PHOTO_MAX_SIDE = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIDE', '1920'))
+LOCAL_LISTING_THUMB_MAX_SIDE = int(os.environ.get('LOCAL_LISTING_THUMB_MAX_SIDE', '480'))
 # Населённые пункты (8.2): путь к CSV реестра КАТОТТГ (пусто - импорт на старте пропускается),
 # минимум символов и максимум подсказок поиска (фронт берёт их из /local/config/).
 KATOTTG_FILE = os.environ.get('KATOTTG_FILE', '').strip()
@@ -836,6 +840,8 @@ if _TESTING:
     PRIVATE_MEDIA_USE_X_ACCEL = False
     TURNSTILE_SITE_KEY = ''
     TURNSTILE_SECRET_KEY = ''
+    # 8.4: прежние тесты одобряют и чистят объявления без фото; правило минимума - local_listings/tests_photos.py.
+    LOCAL_LISTING_MIN_PHOTOS = 0
     # SSO-1: тесты включают SSO через override_settings, сеть мокается.
     OIDC_ENABLED = False
     OIDC_CLIENT_ID = 'autoforyou'

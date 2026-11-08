@@ -51,11 +51,32 @@ def _lock_unchanged(listing: LocalListing):
     return None if fresh.status != listing.status else fresh
 
 
+class ListingNotReadyError(ValueError):
+    """8.4: объявление нельзя одобрить (например, фото меньше LOCAL_LISTING_MIN_PHOTOS)."""
+
+
+def min_photos() -> int:
+    from django.conf import settings
+    return max(0, int(settings.LOCAL_LISTING_MIN_PHOTOS))
+
+
+def not_enough_photos_text(n: int) -> str:
+    return f'Недостатньо фото: потрібно щонайменше {n}.'
+
+
+def check_ready_for_approval(listing: LocalListing) -> None:
+    need = min_photos()
+    if need and listing.images.count() < need:
+        raise ListingNotReadyError(not_enough_photos_text(need))
+
+
 def approve_listing(listing: LocalListing, admin_user, request=None) -> LocalListing:
     """Перевести оголошення в active + зафіксувати модератора + журнал аудиту + повідомити власника.
 
     Ничего не делает, если статус изменился параллельно или владелец заблокирован.
+    8.4: фото меньше LOCAL_LISTING_MIN_PHOTOS - ListingNotReadyError, статус не меняется.
     """
+    check_ready_for_approval(listing)
     with transaction.atomic():
         fresh = _lock_unchanged(listing)
         if fresh is None or fresh.owner.is_banned:

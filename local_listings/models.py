@@ -333,6 +333,11 @@ class LocalListingImage(models.Model):
         upload_to=UuidUploadTo('local_listings'), max_size_setting='LOCAL_LISTING_PHOTO_MAX_SIZE_MB',
         null=True, blank=True, verbose_name='Фото',
     )
+    # 8.4: миниатюра для списков (null - фото до 8.4, см. regenerate_listing_photos).
+    thumbnail = SanitizedImageField(
+        upload_to=UuidUploadTo('local_listings/thumbs'), max_size_setting='LOCAL_LISTING_PHOTO_MAX_SIZE_MB',
+        null=True, blank=True, verbose_name='Мініатюра',
+    )
     source_url = models.CharField(max_length=500, blank=True, verbose_name='URL фото')
     is_primary = models.BooleanField(default=False, verbose_name='Головне фото')
     created_at = models.DateTimeField(auto_now_add=True)

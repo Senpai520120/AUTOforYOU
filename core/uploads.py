@@ -110,11 +110,13 @@ def _target_mode(img, fmt):
     return 'RGB'
 
 
-def sanitize_image(file, *, max_bytes=None, subdir='', enforce_size=True):
+def sanitize_image(file, *, max_bytes=None, subdir='', enforce_size=True, max_side=None):
     """Проверить и пересохранить картинку. Возвращает ContentFile с безопасным именем.
 
     max_bytes=None — общий лимит UPLOAD_IMAGE_MAX_SIZE_MB; enforce_size=False — без лимита
     байт (только для уже лежащих файлов в sanitize_existing_images). Лимит пикселей действует всегда.
+    max_side (8.4) — уменьшить до этой максимальной стороны после exif_transpose, без увеличения
+    маленьких и с сохранением пропорций; None — без ресайза (трекинг, лоты, админка).
     """
     if enforce_size and max_bytes is None:
         max_bytes = default_max_bytes()
@@ -157,24 +159,51 @@ def sanitize_image(file, *, max_bytes=None, subdir='', enforce_size=True):
             # без exif=/icc_profile=/pnginfo=/xmp=, а Pillow берёт их из info (PNG icc, JPEG/WEBP xmp).
             clean = img if not isinstance(img, ImageFile.ImageFile) else img.copy()
             clean.info = {}
+            if max_side:
+                _shrink(clean, max_side)
         except (Image.DecompressionBombError, Image.DecompressionBombWarning):
             raise ImageUploadError(_too_many_pixels(max_pixels)) from None
         except (OSError, SyntaxError, ValueError, TypeError, EOFError):
             raise ImageUploadError('Файл пошкоджений або обрізаний.') from None
 
+    return _to_content(clean, fmt, subdir)
+
+
+def _shrink(img, max_side):
+    """На месте: максимальная сторона не больше max_side, без увеличения (Image.thumbnail)."""
+    if max(img.size) > int(max_side):
+        img.thumbnail((int(max_side), int(max_side)), Image.Resampling.LANCZOS)
+
+
+def _to_content(img, fmt, subdir=''):
     out = io.BytesIO()
     save_kwargs = {}
     if fmt == 'JPEG':
         save_kwargs = {'quality': int(getattr(settings, 'UPLOAD_IMAGE_JPEG_QUALITY', 85)), 'optimize': True}
     elif fmt == 'WEBP':
         save_kwargs = {'quality': int(getattr(settings, 'UPLOAD_IMAGE_JPEG_QUALITY', 85))}
-    clean.save(out, format=fmt, **save_kwargs)
+    img.save(out, format=fmt, **save_kwargs)
 
     name = f'{uuid4().hex}.{SUPPORTED_FORMATS[fmt]}'
     if subdir:
         name = posixpath.join(subdir.strip('/'), name)
     content = ContentFile(out.getvalue(), name=name)
     content.afy_sanitized = True
+    return content
+
+
+def make_thumbnail(file, *, max_side, subdir=''):
+    """Миниатюра для списков (8.4): тот же формат, без EXIF, uuid-имя в subdir.
+
+    ``file`` — уже очищенный sanitize_image ContentFile или сохранённый файл поля. Повторно картинка
+    проходит те же проверки (тип, пиксели, анимация) через sanitize_image без лимита байт, затем
+    уменьшается до max_side. Ошибка — ImageUploadError, как у sanitize_image.
+    """
+    if hasattr(file, 'seek'):
+        file.seek(0)
+    content = sanitize_image(file, enforce_size=False, max_side=max_side, subdir=subdir)
+    if hasattr(file, 'seek'):
+        file.seek(0)
     return content
 
 

@@ -43,6 +43,13 @@ export default function MyLocalListingsPage() {
   // Платні послуги (просування) — лише при PAYMENTS_ENABLED; інакше кнопок немає.
   const payments = useC2C().paymentsEnabled;
   const [listings, setListings] = useState<LocalListing[]>([]);
+  // 8.4: мінімум фото з /local/config/ — для плашки «додайте фото»; помилка конфігу плашку просто ховає.
+  const [minPhotos, setMinPhotos] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    localApi.config().then((c) => { if (alive) setMinPhotos(c.min_photos ?? 0); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
   const [fetching, setFetching] = useState(true);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [soldModal, setSoldModal] = useState<SoldModalState | null>(null);
@@ -230,6 +237,13 @@ export default function MyLocalListingsPage() {
                     {l.status === 'pending' && (
                       <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 inline-block">
                         Очікує перевірки модератором
+                      </p>
+                    )}
+                    {minPhotos > 0 && (l.status === 'pending' || l.status === 'draft')
+                      && (l.photos_count ?? l.images.length) < minPhotos && (
+                      <p role="status" className="mt-2 text-xs text-amber-800 bg-amber-100 border border-amber-300 rounded px-2 py-1">
+                        Додайте щонайменше {minPhotos} фото, щоб оголошення пройшло модерацію.{' '}
+                        <Link href={`/local/${l.id}/edit`} className="underline">Додати фото</Link>
                       </p>
                     )}
                   </div>

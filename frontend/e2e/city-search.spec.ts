@@ -3,6 +3,7 @@
  * Стек e2e: C2C_ENABLED=true, подача відкрита; довідник — seed_regions (великі міста). Однойменні села,
  * нормалізацію апострофів і імпорт КАТОТТГ перевіряють Django-тести (local_listings/tests_places.py).
  */
+import path from 'path';
 import type { Page, Request } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
 import { expectNoRequest } from './helpers/network';
@@ -37,6 +38,8 @@ test.describe('Пошук населеного пункту (8.2)', () => {
     await page.getByLabel('Опис').fill('[E2E] Пошук міста');
     await page.getByLabel('Контактний телефон').fill('+380501112299');
     await page.getByRole('checkbox').check();
+    // 8.4: без мінімуму фото форма не відправляється
+    await page.locator('input[type=file]').setInputFiles(path.join(__dirname, 'fixtures', 'car-1.jpg'));
     const created = page.waitForResponse((r) => r.url().endsWith('/api/v1/local/listings/') && r.request().method() === 'POST');
     await page.getByRole('button', { name: /Подати|Опублікувати|Надіслати/ }).last().click();
     const resp = await created;

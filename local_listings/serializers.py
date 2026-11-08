@@ -80,9 +80,10 @@ CITY_INACTIVE = 'Населений пункт недоступний для в�
 
 
 class LocalListingImageSerializer(serializers.ModelSerializer):
+    # 8.4: thumbnail - миниатюра для карточек (null у фото до 8.4)
     class Meta:
         model = LocalListingImage
-        fields = ['id', 'image', 'source_url', 'is_primary']
+        fields = ['id', 'image', 'thumbnail', 'source_url', 'is_primary']
 
 
 class LocalListingListSerializer(serializers.ModelSerializer):
@@ -175,6 +176,7 @@ class LocalListingOwnerSerializer(LocalListingDetailSerializer):
         # 10-Q1: владельцу (и модератору) - его телефон; публичный detail по-прежнему отдаёт null.
         data = super().to_representation(instance)
         data['contact_phone'] = instance.contact_phone
+        data['photos_count'] = len(data.get('images') or [])  # 8.4: для плашки «додайте фото»
         return data
 
 

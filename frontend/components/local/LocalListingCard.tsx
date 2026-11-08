@@ -18,7 +18,8 @@ const PLACEHOLDER_SVG =
 /** priority — перше зображення сторінки: вантажиться одразу, без lazy (LCP). */
 export default function LocalListingCard({ listing, priority = false }: { listing: LocalListing; priority?: boolean }) {
   const primary = listing.images.find((i) => i.is_primary) ?? listing.images[0];
-  const imgSrc = primary?.image || primary?.source_url || PLACEHOLDER_SVG;
+  // 8.4: у списку — мініатюра; оригінал лише на сторінці оголошення.
+  const imgSrc = primary?.thumbnail || primary?.image || primary?.source_url || PLACEHOLDER_SVG;
 
   const price = Number(listing.price).toLocaleString('uk-UA');
   const isTop = listing.promoted_until && new Date(listing.promoted_until) > new Date();

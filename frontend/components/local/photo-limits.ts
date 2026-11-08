@@ -16,7 +16,14 @@ export function allowedHuman(config: LocalConfig): string {
 }
 
 export function photoHint(config: LocalConfig, count: number): string {
-  return `${count}/${config.max_photos} · ${allowedHuman(config)} · до ${config.photo_max_size_mb} МБ`;
+  const min = config.min_photos ? ` · мінімум ${config.min_photos}` : '';
+  return `${count}/${config.max_photos}${min} · ${allowedHuman(config)} · до ${config.photo_max_size_mb} МБ`;
+}
+
+/** 8.4: текст, якщо фото менше мінімуму (null — достатньо). */
+export function minPhotosError(config: LocalConfig, count: number): string | null {
+  const min = config.min_photos ?? 0;
+  return min > 0 && count < min ? `Додайте щонайменше ${min} фото` : null;
 }
 
 /** Відбирає придатні файли; невідповідні не відправляються, причина — у `error`. */
