@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { apiGet } from '@/api/client';
 import {
@@ -49,10 +49,30 @@ export default function CookieBanner() {
 
   useEffect(() => subscribeConsentOpen(() => setForceOpen(true)), []);
 
-  if (raw === 'unknown') return null;
-  const stored = parseConsent(raw);
+  const stored = raw === 'unknown' ? null : parseConsent(raw);
   const ask = stored === null || shouldAskAgain(stored.version, legal.version, legal.reconsent);
-  if (!ask && !forceOpen) return null;
+  const visible = raw !== 'unknown' && (ask || forceOpen);
+
+  // 6.6: висота банера в --cookie-banner-h, щоб нижня мобільна панель стояла над ним; 0 — коли банера немає.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const docEl = document.documentElement;
+    const el = rootRef.current;
+    if (!visible || !el) {
+      docEl.style.setProperty('--cookie-banner-h', '0px');
+      return;
+    }
+    const publish = () => docEl.style.setProperty('--cookie-banner-h', `${el.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(publish) : null;
+    observer?.observe(el);
+    return () => {
+      observer?.disconnect();
+      docEl.style.setProperty('--cookie-banner-h', '0px');
+    };
+  }, [visible]);
+
+  if (!visible) return null;
 
   const choose = (level: 'necessary' | 'all') => {
     setConsent(level, legal.version || null);
@@ -61,6 +81,7 @@ export default function CookieBanner() {
 
   return (
     <div
+      ref={rootRef}
       role="dialog"
       aria-label="Налаштування файлів cookie"
       className="fixed bottom-0 inset-x-0 z-50 bg-slate-900 text-white px-4 py-4 shadow-lg"

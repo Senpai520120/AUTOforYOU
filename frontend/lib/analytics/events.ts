@@ -7,6 +7,8 @@ export const EVENTS = {
   sign_up: 'sign_up',
   phone_reveal: 'phone_reveal',
   listing_submit: 'listing_submit',
+  // 6.6: клік по нижній мобільній панелі картки (лише source, без ПДн)
+  mobile_bar_click: 'mobile_bar_click',
 } as const;
 
 export type EventName = keyof typeof EVENTS;

@@ -5,44 +5,43 @@
  * «Показати телефон» розгортає капчу (Turnstile або honeypot з /auth/config/), «Показати номер»
  * шле POST /contact/ з токеном. Відмови показуються текстом сервера: капча, добовий ліміт (429),
  * показ гостям вимкнено (503), оголошення недоступне (404). Номер у DOM з'являється лише після 200.
+ * Стан «розгорнуто» керується ззовні (usePhoneReveal, 6.6): нижня панель відкриває цю ж капчу.
  */
 import { useState } from 'react';
 import Link from 'next/link';
 import Captcha from '@/components/ui/Captcha';
-import { ApiError } from '@/api/client';
 import { localApi } from '@/api/local';
-import { apiErrorText, isCaptchaFailed, useAuthConfig, useCaptchaState } from '@/lib/captcha';
+import { useAuthConfig, useCaptchaState } from '@/lib/captcha';
+import { phoneErrorText } from '@/lib/usePhoneReveal';
 
-const GENERIC_ERROR = 'Не вдалося завантажити номер. Спробуйте ще раз.';
+/** @deprecated назва 4.5a; те саме, що phoneErrorText. */
+export const guestPhoneError = phoneErrorText;
 
-export function guestPhoneError(err: unknown): string {
-  if (isCaptchaFailed(err)) return 'Не вдалося пройти перевірку. Спробуйте ще раз.';
-  if (err instanceof ApiError && err.status === 404) return 'Оголошення більше недоступне.';
-  if (err instanceof ApiError && (err.status === 429 || err.status === 503)) return apiErrorText(err, GENERIC_ERROR);
-  return GENERIC_ERROR;
-}
-
-export default function GuestPhoneReveal({ listingId, onPhone }: {
+export default function GuestPhoneReveal({ listingId, open, onOpen, onPhone }: {
   listingId: number;
+  open: boolean;
+  onOpen: () => void;
   onPhone: (phone: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const { config, error: configError } = useAuthConfig();
-  const captcha = useCaptchaState();
-
   if (!open) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={onOpen}
         className="w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg transition-colors"
       >
         Показати телефон
       </button>
     );
   }
+  return <GuestCaptchaForm listingId={listingId} onPhone={onPhone} />;
+}
+
+function GuestCaptchaForm({ listingId, onPhone }: { listingId: number; onPhone: (phone: string) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { config, error: configError } = useAuthConfig();
+  const captcha = useCaptchaState();
 
   const submit = async () => {
     setLoading(true);
@@ -51,7 +50,7 @@ export default function GuestPhoneReveal({ listingId, onPhone }: {
       const data = await localApi.getContactAsGuest(listingId, captcha.payload());
       onPhone(data.contact_phone || 'Номер не вказано');
     } catch (err) {
-      setError(guestPhoneError(err));
+      setError(phoneErrorText(err));
     } finally {
       setLoading(false);
       captcha.bump(); // токен одноразовий

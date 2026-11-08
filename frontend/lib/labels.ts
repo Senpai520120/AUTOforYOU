@@ -32,3 +32,11 @@ export const CALC_COST_LABEL = 'Розрахувати вартість';
 export const HOME_LABEL = 'Головна';
 export const CALCULATOR_LABEL = 'Калькулятор вартості';
 export const LANDING_INDEX_LABEL = 'Пригон авто з США';
+
+/** Підписи нижньої мобільної панелі картки (6.6): уточнюються при приймання в одному місці. */
+export const MOBILE_BAR_LABELS = {
+  call: 'Подзвонити',
+  write: 'Написати',
+  calculate: 'Розрахувати',
+  lead: 'Залишити заявку',
+} as const;

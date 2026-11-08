@@ -1,6 +1,5 @@
 'use client';
 import Image from 'next/image';
-import { trackEvent } from '@/lib/analytics';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { LocalListing } from '@/lib/types';
@@ -10,8 +9,13 @@ import WriteSellerButton from '@/components/messaging/WriteSellerButton';
 import HeartButton from '@/components/favorites/HeartButton';
 import ReportButton from '@/components/reports/ReportButton';
 import ChannelBadge from '@/components/local/ChannelBadge';
-import GuestPhoneReveal, { guestPhoneError } from '@/components/local/GuestPhoneReveal';
+import GuestPhoneReveal from '@/components/local/GuestPhoneReveal';
+import MobileActionBar, { countBarClick, mobileBarButtonClass } from '@/components/ui/MobileActionBar';
+import { MOBILE_BAR_LABELS } from '@/lib/labels';
+import { PHONE_BLOCK_ID, usePhoneReveal } from '@/lib/usePhoneReveal';
 import { useC2C } from '@/components/c2c/C2CProvider';
+
+const WRITE_BLOCK_ID = 'write-seller-block';
 
 const PLACEHOLDER_SVG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%2394a3b8'%3EФото відсутнє%3C/text%3E%3C/svg%3E";
@@ -35,22 +39,25 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   // У «засіві» переписка, обране й скарги по C2C закриті (бекенд відповідає 404), кнопки ховаємо.
   const social = useC2C().social;
   const [activeImg, setActiveImg] = useState(0);
-  const [phone, setPhone] = useState<string | null>(null);
-  const [phoneLoading, setPhoneLoading] = useState(false);
-  const [phoneError, setPhoneError] = useState('');
+  // 4.5a/6.6: один стан показу телефону для блоку на сторінці і нижньої панелі.
+  const phoneReveal = usePhoneReveal(listing.id, !user);
+  const { phone, loading: phoneLoading, error: phoneError } = phoneReveal;
 
   const images = listing.images.length > 0 ? listing.images : [{ id: 0, image: null, source_url: '', is_primary: true }];
   const mainImg = images[activeImg]?.image || images[activeImg]?.source_url || PLACEHOLDER_SVG;
   // SSR-HTML публичный и кэшируется (is_owner там всегда false), поэтому признак владельца
   // берём из авторизованного запроса на клиенте.
   const [ownerFlag, setOwnerFlag] = useState(false);
+  // 6.6: поки ознака власника не відома, панель не показуємо (власник не має витратити ліміт на свій номер).
+  const [ownerResolved, setOwnerResolved] = useState(false);
   const isOwner = Boolean(user) && ownerFlag;
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     localApi.detail(listing.id)
       .then(d => { if (!cancelled) setOwnerFlag(Boolean(d.is_owner)); })
-      .catch(() => { if (!cancelled) setOwnerFlag(false); });
+      .catch(() => { if (!cancelled) setOwnerFlag(false); })
+      .finally(() => { if (!cancelled) setOwnerResolved(true); });
     return () => { cancelled = true; };
   }, [user, listing.id]);
 
@@ -66,19 +73,6 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
     listing.engine_cc ? { label: "Об'єм двигуна", value: `${(listing.engine_cc / 1000).toFixed(1)} л (${listing.engine_cc} куб.см)` } : null,
   ].filter(Boolean) as { label: string; value: string | number }[];
 
-  const handleShowPhone = async () => {
-    setPhoneLoading(true);
-    setPhoneError('');
-    try {
-      const data = await localApi.getContact(listing.id);
-      setPhone(data.contact_phone || 'Номер не вказано');
-      trackEvent('phone_reveal', { source: 'listing' });
-    } catch (err) {
-      setPhoneError(guestPhoneError(err)); // 429 - текст добового ліміту з сервера
-    } finally {
-      setPhoneLoading(false);
-    }
-  };
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -174,7 +168,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                 {listing.seller_deal_count ? <span>· {listing.seller_deal_count} угод</span> : null}
               </div>
             )}
-            <div className="mt-3">
+            <div className="mt-3" id={PHONE_BLOCK_ID}>
               {phone ? (
                 <a
                   href={`tel:${phone}`}
@@ -185,11 +179,13 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               ) : !user ? (
                 <GuestPhoneReveal
                   listingId={listing.id}
-                  onPhone={(p) => { setPhone(p); trackEvent('phone_reveal', { source: 'listing' }); }}
+                  open={phoneReveal.guestOpen}
+                  onOpen={() => phoneReveal.setGuestOpen(true)}
+                  onPhone={phoneReveal.onGuestPhone}
                 />
               ) : (
                 <button
-                  onClick={handleShowPhone}
+                  onClick={phoneReveal.reveal}
                   disabled={phoneLoading}
                   className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
                 >
@@ -201,7 +197,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
           </div>
 
           {social && !isOwner && listing.status === 'active' && (
-            <div className="mt-3">
+            <div className="mt-3" id={WRITE_BLOCK_ID}>
               <WriteSellerButton listingType="local" listingId={listing.id} />
             </div>
           )}
@@ -232,6 +228,49 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
             {listing.description}
           </div>
         </div>
+      )}
+
+      {listing.status === 'active' && !isOwner && (!user || ownerResolved) && (
+        <MobileActionBar
+          actions={[
+            {
+              key: 'call',
+              node: phone ? (
+                <a href={`tel:${phone}`} onClick={countBarClick}
+                  className={`${mobileBarButtonClass} bg-green-600 text-white hover:bg-green-500`}>
+                  {MOBILE_BAR_LABELS.call}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { countBarClick(); void phoneReveal.reveal(); }}
+                  disabled={phoneLoading}
+                  className={`${mobileBarButtonClass} bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-60`}
+                >
+                  {phoneLoading ? 'Завантаження...' : MOBILE_BAR_LABELS.call}
+                </button>
+              ),
+            },
+            ...(social
+              ? [{
+                key: 'write',
+                // Той самий діалог, що й кнопка на сторінці: другого екземпляра модалки немає.
+                node: (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      countBarClick();
+                      document.querySelector<HTMLButtonElement>(`#${WRITE_BLOCK_ID} button`)?.click();
+                    }}
+                    className={`${mobileBarButtonClass} bg-green-600 text-white hover:bg-green-500`}
+                  >
+                    {MOBILE_BAR_LABELS.write}
+                  </button>
+                ),
+              }]
+              : []),
+          ]}
+        />
       )}
     </div>
   );
