@@ -61,7 +61,7 @@ test.describe('Довіра до продавця (8.6)', () => {
 
     await page.goto('/me/messages');
     await page.getByRole('listitem').getByRole('button').first().click();
-    await expect(page.getByLabel('Повідомлення', { exact: true })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Повідомлення' })).toBeVisible();
     await expect(page.getByTestId('scam-warning')).toBeVisible();
   });
 
