@@ -510,6 +510,8 @@ LOCAL_LISTING_THUMB_MAX_SIDE = int(os.environ.get('LOCAL_LISTING_THUMB_MAX_SIDE'
 KATOTTG_FILE = os.environ.get('KATOTTG_FILE', '').strip()
 CITY_SEARCH_MIN_CHARS = int(os.environ.get('CITY_SEARCH_MIN_CHARS', '2'))
 CITY_SEARCH_LIMIT = int(os.environ.get('CITY_SEARCH_LIMIT', '20'))
+# 4.10: подача объявления только с телефоном, подтверждённым через Telegram (staff не блокируется).
+PHONE_VERIFICATION_REQUIRED = os.environ.get('PHONE_VERIFICATION_REQUIRED', 'true').strip().lower() in ('true', '1', 'yes')
 # 4.10: SMS-подтверждение телефона - этап «Рост»; пока любой вызов SmsVerifier -> NotConfigured.
 SMS_VERIFY_ENABLED = os.environ.get('SMS_VERIFY_ENABLED', 'false').strip().lower() in ('true', '1', 'yes')
 # Длина комментария к жалобе (4.13, B8).
@@ -844,6 +846,9 @@ if _TESTING:
     TURNSTILE_SECRET_KEY = ''
     # 8.4: прежние тесты одобряют и чистят объявления без фото; правило минимума - local_listings/tests_photos.py.
     LOCAL_LISTING_MIN_PHOTOS = 0
+    # 4.10: прежние тесты подают объявления пользователями без подтверждённого телефона;
+    # правило проверяет local_listings/tests_phone_required.py с override_settings.
+    PHONE_VERIFICATION_REQUIRED = False
     # SSO-1: тесты включают SSO через override_settings, сеть мокается.
     OIDC_ENABLED = False
     OIDC_CLIENT_ID = 'autoforyou'

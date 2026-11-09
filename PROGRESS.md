@@ -30,6 +30,14 @@
 
 ---
 
+## Задача 4.10 (часть 2 из 2): подача только с подтверждённым телефоном (2026-11-09)
+
+- `PhoneVerifiedForPosting` на `POST /api/v1/local/listings/`: без `phone_verified_at` → 403 `{"code": "phone_not_verified"}`; staff/admin не блокируются (засев); флаг `PHONE_VERIFICATION_REQUIRED` (по умолчанию true, в тестовых настройках false — правило проверяет `local_listings/tests_phone_required.py`).
+- Фронт: `components/PhoneVerifyTelegram.tsx` — шаг «Підтвердіть телефон» вместо формы новой подачи (ссылка на бота из `/telegram/link-token/`, «Я поділився контактом — перевірити» перечитывает профиль); 403 `phone_not_verified` от сервера тоже показывает шаг; статус телефона на `/me/telegram`.
+- e2e: `phone-verify.spec.ts` (бот на стенде не настроен — ссылка и профиль подменяются `page.route`; путь через бота — Django-тесты); в `e2e_seed` телефоны buyer и seller подтверждены, dealer — нет.
+- Не сделано (записано в `docs/BUGS_FOUND.md`): токен привязки хранится без хэша, `/unlink` не снимает подтверждение.
+- Тесты: `tests_phone_required.py` 6 (мутация «пропускать всех» ловится); полный backend 3164 — после правки шаблонов `.env` падают только 2 известных Windows-теста, `users` 445 OK после правки сида; tsc и build чистые; Playwright `phone-verify`, `a11y`, `c2c-flag`, `c2c-listing-form`, `city-search`, `mobile`, `photo-processing`, `private-pages`, `seo`, `states` — 201 passed. Ревью безопасности — по части 1; часть 2 добавляет только проверку права на подачу.
+
 ## Задача 4.10 (часть 1 из 2): подтверждение телефона контактом Telegram — бэкенд (2026-11-08)
 
 - `CustomUser.verified_phone` (E.164, уникален) и `phone_verified_at` (миграция `users/0024`); поле профиля `phone` по-прежнему правит сам пользователь и для доверия не используется. Профиль отдаёт `phone_verified` и `verified_phone` (только чтение); обезличивание очищает оба поля, выгрузка «Мої дані» их включает.

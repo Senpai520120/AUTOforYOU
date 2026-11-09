@@ -88,6 +88,14 @@ export default function TelegramPage() {
         <h1 className="text-xl font-bold text-slate-900 mb-1">Telegram</h1>
         <p className="text-sm text-slate-500 mb-6">Отримуйте сповіщення про нові повідомлення, оголошення та угоди прямо в Telegram.</p>
 
+        {/* 4.10: статус телефону — підтверджується контактом у боті після прив'язки */}
+        <p role="status" data-testid="phone-status"
+          className={`mb-4 text-sm rounded-lg px-4 py-2 ${user.phone_verified ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
+          {user.phone_verified
+            ? `Телефон підтверджено${user.verified_phone ? `: ${user.verified_phone}` : ''}`
+            : 'Телефон не підтверджено: прив\'яжіть Telegram і в боті натисніть «Поділитися контактом».'}
+        </p>
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
             {error}

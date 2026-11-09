@@ -30,6 +30,30 @@ def posting_allowed(user) -> bool:
     return c2c_public_posting_enabled() or is_staff_or_admin(user)
 
 
+PHONE_NOT_VERIFIED = {
+    'detail': 'Підтвердіть телефон через Telegram, щоб подати оголошення.',
+    'code': 'phone_not_verified',
+}
+
+
+class PhoneVerifiedForPosting(BasePermission):
+    """4.10: подача нового объявления - только с телефоном, подтверждённым контактом в Telegram.
+
+    Staff/admin (засев) не блокируются. Выключается PHONE_VERIFICATION_REQUIRED=false. Ставить вместе с
+    IsAuthenticated: код ответа анониму задаёт он.
+    """
+    message = PHONE_NOT_VERIFIED
+
+    def has_permission(self, request, view):
+        from django.conf import settings
+        if request.method in SAFE_METHODS or not settings.PHONE_VERIFICATION_REQUIRED:
+            return True
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        return is_staff_or_admin(user) or user.phone_verified_at is not None
+
+
 class CanPostLocalListing(BasePermission):
     message = POSTING_CLOSED_DETAIL
 

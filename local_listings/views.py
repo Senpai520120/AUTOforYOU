@@ -41,7 +41,7 @@ from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
-from .permissions import POSTING_CLOSED_DETAIL, CanPostLocalListing, posting_allowed
+from .permissions import POSTING_CLOSED_DETAIL, CanPostLocalListing, PhoneVerifiedForPosting, posting_allowed
 from .serializers import (
     CitySearchSerializer,
     CitySerializer,
@@ -146,7 +146,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [permissions.IsAuthenticated(), CanPostLocalListing(), IsEmailVerified()]
+            return [permissions.IsAuthenticated(), CanPostLocalListing(), IsEmailVerified(), PhoneVerifiedForPosting()]
         return [permissions.AllowAny()]
 
     def get_serializer_class(self):

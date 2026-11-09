@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { localApi } from '@/api/local';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import { isEmailNotVerified } from '@/lib/email-verify';
+import { useAuth } from '@/lib/auth-context';
+import PhoneVerifyTelegram from '@/components/PhoneVerifyTelegram';
 import { CityOption, LocalConfig, LocalListing } from '@/lib/types';
 import CityAutocomplete from './CityAutocomplete';
 import { ApiError, getErrorMessage } from '@/lib/errors';
@@ -193,6 +195,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const [vinError, setVinError] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
+  const { user: authUser, refreshUser } = useAuth();
+  const [needPhone, setNeedPhone] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notVerified, setNotVerified] = useState(false);
 
@@ -286,6 +290,11 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         return;
       }
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 403
+        && (err.data as { code?: string } | null)?.code === 'phone_not_verified') {
+        setNeedPhone(true);
+        return;
+      }
       if (isEmailNotVerified(err)) {
         setNotVerified(true);
         return;
@@ -326,6 +335,10 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   // Без списку областей форма не відправиться: показуємо помилку з повтором, а не порожній select.
   if (regionsError) return <ErrorState error={regionsError} onRetry={loadRegions} />;
   if (!regionsLoaded || !config) return <LoadingState />;
+  // 4.10: нове оголошення — лише з підтвердженим телефоном (staff/адмін не блокуються, як і на сервері).
+  if (!isEdit && (needPhone || (authUser && !authUser.phone_verified && !authUser.is_staff && !authUser.is_admin_role))) {
+    return <PhoneVerifyTelegram onCheck={async () => { await refreshUser(); setNeedPhone(false); }} />;
+  }
   if (!isEdit && !config.posting_open) {
     return (
       <div role="status" className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center">

@@ -14,6 +14,7 @@ from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 E2E_DOMAIN = '@e2e.test'
 # SSO-1: учётка ad_alice из Active Directory стека Users & Roles (не @e2e.test - см. _sso_user).
@@ -89,8 +90,9 @@ class Command(BaseCommand):
     def _users(self, password):
         User = get_user_model()
         spec = {
-            'buyer': {'role': 'buyer'},
-            'seller': {'role': 'buyer'},
+            # 4.10: buyer и seller подают объявления в e2e - телефон подтверждён; dealer - нет (e2e/phone-verify.spec.ts)
+            'buyer': {'role': 'buyer', 'verified_phone': '+380670000002', 'phone_verified_at': timezone.now()},
+            'seller': {'role': 'buyer', 'verified_phone': '+380670000001', 'phone_verified_at': timezone.now()},
             'dealer': {'role': 'dealer', 'is_verified_dealer': True},
             'staff': {'role': 'buyer', 'is_staff': True},
             'broker': {'role': 'broker', 'is_staff': True},

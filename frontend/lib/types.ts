@@ -13,6 +13,9 @@ export interface User {
   is_admin_role: boolean;
   created_at: string;
   telegram_id: number | null;
+  /** 4.10: телефон підтверджено власним контактом у Telegram (без нього подача оголошень закрита). */
+  phone_verified?: boolean;
+  verified_phone?: string | null;
   // Період скасування видалення (1.8): дата остаточного видалення або null.
   deletion_scheduled_for: string | null;
 }
