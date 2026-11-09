@@ -11,7 +11,9 @@ import ReportButton from '@/components/reports/ReportButton';
 import ChannelBadge from '@/components/local/ChannelBadge';
 import GuestPhoneReveal from '@/components/local/GuestPhoneReveal';
 import MobileActionBar, { countBarClick, mobileBarButtonClass } from '@/components/ui/MobileActionBar';
-import { MOBILE_BAR_LABELS } from '@/lib/labels';
+import { MOBILE_BAR_LABELS, VERIFIED_DEALER_LABEL } from '@/lib/labels';
+import SellerBlock from '@/components/trust/SellerBlock';
+import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { PHONE_BLOCK_ID, usePhoneReveal } from '@/lib/usePhoneReveal';
 import { useC2C } from '@/components/c2c/C2CProvider';
 
@@ -154,7 +156,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
             <div className="text-sm text-slate-600 flex flex-wrap items-center gap-1.5">
               <span>Продавець: <strong>{listing.owner_name}</strong></span>
               {listing.seller_type === 'dealer' && (
-                <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Дилер</span>
+                <span data-testid="verified-dealer" className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">✓ {VERIFIED_DEALER_LABEL}</span>
               )}
               {listing.seller_has_badge && (
                 <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-semibold">✓ Перевірений продавець</span>
@@ -168,6 +170,8 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                 {listing.seller_deal_count ? <span>· {listing.seller_deal_count} угод</span> : null}
               </div>
             )}
+            <SellerBlock listing={listing} />
+            {!isOwner && <ScamWarningBanner className="mt-3" />}
             <div className="mt-3" id={PHONE_BLOCK_ID}>
               {phone ? (
                 <a

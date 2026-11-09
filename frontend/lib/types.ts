@@ -319,6 +319,11 @@ export interface LocalListing {
   source_channel?: string;
   seller_avg_rating?: number | null;
   seller_deal_count?: number;
+  /** 8.6: лише в деталі оголошення — блок продавця. */
+  seller_id?: number;
+  /** 8.6: «YYYY-MM» — місяць реєстрації продавця. */
+  seller_member_since?: string | null;
+  seller_active_listings_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -571,6 +576,29 @@ export interface SiteSettings {
   local_listing_photo_max_size_mb: number;
   /** Ім'я бота без @; порожній рядок — бот не налаштований. */
   telegram_bot_username: string;
+  /** 8.6: текст банера «не вносьте передоплату»; порожній рядок — банер приховано. */
+  prepayment_warning_text?: string;
+}
+
+/** 8.6: публічна сторінка продавця (GET /api/v1/local/sellers/<id>/). */
+export interface SellerReview {
+  rating: number;
+  /** Порожній, якщо відгук містить контакти (сервер не показує неперевірений текст). */
+  text: string;
+  created_at: string;
+  author_name: string;
+}
+
+export interface SellerProfile {
+  id: number;
+  display_name: string;
+  member_since: string | null;
+  is_verified_dealer: boolean;
+  active_listings_count: number;
+  deal_count: number;
+  avg_rating: number | null;
+  reviews: SellerReview[];
+  listings: { count: number; next: string | null; previous: string | null; results: LocalListing[] };
 }
 
 // Заявки брокеру (задача 2.3)

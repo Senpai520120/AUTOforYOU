@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { LocalListing } from '@/lib/types';
 import ChannelBadge from '@/components/local/ChannelBadge';
+import { VERIFIED_DEALER_LABEL } from '@/lib/labels';
 
 const FUEL_LABELS: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид', gas: 'Газ',
@@ -44,6 +45,11 @@ export default function LocalListingCard({ listing, priority = false }: { listin
       </Link>
       <div className="p-4">
         <ChannelBadge channel={listing.source_channel} className="mb-2" />
+        {listing.seller_type === 'dealer' && (
+          <span data-testid="verified-dealer" className="mb-2 mr-1 inline-block text-[11px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
+            ✓ {VERIFIED_DEALER_LABEL}
+          </span>
+        )}
         <Link href={`/local/${listing.id}`} className="hover:text-blue-700">
           <h2 className="font-semibold text-slate-900 text-sm leading-snug">
             {listing.make} {listing.model} {listing.year}

@@ -14,6 +14,7 @@ import { getAttribution } from '@/lib/attribution';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingState from '@/components/ui/LoadingState';
 import PhotoUploadBlock from './PhotoUploadBlock';
+import { POSTING_AS_DEALER } from '@/lib/labels';
 import { checkPhotos, minPhotosError, photoHint } from './photo-limits';
 
 /** Поля з місцем для помилки у формі; решта ключів відповіді — у загальному блоці з назвою поля. */
@@ -21,7 +22,7 @@ const FIELD_LABELS: Record<string, string> = {
   make: 'Марка', model: 'Модель', year: 'Рік', mileage_km: 'Пробіг', engine_cc: "Об'єм двигуна",
   fuel_type: 'Тип палива', transmission: 'КПП', body_type: 'Тип кузова', condition: 'Стан',
   price: 'Ціна', currency: 'Валюта', price_type: 'Тип ціни', region: 'Область', city: 'Місто',
-  description: 'Опис', contact_phone: 'Телефон', agreed_to_rules: 'Правила', seller_type: 'Тип продавця',
+  description: 'Опис', contact_phone: 'Телефон', agreed_to_rules: 'Правила',
   legal_confirmed: 'Підтвердження',
   images: 'Фото',
 };
@@ -602,6 +603,13 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           </label>
           {errors.legal_confirmed && <p id={fid('err-legal_confirmed')} role="alert" className={errCls}>{errors.legal_confirmed}</p>}
         </div>
+      )}
+
+      {/* 8.6: тип продавця визначає сервер (дилер — лише верифікований), вибору у формі немає. */}
+      {authUser?.is_verified_dealer && (
+        <p data-testid="posting-as-dealer" className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          ✓ {POSTING_AS_DEALER}
+        </p>
       )}
 
       <div className="flex gap-3 pt-2">

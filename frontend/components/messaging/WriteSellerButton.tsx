@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { startConversation } from '@/api/messages';
 import Modal from '@/components/ui/Modal';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { isEmailNotVerified } from '@/lib/email-verify';
 import { ApiError, getErrorMessage } from '@/lib/errors';
 
@@ -72,6 +73,7 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
             {error && (
               <div role="alert" className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
             )}
+            {listingType === 'local' && <ScamWarningBanner className="mb-3" />}
             <textarea
               value={text}
               onChange={e => setText(e.target.value)}

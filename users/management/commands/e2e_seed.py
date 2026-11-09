@@ -68,7 +68,7 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             users = self._users(password)
-            self._local_listings(users['seller'])
+            self._local_listings(users['seller'], users['dealer'])
             vehicles = self._listings(users['seller'])
             self._shipment(users['buyer'], vehicles['retail'])
             self._conversation(users['buyer'], users['seller'])
@@ -136,24 +136,28 @@ class Command(BaseCommand):
             self.stderr.write(f'Фото {path} не найдено, объявление создаётся без фото.')
             return None
 
-    def _local_listings(self, seller):
+    def _local_listings(self, seller, dealer):
         from local_listings.models import City, LocalListing, LocalListingImage, Region
 
         region = Region.objects.order_by('id').first()
         city = City.objects.filter(region=region).order_by('id').first() if region else None
         if not city:
             raise CommandError('Нет регионов/городов: seed_regions не отработал.')
+        private, dealer_type = LocalListing.SellerType.PRIVATE, LocalListing.SellerType.DEALER
         spec = (
-            ('Skoda', 'Octavia', LocalListing.Status.ACTIVE, FIXTURE_PHOTOS[0]),
-            ('Toyota', 'Camry', LocalListing.Status.PENDING, FIXTURE_PHOTOS[1]),
+            (seller, 'Skoda', 'Octavia', LocalListing.Status.ACTIVE, FIXTURE_PHOTOS[0], dealer_type),
+            (seller, 'Toyota', 'Camry', LocalListing.Status.PENDING, FIXTURE_PHOTOS[1], private),
+            # 8.6: активне оголошення верифікованого дилера — бейдж «Перевірений дилер» (e2e/c2c-seller-trust.spec.ts)
+            (dealer, 'Ford', 'Focus', LocalListing.Status.ACTIVE, FIXTURE_PHOTOS[0], dealer_type),
         )
-        for make, model, status, photo in spec:
+        for owner, make, model, status, photo, seller_type in spec:
             # Заголовка у LocalListing нет: маркер [E2E] кладём в описание,
             # по нему же get_or_create и cleanup.
             marker = f'{E2E_PREFIX} {make} {model} ({status})'
             listing, created = LocalListing.objects.get_or_create(
-                owner=seller, description=marker,
+                owner=owner, description=marker,
                 defaults={
+                    'seller_type': seller_type,
                     'make': make, 'model': model, 'year': 2018, 'mileage_km': 120000,
                     'engine_cc': 1600, 'fuel_type': 'petrol', 'transmission': 'auto',
                     'body_type': 'sedan', 'price': Decimal('9000'), 'currency': 'USD',
@@ -162,7 +166,7 @@ class Command(BaseCommand):
                     # 4.5a: номер для e2e/c2c-phone.spec.ts (показ вошедшему и гостю после капчи)
                     'contact_phone': '+380671112233',
                     # 9.57: бейдж «від @канал» на карточке (e2e/channel-badge.spec.ts)
-                    'source_channel': 'afy_e2e_channel' if status == LocalListing.Status.ACTIVE else '',
+                    'source_channel': 'afy_e2e_channel' if owner == seller and status == LocalListing.Status.ACTIVE else '',
                 },
             )
             if created:

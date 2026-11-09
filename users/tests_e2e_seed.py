@@ -78,7 +78,7 @@ class E2ESeedTests(TestCase):
         self.assertEqual(first, _counts())
 
         self.assertEqual(first['users'], 6)
-        self.assertEqual(first['local'], 2)
+        self.assertEqual(first['local'], 3)  # 8.6: + объявление дилера
         self.assertEqual(first['listings'], 2)
         self.assertEqual(first['shipments'], 1)
         self.assertEqual(first['conversations'], 1)
@@ -87,6 +87,8 @@ class E2ESeedTests(TestCase):
             self.assertTrue(user.check_password(ENV_OK['E2E_PASSWORD']))
             self.assertTrue(user.is_email_verified)
         self.assertTrue(User.objects.get(email='dealer@e2e.test').is_verified_dealer)
+        # 8.6: активное объявление верифицированного дилера — для бейджа «Перевірений дилер» в e2e
+        self.assertEqual(LocalListing.objects.get(owner__email='dealer@e2e.test').seller_type, 'dealer')
         self.assertTrue(User.objects.get(email='staff@e2e.test').is_staff)
         self.assertEqual(
             set(LocalListing.objects.values_list('status', flat=True)), {'active', 'pending'},

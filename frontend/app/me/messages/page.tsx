@@ -9,6 +9,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
 import { ApiError, getErrorMessage } from '@/lib/errors';
 import EmailNotVerified from '@/components/ui/EmailNotVerified';
+import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { isEmailNotVerified } from '@/lib/email-verify';
 import { useVisibleInterval } from '@/lib/useVisibleInterval';
 import { timeAgo } from '@/lib/format';
@@ -337,6 +338,9 @@ export default function MessagesPage() {
                 )}
                 <div ref={bottomRef} />
               </div>
+
+              {/* 8.6: банер передоплати над полем вводу — лише в діалогах про оголошення частників. */}
+              {active.subject_url?.startsWith('/local/') && <ScamWarningBanner className="mx-5 mt-3" />}
 
               {/* Input */}
               <div className="px-5 py-3 border-t border-slate-100 flex gap-2 items-end">

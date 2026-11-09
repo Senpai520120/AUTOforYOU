@@ -40,3 +40,23 @@ export const MOBILE_BAR_LABELS = {
   calculate: 'Розрахувати',
   lead: 'Залишити заявку',
 } as const;
+
+/** Довіра до продавця (задача 8.6). */
+export const VERIFIED_DEALER_LABEL = 'Перевірений дилер';
+export const SELLER_ALL_LISTINGS_LABEL = 'Усі оголошення продавця';
+export const SELLER_NOT_FOUND = 'Продавця не знайдено';
+export const SAFE_DEAL_RULES_LABEL = 'Правила безпечної угоди';
+export const POSTING_AS_DEALER = 'Ви публікуєте як перевірений дилер';
+
+const MONTHS_GENITIVE = [
+  'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+  'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня',
+];
+
+/** «2026-03» → «на сайті з березня 2026»; некоректне значення → ''. */
+export function memberSinceLabel(value: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(value ?? '');
+  if (!m) return '';
+  const month = MONTHS_GENITIVE[Number(m[2]) - 1];
+  return month ? `на сайті з ${month} ${m[1]}` : '';
+}
