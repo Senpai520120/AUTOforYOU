@@ -140,7 +140,7 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'owner_configured', 'partner_consent_text',
             'lots_enabled', 'b2b_enabled', 'dealers_enabled', 'shipments_enabled', 'vin_reports_enabled',
             'c2c_enabled', 'c2c_public_posting_enabled', 'payments_enabled',
-            'carvertical_partner_url', 'analytics',
+            'carvertical_partner_url', 'analytics', 'prepayment_warning_text',
             *PUBLIC_CONFIG_FIELDS,
         ]
         read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

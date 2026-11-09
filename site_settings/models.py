@@ -43,6 +43,12 @@ class SiteSettings(models.Model):
         help_text='Сюди суб\'єкти ПДн надсилають запити (доступ, видалення).',
     )
     phone = models.CharField('Телефон', max_length=32, blank=True, default='')
+    # 8.6 (C8.1): баннер «не вносите предоплату»; пусто - баннер скрыт. ПРОВЕРИТЬ формулировку.
+    prepayment_warning_text = models.TextField(
+        'Текст банера «не вносьте передоплату»', blank=True,
+        default='Не переказуйте передоплату чи «завдаток» продавцю, не побачивши авто та документи. '
+                'Шахраї часто просять гроші наперед.',
+    )
     manager_contact = models.CharField(
         'Контакт менеджера', max_length=255, blank=True, default='',
         help_text='Показується клієнтам у кабінеті відстеження доставки.',

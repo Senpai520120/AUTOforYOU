@@ -14,6 +14,7 @@ from .views import (
     MyListingsView,
     PromotionTariffListView,
     RegionListView,
+    SellerPublicView,
     VinPrefillView,
 )
 
@@ -32,4 +33,5 @@ urlpatterns = [
     path('regions/', RegionListView.as_view(), name='local-regions'),
     path('regions/<int:region_id>/cities/', CityListView.as_view(), name='local-cities'),
     path('cities/', CitySearchView.as_view(), name='local-city-search'),
+    path('sellers/<int:pk>/', SellerPublicView.as_view(), name='local-seller'),
 ]

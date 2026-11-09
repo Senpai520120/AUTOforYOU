@@ -296,6 +296,24 @@ class LocalListing(models.Model):
         return f'{self.make} {self.model} {self.year} — {self.price} {self.currency} [{self.status}]'
 
 
+class ListingPriceHistory(models.Model):
+    """8.6 (D5.1): история цены с первого дня (потом не восстановить). Только запись; витрина - 9.7."""
+    listing = models.ForeignKey(
+        LocalListing, on_delete=models.CASCADE, related_name='price_history', verbose_name='Оголошення',
+    )
+    price = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Ціна')
+    currency = models.CharField(max_length=3, verbose_name='Валюта')
+    changed_at = models.DateTimeField(default=timezone.now, verbose_name='Коли')
+
+    class Meta:
+        verbose_name = 'Ціна (історія)'
+        verbose_name_plural = 'Історія цін'
+        ordering = ['-changed_at', '-pk']
+
+    def __str__(self):
+        return f'#{self.listing_id}: {self.price} {self.currency}'
+
+
 class ContactView(models.Model):
     """Факт показа телефона (4.5a, 05-S6). Ни номера, ни user-agent, ни IP в открытом виде.
 

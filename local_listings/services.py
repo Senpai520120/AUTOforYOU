@@ -237,3 +237,17 @@ def _alert_anomaly(*, user, ip_hash: str, count: int) -> None:
         return
     for moderator_id in moderator_ids():
         notify(moderator_id, 'contact_anomaly', {'who': who, 'count': count}, link, telegram=False)
+
+
+# ─── История цены (8.6, D5.1) ────────────────────────────────────────────────
+
+def record_price_change(listing: LocalListing) -> bool:
+    """Записать цену, если она отличается от последней записи (сравнение Decimal и валюты). True - записано."""
+    from .models import ListingPriceHistory
+
+    last = ListingPriceHistory.objects.filter(listing=listing).order_by('-changed_at', '-pk').first()
+    price = Decimal(str(listing.price))
+    if last is not None and last.price == price and last.currency == listing.currency:
+        return False
+    ListingPriceHistory.objects.create(listing=listing, price=price, currency=listing.currency)
+    return True

@@ -833,10 +833,11 @@ class TestSellerTypeDealer(TestCase):
             region=region.pk, city=city.pk, agreed_to_rules=True, legal_confirmed=True, seller_type='dealer',
         )
 
-    def test_unverified_user_gets_400(self):
+    def test_unverified_user_dealer_claim_is_ignored(self):
+        # 8.6 (D1.1): тип продавца определяет сервер - заявка «дилер» не 400, а объявление private
         resp = auth_client(make_user()).post('/api/v1/local/listings/', self._payload(), format='json')
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('seller_type', resp.data)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['seller_type'], 'private')
 
     def test_verified_dealer_gets_201(self):
         resp = auth_client(make_dealer()).post('/api/v1/local/listings/', self._payload(), format='json')

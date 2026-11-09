@@ -86,6 +86,19 @@ class LocalListingImageSerializer(serializers.ModelSerializer):
         fields = ['id', 'image', 'thumbnail', 'source_url', 'is_primary']
 
 
+def public_seller_type(listing) -> str:
+    """8.6: «dealer» отдаётся, только пока владелец верифицирован."""
+    if listing.seller_type == LocalListing.SellerType.DEALER and listing.owner.is_verified_dealer:
+        return LocalListing.SellerType.DEALER
+    return LocalListing.SellerType.PRIVATE
+
+
+def member_since(user) -> str | None:
+    """Месяц регистрации «YYYY-MM» (фронт пишет «на сайті з березня 2026»)."""
+    joined = getattr(user, 'created_at', None) or getattr(user, 'date_joined', None)
+    return joined.strftime('%Y-%m') if joined else None
+
+
 class LocalListingListSerializer(serializers.ModelSerializer):
     """Публічний список — тільки active, без телефону та причини відхилення."""
     images = LocalListingImageSerializer(many=True, read_only=True)
@@ -93,6 +106,8 @@ class LocalListingListSerializer(serializers.ModelSerializer):
     city_name = serializers.CharField(source='city.name', read_only=True)
     owner_name = serializers.SerializerMethodField()
     seller_has_badge = serializers.SerializerMethodField()
+    # 8.6 (D1.1): «дилер» - только пока владелец верифицирован (отзыв роли сразу убирает метку везде).
+    seller_type = serializers.SerializerMethodField()
 
     class Meta:
         model = LocalListing
@@ -114,6 +129,10 @@ class LocalListingListSerializer(serializers.ModelSerializer):
     def get_owner_name(self, obj):
         return public_display_name(obj.owner)
 
+    @extend_schema_field(serializers.ChoiceField(choices=LocalListing.SellerType.choices))
+    def get_seller_type(self, obj):
+        return public_seller_type(obj)
+
     @extend_schema_field(serializers.BooleanField())
     def get_seller_has_badge(self, obj):
         from django.conf import settings
@@ -129,12 +148,27 @@ class LocalListingDetailSerializer(LocalListingListSerializer):
     seller_avg_rating = serializers.SerializerMethodField()
     seller_deal_count = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
+    # 8.6 (D3.1): блок продавца - без email, телефона и фамилии целиком
+    seller_id = serializers.IntegerField(source='owner_id', read_only=True)
+    seller_member_since = serializers.SerializerMethodField()
+    seller_active_listings_count = serializers.SerializerMethodField()
 
     class Meta(LocalListingListSerializer.Meta):
         fields = LocalListingListSerializer.Meta.fields + [
             'contact_phone', 'rejection_reason',
             'seller_avg_rating', 'seller_deal_count', 'is_owner',
+            'seller_id', 'seller_member_since', 'seller_active_listings_count',
         ]
+
+    @extend_schema_field(serializers.CharField())
+    def get_seller_member_since(self, obj):
+        return member_since(obj.owner)
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_seller_active_listings_count(self, obj):
+        if hasattr(obj, 'seller_active_count'):
+            return obj.seller_active_count or 0
+        return LocalListing.objects.filter(owner_id=obj.owner_id, status=LocalListing.Status.ACTIVE).count()
 
     @extend_schema_field(serializers.BooleanField())
     def get_is_owner(self, obj):
@@ -219,7 +253,7 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
             'images', 'created_at', 'updated_at',
             'agreed_to_rules', 'legal_confirmed', 'attribution',
         ]
-        read_only_fields = ['id', 'status', 'created_at', 'updated_at', 'images']
+        read_only_fields = ['id', 'status', 'created_at', 'updated_at', 'images', 'seller_type']
 
     def validate_description(self, value):
         return _check_description_length(value)
@@ -262,17 +296,6 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
                 f'Закрийте або видаліть існуючі перед подачею нового.'
             )
 
-    def validate_seller_type(self, value):
-        # 05-Q22: статус «дилер» самостійно не обирається - тільки верифікований дилер.
-        request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        if value == LocalListing.SellerType.DEALER and not (
-            user and user.is_authenticated and user.is_verified_dealer
-        ):
-            raise serializers.ValidationError(
-                'Тип продавця «дилер» доступний лише верифікованим дилерам.'
-            )
-        return value
 
     def validate_year(self, value):
         current_year = datetime.date.today().year
@@ -294,6 +317,10 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
 
         validated_data['owner'] = owner
         validated_data['status'] = LocalListing.Status.PENDING
+        # 8.6 (D1.1): тип продавца определяет сервер; присланный клиентом seller_type игнорируется
+        validated_data['seller_type'] = (
+            LocalListing.SellerType.DEALER if owner.is_verified_dealer else LocalListing.SellerType.PRIVATE
+        )
         if agreed:
             validated_data['agreed_to_rules'] = True
             validated_data['agreed_to_rules_at'] = timezone.now()
@@ -306,7 +333,10 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'description': contacts_error(detected)})
             validated_data['has_contact_in_text'] = True
 
-        return super().create(validated_data)
+        from .services import record_price_change
+        listing = super().create(validated_data)
+        record_price_change(listing)  # 8.6: первая запись истории цены
+        return listing
 
 
 class LocalListingUpdateSerializer(serializers.ModelSerializer):
@@ -378,4 +408,8 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
             else:
                 validated_data['has_contact_in_text'] = False
 
-        return super().update(instance, validated_data)
+        from .services import record_price_change
+        listing = super().update(instance, validated_data)
+        if 'price' in validated_data or 'currency' in validated_data:
+            record_price_change(listing)  # 8.6: запись только при реальном изменении цены/валюты
+        return listing

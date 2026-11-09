@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import (
     Avg,
@@ -18,7 +19,8 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, serializers, status
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied, Throttled
+from rest_framework.exceptions import NotAuthenticated, NotFound, PermissionDenied, Throttled
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, UserRateThrottle
@@ -37,6 +39,7 @@ from integrations.services import decode_vin
 from integrations.validators import normalize_vin
 from metrics.models import MetricKey
 from metrics.services import record_metric
+from users.display import public_display_name
 from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter
@@ -95,11 +98,18 @@ def _seller_stats_annotations():
         .annotate(avg=Avg('rating'))
         .values('avg')[:1]
     )
+    # 8.6: число активных объявлений продавца - подзапросом, без N+1
+    active_count = (
+        LocalListing.objects
+        .filter(owner=OuterRef('owner'), status=LocalListing.Status.ACTIVE)
+        .order_by().values('owner').annotate(total=Count('pk')).values('total')[:1]
+    )
     return {
         'seller_deals_count': Coalesce(
             Subquery(deals_count, output_field=IntegerField()), Value(0),
         ),
         'seller_avg_rating_agg': Subquery(avg_rating, output_field=FloatField()),
+        'seller_active_count': Coalesce(Subquery(active_count, output_field=IntegerField()), Value(0)),
     }
 
 
@@ -605,6 +615,62 @@ class LocalListingContactView(APIView):
             throttle.release()  # показу не було - слот повертається
             raise
         return self._reveal(listing, ip_hash=ip_hash(throttle.get_ident(request)))
+
+
+# ─── Сторінка продавця (8.6, D3.1/J2.1) ──────────────────────────────────────
+
+SELLER_REVIEWS_LIMIT = 10
+
+
+def _public_review_text(text: str) -> str:
+    """Текст отзыва публичен с 8.6, но не модерируется: с контактами (телефон, email, ссылка) не показываем."""
+    from .antispam import detect_contacts
+    return '' if detect_contacts(text or '') else (text or '')
+
+
+@extend_schema(tags=['local'], summary='Публічна сторінка продавця', responses=None)
+class SellerPublicView(APIView):
+    """GET /api/v1/local/sellers/<id>/ - имя (public_display_name), «на сайті з», дилер, счётчики, отзывы, объявления.
+
+    404: нет такого, неактивный/удалённый пользователь, нет ни одного активного объявления и отзыва.
+    Email, телефон и фамилия целиком не отдаются.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, pk):
+        from deals.models import Deal, Review
+
+        from .serializers import member_since
+
+        # Один и тот же 404 для всех причин (нет, неактивен, удалён, без публичных данных): перебором id
+        # нельзя узнать, какие аккаунты живые (ревью 8.6).
+        user = get_user_model().objects.filter(pk=pk, is_active=True, deleted_at__isnull=True).first()
+        if user is None:
+            raise NotFound()
+        listings = _base_queryset().filter(owner=user, status=LocalListing.Status.ACTIVE).order_by('-created_at')
+        reviews = Review.objects.filter(target=user).select_related('author').order_by('-created_at')
+        if not listings.exists() and not reviews.exists():
+            raise NotFound()
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(listings, request, view=self)
+        avg = reviews.aggregate(avg=Avg('rating'))['avg']
+        return Response({
+            'id': user.pk,
+            'display_name': public_display_name(user),
+            'member_since': member_since(user),
+            'is_verified_dealer': bool(user.is_verified_dealer),
+            'active_listings_count': listings.count(),
+            'deal_count': Deal.objects.filter(seller=user, status=Deal.Status.CONFIRMED).count(),
+            'avg_rating': round(avg, 2) if avg is not None else None,
+            'reviews': [
+                {'rating': r.rating, 'text': _public_review_text(r.text), 'created_at': r.created_at,
+                 'author_name': public_display_name(r.author)}
+                for r in reviews[:SELLER_REVIEWS_LIMIT]
+            ],
+            'listings': paginator.get_paginated_response(
+                LocalListingListSerializer(page, many=True, context={'request': request}).data,
+            ).data,
+        })
 
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────

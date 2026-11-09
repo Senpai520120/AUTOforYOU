@@ -3,7 +3,15 @@ from django.contrib.admin import helpers
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 
-from .models import City, ContactView, LocalListing, LocalListingImage, PromotionTariff, Region
+from .models import (
+    City,
+    ContactView,
+    ListingPriceHistory,
+    LocalListing,
+    LocalListingImage,
+    PromotionTariff,
+    Region,
+)
 from .services import ListingNotReadyError, approve_listing, min_photos, reject_listing
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────
@@ -124,6 +132,18 @@ class EnoughPhotosFilter(admin.SimpleListFilter):
         return qs.filter(_photos__gte=need) if self.value() == 'yes' else qs.filter(_photos__lt=need)
 
 
+class ListingPriceHistoryInline(admin.TabularInline):
+    """8.6: история цены - только чтение."""
+    model = ListingPriceHistory
+    extra = 0
+    fields = ['price', 'currency', 'changed_at']
+    readonly_fields = fields
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 class LocalListingImageInline(admin.TabularInline):
     model = LocalListingImage
     extra = 1
@@ -147,8 +167,14 @@ class LocalListingAdmin(admin.ModelAdmin):
                    'has_contact_in_text']
     search_fields = ['make', 'model', 'owner__email', 'contact_phone', 'source_channel']
     readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'legal_confirmed', 'legal_confirmed_at',
-                       'expiry_warned', 'bumped_at']
-    inlines = [LocalListingImageInline]
+                       'expiry_warned', 'bumped_at', 'seller_type']  # 8.6: тип продавца определяет сервер
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change or {'price', 'currency'} & set(form.changed_data):
+            from .services import record_price_change
+            record_price_change(obj)  # 8.6: история цены и при правке в админке
+    inlines = [LocalListingImageInline, ListingPriceHistoryInline]
     raw_id_fields = ['owner', 'moderated_by']
     # 8.2: десятки тысяч пунктов - поиск вместо списка
     autocomplete_fields = ['region', 'city']

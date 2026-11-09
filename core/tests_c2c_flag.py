@@ -137,7 +137,7 @@ class TestRouteClassification(TestCase):
 
     def test_c2c_route_count_matches_the_task(self):
         # 13 local (4.2: my-listings/<pk>/, config/) + 6 deals + 4 messages + 2 saved-searches + 2 payments.
-        self.assertEqual(len(_c2c_paths()), 28)  # +local/cities/ (8.2)
+        self.assertEqual(len(_c2c_paths()), 29)  # +local/cities/ (8.2), +local/sellers/<id>/ (8.6)
 
 
 class TestClosedReasonUnit(SimpleTestCase):

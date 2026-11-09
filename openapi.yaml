@@ -1829,6 +1829,30 @@ paths:
                 items:
                   $ref: '#/components/schemas/City'
           description: ''
+  /api/v1/local/sellers/{id}/:
+    get:
+      operationId: v1_local_sellers_retrieve
+      description: |-
+        GET /api/v1/local/sellers/<id>/ - имя (public_display_name), «на сайті з», дилер, счётчики, отзывы, объявления.
+
+        404: нет такого, неактивный/удалённый пользователь, нет ни одного активного объявления и отзыва.
+        Email, телефон и фамилия целиком не отдаются.
+      summary: Публічна сторінка продавця
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - local
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/v1/local/tariffs/:
     get:
       operationId: v1_local_tariffs_list
@@ -3872,6 +3896,7 @@ components:
         seller_type:
           allOf:
           - $ref: '#/components/schemas/SellerTypeEnum'
+          readOnly: true
           title: Тип продавця
         contact_phone:
           type: string
@@ -3902,6 +3927,7 @@ components:
       - model
       - price
       - region
+      - seller_type
       - status
       - transmission
       - updated_at
@@ -3973,10 +3999,6 @@ components:
         description:
           type: string
           title: Опис
-        seller_type:
-          allOf:
-          - $ref: '#/components/schemas/SellerTypeEnum'
-          title: Тип продавця
         contact_phone:
           type: string
           title: Телефон
@@ -4087,7 +4109,7 @@ components:
         seller_type:
           allOf:
           - $ref: '#/components/schemas/SellerTypeEnum'
-          title: Тип продавця
+          readOnly: true
         owner_name:
           type: string
           readOnly: true
@@ -4146,6 +4168,15 @@ components:
         is_owner:
           type: boolean
           readOnly: true
+        seller_id:
+          type: integer
+          readOnly: true
+        seller_member_since:
+          type: string
+          readOnly: true
+        seller_active_listings_count:
+          type: integer
+          readOnly: true
       required:
       - body_type
       - city
@@ -4162,9 +4193,13 @@ components:
       - price
       - region
       - region_name
+      - seller_active_listings_count
       - seller_avg_rating
       - seller_deal_count
       - seller_has_badge
+      - seller_id
+      - seller_member_since
+      - seller_type
       - source_channel
       - transmission
       - updated_at
@@ -4296,7 +4331,7 @@ components:
         seller_type:
           allOf:
           - $ref: '#/components/schemas/SellerTypeEnum'
-          title: Тип продавця
+          readOnly: true
         owner_name:
           type: string
           readOnly: true
@@ -4353,6 +4388,7 @@ components:
       - region
       - region_name
       - seller_has_badge
+      - seller_type
       - source_channel
       - transmission
       - updated_at
@@ -4440,7 +4476,7 @@ components:
         seller_type:
           allOf:
           - $ref: '#/components/schemas/SellerTypeEnum'
-          title: Тип продавця
+          readOnly: true
         owner_name:
           type: string
           readOnly: true
@@ -4499,6 +4535,15 @@ components:
         is_owner:
           type: boolean
           readOnly: true
+        seller_id:
+          type: integer
+          readOnly: true
+        seller_member_since:
+          type: string
+          readOnly: true
+        seller_active_listings_count:
+          type: integer
+          readOnly: true
         expiry_warned:
           type: boolean
           title: Попередження надіслано
@@ -4518,9 +4563,13 @@ components:
       - price
       - region
       - region_name
+      - seller_active_listings_count
       - seller_avg_rating
       - seller_deal_count
       - seller_has_badge
+      - seller_id
+      - seller_member_since
+      - seller_type
       - source_channel
       - transmission
       - updated_at
