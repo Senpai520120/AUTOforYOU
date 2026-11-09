@@ -58,7 +58,7 @@ test.describe('Підтвердження телефону (4.10)', () => {
           make: 'Skoda', model: '[E2E] Без телефону', year: 2015, mileage_km: 1, price: '1000', currency: 'USD',
           fuel_type: 'petrol', transmission: 'manual', body_type: 'sedan', condition: 'used',
           region: cities[0].region, city: cities[0].id, description: '[E2E]', contact_phone: '+380501112295',
-          agreed_to_rules: true,
+          agreed_to_rules: true, legal_confirmed: true,
         },
       });
       expect(resp.status()).toBe(403);

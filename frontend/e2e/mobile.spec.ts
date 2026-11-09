@@ -223,6 +223,9 @@ test.describe('Мобільний кабінет buyer @mobile', () => {
     await expect(make).toBeVisible();
     let posted = false;
     page.on('request', r => { if (r.method() === 'POST' && r.url().includes('/local/listings')) posted = true; });
+    // 8.5: кнопка активна лише з обома відмітками — ставимо їх, щоб перевірити саме порожні поля
+    await page.getByRole('checkbox', { name: /правилами/ }).check();
+    await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     await page.locator('form button[type="submit"]').click();
     await expect.poll(() => make.evaluate((el: HTMLInputElement) => el.validity.valueMissing)).toBe(true);
     expect(posted).toBe(false);

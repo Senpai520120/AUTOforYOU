@@ -22,11 +22,12 @@ const FIELD_LABELS: Record<string, string> = {
   fuel_type: 'Тип палива', transmission: 'КПП', body_type: 'Тип кузова', condition: 'Стан',
   price: 'Ціна', currency: 'Валюта', price_type: 'Тип ціни', region: 'Область', city: 'Місто',
   description: 'Опис', contact_phone: 'Телефон', agreed_to_rules: 'Правила', seller_type: 'Тип продавця',
+  legal_confirmed: 'Підтвердження',
   images: 'Фото',
 };
 const INLINE_FIELDS = new Set([
   'make', 'model', 'year', 'mileage_km', 'engine_cc', 'price', 'region', 'city',
-  'description', 'contact_phone', 'agreed_to_rules',
+  'description', 'contact_phone', 'agreed_to_rules', 'legal_confirmed',
 ]);
 
 function joinMessages(v: unknown): string {
@@ -38,7 +39,11 @@ function joinMessages(v: unknown): string {
 /** 10-Q4: будь-яка відповідь з помилкою стає видимою — поле, загальний блок або текст статусу. */
 function mapFormErrors(err: unknown): Record<string, string> {
   if (!(err instanceof ApiError)) return { _general: getErrorMessage(err) };
-  if (err.status === 429) return { _general: 'Забагато спроб. Спробуйте за кілька хвилин' };
+  if (err.status === 429) {
+    // 8.5: причина сервера («Забагато нових оголошень…»), запасний текст — якщо її немає
+    const detail = (err.data as { detail?: unknown } | null)?.detail;
+    return { _general: typeof detail === 'string' && detail ? detail : 'Забагато спроб. Спробуйте за кілька хвилин' };
+  }
   if (err.status >= 500) return { _general: getErrorMessage(err) };
   const data = err.data;
   if (Array.isArray(data) || typeof data === 'string') {
@@ -188,6 +193,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const [description, setDescription] = useState(initial?.description ?? '');
   const [contactPhone, setContactPhone] = useState(initial?.contact_phone ?? '');
   const [agreedToRules, setAgreedToRules] = useState(false);
+  // 8.5 (N6.1): окрема відмітка «не в розшуку, не в заставі, документи є» — без неї подача не відправляється.
+  const [legalConfirmed, setLegalConfirmed] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const [vin, setVin] = useState('');
@@ -196,6 +203,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
   const [submitting, setSubmitting] = useState(false);
   const { user: authUser, refreshUser } = useAuth();
+  const descriptionMax = config?.description_max ?? 0;
+  const descriptionTooLong = descriptionMax > 0 && description.length > descriptionMax;
   const [needPhone, setNeedPhone] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notVerified, setNotVerified] = useState(false);
@@ -271,6 +280,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         const created = await localApi.create({
           ...payload,
           agreed_to_rules: agreedToRules,
+          legal_confirmed: legalConfirmed,
           ...(Object.keys(attribution).length ? { attribution } : {}),
         });
         setCreatedListingId(created.id);
@@ -522,10 +532,20 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           rows={5}
           value={description}
           onChange={e => setDescription(e.target.value)}
-          aria-invalid={!!errors.description}
-          aria-describedby={errors.description ? fid('err-description') : undefined}
+          aria-invalid={!!errors.description || descriptionTooLong}
+          aria-describedby={[errors.description ? fid('err-description') : '', fid('desc-count')].filter(Boolean).join(' ')}
           placeholder="Розкажіть детальніше про автомобіль..."
         />
+        {/* 8.5: ліміт довжини з /local/config/ (description_max), лічильник «N / max» */}
+        {descriptionMax > 0 && (
+          <p id={fid('desc-count')} data-testid="description-counter"
+            className={`text-xs mt-1 text-right ${descriptionTooLong ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+            {description.length} / {descriptionMax}
+          </p>
+        )}
+        {descriptionTooLong && !errors.description && (
+          <p role="alert" className={errCls}>Опис не довше {descriptionMax} символів.</p>
+        )}
         {errors.description && <p id={fid('err-description')} role="alert" className={errCls}>{errors.description}</p>}
       </div>
 
@@ -566,13 +586,28 @@ export default function LocalListingForm({ initial, listingId }: Props) {
             </span>
           </label>
           {errors.agreed_to_rules && <p id={fid('err-agreed_to_rules')} role="alert" className={errCls}>{errors.agreed_to_rules}</p>}
+          <label className="mt-3 flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+              checked={legalConfirmed}
+              onChange={e => setLegalConfirmed(e.target.checked)}
+              aria-describedby={errors.legal_confirmed ? fid('err-legal_confirmed') : undefined}
+              required
+            />
+            <span className="text-sm text-slate-700">
+              Авто не в розшуку, не в заставі, документи в наявності{' '}
+              (<a href="/rules#forbidden" target="_blank" className="text-blue-600 underline">що забороняється</a>)
+            </span>
+          </label>
+          {errors.legal_confirmed && <p id={fid('err-legal_confirmed')} role="alert" className={errCls}>{errors.legal_confirmed}</p>}
         </div>
       )}
 
       <div className="flex gap-3 pt-2">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || descriptionTooLong || (!isEdit && !(agreedToRules && legalConfirmed))}
           className="bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold px-8 py-3 rounded-lg transition-colors"
         >
           {submitting ? 'Збереження...' : isEdit ? 'Зберегти зміни' : 'Опублікувати оголошення'}

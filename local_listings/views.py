@@ -21,7 +21,7 @@ from rest_framework import generics, permissions, serializers, status
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied, Throttled
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from core.c2c import payments_enabled
@@ -55,7 +55,14 @@ from .serializers import (
     RegionSerializer,
 )
 from .services import min_photos, record_contact_view
-from .throttles import ContactDailyThrottle, GuestAnonThrottle, GuestContactThrottle, ip_hash
+from .throttles import (
+    ContactDailyThrottle,
+    GuestAnonThrottle,
+    GuestContactThrottle,
+    ListingCreateDailyThrottle,
+    ListingCreateThrottle,
+    ip_hash,
+)
 
 
 def _seller_stats_annotations():
@@ -143,6 +150,13 @@ class IsOwnerOrAdmin(permissions.BasePermission):
 class LocalListingListCreateView(generics.ListCreateAPIView):
     # права по методу в get_permissions: GET - AllowAny, POST - IsAuthenticated
     filter_backends = [LocalListingFilter]
+    # 8.5: общие anon/user + лимит подачи (час и сутки), действует только на POST
+    throttle_classes = [AnonRateThrottle, UserRateThrottle, ListingCreateThrottle, ListingCreateDailyThrottle]
+
+    def check_throttles(self, request):
+        for throttle in self.get_throttles():
+            if not throttle.allow_request(request, self):
+                raise _throttled(throttle)
 
     def get_permissions(self):
         if self.request.method == 'POST':
@@ -262,6 +276,7 @@ class LocalConfigView(APIView):
             'allowed_types': [f'image/{fmt.lower()}' for fmt in allowed_formats()],
             'max_active_listings': int(settings.LOCAL_LISTING_MAX_ACTIVE or 0),
             'min_photos': min_photos(),  # 8.4
+            'description_max': int(settings.LOCAL_LISTING_DESCRIPTION_MAX),  # 8.5
             'posting_open': posting_allowed(request.user),
             # 8.2: лимиты поиска населённого пункта - фронт их не хардкодит.
             'city_search_min_chars': int(settings.CITY_SEARCH_MIN_CHARS),

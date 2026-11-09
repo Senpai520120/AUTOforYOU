@@ -206,7 +206,7 @@ class TestUnverifiedRestricted(CleanCacheTestCase):
             'fuel_type': 'petrol', 'transmission': 'auto', 'body_type': 'sedan', 'condition': 'used',
             'price': '500000', 'currency': 'UAH', 'price_type': 'fixed',
             'region': self.region.pk, 'city': self.city.pk, 'description': 'Тест',
-            'contact_phone': '+380501234567', 'agreed_to_rules': True,
+            'contact_phone': '+380501234567', 'agreed_to_rules': True, 'legal_confirmed': True,
         }
 
     def _start(self):

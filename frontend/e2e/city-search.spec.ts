@@ -37,7 +37,9 @@ test.describe('Пошук населеного пункту (8.2)', () => {
     await expect(box).toHaveValue(/^Жмеринка/);
     await page.getByLabel('Опис').fill('[E2E] Пошук міста');
     await page.getByLabel('Контактний телефон').fill('+380501112299');
-    await page.getByRole('checkbox').check();
+    // 8.5: дві відмітки — правила і «не в розшуку, не в заставі»
+    await page.getByRole('checkbox', { name: /правилами/ }).check();
+    await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     // 8.4: без мінімуму фото форма не відправляється
     await page.locator('input[type=file]').setInputFiles(path.join(__dirname, 'fixtures', 'car-1.jpg'));
     const created = page.waitForResponse((r) => r.url().endsWith('/api/v1/local/listings/') && r.request().method() === 'POST');
@@ -56,6 +58,9 @@ test.describe('Пошук населеного пункту (8.2)', () => {
     await box.fill('Неіснуючепоселення');
     await expect(page.getByText('Нічого не знайдено. Перевірте написання.')).toBeVisible();
     await page.getByLabel('Марка').fill('Skoda');
+    // 8.5: кнопка активна лише з обома відмітками — ставимо їх, щоб перевірити саме порожні поля
+    await page.getByRole('checkbox', { name: /правилами/ }).check();
+    await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     await expectNoRequest(
       page, (r) => r.url().endsWith('/api/v1/local/listings/') && r.method() === 'POST',
       async () => { await page.getByRole('button', { name: /Подати|Опублікувати|Надіслати/ }).last().click(); },
@@ -77,7 +82,7 @@ test.describe('Пошук населеного пункту (8.2)', () => {
       data: {
         make: 'Skoda', model: 'X', year: 2015, mileage_km: 1, price: '1', currency: 'USD', fuel_type: 'petrol',
         transmission: 'manual', body_type: 'sedan', condition: 'used', region: a.id, city: citiesB[0].id,
-        description: '[E2E] чуже місто', contact_phone: '+380501112298', agreed_to_rules: true,
+        description: '[E2E] чуже місто', contact_phone: '+380501112298', agreed_to_rules: true, legal_confirmed: true,
       },
     });
     expect(resp.status()).toBe(400);

@@ -57,7 +57,7 @@ def _listing_payload(region, city, **extra):
         'price': '500000', 'currency': 'UAH', 'price_type': 'fixed',
         'region': region.pk, 'city': city.pk,
         'description': 'Тест', 'contact_phone': '+380501234567',
-        'agreed_to_rules': True,
+        'agreed_to_rules': True, 'legal_confirmed': True,
     }
     base.update(extra)
     return base
@@ -1520,7 +1520,7 @@ class TestListingForm42(APITestCase):
         resp = auth_client(make_user()).post('/api/v1/local/listings/', {
             'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
             'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
-            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True, 'legal_confirmed': True,
             'description': 'Дзвоніть +380501234567', 'contact_phone': self.PHONE,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1532,7 +1532,7 @@ class TestListingForm42(APITestCase):
         resp = self.client_owner.post('/api/v1/local/listings/', {
             'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
             'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
-            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True, 'legal_confirmed': True,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('ліміт', resp.json()['non_field_errors'][0])
@@ -1545,7 +1545,7 @@ class TestListingForm42(APITestCase):
         resp = auth_client(staff).post('/api/v1/local/listings/', {
             'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
             'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
-            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True, 'legal_confirmed': True,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
@@ -1604,7 +1604,7 @@ class TestListingForm42Review(APITestCase):
         resp = auth_client(broker).post('/api/v1/local/listings/', {
             'make': 'BMW', 'model': 'X5', 'year': 2019, 'mileage_km': 1000, 'fuel_type': 'petrol',
             'transmission': 'auto', 'body_type': 'suv', 'price': '20000', 'currency': 'USD',
-            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True,
+            'price_type': 'fixed', 'region': region.pk, 'city': city.pk, 'agreed_to_rules': True, 'legal_confirmed': True,
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('non_field_errors', resp.json())

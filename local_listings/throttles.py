@@ -27,6 +27,25 @@ def ip_hash(ip: str) -> str:
     return hmac.new(salt.encode(), ip.encode(), hashlib.sha256).hexdigest()
 
 
+class _ListingCreateThrottle(UserRateThrottle):
+    """8.5 (B7.2): только POST создания объявления; GET каталога и staff (засев) не ограничиваются."""
+    message = 'Забагато нових оголошень. Спробуйте пізніше'
+
+    def allow_request(self, request, view):
+        user = getattr(request, 'user', None)
+        if request.method != 'POST' or (user and user.is_authenticated and (user.is_staff or user.is_admin_role)):
+            return True
+        return super().allow_request(request, view)
+
+
+class ListingCreateThrottle(_ListingCreateThrottle):
+    scope = 'listing_create'
+
+
+class ListingCreateDailyThrottle(_ListingCreateThrottle):
+    scope = 'listing_create_daily'
+
+
 class ContactDailyThrottle(UserRateThrottle):
     scope = 'contact_daily'
     message = DAILY_LIMIT_MESSAGE

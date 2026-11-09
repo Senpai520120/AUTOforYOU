@@ -363,6 +363,9 @@ REST_FRAMEWORK = {
         'contact_guest': os.environ.get('THROTTLE_CONTACT_GUEST_DAILY_RATE', '10/day'),
         # 4.13 (B8): жалоб на аккаунт в час - не дать засорить очередь модерации.
         'reports': os.environ.get('THROTTLE_REPORTS_RATE', '10/hour'),
+        # 8.5 (B7.2): подача новых объявлений на аккаунт (staff не ограничен). ПРОВЕРИТЬ значения с владельцем.
+        'listing_create': os.environ.get('THROTTLE_LISTING_CREATE_RATE', '5/hour'),
+        'listing_create_daily': os.environ.get('THROTTLE_LISTING_CREATE_DAILY_RATE', '20/day'),
         # 8.2: поиск населённых пунктов (автодополнение, гость и вошедший; на IP/пользователя).
         'city_search': os.environ.get('THROTTLE_CITY_SEARCH_RATE', '120/min'),
         # Загрузка фото (задача 1.10): каждый запрос — декодирование и пересохранение картинок.
@@ -501,6 +504,8 @@ LOCAL_LISTING_MAX_PHOTOS = int(os.environ.get('LOCAL_LISTING_MAX_PHOTOS', '15'))
 # Пусто — общий UPLOAD_IMAGE_MAX_SIZE_MB (задача 1.10).
 LOCAL_LISTING_PHOTO_MAX_SIZE_MB = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIZE_MB', '') or 0) or None
 LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'))
+# 8.5 (B5.1): длина описания; пост в канале (5.2) - до 4096 символов вместе с заголовком и ссылкой.
+LOCAL_LISTING_DESCRIPTION_MAX = int(os.environ.get('LOCAL_LISTING_DESCRIPTION_MAX', '3000'))  # ПРОВЕРИТЬ
 # 8.4: минимум фото для одобрения (0 - без минимума), максимальная сторона фото и миниатюры, px.
 LOCAL_LISTING_MIN_PHOTOS = int(os.environ.get('LOCAL_LISTING_MIN_PHOTOS', '1'))
 LOCAL_LISTING_PHOTO_MAX_SIDE = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIDE', '1920'))

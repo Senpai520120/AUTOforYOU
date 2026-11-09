@@ -33,7 +33,9 @@ async function fillRequired(page: Page, make: string) {
   await page.getByRole('option', { name: /^Вінниця/ }).click();
   await page.getByLabel('Опис').fill('[E2E] Звичайний опис без контактів');
   await page.getByLabel('Контактний телефон').fill('+380501112233');
-  await page.getByRole('checkbox').check();
+  // 8.5: дві відмітки — правила і «не в розшуку, не в заставі»
+  await page.getByRole('checkbox', { name: /правилами/ }).check();
+  await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
 }
 
 test.describe('Форма оголошення (4.2): продавець', () => {

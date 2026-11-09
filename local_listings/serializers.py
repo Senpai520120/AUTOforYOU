@@ -189,9 +189,22 @@ def _listing_source(raw) -> dict:
     return {'utm': data['utm'], 'referrer': data['referrer'], 'entry_page_url': data['entry_page_url']}
 
 
+LEGAL_CONFIRM_REQUIRED = 'Підтвердіть, що авто не в розшуку, не в заставі, документи в наявності.'
+
+
+def _check_description_length(value):
+    """8.5 (B5.1): длина описания не больше LOCAL_LISTING_DESCRIPTION_MAX (и при создании, и при правке)."""
+    limit = int(settings.LOCAL_LISTING_DESCRIPTION_MAX)
+    if value and len(value) > limit:
+        raise serializers.ValidationError(f'Опис не довше {limit} символів (зараз {len(value)}).')
+    return value
+
+
 class LocalListingCreateSerializer(serializers.ModelSerializer):
     images = LocalListingImageSerializer(many=True, read_only=True)
     agreed_to_rules = serializers.BooleanField(write_only=True)
+    # 8.5 (N6.1): отдельная отметка «не в розшуку, не в заставі, документи є»; без неё - 400.
+    legal_confirmed = serializers.BooleanField(write_only=True, required=False, default=False)
     # Источник визита на момент подачи (2.14): только запись, мусор тихо отбрасывается.
     attribution = serializers.JSONField(write_only=True, required=False, allow_null=True)
 
@@ -204,9 +217,12 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
             'region', 'city',
             'description', 'status', 'seller_type', 'contact_phone',
             'images', 'created_at', 'updated_at',
-            'agreed_to_rules', 'attribution',
+            'agreed_to_rules', 'legal_confirmed', 'attribution',
         ]
         read_only_fields = ['id', 'status', 'created_at', 'updated_at', 'images']
+
+    def validate_description(self, value):
+        return _check_description_length(value)
 
     def validate_agreed_to_rules(self, value):
         if not value:
@@ -216,6 +232,8 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        if not attrs.get('legal_confirmed'):
+            raise serializers.ValidationError({'legal_confirmed': [LEGAL_CONFIRM_REQUIRED]})
         city = attrs.get('city')
         if city is not None and not city.is_active:
             raise serializers.ValidationError({'city': CITY_INACTIVE})
@@ -265,9 +283,12 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         from django.conf import settings as dj_settings
 
-        from .antispam import detect_contacts
+        from .antispam import contacts_error, detect_contacts
 
         agreed = validated_data.pop('agreed_to_rules')
+        validated_data.pop('legal_confirmed', None)
+        validated_data['legal_confirmed'] = True  # validate() не пропускает без отметки
+        validated_data['legal_confirmed_at'] = timezone.now()
         validated_data.update(_listing_source(validated_data.pop('attribution', None)))
         owner = self.context['request'].user
 
@@ -282,9 +303,7 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         detected = detect_contacts(description) if antispam_mode != 'off' else []
         if detected:
             if antispam_mode == 'hard':
-                raise serializers.ValidationError({
-                    'description': 'Текст містить контактні дані (телефон, посилання або месенджер). Видаліть їх.'
-                })
+                raise serializers.ValidationError({'description': contacts_error(detected)})
             validated_data['has_contact_in_text'] = True
 
         return super().create(validated_data)
@@ -300,6 +319,9 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
             'region', 'city',
             'description', 'status', 'contact_phone',
         ]
+
+    def validate_description(self, value):
+        return _check_description_length(value)
 
     def validate(self, attrs):
         city = attrs.get('city', getattr(self.instance, 'city', None))
@@ -331,7 +353,7 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         from django.conf import settings as dj_settings
 
-        from .antispam import detect_contacts
+        from .antispam import contacts_error, detect_contacts
 
         current_status = instance.status
         substantive_changed = is_substantive_change(instance, validated_data)
@@ -351,9 +373,7 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
             detected = detect_contacts(validated_data['description'])
             if detected:
                 if antispam_mode == 'hard':
-                    raise serializers.ValidationError({
-                        'description': 'Текст містить контактні дані. Видаліть їх.'
-                    })
+                    raise serializers.ValidationError({'description': contacts_error(detected)})
                 validated_data['has_contact_in_text'] = True
             else:
                 validated_data['has_contact_in_text'] = False

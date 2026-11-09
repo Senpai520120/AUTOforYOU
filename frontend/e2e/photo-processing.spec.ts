@@ -76,7 +76,9 @@ test.describe('Фото: ресайз і мініатюри (8.4)', () => {
     await page.getByRole('option', { name: /^Вінниця/ }).click();
     await page.getByLabel('Опис').fill('[E2E] без фото');
     await page.getByLabel('Контактний телефон').fill('+380501112297');
-    await page.getByRole('checkbox').check();
+    // 8.5: дві відмітки — правила і «не в розшуку, не в заставі»
+    await page.getByRole('checkbox', { name: /правилами/ }).check();
+    await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     await expectNoRequest(
       page, (r) => r.url().endsWith('/api/v1/local/listings/') && r.method() === 'POST',
       async () => { await page.getByRole('button', { name: 'Опублікувати оголошення' }).click(); },
@@ -92,7 +94,7 @@ test.describe('Фото: ресайз і мініатюри (8.4)', () => {
         make: 'Skoda', model: '[E2E] Плашка', year: 2014, mileage_km: 1, price: '1000', currency: 'USD',
         fuel_type: 'petrol', transmission: 'manual', body_type: 'sedan', condition: 'used',
         region: cities[0].region, city: cities[0].id, description: '[E2E] плашка', contact_phone: '+380501112296',
-        agreed_to_rules: true,
+        agreed_to_rules: true, legal_confirmed: true,
       },
     });
     expect(created.status()).toBe(201);

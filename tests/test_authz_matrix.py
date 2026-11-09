@@ -216,7 +216,7 @@ LISTING_PAYLOAD = lambda c: {  # noqa: E731
     'make': 'Toyota', 'model': 'Camry', 'year': 2020, 'mileage_km': 50000, 'engine_cc': 2500,
     'fuel_type': 'petrol', 'transmission': 'auto', 'body_type': 'sedan', 'condition': 'used',
     'price': '500000', 'currency': 'UAH', 'price_type': 'fixed', 'region': c.region,
-    'city': c.city, 'description': 'Тест', 'contact_phone': '+380501234567', 'agreed_to_rules': True,
+    'city': c.city, 'description': 'Тест', 'contact_phone': '+380501234567', 'agreed_to_rules': True, 'legal_confirmed': True,
 }
 
 BROKER_ROLES = {'moderator': 403, 'staff': 403, 'dealer': 403, 'admin': 200}

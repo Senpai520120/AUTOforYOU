@@ -830,7 +830,7 @@ class TestSellerTypeDealer(TestCase):
             make='Toyota', model='Camry', year=2020, mileage_km=50000,
             fuel_type='petrol', transmission='auto', body_type='sedan',
             price='500000', currency='UAH', price_type='fixed',
-            region=region.pk, city=city.pk, agreed_to_rules=True, seller_type='dealer',
+            region=region.pk, city=city.pk, agreed_to_rules=True, legal_confirmed=True, seller_type='dealer',
         )
 
     def test_unverified_user_gets_400(self):

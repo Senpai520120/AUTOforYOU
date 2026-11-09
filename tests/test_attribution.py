@@ -127,7 +127,7 @@ class ListingSourceTests(CleanCacheTestCase):
             'make': 'Toyota', 'model': 'Camry', 'year': 2020, 'mileage_km': 50000, 'engine_cc': 2500,
             'fuel_type': 'petrol', 'transmission': 'auto', 'body_type': 'sedan', 'condition': 'used',
             'price': '500000', 'currency': 'UAH', 'price_type': 'fixed', 'region': region.pk, 'city': city.pk,
-            'description': 'Тест', 'contact_phone': '+380501234567', 'agreed_to_rules': True,
+            'description': 'Тест', 'contact_phone': '+380501234567', 'agreed_to_rules': True, 'legal_confirmed': True,
         }
 
     def test_create_saves_source_and_hides_it(self):

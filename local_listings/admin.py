@@ -146,7 +146,8 @@ class LocalListingAdmin(admin.ModelAdmin):
     list_filter = ['status', EnoughPhotosFilter, 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region',
                    'has_contact_in_text']
     search_fields = ['make', 'model', 'owner__email', 'contact_phone', 'source_channel']
-    readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
+    readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'legal_confirmed', 'legal_confirmed_at',
+                       'expiry_warned', 'bumped_at']
     inlines = [LocalListingImageInline]
     raw_id_fields = ['owner', 'moderated_by']
     # 8.2: десятки тысяч пунктов - поиск вместо списка
@@ -173,7 +174,7 @@ class LocalListingAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
         ('Згода з правилами', {
-            'fields': ('agreed_to_rules', 'agreed_to_rules_at'),
+            'fields': ('agreed_to_rules', 'agreed_to_rules_at', 'legal_confirmed', 'legal_confirmed_at'),
             'classes': ('collapse',),
         }),
         ('Термін дії і просування', {

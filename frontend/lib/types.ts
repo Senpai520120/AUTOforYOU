@@ -272,6 +272,8 @@ export interface LocalConfig {
   allowed_types: string[];
   max_active_listings: number;
   posting_open: boolean;
+  /** 8.5: максимальна довжина опису. */
+  description_max?: number;
   /** 8.4: мінімум фото для схвалення (0 — без мінімуму). */
   min_photos?: number;
   /** 8.2: ліміти пошуку населеного пункту (старий бекенд може не віддавати). */

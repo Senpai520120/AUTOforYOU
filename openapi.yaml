@@ -3984,6 +3984,10 @@ components:
         agreed_to_rules:
           type: boolean
           writeOnly: true
+        legal_confirmed:
+          type: boolean
+          writeOnly: true
+          default: false
         attribution:
           writeOnly: true
           nullable: true

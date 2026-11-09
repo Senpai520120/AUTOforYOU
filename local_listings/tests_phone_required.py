@@ -20,7 +20,7 @@ class TestPhoneRequiredForPosting(APITestCase):
             'make': 'Skoda', 'model': 'Fabia', 'year': 2015, 'mileage_km': 100000, 'price': '5000',
             'currency': 'USD', 'fuel_type': 'petrol', 'transmission': 'manual', 'body_type': 'hatchback',
             'condition': 'used', 'region': self.region.pk, 'city': self.city.pk, 'description': 'Тест',
-            'contact_phone': '+380501234567', 'agreed_to_rules': True,
+            'contact_phone': '+380501234567', 'agreed_to_rules': True, 'legal_confirmed': True,
         }
 
     def test_unverified_is_403_with_code_and_nothing_created(self):

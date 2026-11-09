@@ -232,6 +232,9 @@ class LocalListing(models.Model):
     moderated_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата модерації')
     # ── Згода з правилами розміщення ──
     agreed_to_rules = models.BooleanField(default=False, verbose_name='Погодився з правилами')
+    # 8.5 (N6.1): продавец подтвердил «авто не в розыске, не в залоге, документы есть» - время для спора.
+    legal_confirmed = models.BooleanField(default=False, verbose_name='Підтверджено: не в розшуку/заставі')
+    legal_confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='Коли підтверджено')
     agreed_to_rules_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата згоди')
     # ── Термін дії ──
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='Дійсне до')
