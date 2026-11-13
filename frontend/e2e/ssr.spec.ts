@@ -14,11 +14,9 @@ import { test, expect } from '@playwright/test';
 test.describe('Серверний рендер каталогів @smoke', () => {
   test.use({ javaScriptEnabled: false });
 
-  test('каталог України віддає вміст без JavaScript', async ({ page, request }) => {
-    // Прогрів кешу даних Next: на холодному кеші /ua віддає скелетон loading.tsx, а каталог стримиться
-    // у <div hidden> (без JS не видно) — відома проблема, docs/BUGS_FOUND.md. Тест перевіряє, що дані
-    // рендеряться на сервері, а не в useEffect, тому не залежить від того, чи встигли попередні спеки прогріти кеш.
-    expect((await request.get('/ua')).status()).toBe(200);
+  test('каталог України віддає вміст без JavaScript', async ({ page }) => {
+    // У /ua немає loading.tsx навмисно: з ним Next спершу віддає скелетон, а каталог стримить у <div hidden>,
+    // і без JS (у т.ч. Bingbot/Twitterbot) видно лише скелетон.
     const resp = await page.goto('/ua');
     expect(resp?.status()).toBe(200);
 
