@@ -6,7 +6,7 @@ import LocalCatalogGrid from './LocalCatalogGrid';
 import SaveSearchButton from '@/components/local/SaveSearchButton';
 import { getC2CFlags } from '@/lib/c2c';
 import { buildMetadata, hasFilters } from '@/lib/seo';
-import { fetchPaginated, pageNumber, type SearchParams } from '@/lib/server-api';
+import { fetchPaginated, type SearchParams } from '@/lib/server-api';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
 
 // Каталог залежить від query-параметрів фільтрів, тому рендериться на кожен
@@ -20,28 +20,14 @@ export async function generateMetadata({
   searchParams: Promise<SearchParams>;
 }): Promise<Metadata> {
   const params = await searchParams;
-  const filtered = hasFilters(params);
-  let page = pageNumber(params);
-  // Сторінка поза діапазоном: fetchPaginated показує першу. Тоді canonical — на першу, і noindex.
-  // fetch з тим самим URL/опціями у generateMetadata і в сторінці мемоїзується в межах запиту (Next).
-  let outOfRange = false;
-  if (page > 1 && !filtered) {
-    const resolved = await fetchPaginated<PaginatedResponse<LocalListing>>(
-      '/api/v1/local/listings/', params, LOCAL_FILTERS,
-    );
-    if (resolved.page !== page) {
-      outOfRange = true;
-      page = resolved.page;
-    }
-  }
   return buildMetadata({
     title: 'Каталог Україна',
     description:
       'Місцеві оголошення про продаж авто по всій Україні. Фільтри за маркою, регіоном, паливом, ціною.',
-    // Self-canonical для page>1: hasFilters уже не вважає page фільтром, тож
-    // сторінки пагінації індексуються (sitemap веде на них), а не склеюються з першою.
-    path: page > 1 ? `/ua?page=${page}` : '/ua',
-    noindex: filtered || outOfRange,
+    // Рішення 6.3a: canonical каталогу завжди /ua (без query); сторінки пагінації індексуються, з фільтрами — noindex.
+    // Сторінка поза діапазоном показує першу (fetchPaginated) — canonical /ua це покриває.
+    path: '/ua',
+    noindex: hasFilters(params),
   });
 }
 
