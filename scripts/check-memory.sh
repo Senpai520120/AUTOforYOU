@@ -14,6 +14,8 @@ set -euo pipefail
 DEFAULT_ALERT_PERCENT=85
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=lib-image-tag.sh
+. scripts/lib-image-tag.sh
 read -r -a DC <<< "${COMPOSE_CMD:-docker compose}"
 
 threshold="${MEM_ALERT_PERCENT:-}"

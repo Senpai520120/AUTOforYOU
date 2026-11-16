@@ -16,6 +16,8 @@ if [ "$#" -ne 1 ] || [ "$1" != "--now" ]; then
 fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=lib-image-tag.sh
+. scripts/lib-image-tag.sh
 read -r -a DC <<< "${COMPOSE_CMD:-docker compose}"
 
 "${DC[@]}" run --rm -T backup /usr/local/bin/backup.sh

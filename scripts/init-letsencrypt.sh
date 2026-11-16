@@ -26,6 +26,8 @@ case "$DOMAIN" in *..*) echo "DOMAIN не должен содержать '..'" 
 [ "$TLS_MODE" = "letsencrypt" ] || { echo "Нужен TLS_MODE=letsencrypt в .env (сейчас: '${TLS_MODE}')" >&2; exit 1; }
 [ -n "$EMAIL" ] || { echo "LETSENCRYPT_EMAIL не задан в .env" >&2; exit 1; }
 
+# shellcheck source=lib-image-tag.sh
+. scripts/lib-image-tag.sh
 DC="docker compose --profile letsencrypt"
 
 echo "==> Запуск nginx (временный сертификат создаётся автоматически)"

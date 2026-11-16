@@ -49,6 +49,8 @@ if [ -n "$media" ]; then
 fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# shellcheck source=lib-image-tag.sh
+. scripts/lib-image-tag.sh
 read -r -a DC <<< "${COMPOSE_CMD:-docker compose}"
 
 # Контрольная сумма: считаем сами и сравниваем с первым полем .sha256. Нет файла .sha256 - предупреждение.
