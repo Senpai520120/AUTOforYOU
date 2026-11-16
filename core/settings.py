@@ -661,6 +661,11 @@ FAILED_TASK_ALERT_COOLDOWN_MINUTES = _positive_int_env('FAILED_TASK_ALERT_COOLDO
 FAILED_TASK_ALERT_CHAT_ID = os.environ.get('FAILED_TASK_ALERT_CHAT_ID', '').strip()
 FAILED_TASK_ALERT_EMAIL = os.environ.get('FAILED_TASK_ALERT_EMAIL', '').strip()
 
+# Алерт о заполнении диска (10.20): путь, порог в процентах, пауза. Каналы - те же FAILED_TASK_ALERT_*.
+DISK_ALERT_PATH = os.environ.get('DISK_ALERT_PATH', '/').strip() or '/'
+DISK_ALERT_THRESHOLD_PERCENT = _positive_int_env('DISK_ALERT_THRESHOLD_PERCENT', 85)
+DISK_ALERT_COOLDOWN_MINUTES = _positive_int_env('DISK_ALERT_COOLDOWN_MINUTES', 360)
+
 CELERY_BEAT_SCHEDULE = {
     # Сигнал «Celery жив» сторожу; expires: при мёртвом worker пинги не копятся и не дают ложный зелёный (9.55)
     'celery-heartbeat': {
@@ -673,6 +678,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'core.tasks.alert_failed_task_growth',
         'schedule': _crontab(minute='*/10'),
         'options': {'expires': 540},
+    },
+    # Заполнение диска: алерт владельцу при превышении порога (10.20)
+    'disk-usage-alert': {
+        'task': 'core.tasks.alert_disk_usage',
+        'schedule': _crontab(minute='*/30'),
+        'options': {'expires': 1500},
     },
     # Отчёт о воронке владельцу: понедельник 09:00 по Киеву (9.50). expires: после простоя не шлём устаревший
     'weekly-funnel-report': {

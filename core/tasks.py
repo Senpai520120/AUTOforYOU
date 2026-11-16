@@ -8,6 +8,7 @@
 import hashlib
 import logging
 import re
+import shutil
 from datetime import timedelta
 
 import httpx
@@ -130,3 +131,43 @@ def alert_failed_task_growth():
             cache.delete(cache_key)  # не дошло ни в один канал: следующий запуск попробует снова
         except Exception:
             logger.warning('failed_task_alert: кэш недоступен')
+
+
+def _build_disk_alert(used_percent: float, free_gb: float, threshold: int) -> str:
+    """Текст алерта о диске: только проценты и свободные ГБ, без путей, имён и ПДн."""
+    return (f'⚠ AUTOforYOU: диск заповнено на {used_percent:.0f}% (поріг {threshold}%), '
+            f'вільно {free_gb:.1f} ГБ.\nЩо робити: docs/RUNBOOK.md, розділ «Закінчився диск».')
+
+
+@shared_task(ignore_result=True)
+def alert_disk_usage():
+    """Алерт владельцу, если диск по пути DISK_ALERT_PATH заполнен на >= DISK_ALERT_THRESHOLD_PERCENT (10.20).
+
+    Каналы те же, что у alert_failed_task_growth (FAILED_TASK_ALERT_CHAT_ID / _EMAIL). Повтор не чаще, чем раз
+    в DISK_ALERT_COOLDOWN_MINUTES (кэш).
+    """
+    try:
+        usage = shutil.disk_usage(settings.DISK_ALERT_PATH)
+    except OSError as exc:
+        logger.warning('disk_alert: не удалось проверить диск (%s)', type(exc).__name__)
+        return
+    used_percent = usage.used / usage.total * 100 if usage.total else 0
+    threshold = int(settings.DISK_ALERT_THRESHOLD_PERCENT)
+    if used_percent < threshold:
+        return
+    cache_key = 'core:disk_alert'
+    cooldown = int(settings.DISK_ALERT_COOLDOWN_MINUTES) * 60
+    try:
+        if not cache.add(cache_key, 1, timeout=cooldown):
+            return
+    except Exception:
+        logger.warning('disk_alert: кэш недоступен, дедупликации нет')
+    if not (settings.FAILED_TASK_ALERT_CHAT_ID or settings.FAILED_TASK_ALERT_EMAIL):
+        logger.warning('disk_alert: диск заполнен на %.0f%%, но канал алерта не настроен', used_percent)
+        return
+    text = _build_disk_alert(used_percent, usage.free / 1024 ** 3, threshold)
+    if not _send_failed_task_alert(text):
+        try:
+            cache.delete(cache_key)
+        except Exception:
+            logger.warning('disk_alert: кэш недоступен')

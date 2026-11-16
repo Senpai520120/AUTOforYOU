@@ -40,7 +40,7 @@ df -h                                          # место на диске
 
 - **Проверка:**
   - `docker compose exec celery_worker celery -A core inspect ping`
-  - `docker compose exec redis redis-cli -a "$REDIS_PASSWORD" LLEN celery` (очередь; пароль — из `.env`)
+  - `docker compose exec redis redis-cli LLEN celery` (очередь; пароль контейнер берёт сам из `REDISCLI_AUTH` в docker-compose.yml, в командной строке его нет)
   - админка → «Невдалі завдання»
 - **Действие:** `docker compose restart celery_worker celery_beat`.
 - **Что с заявками:** они лежат в БД и досылаются автоматически (`resend-undelivered-leads`), вручную — «повторно» в админке.
@@ -54,6 +54,7 @@ df -h                                          # место на диске
 
 ## 6. Кончился диск
 
+- **Алерт:** задача `core.tasks.alert_disk_usage` раз в 30 минут шлёт в Telegram/email (`FAILED_TASK_ALERT_*`) сообщение, когда диск заполнен на `DISK_ALERT_THRESHOLD_PERCENT` (85%) и больше; повтор не чаще раза в `DISK_ALERT_COOLDOWN_MINUTES` (360).
 - **Проверка:** `df -h`, `docker system df`, `du -sh backups`.
 - **Действие:** `docker image prune` (теги текущего и прошлого деплоя не удалять: они нужны для отката), `journalctl --vacuum-size=200M`.
 - **Затем:** `docker compose restart db backend`.
