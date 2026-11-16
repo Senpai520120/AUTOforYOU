@@ -388,8 +388,8 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         current_status = instance.status
         substantive_changed = is_substantive_change(instance, validated_data)
 
-        # Суттєва правка active → ремодерація
-        if substantive_changed and current_status == LocalListing.Status.ACTIVE:
+        # Суттєва правка active/expired → ремодерація (expired: інакше правка + RENEW опублікує неперевірений контент)
+        if substantive_changed and current_status in (LocalListing.Status.ACTIVE, LocalListing.Status.EXPIRED):
             validated_data['status'] = LocalListing.Status.PENDING
             validated_data['rejection_reason'] = ''
 

@@ -131,6 +131,8 @@ class LiqPayCheckoutView(APIView):
 class LiqPayCallbackView(APIView):
     authentication_classes = []
     permission_classes = []
+    # Callback защищён подписью. Anon-троттлинг (60/час по IP) теряет callback при всплеске: LiqPay шлёт с узкого набора IP.
+    throttle_classes = []
 
     def post(self, request):
         data = request.POST.get('data') or request.data.get('data', '')
@@ -178,6 +180,24 @@ class LiqPayCallbackView(APIView):
         if payment.status == S.REVERSED or (payment.status == S.COMPLETED and new_status != S.REVERSED):
             logger.info('LiqPay callback: платёж %s уже %s, статус %s проигнорирован',
                         payment.pk, payment.status, new_status)
+            return Response({'ok': True, 'status': payment.status})
+
+        if payment.status == S.COMPLETED:
+            # Возврат оплаченного платежа. По документации LiqPay (callback): status=reversed ("Платіж повернений"),
+            # action остаётся типом исходной операции (pay), amount может отличаться от суммы заказа при частичном
+            # возврате, сумма возврата - в refund_amount. Поэтому action/amount тут не сверяем и COMPLETED
+            # в FAILED не переводим; сверяем только валюту и ведём журнал.
+            # TODO(4.1): откат эффекта оплаты (promoted_until/expires_at) при возврате - в задаче 4.1.
+            if decoded.get('currency') != payment.currency:
+                logger.warning('LiqPay callback: возврат платежа %s - валюта не совпала, проигнорирован', payment.pk)
+                return Response({'ok': True, 'status': payment.status})
+            logger.error('LiqPay: возврат платежа %s: amount=%s refund_amount=%s (оплачено %s %s), эффект не откатан',
+                           payment.pk, decoded.get('amount'), decoded.get('refund_amount'),
+                           payment.amount, payment.currency)
+            payment.liqpay_status = liqpay_status
+            payment.liqpay_raw = decoded
+            payment.status = S.REVERSED
+            payment.save(update_fields=['status', 'liqpay_status', 'liqpay_raw', 'updated_at'])
             return Response({'ok': True, 'status': payment.status})
 
         if not _callback_matches(payment, decoded):

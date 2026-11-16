@@ -201,6 +201,23 @@ class TestRemoderation(APITestCase):
         self.listing.refresh_from_db()
         self.assertEqual(self.listing.status, LocalListing.Status.ACTIVE)
 
+    def test_substantive_edit_expired_returns_pending(self):
+        self.listing.status = LocalListing.Status.EXPIRED
+        self.listing.save(update_fields=['status'])
+        r = self.client.patch(f'/api/v1/local/listings/{self.listing.pk}/', {'price': '600000'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.PENDING)
+
+    def test_non_substantive_edit_expired_stays_expired(self):
+        self.listing.status = LocalListing.Status.EXPIRED
+        self.listing.save(update_fields=['status'])
+        r = self.client.patch(
+            f'/api/v1/local/listings/{self.listing.pk}/', {'contact_phone': '+380991112233'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.EXPIRED)
+
     def test_edit_rejected_returns_pending(self):
         self.listing.status = LocalListing.Status.REJECTED
         self.listing.rejection_reason = 'Стара причина'
@@ -861,6 +878,33 @@ class TestExpiryTasks(APITestCase):
         listing.refresh_from_db()
         self.assertEqual(listing.status, LocalListing.Status.EXPIRED)
 
+    def test_expire_skips_listing_renewed_after_selection(self):
+        """Владелец продлил объявление между выборкой и UPDATE: остаётся active, уведомления нет."""
+        from django.db.models.query import QuerySet
+
+        from notifications.models import Notification
+
+        listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.ACTIVE)
+        listing.expires_at = timezone.now() - timedelta(hours=1)
+        listing.save(update_fields=['expires_at'])
+        original_update = QuerySet.update
+        pk = listing.pk
+
+        def renew_then_update(qs, **kwargs):
+            # «Продление» происходит после того, как задача выбрала объявление.
+            original_update(LocalListing.objects.filter(pk=pk), expires_at=timezone.now() + timedelta(days=30))
+            return original_update(qs, **kwargs)
+
+        with patch.object(QuerySet, 'update', renew_then_update), \
+                patch('integrations.tasks.send_notification.delay') as send:
+            result = expire_listings()
+
+        listing.refresh_from_db()
+        self.assertEqual(listing.status, LocalListing.Status.ACTIVE)
+        self.assertEqual(result, 'expired=0')
+        self.assertEqual(Notification.objects.filter(user=self.owner).count(), 0)
+        send.assert_not_called()
+
     def test_warn_not_sent_for_non_active(self):
         listing = _make_listing(self.owner, self.region, self.city, status_val=LocalListing.Status.PENDING)
         listing.expires_at = timezone.now() + timedelta(days=1)
@@ -873,6 +917,21 @@ class TestExpiryTasks(APITestCase):
 
 
 # ─── Тести: promote endpoint + callback ──────────────────────────────────────
+
+
+@override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
+class PromotionTariffConstraintTests(APITestCase):
+    def test_price_must_be_positive_in_db(self):
+        from django.db import IntegrityError, transaction
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            PromotionTariff.objects.create(code='zero', name='z', type='top', price=0, currency='UAH')
+
+    def test_price_validator_and_currency_choices(self):
+        from django.core.exceptions import ValidationError
+        tariff = PromotionTariff(code='bad', name='b', type='top', price='0.00', currency='XXX')
+        with self.assertRaises(ValidationError) as ctx:
+            tariff.full_clean()
+        self.assertEqual(set(ctx.exception.message_dict), {'price', 'currency'})
 
 
 @override_settings(LIQPAY_PUBLIC_KEY='test_pub', LIQPAY_PRIVATE_KEY='test_priv')
@@ -937,10 +996,48 @@ class TestPromoteEndpoint(APITestCase):
     def test_promote_mode_off_503(self):
         self._assert_unavailable()
 
-    def test_promote_non_owner_403(self):
+    def test_promote_non_owner_404(self):
         self.client = auth_client(self.other)
         r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 404)
+        self.assertFalse(Payment.objects.exists())
+
+    def test_promote_anonymous_401(self):
+        r = self.client.post(self.url, {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 401)
+
+    def test_promote_unknown_listing_404(self):
+        self.client = auth_client(self.owner)
+        r = self.client.post('/api/v1/local/listings/999999/promote/', {'tariff': self.tariff.code}, format='json')
+        self.assertEqual(r.status_code, 404)
+
+    def _promote_with_status(self, status_, tariff):
+        self.listing.status = status_
+        self.listing.save(update_fields=['status'])
+        self.client = auth_client(self.owner)
+        return self.client.post(self.url, {'tariff': tariff.code}, format='json')
+
+    def test_promote_top_and_bump_only_for_active_409(self):
+        top = _make_tariff('t_top', 'top', '99.00', 7)
+        bump = _make_tariff('t_bump', 'bump', '29.00', 0)
+        for status_ in ('draft', 'pending', 'rejected', 'expired', 'sold', 'hidden'):
+            for tariff in (top, bump):
+                with self.subTest(status=status_, tariff=tariff.type):
+                    self.assertEqual(self._promote_with_status(status_, tariff).status_code, 409)
+        self.assertFalse(Payment.objects.exists())
+
+    def test_promote_top_active_201(self):
+        top = _make_tariff('t_top', 'top', '99.00', 7)
+        self.assertEqual(self._promote_with_status('active', top).status_code, 201)
+
+    def test_promote_renew_active_and_expired_201(self):
+        for status_ in ('active', 'expired'):
+            with self.subTest(status=status_):
+                self.assertEqual(self._promote_with_status(status_, self.tariff).status_code, 201)
+
+    def test_promote_renew_sold_409(self):
+        self.assertEqual(self._promote_with_status('sold', self.tariff).status_code, 409)
+        self.assertFalse(Payment.objects.exists())
 
     def test_promote_missing_tariff_400(self):
         self.client = auth_client(self.owner)
@@ -1033,6 +1130,26 @@ class TestCallbackAppliesTariff(APITestCase):
         self.client.post('/api/v1/payments/liqpay/callback/', cb)
         self.listing.refresh_from_db()
         self.assertEqual(self.listing.status, LocalListing.Status.ACTIVE)
+
+    def test_edit_expired_then_renew_callback_does_not_publish(self):
+        # правка EXPIRED -> PENDING; оплаченный ранее RENEW не должен сделать непроверенное объявление ACTIVE
+        self.listing.status = LocalListing.Status.EXPIRED
+        self.listing.save(update_fields=['status'])
+        payment = self._create_payment(_make_tariff('cb_renew3', 'renew', '49.00', 30))
+        r = auth_client(self.owner).patch(
+            f'/api/v1/local/listings/{self.listing.pk}/', {'price': '777000'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.client.post('/api/v1/payments/liqpay/callback/', self._make_callback(payment))
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, LocalListing.Status.PENDING)
+
+    def test_renew_for_pending_listing_409(self):
+        self.listing.status = LocalListing.Status.PENDING
+        self.listing.save(update_fields=['status'])
+        tariff = _make_tariff('cb_renew4', 'renew', '49.00', 30)
+        r = auth_client(self.owner).post(
+            f'/api/v1/local/listings/{self.listing.pk}/promote/', {'tariff': tariff.code}, format='json')
+        self.assertEqual(r.status_code, 409)
 
     def test_duplicate_callback_idempotent(self):
         tariff = _make_tariff('cb_bump2', 'bump', '29.00', 0)

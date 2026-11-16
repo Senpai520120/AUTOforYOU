@@ -32,12 +32,23 @@ def legacy_price_for(purpose: str):
     return None
 
 
-def _apply_local_listing_promote(payment):
-    """Застосувати ефект тарифу після успішної оплати просування."""
+def _promote_targets_present(payment) -> bool:
+    """Для оплаты просмотра есть и объявление, и тариф. Не promote - True. Проверка до любых изменений данных."""
     if payment.purpose != payment.Purpose.LOCAL_LISTING_PROMOTE:
-        return
+        return True
     if not payment.local_listing or not payment.tariff:
-        return
+        logger.error('Payment %s (%s): объявление или тариф удалены до применения эффекта, нужна ручная обработка',
+                     payment.pk, payment.order_id)
+        return False
+    return True
+
+
+def _apply_local_listing_promote(payment):
+    """Застосувати ефект тарифу після успішної оплати просування. False - не застосовано (потрібна ручна обробка)."""
+    if payment.purpose != payment.Purpose.LOCAL_LISTING_PROMOTE:
+        return True
+    if not _promote_targets_present(payment):
+        return False
 
     from local_listings.models import LocalListing, PromotionTariff
 
@@ -63,6 +74,7 @@ def _apply_local_listing_promote(payment):
         listing.save(update_fields=['promoted_until'])
 
     logger.info('Tariff %s applied to listing %s', tariff.code, listing.pk)
+    return True
 
 
 @transaction.atomic
@@ -78,8 +90,12 @@ def apply_payment_effect(payment) -> bool:
         'listing', 'local_listing', 'tariff').get(pk=payment.pk)
     if locked.status != Payment.Status.COMPLETED or locked.applied_at is not None:
         return False
+    # Проверка ДО unlock_listing: при False ничего не изменено.
+    if not _promote_targets_present(locked):
+        return False  # applied_at не ставим: платёж виден в админке как COMPLETED без applied_at
     locked.unlock_listing()
-    _apply_local_listing_promote(locked)
+    if not _apply_local_listing_promote(locked):
+        return False  # applied_at не ставим: платёж виден в админке как COMPLETED без applied_at
     locked.applied_at = timezone.now()
     locked.save(update_fields=['applied_at', 'updated_at'])
     payment.applied_at = locked.applied_at

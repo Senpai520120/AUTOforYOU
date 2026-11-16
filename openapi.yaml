@@ -1713,8 +1713,10 @@ paths:
   /api/v1/local/listings/{id}/promote/:
     post:
       operationId: v1_local_listings_promote_create
-      description: 'Тільки власник оголошення. Body: `{"tariff": "<code>"}`. Повертає
-        LiqPay checkout_url і form_data. Оплата в ТЕСТОВОМУ режимі (LIQPAY_SANDBOX=true).'
+      description: 'Тільки власник оголошення (чуже - 404). ТОП/підняття - лише для
+        активних, продовження - для активних і завершених (409 інакше). Body: `{"tariff":
+        "<code>"}`. Повертає LiqPay checkout_url і form_data. Оплата в ТЕСТОВОМУ режимі
+        (LIQPAY_SANDBOX=true).'
       summary: Замовити просування оголошення (LiqPay SANDBOX)
       parameters:
       - in: path
@@ -5236,9 +5238,9 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
           title: Ціна
         currency:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/ListingCurrencyEnum'
           title: Валюта
-          maxLength: 3
         duration_days:
           type: integer
           maximum: 2147483647

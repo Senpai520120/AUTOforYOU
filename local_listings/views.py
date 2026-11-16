@@ -689,7 +689,7 @@ class PromotionTariffListView(generics.ListAPIView):
     tags=['local'],
     summary='Замовити просування оголошення (LiqPay SANDBOX)',
     description=(
-        'Тільки власник оголошення. Body: `{"tariff": "<code>"}`. '
+        'Тільки власник оголошення (чуже - 404). ТОП/підняття - лише для активних, продовження - для активних і завершених (409 інакше). Body: `{"tariff": "<code>"}`. '
         'Повертає LiqPay checkout_url і form_data. '
         'Оплата в ТЕСТОВОМУ режимі (LIQPAY_SANDBOX=true).'
     ),
@@ -700,18 +700,25 @@ class LocalListingPromoteView(APIView):
     def post(self, request, pk):
         if not payments_enabled():  # 6.7: платные услуги закрыты, платёж не создаётся
             raise Http404
-        listing = get_object_or_404(LocalListing, pk=pk)
-        if listing.owner != request.user and not request.user.has_perm('local_listings.moderate_locallisting'):
-            return Response(
-                {'detail': 'Тільки власник може просувати оголошення.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # Чужое и несуществующее объявление неразличимы (404): не раскрываем существование.
+        listing = get_object_or_404(LocalListing, pk=pk, owner=request.user)
 
         tariff_code = request.data.get('tariff')
         if not tariff_code:
-            return Response({'detail': 'Поле tariff обов\'язкове.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': "Поле tariff обов'язкове."}, status=status.HTTP_400_BAD_REQUEST)
 
         tariff = get_object_or_404(PromotionTariff, code=tariff_code, active=True)
+
+        # TOP/BUMP - только для опубликованного; RENEW - для активного и истёкшего.
+        allowed = {LocalListing.Status.ACTIVE}
+        if tariff.type == PromotionTariff.TariffType.RENEW:
+            allowed.add(LocalListing.Status.EXPIRED)
+        if listing.status not in allowed:
+            return Response(
+                {'detail': 'Цей тариф не можна застосувати до оголошення в поточному статусі.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         order_id = f'promo-{listing.pk}-{tariff.code}-{uuid.uuid4().hex[:8]}'
         description = f'{tariff.name}: {listing.make} {listing.model} {listing.year}'
 

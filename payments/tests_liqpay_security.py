@@ -20,6 +20,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from local_listings.models import PromotionTariff
+from tests.base import CleanCacheTestCase
 from tests.factories import auth_client, make_listing, make_local_listing, make_user, make_vehicle
 
 from .liqpay_client import LiqPayClient, LiqPayNotConfigured
@@ -57,8 +58,9 @@ def make_payment(owner, listing, tariff, order_id='sec-1'):
         currency=tariff.currency, purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE)
 
 
-class _Base(TestCase):
+class _Base(CleanCacheTestCase):  # кэш чистится: callback под anon-троттлингом, 60/час на весь прогон
     def setUp(self):
+        super().setUp()
         self.owner = make_user()
         self.listing = make_local_listing(self.owner)
         self.tariff = make_tariff()
@@ -231,6 +233,15 @@ class F2PromotePriceTests(TestCase):
         self.assertEqual((payment.amount, payment.currency), (tariff.price, tariff.currency))
 
 
+@override_settings(**KEYS)
+class CallbackNotThrottledTests(_Base):
+    def test_callbacks_over_anon_limit_not_429(self):
+        from rest_framework.throttling import AnonRateThrottle
+        with mock.patch.dict(AnonRateThrottle.THROTTLE_RATES, {'anon': '2/hour'}):
+            codes = [self.post(signed(self.payment, 'processing')).status_code for _ in range(4)]
+        self.assertEqual(codes, [status.HTTP_200_OK] * 4)
+
+
 # ─── F3 ──────────────────────────────────────────────────────────────────────
 
 @override_settings(**KEYS)
@@ -286,6 +297,46 @@ class F3TransitionTests(_Base):
         self.post(signed(self.payment, 'reversed'))
         self.assertEqual(self.reload().status, Payment.Status.REVERSED)
         self.assertEqual(self.promoted_until(), first)
+
+    def test_partial_reversed_with_other_action_and_amount_not_failed(self):
+        self.post(signed(self.payment))
+        resp = self.post(signed(self.payment, 'reversed', action='refund', amount='10.00', refund_amount='10.00'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.reload().status, Payment.Status.REVERSED)
+        self.assertIsNotNone(self.reload().applied_at)
+
+    def test_reversed_with_wrong_currency_keeps_completed(self):
+        self.post(signed(self.payment))
+        self.post(signed(self.payment, 'reversed', currency='EUR'))
+        self.assertEqual(self.reload().status, Payment.Status.COMPLETED)
+
+    def test_completed_with_mismatched_pay_callback_not_failed(self):
+        self.post(signed(self.payment))
+        self.post(signed(self.payment, 'success', amount='1.00'))
+        self.assertEqual(self.reload().status, Payment.Status.COMPLETED)
+
+    def test_pending_mismatched_amount_still_failed(self):
+        self.post(signed(self.payment, 'success', amount='1.00'))
+        self.assertEqual(self.reload().status, Payment.Status.FAILED)
+
+    def test_effect_not_applied_when_listing_or_tariff_deleted(self):
+        self.payment.status = Payment.Status.COMPLETED
+        self.payment.save()
+        self.tariff.delete()  # tariff -> NULL (SET_NULL)
+        with self.assertLogs('payments.services', level='ERROR'):
+            self.assertIs(apply_payment_effect(self.payment), False)
+        self.assertIsNone(self.reload().applied_at)
+        self.assertIsNone(self.promoted_until())
+
+    def test_deleted_tariff_checked_before_unlock_listing(self):
+        # Проверка «объявление/тариф удалены» идёт до unlock_listing: при False данные не меняются.
+        from unittest.mock import patch
+        self.payment.status = Payment.Status.COMPLETED
+        self.payment.save()
+        self.tariff.delete()
+        with patch.object(Payment, 'unlock_listing') as unlock, self.assertLogs('payments.services', level='ERROR'):
+            self.assertIs(apply_payment_effect(self.payment), False)
+        unlock.assert_not_called()
 
     def test_reversed_is_final(self):
         self.post(signed(self.payment))

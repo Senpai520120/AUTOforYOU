@@ -1,7 +1,8 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
-from django.core.validators import RegexValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -102,8 +103,11 @@ class PromotionTariff(models.Model):
     code = models.CharField(max_length=50, unique=True, verbose_name='Код')
     name = models.CharField(max_length=100, verbose_name='Назва')
     type = models.CharField(max_length=20, choices=TariffType.choices, verbose_name='Тип')
-    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Ціна')  # підігнати під реальні ціни
-    currency = models.CharField(max_length=3, default='UAH', verbose_name='Валюта')
+    price = models.DecimalField(
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Ціна')  # підігнати під реальні ціни
+    currency = models.CharField(
+        max_length=3, choices=[('UAH', 'UAH'), ('USD', 'USD'), ('EUR', 'EUR')], default='UAH', verbose_name='Валюта')
     duration_days = models.PositiveIntegerField(default=30, verbose_name='Днів дії')
     description = models.TextField(blank=True, verbose_name='Опис')
     active = models.BooleanField(default=True, verbose_name='Активний')
@@ -112,6 +116,9 @@ class PromotionTariff(models.Model):
         verbose_name = 'Тариф просування'
         verbose_name_plural = 'Тарифи просування'
         ordering = ['type', 'price']
+        constraints = [
+            models.CheckConstraint(condition=models.Q(price__gt=0), name='promotiontariff_price_gt_0'),
+        ]
 
     def __str__(self):
         return f'{self.name} ({self.price} {self.currency})'

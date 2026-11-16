@@ -275,6 +275,52 @@ class TestSavedSearchTask(SetupMixin):
         self.assertGreater(count_first, 0)
         self.assertEqual(count_first, count_second)
 
+    def test_failure_in_one_search_does_not_break_others_and_rolls_back(self):
+        """Сбой на одном поиске: его уведомления откатываются, остальные обработаны."""
+        import datetime
+        from unittest.mock import patch
+
+        from django.utils import timezone
+        old = timezone.now() - datetime.timedelta(days=1)
+        bad = SavedSearch.objects.create(
+            user=self.buyer, name='Bad', filters={'make': 'Toyota'}, notify=True, last_notified_at=old)
+        other = make_user('other_ss@test.com')
+        good = SavedSearch.objects.create(
+            user=other, name='Good', filters={'make': 'Toyota'}, notify=True, last_notified_at=old)
+
+        from notifications.services import create_notification as real_create
+
+        def flaky(user_id, *args, **kwargs):
+            real_create(user_id, *args, **kwargs)
+            if user_id == self.buyer.pk:
+                raise RuntimeError('boom')
+
+        with patch('notifications.services.create_notification', side_effect=flaky):
+            result = check_saved_searches()
+
+        self.assertEqual(result, {'processed': 1})
+        self.assertEqual(Notification.objects.filter(user=self.buyer).count(), 0)
+        self.assertGreater(Notification.objects.filter(user=other).count(), 0)
+        bad.refresh_from_db()
+        good.refresh_from_db()
+        self.assertEqual(bad.last_notified_at, old)
+        self.assertGreater(good.last_notified_at, old)
+
+    def test_telegram_summary_sent_only_after_commit(self):
+        import datetime
+        from unittest.mock import patch
+
+        from django.utils import timezone
+        SavedSearch.objects.create(
+            user=self.buyer, name='Camry', filters={'make': 'Toyota'}, notify=True,
+            last_notified_at=timezone.now() - datetime.timedelta(days=1))
+        with patch('integrations.tasks.send_notification.delay') as send:
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                check_saved_searches()
+                send.assert_not_called()  # внутри транзакции отправки ещё нет
+            self.assertEqual(len(callbacks), 1)
+            send.assert_called_once()  # после коммита - ровно одна
+
     def test_task_skips_non_matching(self):
         """SavedSearch для Honda не спрацьовує на Toyota."""
         import datetime
@@ -290,6 +336,20 @@ class TestSavedSearchTask(SetupMixin):
         check_saved_searches()
         n = Notification.objects.filter(user=self.buyer, type=Notification.Type.SAVED_SEARCH_MATCH).first()
         self.assertIsNone(n)
+
+    def test_soft_time_limit_is_not_swallowed(self):
+        """SoftTimeLimitExceeded из обработки поиска пробрасывается, а не глотается общим except Exception."""
+        import datetime
+        from unittest.mock import patch
+
+        from celery.exceptions import SoftTimeLimitExceeded
+        from django.utils import timezone
+        SavedSearch.objects.create(
+            user=self.buyer, name='Camry', filters={'make': 'Toyota'}, notify=True,
+            last_notified_at=timezone.now() - datetime.timedelta(days=1))
+        with patch('saved_searches.tasks._process_search', side_effect=SoftTimeLimitExceeded()):
+            with self.assertRaises(SoftTimeLimitExceeded):
+                check_saved_searches()
 
 
 # ── Задача 4.7: пагинация, mark-read, шаблоны ────────────────────────────────
