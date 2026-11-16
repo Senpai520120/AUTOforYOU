@@ -38,6 +38,9 @@ check "повреждённый current_tag: IMAGE_TAG не задан" "unset" 
 if [ ! -e "$TMP/PWNED" ]; then ok "повреждённый тег не выполняется"; else bad "выполнился код из current_tag"; fi
 
 echo a1b2c3d > "$TMP/.deploy/current_tag"
+# init-letsencrypt.sh и update-cloudflare-ips.sh - /bin/sh (на Ubuntu dash): библиотека обязана быть POSIX.
+SH=$(command -v dash || command -v sh)
+check "подключение из POSIX sh ($SH): тег из current_tag" "a1b2c3d"     "$(cd "$TMP" && env -u IMAGE_TAG "$SH" -c '. scripts/lib-image-tag.sh; echo "${IMAGE_TAG:-unset}"' 2>&1)"
 check "docker compose видит IMAGE_TAG из current_tag" "TAG=a1b2c3d" "$(cd "$TMP" && env -u IMAGE_TAG PATH="$TMP/bin:$PATH" bash -c '. scripts/lib-image-tag.sh; docker compose ps')"
 
 if [ "$fails" -eq 0 ]; then echo "Все проверки пройдены"; exit 0; else echo "Провалено: $fails"; exit 1; fi
