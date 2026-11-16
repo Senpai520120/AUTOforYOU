@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 
+from .calculator import EV_FUEL_TYPES
 from .models import Calculation
 
 
@@ -38,7 +39,11 @@ class CalculateInputSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        if attrs['fuel_type'] in ('electric', 'phev'):
+        # Акциз EV/PHEV считается по батарее (calculator.EV_FUEL_TYPES), объём двигателя нужен только ДВС/hybrid.
+        is_ev = attrs['fuel_type'] in EV_FUEL_TYPES
+        if not is_ev and attrs['engine_cc'] < 1:
+            raise serializers.ValidationError({'engine_cc': "Вкажіть об'єм двигуна (см³)."})
+        if is_ev:
             kwh = attrs.get('battery_capacity_kwh')
             if kwh is None or kwh <= 0:
                 raise serializers.ValidationError({'battery_capacity_kwh': 'Вкажіть ємність батареї (кВт·год).'})

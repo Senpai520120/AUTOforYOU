@@ -24,6 +24,7 @@ from pricing.rates_provider import (
 )
 from pricing.tasks import fetch_nbu_rates_task
 from pricing.tests_config import TARIFFS, SeededCase
+from pricing.tests_helpers import cache_invalidation_immediate
 from tests.base import CleanCacheTestCase
 from tests.factories import make_staff, make_user
 
@@ -106,6 +107,7 @@ class NbuFetchTests(CleanCacheTestCase):
             with self.assertRaisesMessage(CommandError, 'Ошибка запроса к НБУ: TimeoutError'):
                 call_command('fetch_nbu_rates')
 
+    @cache_invalidation_immediate
     def test_success_marks_source_nbu_and_clears_cache(self):
         pricing_cache.get_exchange_rates()
         self.assertIsNotNone(cache.get(pricing_cache.KEYS['exchange']))
@@ -180,6 +182,7 @@ class SeedAndCalculatorTests(SeededCase):
         self.assertEqual(body['exchange_rate_source'], 'demo')
         self.assertTrue(body['is_demo'])
 
+    @cache_invalidation_immediate
     def test_real_nbu_rate_removes_demo_mark(self):
         for model in TARIFFS:
             model.objects.update(is_verified=True)

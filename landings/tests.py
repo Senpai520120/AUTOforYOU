@@ -29,9 +29,10 @@ from pricing.calculator import (
     calculate_landed_cost,
     select_rates,
 )
-from pricing.models import Calculation, OceanFreightRate
+from pricing.models import Calculation, ExchangeRate, OceanFreightRate
 from pricing.views import FORM_DEFAULTS
 from site_settings.models import SiteSettings
+from pricing.tests_helpers import cache_invalidation_immediate
 from tests.base import CleanCacheTestCase
 from tests.factories import make_admin_role, make_broker, make_moderator, make_staff, make_user
 
@@ -93,6 +94,37 @@ class CalculationServiceTests(SeededCase):
                 self.assertIsNone(build_landing_calculation(make_page(slug=f'p-{field}'.replace('_', '-'),
                                                                       **{field: value})))
 
+    def test_petrol_zero_cc_gives_none(self):
+        self.assertIsNone(build_landing_calculation(make_page(engine_cc=0)))
+
+    def test_electric_zero_or_empty_cc_ok(self):
+        for cc in (0, None):
+            with self.subTest(cc=cc):
+                page = make_page(slug=f'ev-{cc}', fuel_type='electric', engine_cc=cc,
+                                 battery_capacity_kwh=Decimal('75.0'))
+                self.assertIsNotNone(build_landing_calculation(page))
+
+    def test_phev_without_cc_ok(self):
+        page = make_page(slug='phev-no-cc', fuel_type='phev', engine_cc=None, battery_capacity_kwh=Decimal('14.0'))
+        self.assertIsNotNone(build_landing_calculation(page))
+
+    def test_hybrid_without_cc_gives_none(self):
+        self.assertIsNone(build_landing_calculation(make_page(slug='hybrid-no-cc', fuel_type='hybrid', engine_cc=None)))
+
+    def test_fresh_rate_not_stale(self):
+        calc = build_landing_calculation(make_page())
+        self.assertIs(calc['exchange_rate_stale'], False)
+        self.assertIsNone(calc['exchange_rate_warning'])
+
+    def test_stale_rate_flagged_but_calculation_kept(self):
+        page = make_page()
+        ExchangeRate.objects.update(date=timezone.localdate() - timedelta(days=30))
+        invalidate_all()
+        calc = build_landing_calculation(page)
+        self.assertIsNotNone(calc)
+        self.assertIs(calc['exchange_rate_stale'], True)
+        self.assertIn('застарілий', calc['exchange_rate_warning'])
+
     def test_electric_needs_battery(self):
         page = make_page(fuel_type='electric', engine_cc=None, battery_capacity_kwh=None)
         self.assertIsNone(build_landing_calculation(page))
@@ -105,6 +137,7 @@ class CalculationServiceTests(SeededCase):
         self.assertIsNone(build_landing_calculation(page))
         self.assertFalse(can_publish(page))
 
+    @cache_invalidation_immediate
     def test_rate_change_changes_total_without_code_change(self):
         page = make_page()
         before = Decimal(build_landing_calculation(page)['total_usd'])
@@ -202,6 +235,7 @@ class LandingApiTests(SeededCase):
         self.assertEqual(self.client.get(detail_url(page.slug)).status_code, 404)
         self.assertEqual(self.client.get(LIST_URL).json()['results'], [])
 
+    @cache_invalidation_immediate
     def test_rates_expired_after_publication_is_404(self):
         page = make_page(is_published=True)
         self.assertEqual(self.client.get(detail_url(page.slug)).status_code, 200)
@@ -256,6 +290,7 @@ class CacheTests(SeededCase):
             self.assertEqual(self.get().status_code, 200)
         self.assertEqual(spy.call_count, 1)
 
+    @cache_invalidation_immediate
     def test_rate_save_resets_cache(self):
         first = self.get().json()['calculation']['total_usd']
         rate = OceanFreightRate.objects.get(us_port='houston', eu_port='klaipeda')
@@ -280,6 +315,7 @@ class CacheTests(SeededCase):
         self.page.delete()
         self.assertEqual(self.get().status_code, 404)
 
+    @cache_invalidation_immediate
     def test_expired_rates_reset_cache(self):
         self.assertEqual(self.get().status_code, 200)
         self.expire_rates()

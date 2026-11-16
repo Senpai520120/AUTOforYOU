@@ -11,6 +11,7 @@ import logging
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,18 @@ def get_catalog():
     )
 
 
+def _delete_on_commit(keys: list, label: str) -> None:
+    """Удаление ключей после коммита: иначе параллельный запрос между delete и commit
+    перечитает старые тарифы и закэширует их на сутки. Вне транзакции on_commit срабатывает сразу."""
+    def _delete():
+        try:
+            cache.delete_many(keys)
+        except Exception:
+            logger.warning('pricing.cache: инвалидация %s не удалась', label, exc_info=True)
+
+    transaction.on_commit(_delete)
+
+
 def invalidate(key_name: str):
     """
     Инвалидация не должна ронять вызывающий код.
@@ -147,14 +160,8 @@ def invalidate(key_name: str):
     было замаскировано `|| true` — то есть при недоступном Redis сиды тихо
     не применялись, и никто об этом не узнавал.
     """
-    try:
-        cache.delete_many([KEYS[key_name], KEYS['landings_version']])
-    except Exception:
-        logger.warning('pricing.cache: инвалидация %s не удалась', key_name, exc_info=True)
+    _delete_on_commit([KEYS[key_name], KEYS['landings_version']], key_name)
 
 
 def invalidate_all():
-    try:
-        cache.delete_many(list(KEYS.values()))
-    except Exception:
-        logger.warning('pricing.cache: полная инвалидация не удалась', exc_info=True)
+    _delete_on_commit(list(KEYS.values()), 'all')

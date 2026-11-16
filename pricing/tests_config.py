@@ -31,6 +31,7 @@ from pricing.models import (
 )
 from pricing.tasks import purge_anonymous_calculations
 from pricing.views import CalculateView
+from pricing.tests_helpers import cache_invalidation_immediate
 from tests.base import CleanCacheTestCase
 from tests.factories import make_admin_role, make_broker, make_moderator, make_staff, make_user
 
@@ -330,6 +331,7 @@ class HookTests(SeededCase):
 # ─── Админка (шаг 6) ─────────────────────────────────────────────────────────
 
 class AdminVerifyTests(SeededCase):
+    @cache_invalidation_immediate
     def test_mark_verified_action_and_cache(self):
         self.assertTrue(client_for().get(RATES_URL).json()['is_demo'])  # прогрели кэш
         request = RequestFactory().post('/')

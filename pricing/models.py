@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -360,7 +362,8 @@ class RateSource(models.TextChoices):
 class ExchangeRate(models.Model):
     from_currency = models.CharField(max_length=3, verbose_name='Из валюты')
     to_currency = models.CharField(max_length=3, verbose_name='В валюту')
-    rate = models.DecimalField(max_digits=14, decimal_places=6, verbose_name='Курс')
+    rate = models.DecimalField(max_digits=14, decimal_places=6, verbose_name='Курс',
+                               validators=[MinValueValidator(Decimal('0.000001'))])
     date = models.DateField(verbose_name='Дата')
     source = models.CharField(max_length=10, choices=RateSource.choices, default=RateSource.MANUAL,
                               verbose_name='Джерело')
@@ -370,6 +373,7 @@ class ExchangeRate(models.Model):
         verbose_name_plural = 'Курсы валют'
         ordering = ['-date']
         unique_together = [('from_currency', 'to_currency', 'date')]
+        constraints = [models.CheckConstraint(condition=models.Q(rate__gt=0), name='exchangerate_rate_gt_0')]
 
     def __str__(self):
         return f'{self.from_currency}/{self.to_currency} = {self.rate} ({self.date})'

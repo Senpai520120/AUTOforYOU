@@ -30,7 +30,8 @@ def fetch_nbu_rates_task(self):
     return updated
 
 
-@shared_task(name='pricing.tasks.purge_anonymous_calculations')
+# Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
+@shared_task(name='pricing.tasks.purge_anonymous_calculations', soft_time_limit=900, time_limit=960)
 def purge_anonymous_calculations():
     """Удаляет анонимные расчёты старше ANON_CALCULATION_TTL_DAYS (02-S2).
 

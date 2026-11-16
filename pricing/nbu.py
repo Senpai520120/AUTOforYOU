@@ -9,6 +9,7 @@ import logging
 from datetime import date
 
 from django.db import transaction
+from django.utils import timezone
 
 from integrations.base import MODE_DEMO, record_error, record_success
 from pricing import cache as pricing_cache
@@ -53,7 +54,7 @@ def fetch_and_save_rates(rate_date: date | None = None) -> list[str]:
         URLError: сетевая ошибка. RatesUnavailable: пустой или нечитаемый ответ.
     """
     if rate_date is None:
-        rate_date = date.today()
+        rate_date = timezone.localdate()
     provider = get_rate_provider()
     if provider is None:
         logger.info('NBU: загрузка курса пропущена (NBU_MODE выключает провайдера)')

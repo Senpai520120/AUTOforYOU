@@ -306,7 +306,14 @@ class Command(BaseCommand):
         from decimal import Decimal
 
         from landings.models import ModelLandingPage
+        from django.core.cache import cache
+
         from landings.services import can_publish
+        from pricing import cache as pricing_cache
+
+        # Сигналы тарифов сбрасывают кэш только on_commit, а мы внутри transaction.atomic: каталог, закэшированный
+        # раньше (до доставки по Украине и сборов брокера), был бы устаревшим и расчёт не получился бы.
+        cache.delete_many(list(pricing_cache.KEYS.values()))
 
         inputs = {
             'year_from': 2015, 'year_to': 2020, 'calc_year': 2018, 'auction_price_usd': Decimal('5000'),

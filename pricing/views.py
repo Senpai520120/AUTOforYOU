@@ -1,5 +1,4 @@
 import logging
-from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
@@ -330,7 +329,7 @@ class ActiveRatesView(APIView):
 
 def _active_on(qs, on_date=None):
     """ORM-фильтр «действует на дату»."""
-    on_date = on_date or date.today()
+    on_date = on_date or timezone.localdate()
     return qs.filter(valid_from__lte=on_date).filter(Q(valid_to__isnull=True) | Q(valid_to__gte=on_date))
 
 

@@ -9,6 +9,7 @@ from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase
 from django.utils import timezone
 
+from pricing.tests_helpers import cache_invalidation_immediate
 from pricing import cache as pricing_cache
 from pricing.calculator import LandedCostInputs, broker_services_for, calculate_landed_cost
 from pricing.models import BrokerServiceFee, Calculation, FeeMode, UaDeliveryRate
@@ -150,6 +151,7 @@ class ApiTests(SeededCase):
         BrokerServiceFee.objects.create(title='Реєстрація', amount_usd=D('50'), valid_from=TODAY + timedelta(days=5))
         self.assertTrue(self.calc().json()['breakdown']['broker_services_pending'])
 
+    @cache_invalidation_immediate
     def test_unverified_city_makes_demo(self):
         self.verify_all()
         self.assertFalse(self.calc(ua_delivery_rate=self.kyiv.pk).json()['is_demo'])
@@ -183,6 +185,7 @@ class RatesTests(SeededCase):
         self.assertEqual(D(str(body['ua_delivery_rates'][0]['cost_usd'])), D('321'))
         self.assertEqual(D(str(body['broker_service_fees'][0]['amount_usd'])), D('77'))
 
+    @cache_invalidation_immediate
     def test_admin_change_invalidates_cache(self):
         client_for().get(RATES_URL)  # прогрели кэш
         UaDeliveryRate.objects.create(destination='Одеса', cost_usd=D('400'), valid_from=TODAY)

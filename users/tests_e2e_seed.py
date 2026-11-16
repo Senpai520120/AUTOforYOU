@@ -14,6 +14,7 @@ from listings.models import Listing
 from local_listings.models import City, LocalListing, Region
 from messaging.models import Conversation
 from shipments.models import Shipment
+from tests.base import CleanCacheTestCase
 
 User = get_user_model()
 
@@ -38,7 +39,7 @@ def _counts():
     }
 
 
-class E2ESeedTests(TestCase):
+class E2ESeedTests(CleanCacheTestCase):  # читает тарифы через кэш (CLAUDE.md, правила тестов)
     def setUp(self):
         media = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, media, ignore_errors=True)

@@ -36,6 +36,7 @@ from pricing.models import (
     PensionFundBracket,
     UsLandRoute,
 )
+from pricing.tests_helpers import cache_invalidation_immediate
 from tests.base import CleanCacheTestCase
 from tests.factories import make_staff
 
@@ -187,6 +188,7 @@ class DateRangeValidationTests(CleanCacheTestCase):
 
 
 class OverlapLatestAppliedTests(SeededCase):
+    @cache_invalidation_immediate
     def test_two_active_routes_latest_applied(self):
         base = self.calc().json()['breakdown']
         # более старая запись того же маршрута не побеждает, более свежая (или та же дата, больший pk) - да
@@ -277,6 +279,7 @@ class CustomsRuleTests(SeededCase):
         snap = Calculation.objects.get(pk=body['calculation_id']).rates_snapshot['rule']
         self.assertEqual(snap['confirmed_at'], '2026-10-01')
 
+    @cache_invalidation_immediate
     def test_customs_value_includes_eu_to_ua(self):
         base = self.calc().json()['breakdown']
         CustomsCalcRule.objects.filter(pk=self._rule().pk).update(customs_value_includes_eu_to_ua=True)
@@ -287,6 +290,7 @@ class CustomsRuleTests(SeededCase):
         self.assertGreater(D(new['duty_usd']), D(base['duty_usd']))
         self.assertGreater(D(new['vat_uah']), D(base['vat_uah']))
 
+    @cache_invalidation_immediate
     def test_age_offset_from_rule(self):
         base = D(self.calc().json()['breakdown']['excise_eur'])
         rule = self._rule()
@@ -296,6 +300,7 @@ class CustomsRuleTests(SeededCase):
         # возраст 8 -> 7: акциз пропорционален коэффициенту
         self.assertEqual((new / base).quantize(D('0.001')), (D(7) / D(8)).quantize(D('0.001')))
 
+    @cache_invalidation_immediate
     def test_each_pension_base_pair(self):
         b = self.calc().json()['breakdown']
         rule = self._rule()
@@ -334,6 +339,7 @@ class CustomsRuleTests(SeededCase):
         new = self.calc().json()['breakdown']['excise_eur']
         self.assertNotEqual(old, new)
 
+    @cache_invalidation_immediate
     def test_admin_change_invalidates_cache(self):
         self.calc()
         root = make_staff(superuser=True)

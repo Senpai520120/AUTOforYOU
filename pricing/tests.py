@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from django.core.management import call_command
 from django.test import SimpleTestCase
 
+from pricing.tests_helpers import cache_invalidation_immediate
 from tests.base import CleanCacheTestCase
 
 from .calculator import (
@@ -814,6 +815,7 @@ class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
 class TestPricingCacheInvalidation(CleanCacheTestCase):
     """Изменение ставки в БД → кэш сброшен → следующий запрос берёт новое значение."""
 
+    @cache_invalidation_immediate
     def test_save_exchange_rate_invalidates_cache(self):
         from django.core.cache import cache
 
@@ -833,6 +835,7 @@ class TestPricingCacheInvalidation(CleanCacheTestCase):
 
         self.assertIsNone(cache.get(KEYS['exchange']), 'Кэш не сброшен после save()')
 
+    @cache_invalidation_immediate
     def test_delete_exchange_rate_invalidates_cache(self):
         from django.core.cache import cache
 
@@ -849,6 +852,7 @@ class TestPricingCacheInvalidation(CleanCacheTestCase):
         rate.delete()
         self.assertIsNone(cache.get(KEYS['exchange']), 'Кэш не сброшен после delete()')
 
+    @cache_invalidation_immediate
     def test_cache_repopulates_after_invalidation(self):
         from .cache import get_exchange_rates
         from .models import ExchangeRate
@@ -870,6 +874,7 @@ class TestPricingCacheInvalidation(CleanCacheTestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match.rate, D('42.00'))
 
+    @cache_invalidation_immediate
     def test_auction_fee_tier_save_invalidates_cache(self):
         from django.core.cache import cache
 
@@ -912,6 +917,7 @@ class TestFetchNbuRatesTask(CleanCacheTestCase):
         mock_resp.__exit__ = MagicMock(return_value=False)
         return mock_resp
 
+    @cache_invalidation_immediate
     def test_task_saves_rates_and_invalidates_cache(self):
         from unittest.mock import patch
 

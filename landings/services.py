@@ -7,6 +7,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -20,6 +21,7 @@ from pricing.calculator import (
     build_rate_snapshot_from_db,
     calc_auction_fees,
     calculate_landed_cost,
+    exchange_rate_info,
     fees_freshness,
     rate_snapshot_to_dict,
     select_rates,
@@ -75,13 +77,13 @@ def _inputs(page: ModelLandingPage) -> dict | None:
     if (page.auction_price_usd is None or not page.fuel_type or page.calc_year is None
             or not (page.auction_location and page.us_port and page.eu_port)):
         return None
-    if not is_ev and page.engine_cc is None:
+    if not is_ev and not page.engine_cc:
         return None
     if is_ev and not (page.battery_capacity_kwh and page.battery_capacity_kwh > 0):
         return None
     return {
         'auction_price_usd': page.auction_price_usd,
-        'engine_cc': page.engine_cc or 0,
+        'engine_cc': 0 if page.engine_cc is None else page.engine_cc,
         'fuel_type': page.fuel_type,
         'vehicle_year': page.calc_year,
         'battery_capacity_kwh': page.battery_capacity_kwh if is_ev else None,
@@ -161,6 +163,7 @@ def build_landing_calculation(page: ModelLandingPage, *, now=None) -> dict | Non
         'local_currency': 'UAH',
         'usd_to_uah': str(rates.usd_to_uah),
         'exchange_rate_date': selected.usd_to_uah.date.isoformat(),
+        **exchange_rate_info(selected.usd_to_uah, selected.usd_to_eur, calc_date, settings.EXCHANGE_RATE_MAX_AGE_DAYS),
         'total_usd': str(result.total_usd),
         'total_uah': str(result.total_uah),
         'breakdown': result.to_dict(),
