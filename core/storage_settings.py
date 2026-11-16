@@ -8,6 +8,8 @@
   статика остаётся локальной (её раздаёт nginx из volume).
 - MEDIA_URL: CDN-домен (S3_CUSTOM_DOMAIN / AWS_S3_CUSTOM_DOMAIN) → для R2/MinIO (S3_ENDPOINT_URL)
   ссылку даёт storage.url() (подписанные URL) → шаблон amazonaws только для AWS без endpoint.
+- AWS без S3_ENDPOINT_URL: региональный AWS_S3_ENDPOINT_URL + virtual addressing, иначе подписанные
+  URL идут на глобальный хост и бакет вне us-east-1 отвечает 400 (region is wrong).
 """
 import os
 from collections.abc import Mapping
@@ -53,6 +55,12 @@ def build_storage_settings(env: Mapping, base_dir) -> dict:
     })
     if endpoint:
         result['AWS_S3_ENDPOINT_URL'] = endpoint  # Cloudflare R2 / MinIO
+    else:
+        # AWS: без регионального endpoint подписанные URL уходят на глобальный хост и новый бакет
+        # вне us-east-1 отвечает 400 AuthorizationQueryParametersError. Для custom domain на AWS
+        # это тоже безопасно: домен влияет только на ссылки, endpoint нужен загрузкам/подписи.
+        result['AWS_S3_ENDPOINT_URL'] = f'https://s3.{region}.amazonaws.com'
+        result['AWS_S3_ADDRESSING_STYLE'] = 'virtual'
     if custom_domain:
         # Публичный домен bucket'а (CDN, R2 custom domain): ссылки без подписи.
         result['AWS_S3_CUSTOM_DOMAIN'] = custom_domain

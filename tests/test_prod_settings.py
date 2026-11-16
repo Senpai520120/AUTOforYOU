@@ -175,6 +175,24 @@ class StorageSettingsTests(SimpleTestCase):
         self.assertEqual(cfg['AWS_S3_ENDPOINT_URL'], 'https://acc.r2.cloudflarestorage.com')
         self.assertTrue(cfg['AWS_QUERYSTRING_AUTH'])
 
+    def test_aws_without_endpoint_uses_regional_endpoint(self):
+        cfg = build_storage_settings(self.S3, '/app')
+        self.assertEqual(cfg['AWS_S3_ENDPOINT_URL'], 'https://s3.eu-central-1.amazonaws.com')
+        self.assertEqual(cfg['AWS_S3_ADDRESSING_STYLE'], 'virtual')
+        self.assertEqual(cfg['MEDIA_URL'], 'https://media.s3.eu-central-1.amazonaws.com/')
+
+    def test_aws_regional_endpoint_follows_region(self):
+        cfg = build_storage_settings({**self.S3, 'S3_REGION': 'us-west-2'}, '/app')
+        self.assertEqual(cfg['AWS_S3_ENDPOINT_URL'], 'https://s3.us-west-2.amazonaws.com')
+        self.assertEqual(cfg['MEDIA_URL'], 'https://media.s3.us-west-2.amazonaws.com/')
+
+    def test_custom_endpoint_keeps_media_url_and_no_virtual_style(self):
+        cfg = build_storage_settings({**self.S3, 'S3_ENDPOINT_URL': 'https://acc.r2.cloudflarestorage.com',
+                                      'S3_REGION': 'auto'}, '/app')
+        self.assertEqual(cfg['AWS_S3_ENDPOINT_URL'], 'https://acc.r2.cloudflarestorage.com')
+        self.assertEqual(cfg['MEDIA_URL'], '/media/')
+        self.assertNotIn('AWS_S3_ADDRESSING_STYLE', cfg)
+
     def test_custom_domain(self):
         cfg = build_storage_settings({**self.S3, 'S3_CUSTOM_DOMAIN': 'cdn.example.com'}, '/app')
         self.assertEqual(cfg['MEDIA_URL'], 'https://cdn.example.com/')
