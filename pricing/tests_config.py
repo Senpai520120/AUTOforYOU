@@ -30,8 +30,8 @@ from pricing.models import (
     UsLandRoute,
 )
 from pricing.tasks import purge_anonymous_calculations
-from pricing.views import CalculateView
 from pricing.tests_helpers import cache_invalidation_immediate
+from pricing.views import CalculateView
 from tests.base import CleanCacheTestCase
 from tests.factories import make_admin_role, make_broker, make_moderator, make_staff, make_user
 

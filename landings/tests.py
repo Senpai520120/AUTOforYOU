@@ -30,9 +30,9 @@ from pricing.calculator import (
     select_rates,
 )
 from pricing.models import Calculation, ExchangeRate, OceanFreightRate
+from pricing.tests_helpers import cache_invalidation_immediate
 from pricing.views import FORM_DEFAULTS
 from site_settings.models import SiteSettings
-from pricing.tests_helpers import cache_invalidation_immediate
 from tests.base import CleanCacheTestCase
 from tests.factories import make_admin_role, make_broker, make_moderator, make_staff, make_user
 

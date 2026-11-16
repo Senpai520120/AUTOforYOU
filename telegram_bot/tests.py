@@ -565,6 +565,7 @@ class PostListingToChannelNetworkErrorTest(TestCase):
 
     def test_os_error_is_retried(self):
         from celery.exceptions import Retry
+
         from telegram_bot.tasks import post_listing_to_channel
         with patch.object(post_listing_to_channel, 'retry', side_effect=Retry('again')) as retry:
             result = self._apply(ConnectionError('boom'))

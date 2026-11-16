@@ -9,12 +9,12 @@ from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from pricing.tests_helpers import cache_invalidation_immediate
 from pricing import cache as pricing_cache
 from pricing.calculator import LandedCostInputs, broker_services_for, calculate_landed_cost
 from pricing.models import BrokerServiceFee, Calculation, FeeMode, UaDeliveryRate
 from pricing.tests import _make_rates
 from pricing.tests_config import RATES_URL, SeededCase, client_for
+from pricing.tests_helpers import cache_invalidation_immediate
 from tests.factories import make_broker, make_user
 
 TODAY = timezone.localdate()

@@ -305,9 +305,9 @@ class Command(BaseCommand):
         """
         from decimal import Decimal
 
-        from landings.models import ModelLandingPage
         from django.core.cache import cache
 
+        from landings.models import ModelLandingPage
         from landings.services import can_publish
         from pricing import cache as pricing_cache
 
