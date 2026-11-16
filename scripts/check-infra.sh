@@ -25,6 +25,11 @@ check_lf() {
     git ls-files --eol -- '*.sh' | awk '$1 != "i/lf" {print; bad=1} END {exit bad}' || bad=1
     # -U: grep в Git Bash иначе срезает \r и CRLF не видит.
     if git ls-files -z '*.sh' | xargs -0 grep -lIU $'\r'; then echo "CRLF в *.sh" >&2; bad=1; fi
+    # Запускаемые скрипты - с битом исполнения в git: с Windows он теряется, на Linux «Permission denied»
+    # (2026-11-16: init-letsencrypt.sh, update-cloudflare-ips.sh, tests/test_image_tag.sh). lib-*.sh подключаются через source.
+    local noexec
+    noexec=$(git ls-files -s -- 'scripts/*.sh' 'scripts/tests/*.sh' deploy.sh | awk '$1 != "100755" && $4 !~ /\/lib-[^\/]*\.sh$/ {print $4}')
+    if [ -n "$noexec" ]; then echo "без бита исполнения (git update-index --chmod=+x):" >&2; echo "$noexec" >&2; bad=1; fi
     return "$bad"
 }
 
