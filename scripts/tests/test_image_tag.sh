@@ -35,9 +35,9 @@ check "явный IMAGE_TAG не перезаписывается" "manual" "$(g
 
 echo 'a1b2c3d; touch PWNED' > "$TMP/.deploy/current_tag"
 check "повреждённый current_tag: IMAGE_TAG не задан" "unset" "$(get)"
-[ ! -e "$TMP/PWNED" ] && ok "повреждённый тег не выполняется" || bad "выполнился код из current_tag"
+if [ ! -e "$TMP/PWNED" ]; then ok "повреждённый тег не выполняется"; else bad "выполнился код из current_tag"; fi
 
 echo a1b2c3d > "$TMP/.deploy/current_tag"
 check "docker compose видит IMAGE_TAG из current_tag" "TAG=a1b2c3d" "$(cd "$TMP" && env -u IMAGE_TAG PATH="$TMP/bin:$PATH" bash -c '. scripts/lib-image-tag.sh; docker compose ps')"
 
-[ "$fails" -eq 0 ] && { echo "Все проверки пройдены"; exit 0; } || { echo "Провалено: $fails"; exit 1; }
+if [ "$fails" -eq 0 ]; then echo "Все проверки пройдены"; exit 0; else echo "Провалено: $fails"; exit 1; fi

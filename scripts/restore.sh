@@ -49,7 +49,7 @@ if [ -n "$media" ]; then
 fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-# shellcheck source=lib-image-tag.sh
+# shellcheck source=/dev/null  # scripts/lib-image-tag.sh: CI запускает shellcheck без -x
 . scripts/lib-image-tag.sh
 read -r -a DC <<< "${COMPOSE_CMD:-docker compose}"
 
