@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 RETRY_AFTER_MAX_COUNTDOWN = 600
 
 
-@shared_task(ignore_result=True)
+# Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
+@shared_task(ignore_result=True, soft_time_limit=900, time_limit=960)
 def send_weekly_funnel_report(days: int = 7):
     reports.dispatch_report(reports.build_report(days))
 

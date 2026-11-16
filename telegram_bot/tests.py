@@ -542,6 +542,44 @@ class PostListingToChannelTaskTest(TestCase):
         self.assertEqual(result['reason'], 'no channel_id')
 
 
+class PostListingToChannelNetworkErrorTest(TestCase):
+    """Сетевые сбои не глотаются: задача уходит в retry; прочие ошибки - прежний ответ без падения."""
+
+    def setUp(self):
+        from listings.models import Listing
+        from vehicles.models import Vehicle
+        user = User.objects.create_user(email='net@test.com', password='pass')
+        v = Vehicle.objects.create(
+            vin='1HGBH41JXMN109187', make='Toyota', model='Camry', year=2020,
+            engine_cc=2000, fuel_type='petrol', mileage_km=10000,
+        )
+        self.listing = Listing.objects.create(vehicle=v, seller=user, price='15000.00', channel='retail')
+
+    def _apply(self, exc):
+        from telegram_bot.tasks import post_listing_to_channel
+        provider = SimpleNamespace(is_configured=lambda: True, send_photo=AsyncMock())
+        provider.send_message = lambda *a, **k: (_ for _ in ()).throw(exc)
+        with self.settings(TELEGRAM_BOT_TOKEN='fake', TELEGRAM_CHANNEL_ID='@ch'), \
+                patch('telegram_bot.provider.get_telegram_provider', return_value=provider):
+            return post_listing_to_channel.apply(args=(self.listing.pk,), throw=False)
+
+    def test_os_error_is_retried(self):
+        from celery.exceptions import Retry
+        from telegram_bot.tasks import post_listing_to_channel
+        with patch.object(post_listing_to_channel, 'retry', side_effect=Retry('again')) as retry:
+            result = self._apply(ConnectionError('boom'))
+        retry.assert_called_once()
+        self.assertEqual(result.state, 'RETRY')
+
+    def test_other_error_keeps_old_behaviour(self):
+        from telegram_bot.tasks import post_listing_to_channel
+        with patch.object(post_listing_to_channel, 'retry') as retry:
+            result = self._apply(ValueError('bad chat'))
+        retry.assert_not_called()
+        self.assertEqual(result.state, 'SUCCESS')
+        self.assertEqual(result.result, {'posted': False, 'reason': 'ValueError'})
+
+
 # ─── Autopost signal ─────────────────────────────────────────────────────────
 
 class ListingAutopostSignalTest(TestCase):
@@ -559,20 +597,33 @@ class ListingAutopostSignalTest(TestCase):
         from listings.models import Listing
         v = self._make_vehicle()
         with patch('telegram_bot.tasks.post_listing_to_channel.delay') as mock_delay:
-            Listing.objects.create(
-                vehicle=v, seller=self.user, price='12000.00', channel='retail',
-            )
+            with self.captureOnCommitCallbacks(execute=True):
+                Listing.objects.create(
+                    vehicle=v, seller=self.user, price='12000.00', channel='retail',
+                )
             mock_delay.assert_called_once()
 
     def test_new_express_buyout_wholesale_schedules_task(self):
         from listings.models import Listing
         v = self._make_vehicle()
         with patch('telegram_bot.tasks.post_listing_to_channel.delay') as mock_delay:
-            Listing.objects.create(
-                vehicle=v, seller=self.user, price='8000.00',
-                channel='wholesale', is_express_buyout=True,
-            )
+            with self.captureOnCommitCallbacks(execute=True):
+                Listing.objects.create(
+                    vehicle=v, seller=self.user, price='8000.00',
+                    channel='wholesale', is_express_buyout=True,
+                )
             mock_delay.assert_called_once()
+
+    def test_task_is_scheduled_only_after_commit(self):
+        from listings.models import Listing
+        v = self._make_vehicle()
+        with patch('telegram_bot.tasks.post_listing_to_channel.delay') as mock_delay:
+            with self.captureOnCommitCallbacks(execute=False) as callbacks:
+                listing = Listing.objects.create(vehicle=v, seller=self.user, price='12000.00', channel='retail')
+            mock_delay.assert_not_called()
+            self.assertEqual(len(callbacks), 1)
+            callbacks[0]()
+            mock_delay.assert_called_once_with(listing.pk)
 
     def test_regular_wholesale_does_not_schedule_task(self):
         from listings.models import Listing
@@ -656,7 +707,8 @@ class PostListingToChannelLotsDisabledTest(TestCase):
         from tests.factories import make_listing, make_user, make_vehicle
         with patch('telegram_bot.tasks.post_listing_to_channel.delay'):
             listing = make_listing(make_vehicle(), make_user())
-        with self.settings(LOTS_ENABLED=False, TELEGRAM_BOT_TOKEN='fake', TELEGRAM_CHANNEL_ID='@ch'),                 patch('aiogram.Bot.__call__') as bot_call:
+        with self.settings(LOTS_ENABLED=False, TELEGRAM_BOT_TOKEN='fake', TELEGRAM_CHANNEL_ID='@ch'), \
+                patch('aiogram.Bot.__call__') as bot_call:
             result = post_listing_to_channel(listing.pk)
         self.assertEqual(result, {'posted': False, 'reason': 'lots disabled'})
         bot_call.assert_not_called()

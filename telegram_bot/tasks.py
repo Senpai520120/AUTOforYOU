@@ -1,10 +1,14 @@
 import logging
 import time
 
-from aiogram.exceptions import TelegramRetryAfter
+import httpx
+from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
+
+# Сетевые сбои: пробрасываем наружу, autoretry_for повторит задачу
+_NETWORK_ERRORS = (OSError, ConnectionError, TelegramNetworkError, httpx.TransportError)
 
 # Пауза между постами в канал, чтобы уважать лимиты Bot API (~20 сообщений/мин)
 _CHANNEL_THROTTLE_SECONDS = 3
@@ -12,7 +16,7 @@ _CHANNEL_THROTTLE_SECONDS = 3
 
 @shared_task(
     bind=True,
-    autoretry_for=(OSError, ConnectionError),
+    autoretry_for=_NETWORK_ERRORS,
     retry_kwargs={'max_retries': 5, 'countdown': _CHANNEL_THROTTLE_SECONDS},
     name='telegram_bot.tasks.post_listing_to_channel',
 )
@@ -82,6 +86,8 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
                                              parse_mode='HTML')
             except TelegramRetryAfter:
                 raise
+            except _NETWORK_ERRORS:
+                raise  # сеть: пусть сработает повтор, а не молчаливый fallback
             except Exception:
                 result = None  # fallback to text
             if result is not None and not result.ok:
@@ -91,6 +97,8 @@ def post_listing_to_channel(self, listing_id: int) -> dict:
         posted = result.ok
     except TelegramRetryAfter as exc:
         raise self.retry(countdown=exc.retry_after + 1) from exc
+    except _NETWORK_ERRORS:
+        raise
     except Exception as exc:
         # Bad URL (localhost dev), invalid chat_id, network - log and skip, never crash listing creation.
         logger.warning('post_listing_to_channel: skipped listing %s: %s', listing_id, type(exc).__name__)

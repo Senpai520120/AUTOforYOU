@@ -231,7 +231,8 @@ def _send_to_all(send_email, recipients, subject, body, lead_id):
 RESEND_NOTIFY_BATCH = 50
 
 
-@shared_task(base=ResilientTask, name='leads.tasks.resend_undelivered_leads')
+# Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
+@shared_task(base=ResilientTask, name='leads.tasks.resend_undelivered_leads', soft_time_limit=900, time_limit=960)
 def resend_undelivered_leads():
     """Периодический досыл личного уведомления брокеру (Telegram + email) и предупреждение админам.
 
@@ -292,7 +293,8 @@ RESEND_BATCH = 50
 RESEND_MAX_AGE = timedelta(days=7)
 
 
-@shared_task(name='leads.tasks.resend_journal')
+# Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
+@shared_task(name='leads.tasks.resend_journal', soft_time_limit=900, time_limit=960)
 def resend_journal():
     """Периодический досыл журнала для заявок без journal_message_id (старше N минут из админки)."""
     from .models import LeadJournalSettings

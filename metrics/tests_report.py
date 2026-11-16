@@ -207,7 +207,7 @@ class DispatchTests(TestCase):
         self.assertEqual(entry['schedule'].day_of_week, {1})
         self.assertEqual(entry['schedule'].hour, {9})
         self.assertEqual(entry['schedule'].minute, {0})
-        self.assertEqual(entry['options']['expires'], 86400)
+        self.assertEqual(entry['options']['expire_seconds'], 86400)
 
     def test_beat_task_builds_and_dispatches(self):
         with mock.patch.object(reports, 'build_report', return_value='текст') as build, \

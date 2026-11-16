@@ -67,3 +67,25 @@ class DiskAlertTests(CleanCacheTestCase):
         from django.conf import settings
         entry = settings.CELERY_BEAT_SCHEDULE['disk-usage-alert']
         self.assertEqual(entry['task'], 'core.tasks.alert_disk_usage')
+
+    def test_email_subject_is_about_disk(self):
+        with override_settings(FAILED_TASK_ALERT_CHAT_ID='', FAILED_TASK_ALERT_EMAIL='o@e.test'), \
+                mock.patch(DISK, return_value=usage(90)), \
+                mock.patch('integrations.email.send_email', return_value={'queued': True}) as mail:
+            alert_disk_usage()
+        mail.assert_called_once()
+        self.assertEqual(mail.call_args.args[1], 'AUTOforYOU: закінчується місце на диску')
+
+    def test_no_channels_does_not_set_cooldown_key(self):
+        with override_settings(FAILED_TASK_ALERT_CHAT_ID='', FAILED_TASK_ALERT_EMAIL=''), \
+                self.assertLogs('core.tasks', level='WARNING'):
+            self.run_task(90)
+        # канал включили позже: алерт уходит сразу, а не после паузы
+        self.assertEqual(self.run_task(90).call_count, 1)
+
+    def test_used_percent_ignores_ext4_reserve(self):
+        # total=100, used=80, free=10 (10 ГБ резерв root): реально занято 80/90 = 89% >= 85
+        with mock.patch(DISK, return_value=Usage(100 * GB, 80 * GB, 10 * GB)), \
+                mock.patch(TG, return_value=mock.Mock(ok=True)) as tg:
+            alert_disk_usage()
+        self.assertIn('89%', tg.call_args.args[1])

@@ -271,7 +271,7 @@ services:
   celery_worker:
     logging: *default-logging
     image: autoforyou-backend:${IMAGE_TAG:-local}
-    command: ["celery", "-A", "core", "worker", "-l", "info", "--concurrency", "${CELERY_CONCURRENCY:-2}"]
+    command: ["celery", "-A", "core", "worker", "-l", "info", "--concurrency", "${CELERY_CONCURRENCY:-2}", "--max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}"]
     env_file: .env
     environment:
       # Force DEBUG=false so settings.py uses Redis broker (not memory://).

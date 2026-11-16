@@ -401,6 +401,6 @@ class TestBackgroundTasks(TestCase):
         self.assertEqual(Notification.objects.count(), 1)
 
     def test_lot_channel_post_not_affected_by_c2c_flag(self):
-        with override_settings(**OFF), mock.patch('telegram_bot.tasks.post_listing_to_channel.delay') as delay:
+        with override_settings(**OFF), mock.patch('telegram_bot.tasks.post_listing_to_channel.delay') as delay,                 self.captureOnCommitCallbacks(execute=True):
             listing = make_listing(make_vehicle(), make_user())
         delay.assert_called_once_with(listing.pk)

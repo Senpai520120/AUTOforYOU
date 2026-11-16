@@ -10,7 +10,8 @@ from integrations.tasks import EMAIL_MAX_RETRIES, EMAIL_RETRY_BACKOFF, EMAIL_RET
 logger = logging.getLogger(__name__)
 
 
-@shared_task
+# Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
+@shared_task(soft_time_limit=900, time_limit=960)
 def flush_expired_tokens():
     """Чистит просроченные JWT в blacklist и сессии Django (01-Q1). Раз в сутки."""
     call_command('flushexpiredtokens')
@@ -37,7 +38,8 @@ def send_password_reset_email_task(email):
         send_password_reset_email(user, direct=True)
 
 
-@shared_task
+# Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
+@shared_task(soft_time_limit=900, time_limit=960)
 def anonymize_due_accounts():
     """Раз в сутки: аккаунты, у которых истёк период отмены, обезличиваются (1.8, Q3).
 

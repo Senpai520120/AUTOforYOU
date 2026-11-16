@@ -190,7 +190,7 @@ class TestTelegramSignalByFlag(TestCase):
         delay.assert_not_called()
 
     def test_listing_queued_when_lots_enabled(self):
-        with mock.patch(self.TASK) as delay:
+        with mock.patch(self.TASK) as delay, self.captureOnCommitCallbacks(execute=True):
             listing = make_listing(make_vehicle(), make_user())
         delay.assert_called_once_with(listing.pk)
 

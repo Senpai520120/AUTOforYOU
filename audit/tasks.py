@@ -10,7 +10,8 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name='audit.tasks.purge_audit_log')
+# Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
+@shared_task(name='audit.tasks.purge_audit_log', soft_time_limit=900, time_limit=960)
 def purge_audit_log() -> int:
     from .models import AuditAction, AuditLog
     from .services import log_action

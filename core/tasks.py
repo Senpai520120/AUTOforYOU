@@ -76,7 +76,11 @@ def _build_failed_task_alert(total: int, window_minutes: int, per_task) -> str:
     return '\n'.join(lines)
 
 
-def _send_failed_task_alert(text: str) -> bool:
+FAILED_TASK_ALERT_SUBJECT = 'AUTOforYOU: ростуть невдалі завдання'
+DISK_ALERT_SUBJECT = 'AUTOforYOU: закінчується місце на диску'
+
+
+def _send_failed_task_alert(text: str, subject: str = FAILED_TASK_ALERT_SUBJECT) -> bool:
     """Шлёт во все настроенные каналы. True - дошло хотя бы в один. Сбой канала не роняет задачу."""
     delivered = False
     chat_id = settings.FAILED_TASK_ALERT_CHAT_ID
@@ -90,7 +94,7 @@ def _send_failed_task_alert(text: str) -> bool:
     if email:
         try:
             from integrations.email import send_email
-            result = send_email(email, 'AUTOforYOU: ростуть невдалі завдання', text)
+            result = send_email(email, subject, text)
             delivered |= bool(result.get('queued'))
         except Exception as exc:
             logger.warning('failed_task_alert: email не поставлено (%s)', type(exc).__name__)
@@ -151,9 +155,13 @@ def alert_disk_usage():
     except OSError as exc:
         logger.warning('disk_alert: не удалось проверить диск (%s)', type(exc).__name__)
         return
-    used_percent = usage.used / usage.total * 100 if usage.total else 0
+    used_percent = usage.used / (usage.used + usage.free) * 100 if (usage.used + usage.free) else 0  # без резерва ext4
     threshold = int(settings.DISK_ALERT_THRESHOLD_PERCENT)
     if used_percent < threshold:
+        return
+    if not (settings.FAILED_TASK_ALERT_CHAT_ID or settings.FAILED_TASK_ALERT_EMAIL):
+        # До cache.add: иначе пауза включилась бы без отправки и алерт после настройки канала задержался бы.
+        logger.warning('disk_alert: диск заполнен на %.0f%%, но канал алерта не настроен', used_percent)
         return
     cache_key = 'core:disk_alert'
     cooldown = int(settings.DISK_ALERT_COOLDOWN_MINUTES) * 60
@@ -162,11 +170,8 @@ def alert_disk_usage():
             return
     except Exception:
         logger.warning('disk_alert: кэш недоступен, дедупликации нет')
-    if not (settings.FAILED_TASK_ALERT_CHAT_ID or settings.FAILED_TASK_ALERT_EMAIL):
-        logger.warning('disk_alert: диск заполнен на %.0f%%, но канал алерта не настроен', used_percent)
-        return
     text = _build_disk_alert(used_percent, usage.free / 1024 ** 3, threshold)
-    if not _send_failed_task_alert(text):
+    if not _send_failed_task_alert(text, DISK_ALERT_SUBJECT):
         try:
             cache.delete(cache_key)
         except Exception:

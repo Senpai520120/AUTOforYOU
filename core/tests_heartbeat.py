@@ -52,4 +52,4 @@ class CeleryHeartbeatTests(SimpleTestCase):
         entry = settings.CELERY_BEAT_SCHEDULE['celery-heartbeat']
         self.assertEqual(entry['task'], 'core.tasks.send_celery_heartbeat')
         self.assertEqual(entry['schedule'].minute, set(range(0, 60, 5)))
-        self.assertLess(entry['options']['expires'], 300)
+        self.assertLess(entry['options']['expire_seconds'], 300)

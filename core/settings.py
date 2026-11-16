@@ -666,30 +666,34 @@ DISK_ALERT_PATH = os.environ.get('DISK_ALERT_PATH', '/').strip() or '/'
 DISK_ALERT_THRESHOLD_PERCENT = _positive_int_env('DISK_ALERT_THRESHOLD_PERCENT', 85)
 DISK_ALERT_COOLDOWN_MINUTES = _positive_int_env('DISK_ALERT_COOLDOWN_MINUTES', 360)
 
+# Лимиты времени Celery-задач, секунды: зависшая задача не держит воркер (soft - исключение внутри задачи, hard - убийство).
+CELERY_TASK_SOFT_TIME_LIMIT = _positive_int_env('CELERY_TASK_SOFT_TIME_LIMIT', 120)
+CELERY_TASK_TIME_LIMIT = _positive_int_env('CELERY_TASK_TIME_LIMIT', 180)
+
 CELERY_BEAT_SCHEDULE = {
-    # Сигнал «Celery жив» сторожу; expires: при мёртвом worker пинги не копятся и не дают ложный зелёный (9.55)
+    # Сигнал «Celery жив» сторожу; expire_seconds (не expires: DatabaseScheduler его отбрасывает): при мёртвом worker пинги не копятся и не дают ложный зелёный (9.55)
     'celery-heartbeat': {
         'task': 'core.tasks.send_celery_heartbeat',
         'schedule': _crontab(minute='*/5'),
-        'options': {'expires': 240},
+        'options': {'expire_seconds': 240},
     },
     # Рост упавших задач (FailedTask): алерт владельцу при превышении порога за окно (9.55)
     'failed-task-alert': {
         'task': 'core.tasks.alert_failed_task_growth',
         'schedule': _crontab(minute='*/10'),
-        'options': {'expires': 540},
+        'options': {'expire_seconds': 540},
     },
     # Заполнение диска: алерт владельцу при превышении порога (10.20)
     'disk-usage-alert': {
         'task': 'core.tasks.alert_disk_usage',
         'schedule': _crontab(minute='*/30'),
-        'options': {'expires': 1500},
+        'options': {'expire_seconds': 1500},
     },
     # Отчёт о воронке владельцу: понедельник 09:00 по Киеву (9.50). expires: после простоя не шлём устаревший
     'weekly-funnel-report': {
         'task': 'metrics.tasks.send_weekly_funnel_report',
         'schedule': _crontab(day_of_week=1, hour=9, minute=0),
-        'options': {'expires': 86400},
+        'options': {'expire_seconds': 86400},
     },
     # Очистка старых анонимных расчётов (2.6, 02-S2)
     'purge-anonymous-calculations-daily': {
@@ -715,7 +719,7 @@ CELERY_BEAT_SCHEDULE = {
     'cleanup-contact-views-daily': {
         'task': 'local_listings.tasks.cleanup_contact_views',
         'schedule': _crontab(hour=4, minute=30),
-        'options': {'expires': 86400},
+        'options': {'expire_seconds': 86400},
     },
     'expire-listings-daily': {
         'task': 'local_listings.tasks.expire_listings',

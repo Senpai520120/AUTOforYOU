@@ -146,4 +146,4 @@ class FailedTaskAlertTests(CleanCacheTestCase):
     def test_scheduled_every_ten_minutes_with_expiry(self):
         entry = settings.CELERY_BEAT_SCHEDULE['failed-task-alert']
         self.assertEqual(entry['task'], 'core.tasks.alert_failed_task_growth')
-        self.assertEqual(entry['options']['expires'], 540)
+        self.assertEqual(entry['options']['expire_seconds'], 540)
