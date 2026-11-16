@@ -10,6 +10,24 @@
  * INTERNAL_API_URL задається в Docker (http://backend:8000).
  */
 import { INTERNAL_API_URL as apiUrl } from '@/lib/config.server';
+import { API_URL } from '@/lib/config';
+
+const INTERNAL_MEDIA = `${apiUrl}/media/`;
+const PUBLIC_MEDIA = `${API_URL.replace(/\/+$/, '')}/media/`;
+
+/**
+ * Замінює внутрішню адресу медіа на публічну (задача 10.3).
+ *
+ * Django будує абсолютний URL фото з Host запиту. Запит із сервера Next іде на
+ * http://backend:8000, тож у відповіді фото мають адресу, яку браузер не відкриє,
+ * а /_next/image відповідає 400. Фото з S3/R2 мають власний домен і не змінюються.
+ */
+export function publicMedia<T>(data: T): T {
+  if (data == null || INTERNAL_MEDIA === PUBLIC_MEDIA) return data;
+  const json = JSON.stringify(data);
+  if (!json.includes(INTERNAL_MEDIA)) return data;
+  return JSON.parse(json.split(INTERNAL_MEDIA).join(PUBLIC_MEDIA)) as T;
+}
 
 export type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -35,7 +53,7 @@ export async function serverGet<T>(path: string, revalidate = 60): Promise<T | n
   try {
     const res = await fetch(`${apiUrl}${path}`, { next: { revalidate } });
     if (!res.ok) return null;
-    return (await res.json()) as T;
+    return publicMedia((await res.json()) as T);
   } catch {
     return null;
   }
@@ -67,7 +85,7 @@ export async function serverGetAuthed<T>(path: string): Promise<T | null> {
       cache: 'no-store',
     });
     if (!res.ok) return null;
-    return (await res.json()) as T;
+    return publicMedia((await res.json()) as T);
   } catch {
     return null;
   }

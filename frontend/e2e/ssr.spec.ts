@@ -57,3 +57,27 @@ test.describe('Серверний рендер каталогів @smoke', () =>
     expect(paths).toContain('/refund');
   });
 });
+
+test.describe('Фото оголошень у серверному HTML (10.3) @smoke', () => {
+  test('адреса фото публічна, без внутрішнього хоста бекенду', async ({ request }) => {
+    const html = await (await request.get('/ua')).text();
+    // e2e_seed кладе фото в оголошення: без цього перевірка нижче пройшла б порожньою.
+    expect(html).toContain('%2Fmedia%2F');
+    // Сервер Next ходить в API через http://backend:8000; ця адреса не має потрапити в HTML.
+    expect(html).not.toContain('backend:8000');
+    expect(html).not.toContain('backend%3A8000');
+  });
+
+  test('фото, що не завантажилось, не зациклює запити', async ({ page }) => {
+    let imageRequests = 0;
+    page.on('request', (req) => {
+      if (req.url().includes('/_next/image')) imageRequests += 1;
+    });
+    await page.goto('/ua');
+    const cards = await page.locator('article img').count();
+    expect(cards).toBeGreaterThan(0);
+    // Цикл (заміна src в onError, яку React скидає) дає десятки запитів за секунди.
+    await page.waitForTimeout(3000);
+    expect(imageRequests).toBeLessThanOrEqual(cards * 2);
+  });
+});

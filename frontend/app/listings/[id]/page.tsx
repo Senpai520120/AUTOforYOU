@@ -7,6 +7,7 @@ import { buildMetadata } from '@/lib/seo';
 import { isModuleEnabled, requireModule } from '@/lib/site-settings';
 import { listingSlug } from '@/lib/utils';
 import { INTERNAL_API_URL } from '@/lib/config.server';
+import { publicMedia } from '@/lib/server-api';
 
 const apiUrl = INTERNAL_API_URL;
 
@@ -18,7 +19,7 @@ const getListing = cache(async (id: number): Promise<Listing | null> => {
     });
     if (res.status === 404) return null;
     if (!res.ok) return null;
-    return res.json();
+    return publicMedia(await res.json());
   } catch {
     return null;
   }

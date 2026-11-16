@@ -5,6 +5,7 @@ import { LocalListing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
 import { isC2CEnabled } from '@/lib/c2c';
 import { INTERNAL_API_URL } from '@/lib/config.server';
+import { publicMedia } from '@/lib/server-api';
 
 const API = INTERNAL_API_URL;
 
@@ -12,7 +13,7 @@ async function getListing(id: string): Promise<LocalListing | null> {
   try {
     const res = await fetch(`${API}/api/v1/local/listings/${id}/`, { next: { revalidate: 60 } });
     if (!res.ok) return null;
-    return res.json();
+    return publicMedia(await res.json());
   } catch {
     return null;
   }

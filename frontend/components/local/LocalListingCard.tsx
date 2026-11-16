@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { LocalListing } from '@/lib/types';
@@ -20,7 +21,10 @@ const PLACEHOLDER_SVG =
 export default function LocalListingCard({ listing, priority = false }: { listing: LocalListing; priority?: boolean }) {
   const primary = listing.images.find((i) => i.is_primary) ?? listing.images[0];
   // 8.4: у списку — мініатюра; оригінал лише на сторінці оголошення.
-  const imgSrc = primary?.thumbnail || primary?.image || primary?.source_url || PLACEHOLDER_SVG;
+  const original = primary?.thumbnail || primary?.image || primary?.source_url || PLACEHOLDER_SVG;
+  // 10.3: заглушка через state. Пряма заміна currentTarget.src скидалась ре-рендером React → цикл запитів.
+  const [failed, setFailed] = useState(false);
+  const imgSrc = failed ? PLACEHOLDER_SVG : original;
 
   const price = Number(listing.price).toLocaleString('uk-UA');
   const isTop = listing.promoted_until && new Date(listing.promoted_until) > new Date();
@@ -35,7 +39,7 @@ export default function LocalListingCard({ listing, priority = false }: { listin
           {...(priority ? { loading: 'eager', fetchPriority: 'high' } as const : {})}
           className="object-cover"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER_SVG; }}
+          onError={() => setFailed(true)}
         />
         {isTop && (
           <span className="absolute top-2 left-2 bg-amber-400 text-black text-[11px] font-bold px-2 py-0.5 rounded-full shadow">

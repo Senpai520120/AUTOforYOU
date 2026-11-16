@@ -46,7 +46,10 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   const { phone, loading: phoneLoading, error: phoneError } = phoneReveal;
 
   const images = listing.images.length > 0 ? listing.images : [{ id: 0, image: null, source_url: '', is_primary: true }];
-  const mainImg = images[activeImg]?.image || images[activeImg]?.source_url || PLACEHOLDER_SVG;
+  const activeSrc = images[activeImg]?.image || images[activeImg]?.source_url || PLACEHOLDER_SVG;
+  // 10.3: адреси фото, що не завантажились; заглушка через state, без циклу запитів.
+  const [failedSrcs, setFailedSrcs] = useState<ReadonlySet<string>>(() => new Set());
+  const mainImg = failedSrcs.has(activeSrc) ? PLACEHOLDER_SVG : activeSrc;
   // SSR-HTML публичный и кэшируется (is_owner там всегда false), поэтому признак владельца
   // берём из авторизованного запроса на клиенте.
   const [ownerFlag, setOwnerFlag] = useState(false);
@@ -101,7 +104,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               className="object-cover"
               sizes="(max-width: 1024px) 100vw, 50vw"
               priority
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER_SVG; }}
+              onError={() => setFailedSrcs((prev) => (prev.has(activeSrc) ? prev : new Set(prev).add(activeSrc)))}
             />
           </div>
           {images.length > 1 && (

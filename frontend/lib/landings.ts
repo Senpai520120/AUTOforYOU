@@ -5,6 +5,7 @@
  * у другому чесна помилка, а не порожній розрахунок. Кеш fetch — LANDING_REVALIDATE_SECONDS (.env).
  */
 import { INTERNAL_API_URL } from '@/lib/config.server';
+import { publicMedia } from '@/lib/server-api';
 import type { LandingDetail, LandingListItem } from '@/lib/types';
 
 const DEFAULT_REVALIDATE = 60;
@@ -24,7 +25,7 @@ export async function getLanding(slug: string): Promise<LandingResult> {
     });
     if (res.status === 404) return { status: 'notfound' };
     if (!res.ok) return { status: 'error' };
-    return { status: 'ok', data: (await res.json()) as LandingDetail };
+    return { status: 'ok', data: publicMedia((await res.json()) as LandingDetail) };
   } catch {
     return { status: 'error' };
   }
@@ -35,7 +36,7 @@ export async function getLandingList(revalidate = landingRevalidate()): Promise<
   try {
     const res = await fetch(`${INTERNAL_API_URL}/api/v1/landings/`, { next: { revalidate } });
     if (!res.ok) return null;
-    const data = (await res.json()) as { results: LandingListItem[] };
+    const data = publicMedia((await res.json()) as { results: LandingListItem[] });
     return data.results;
   } catch {
     return null;
