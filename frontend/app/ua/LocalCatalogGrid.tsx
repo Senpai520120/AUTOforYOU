@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import LocalListingCard from '@/components/local/LocalListingCard';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
-import { pageHref, type SearchParams } from '@/lib/server-api';
+import { pageHref, pageWindow, type SearchParams } from '@/lib/server-api';
 
 const PAGE_SIZE = 20;
 
@@ -16,9 +16,12 @@ const PAGE_SIZE = 20;
 export default function LocalCatalogGrid({
   data,
   params,
+  page = 1,
   postingEnabled = false,
 }: {
   postingEnabled?: boolean;
+  /** Нормалізований номер сторінки (page.tsx). */
+  page?: number;
   data: PaginatedResponse<LocalListing> | null;
   params: SearchParams;
 }) {
@@ -51,8 +54,7 @@ export default function LocalCatalogGrid({
   }
 
   const totalPages = Math.ceil(data.count / PAGE_SIZE);
-  const rawPage = Array.isArray(params.page) ? params.page[0] : params.page;
-  const currentPage = Number(rawPage ?? 1);
+  const currentPage = page;
 
   return (
     <div>
@@ -65,7 +67,9 @@ export default function LocalCatalogGrid({
 
       {totalPages > 1 && (
         <nav aria-label="Пагінація" className="mt-8 flex justify-center gap-2 flex-wrap">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+          {pageWindow(currentPage, totalPages).map((p, i) => p === null ? (
+            <span key={`gap-${i}`} aria-hidden="true" className="px-1 py-1.5 text-sm text-slate-400">…</span>
+          ) : (
             <Link
               key={p}
               href={pageHref('/ua', params, p)}

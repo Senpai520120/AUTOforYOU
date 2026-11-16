@@ -4,7 +4,7 @@ import ListingFilters from '@/components/listings/ListingFilters';
 import ListingsGrid from './ListingsGrid';
 import WholesaleHint from './WholesaleHint';
 import { buildMetadata, hasFilters } from '@/lib/seo';
-import { buildQuery, serverGet, type SearchParams } from '@/lib/server-api';
+import { fetchPaginated, pageNumber, type SearchParams } from '@/lib/server-api';
 import type { Listing, PaginatedResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -15,12 +15,28 @@ export async function generateMetadata({
 }: {
   searchParams: Promise<SearchParams>;
 }): Promise<Metadata> {
+  const params = await searchParams;
+  const filtered = hasFilters(params);
+  let page = pageNumber(params);
+  // Сторінка поза діапазоном: fetchPaginated показує першу. Тоді canonical — на першу, і noindex.
+  // fetch з тим самим URL/опціями у generateMetadata і в сторінці мемоїзується в межах запиту (Next).
+  let outOfRange = false;
+  if (page > 1 && !filtered) {
+    const resolved = await fetchPaginated<PaginatedResponse<Listing>>(
+      '/api/v1/listings/', params, LISTING_FILTERS,
+    );
+    if (resolved.page !== page) {
+      outOfRange = true;
+      page = resolved.page;
+    }
+  }
   return buildMetadata({
     title: 'Каталог авто',
     description:
       'Каталог автомобілів з аукціонів США Copart та IAAI. Фільтри за статусом, типом палива, ціною. В наявності та в дорозі.',
-    path: '/listings',
-    noindex: hasFilters(await searchParams),
+    // Self-canonical для page>1 (page не фільтр у hasFilters).
+    path: page > 1 ? `/listings?page=${page}` : '/listings',
+    noindex: filtered || outOfRange,
   });
 }
 
@@ -35,8 +51,8 @@ export default async function ListingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const data = await serverGet<PaginatedResponse<Listing>>(
-    `/api/v1/listings/${buildQuery(params, LISTING_FILTERS)}`,
+  const { data, page } = await fetchPaginated<PaginatedResponse<Listing>>(
+    '/api/v1/listings/', params, LISTING_FILTERS,
   );
 
   return (
@@ -50,7 +66,7 @@ export default async function ListingsPage({
       </Suspense>
 
       <div className="mt-6">
-        <ListingsGrid data={data} params={params} />
+        <ListingsGrid data={data} params={params} page={page} />
       </div>
     </div>
   );

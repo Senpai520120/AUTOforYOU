@@ -6,7 +6,7 @@ import LocalCatalogGrid from './LocalCatalogGrid';
 import SaveSearchButton from '@/components/local/SaveSearchButton';
 import { getC2CFlags } from '@/lib/c2c';
 import { buildMetadata, hasFilters } from '@/lib/seo';
-import { buildQuery, serverGet, type SearchParams } from '@/lib/server-api';
+import { fetchPaginated, pageNumber, type SearchParams } from '@/lib/server-api';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
 
 // Каталог залежить від query-параметрів фільтрів, тому рендериться на кожен
@@ -19,12 +19,29 @@ export async function generateMetadata({
 }: {
   searchParams: Promise<SearchParams>;
 }): Promise<Metadata> {
+  const params = await searchParams;
+  const filtered = hasFilters(params);
+  let page = pageNumber(params);
+  // Сторінка поза діапазоном: fetchPaginated показує першу. Тоді canonical — на першу, і noindex.
+  // fetch з тим самим URL/опціями у generateMetadata і в сторінці мемоїзується в межах запиту (Next).
+  let outOfRange = false;
+  if (page > 1 && !filtered) {
+    const resolved = await fetchPaginated<PaginatedResponse<LocalListing>>(
+      '/api/v1/local/listings/', params, LOCAL_FILTERS,
+    );
+    if (resolved.page !== page) {
+      outOfRange = true;
+      page = resolved.page;
+    }
+  }
   return buildMetadata({
     title: 'Каталог Україна',
     description:
       'Місцеві оголошення про продаж авто по всій Україні. Фільтри за маркою, регіоном, паливом, ціною.',
-    path: '/ua',
-    noindex: hasFilters(await searchParams),
+    // Self-canonical для page>1: hasFilters уже не вважає page фільтром, тож
+    // сторінки пагінації індексуються (sitemap веде на них), а не склеюються з першою.
+    path: page > 1 ? `/ua?page=${page}` : '/ua',
+    noindex: filtered || outOfRange,
   });
 }
 
@@ -53,11 +70,9 @@ export default async function UaCatalogPage({
     const v = Array.isArray(raw) ? raw[0] : raw;
     return v !== undefined && v !== '' && !/^\d+(\.\d+)?$/.test(v);
   });
-  const data = badFilters.length > 0
-    ? null
-    : await serverGet<PaginatedResponse<LocalListing>>(
-        `/api/v1/local/listings/${buildQuery(params, LOCAL_FILTERS)}`,
-      );
+  const { data, page } = badFilters.length > 0
+    ? { data: null, page: 1 }
+    : await fetchPaginated<PaginatedResponse<LocalListing>>('/api/v1/local/listings/', params, LOCAL_FILTERS);
 
   return (
     <div>
@@ -94,7 +109,7 @@ export default async function UaCatalogPage({
             Некоректне значення фільтра (ціна, рік або пробіг мають бути числом). Змініть фільтри та спробуйте ще раз.
           </div>
         ) : (
-          <LocalCatalogGrid data={data} params={params} postingEnabled={flags.postingEnabled} />
+          <LocalCatalogGrid data={data} params={params} page={page} postingEnabled={flags.postingEnabled} />
         )}
       </div>
     </div>

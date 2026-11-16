@@ -14,18 +14,25 @@ interface Props {
 export default function HeartButton({ listingType, listingId, size = 'md' }: Props) {
   const { user } = useAuth();
   const router = useRouter();
-  const [isFav, setIsFav] = useState(false);
+  // Статус привʼязаний до (тип, id): при зміні оголошення або виході з акаунта
+  // старе значення не показується (isFav = false), без setState в ефекті.
+  const key = `${listingType}:${listingId}`;
+  const [fav, setFav] = useState<{ key: string; value: boolean } | null>(null);
+  const isFav = Boolean(user) && fav?.key === key && fav.value;
+  const setIsFav = (value: boolean) => setFav({ key, value });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     getFavoriteStatus(listingType, listingId)
-      .then(d => setIsFav(d.is_favorite))
+      .then(d => { if (!cancelled) setFav({ key, value: d.is_favorite }); })
       .catch(() => {
         // Початковий статус не критичний: сердечко лишається незаповненим, дія покаже помилку.
       });
-  }, [user, listingType, listingId]);
+    return () => { cancelled = true; };
+  }, [user, listingType, listingId, key]);
 
   const toggle = async (e: React.MouseEvent) => {
     e.preventDefault();

@@ -15,7 +15,10 @@ export function useRequireAuth() {
   const { user, loading } = auth;
 
   useEffect(() => {
-    if (!loading && !user) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    if (loading || user) return;
+    // search читаємо в ефекті (лише клієнт): useSearchParams вимагав би Suspense на кожній приватній сторінці.
+    const next = `${pathname}${window.location.search}`;
+    router.replace(`/login?next=${encodeURIComponent(next)}`);
   }, [user, loading, router, pathname]);
 
   return auth;

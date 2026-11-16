@@ -91,6 +91,49 @@ export async function serverGetAuthed<T>(path: string): Promise<T | null> {
   }
 }
 
+/** ?page= → ціле ≥ 1; abc, 0, -1, 1.5 дають 1. */
+export function pageNumber(params: SearchParams): number {
+  const raw = params.page;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === undefined || !/^\d{1,6}$/.test(value)) return 1;
+  return Math.max(1, Number(value));
+}
+
+/**
+ * Номери для пагінації: перша, остання і вікно ±2 навколо поточної; `null` — «…».
+ */
+export function pageWindow(current: number, total: number, radius = 2): (number | null)[] {
+  const pages: (number | null)[] = [];
+  let prev = 0;
+  for (let p = 1; p <= total; p++) {
+    if (p === 1 || p === total || Math.abs(p - current) <= radius) {
+      if (p - prev > 1) pages.push(null);
+      pages.push(p);
+      prev = p;
+    }
+  }
+  return pages;
+}
+
+/**
+ * Список з ?page=: якщо сторінки за межами діапазону немає (DRF 404 → null),
+ * повертає першу, а не «не вдалося завантажити».
+ */
+export async function fetchPaginated<T>(
+  basePath: string,
+  params: SearchParams,
+  allowed: readonly string[],
+): Promise<{ data: T | null; page: number }> {
+  let page = pageNumber(params);
+  const query = (p: number) => buildQuery({ ...params, page: p > 1 ? String(p) : undefined }, allowed);
+  let data = await serverGet<T>(`${basePath}${query(page)}`);
+  if (data === null && page > 1) {
+    page = 1;
+    data = await serverGet<T>(`${basePath}${query(1)}`);
+  }
+  return { data, page };
+}
+
 /** Посилання на ту саму сторінку з іншим значенням page. */
 export function pageHref(basePath: string, params: SearchParams, page: number): string {
   const p = new URLSearchParams();

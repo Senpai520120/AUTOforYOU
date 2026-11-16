@@ -23,8 +23,9 @@ export default function LocalListingCard({ listing, priority = false }: { listin
   // 8.4: у списку — мініатюра; оригінал лише на сторінці оголошення.
   const original = primary?.thumbnail || primary?.image || primary?.source_url || PLACEHOLDER_SVG;
   // 10.3: заглушка через state. Пряма заміна currentTarget.src скидалась ре-рендером React → цикл запитів.
-  const [failed, setFailed] = useState(false);
-  const imgSrc = failed ? PLACEHOLDER_SVG : original;
+  // Зберігаємо саме адресу, що впала: при зміні фото (інший src) заглушка скидається.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const imgSrc = failedSrc === original ? PLACEHOLDER_SVG : original;
 
   const price = Number(listing.price).toLocaleString('uk-UA');
   const isTop = listing.promoted_until && new Date(listing.promoted_until) > new Date();
@@ -39,7 +40,7 @@ export default function LocalListingCard({ listing, priority = false }: { listin
           {...(priority ? { loading: 'eager', fetchPriority: 'high' } as const : {})}
           className="object-cover"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(original)}
         />
         {isTop && (
           <span className="absolute top-2 left-2 bg-amber-400 text-black text-[11px] font-bold px-2 py-0.5 rounded-full shadow">

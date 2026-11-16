@@ -10,6 +10,8 @@ import { publicMedia } from '@/lib/server-api';
 const API = INTERNAL_API_URL;
 
 async function getListing(id: string): Promise<LocalListing | null> {
+  // Не число — нічого не питаємо в API (як sellers/[id]).
+  if (!/^\d{1,10}$/.test(id)) return null;
   try {
     const res = await fetch(`${API}/api/v1/local/listings/${id}/`, { next: { revalidate: 60 } });
     if (!res.ok) return null;

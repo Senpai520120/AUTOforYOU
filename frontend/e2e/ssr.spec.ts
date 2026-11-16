@@ -9,7 +9,7 @@
  * Скелетон позначений класом animate-pulse — його наявність без JS і означала б
  * повернення до клієнтського завантаження.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Route } from '@playwright/test';
 
 test.describe('Серверний рендер каталогів @smoke', () => {
   test.use({ javaScriptEnabled: false });
@@ -69,13 +69,23 @@ test.describe('Фото оголошень у серверному HTML (10.3) @
   });
 
   test('фото, що не завантажилось, не зациклює запити', async ({ page }) => {
+    // Без примусового збою тест зелений і без захисту: змушуємо всі фото падати.
+    // Оптимізоване фото йде через /_next/image, unoptimized — напряму з /media/ або S3/R2.
     let imageRequests = 0;
-    page.on('request', (req) => {
-      if (req.url().includes('/_next/image')) imageRequests += 1;
-    });
+    const failImage = async (route: Route) => {
+      imageRequests += 1;
+      await route.fulfill({ status: 404, body: '' });
+    };
+    await page.route('**/_next/image**', failImage);
+    await page.route('**/media/**', failImage);
+    await page.route(/\.(?:jpe?g|png|webp|avif)(?:\?.*)?$/i, failImage);
     await page.goto('/ua');
-    const cards = await page.locator('article img').count();
+    const imgs = page.locator('article img');
+    const cards = await imgs.count();
     expect(cards).toBeGreaterThan(0);
+    // Збій справді стався: усі картки перейшли на заглушку (data:-адреса), а не лишились з фото.
+    await expect(imgs.first()).toHaveAttribute('src', /^data:image\/svg\+xml/);
+    expect(imageRequests).toBeGreaterThan(0);
     // Цикл (заміна src в onError, яку React скидає) дає десятки запитів за секунди.
     await page.waitForTimeout(3000);
     expect(imageRequests).toBeLessThanOrEqual(cards * 2);

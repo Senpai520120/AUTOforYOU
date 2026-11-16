@@ -49,6 +49,8 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   const activeSrc = images[activeImg]?.image || images[activeImg]?.source_url || PLACEHOLDER_SVG;
   // 10.3: адреси фото, що не завантажились; заглушка через state, без циклу запитів.
   const [failedSrcs, setFailedSrcs] = useState<ReadonlySet<string>>(() => new Set());
+  const markFailed = (src: string) =>
+    setFailedSrcs((prev) => (prev.has(src) ? prev : new Set(prev).add(src)));
   const mainImg = failedSrcs.has(activeSrc) ? PLACEHOLDER_SVG : activeSrc;
   // SSR-HTML публичный и кэшируется (is_owner там всегда false), поэтому признак владельца
   // берём из авторизованного запроса на клиенте.
@@ -104,26 +106,30 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               className="object-cover"
               sizes="(max-width: 1024px) 100vw, 50vw"
               priority
-              onError={() => setFailedSrcs((prev) => (prev.has(activeSrc) ? prev : new Set(prev).add(activeSrc)))}
+              onError={() => markFailed(activeSrc)}
             />
           </div>
           {images.length > 1 && (
             <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-              {images.map((img, i) => (
+              {images.map((img, i) => {
+                const thumbSrc = img.image || img.source_url || PLACEHOLDER_SVG;
+                return (
                 <button
                   key={img.id || i}
                   onClick={() => setActiveImg(i)}
                   className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-colors ${i === activeImg ? 'border-blue-600' : 'border-transparent'}`}
                 >
                   <Image
-                    src={img.image || img.source_url || PLACEHOLDER_SVG}
+                    src={failedSrcs.has(thumbSrc) ? PLACEHOLDER_SVG : thumbSrc}
                     alt={`Фото ${i + 1} з ${images.length} — ${listing.make} ${listing.model} ${listing.year}`}
                     fill
                     className="object-cover"
                     sizes="64px"
+                    onError={() => markFailed(thumbSrc)}
                   />
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
