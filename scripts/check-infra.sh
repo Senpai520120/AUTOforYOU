@@ -5,7 +5,7 @@
 # Нужен Docker (кроме lf; shellcheck - если нет локального). На Windows (Git Bash) shell-тесты
 # идут в ubuntu:24.04: NTFS не хранит права файлов, и test_deploy.sh там ложно падает.
 # Код возврата 0 = все выбранные разделы прошли.
-# shellcheck disable=SC2317  # функции check_* вызываются по имени раздела ("check_${s//-/_}")
+# shellcheck disable=SC2317,SC2329  # функции check_* вызываются по имени раздела ("check_${s//-/_}")
 set -uo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
