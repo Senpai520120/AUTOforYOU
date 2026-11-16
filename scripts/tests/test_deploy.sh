@@ -85,6 +85,7 @@ new_project() {
     P=$(mktemp -d -p "$TMP")
     mkdir -p "$P/scripts" "$P/nginx" "$P/frontend"
     cp "$ROOT/deploy.sh" "$P/deploy.sh"
+    cp "$ROOT/scripts/lib-image-tag.sh" "$P/scripts/lib-image-tag.sh"
     printf '#!/bin/sh\necho "backup.sh $*" >> "$STUB_LOG"\nmkdir -p "${BACKUP_DIR:-./backups}"\ntouch "${BACKUP_DIR:-./backups}/autoforyou_2026-01-01_0330.dump"\n' > "$P/scripts/backup.sh"
     printf '#!/bin/sh\necho "update-cloudflare-ips.sh" >> "$STUB_LOG"\n' > "$P/scripts/update-cloudflare-ips.sh"
     chmod +x "$P/scripts/"*.sh "$P/deploy.sh"
@@ -368,6 +369,33 @@ mkdir -p "$P/.deploy"; echo a1a1a1a > "$P/.deploy/current_tag"
 STUB_ENV="STUB_UP_FAIL_TAG=b2b2b2b" run_deploy --skip-backup
 [ "$RC" -ne 0 ] && ok "провал up --wait: код != 0" || bad "провал up --wait: ожидался код != 0"
 check "провал up --wait: поднят предыдущий тег" "a1a1a1a" "$(cat "$STATE/last_up_tag")"
+check "провал up --wait: current_tag не изменился" "a1a1a1a" "$(cat "$P/.deploy/current_tag")"
+[ ! -e "$P/.deploy/previous_tag" ] && ok "провал up --wait: previous_tag не записан" || bad "провал up --wait: previous_tag записан"
+
+# Упавший деплой не затирает настоящий предыдущий тег (ревью 2026-11-16 п. 13)
+for fail_env in "STUB_SMOKE_BAD_TAG=b2b2b2b" "STUB_UP_FAIL_TAG=b2b2b2b"; do
+    new_project; mkenv
+    mkdir -p "$P/.deploy"; echo a1a1a1a > "$P/.deploy/current_tag"; echo 9f9f9f9 > "$P/.deploy/previous_tag"
+    STUB_ENV="$fail_env" run_deploy --skip-backup
+    [ "$RC" -ne 0 ] && ok "$fail_env: код != 0" || bad "$fail_env: ожидался код != 0"
+    check "$fail_env: previous_tag не изменился" "9f9f9f9" "$(cat "$P/.deploy/previous_tag")"
+    check "$fail_env: current_tag не изменился" "a1a1a1a" "$(cat "$P/.deploy/current_tag")"
+    lacks "$fail_env: образы предыдущего тега не удалены" "$(docker_log)" "image rm"
+done
+
+# ── 5a. Параллельный деплой блокируется (flock) ──────────────────────────────
+new_project; mkenv
+mkdir -p "$P/.deploy"
+flock "$P/.deploy/lock" sleep 4 &
+LOCK_PID=$!
+sleep 1
+run_deploy
+wait "$LOCK_PID" 2> /dev/null || true   # flock держит блокировку, пока не выйдет sleep
+[ "$RC" -ne 0 ] && ok "деплой при занятой блокировке: код != 0" || bad "деплой при занятой блокировке: ожидался код != 0"
+contains "деплой при занятой блокировке: сообщение" "$OUT" "деплой уже идёт"
+lacks "деплой при занятой блокировке: стек не тронут" "$(docker_log)" " up -d"
+run_deploy
+check "после снятия блокировки деплой проходит" "0" "$RC"
 
 new_project; mkenv
 STUB_ENV="STUB_SMOKE_BAD_TAG=b2b2b2b" run_deploy --skip-backup

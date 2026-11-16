@@ -43,4 +43,12 @@ SH=$(command -v dash || command -v sh)
 check "подключение из POSIX sh ($SH): тег из current_tag" "a1b2c3d"     "$(cd "$TMP" && env -u IMAGE_TAG "$SH" -c '. scripts/lib-image-tag.sh; echo "${IMAGE_TAG:-unset}"' 2>&1)"
 check "docker compose видит IMAGE_TAG из current_tag" "TAG=a1b2c3d" "$(cd "$TMP" && env -u IMAGE_TAG PATH="$TMP/bin:$PATH" bash -c '. scripts/lib-image-tag.sh; docker compose ps')"
 
+# Чужой compose-проект (COMPOSE_CMD): .deploy относится к боевому стеку, тег из него не берём.
+check "COMPOSE_CMD задан: тег из current_tag не берётся" "unset" "$(get COMPOSE_CMD='docker compose -p e2e')"
+check "COMPOSE_CMD задан: явный IMAGE_TAG сохраняется" "manual" "$(get COMPOSE_CMD='docker compose -p e2e' IMAGE_TAG=manual)"
+check "COMPOSE_CMD пуст: тег из current_tag берётся" "a1b2c3d" "$(get COMPOSE_CMD=)"
+check "IMAGE_TAG_LIB_NO_AUTO: тег не подставляется" "unset" "$(get IMAGE_TAG_LIB_NO_AUTO=1)"
+check "is_image_tag принимает sha и local" "yes" "$(cd "$TMP" && bash -c '. scripts/lib-image-tag.sh; is_image_tag a1b2c3d && is_image_tag local && echo yes' 2> /dev/null)"
+check "is_image_tag отвергает мусор" "no" "$(cd "$TMP" && bash -c '. scripts/lib-image-tag.sh; is_image_tag "a1b2c3d; x" || is_image_tag "" || echo no' 2> /dev/null)"
+
 if [ "$fails" -eq 0 ]; then echo "Все проверки пройдены"; exit 0; else echo "Провалено: $fails"; exit 1; fi

@@ -3,15 +3,25 @@
 # Только POSIX sh: подключается и из bash, и из /bin/sh-скриптов (init-letsencrypt.sh; на Ubuntu sh = dash).
 # deploy.sh собирает образы с тегом IMAGE_TAG=<git sha> и пишет его в .deploy/current_tag;
 # без IMAGE_TAG docker-compose.yml берёт ${IMAGE_TAG:-local} -> образ :local не найден / собирается лишний.
-# Если IMAGE_TAG не задан и есть непустой .deploy/current_tag - берём тег оттуда. Иначе (локальная разработка) без изменений.
-if [ -z "${IMAGE_TAG:-}" ] && [ -s .deploy/current_tag ]; then
-    _image_tag="$(tr -d '[:space:]' < .deploy/current_tag)"
-    # Тег попадает в команды docker: только git sha или 'local' (как read_state в deploy.sh).
-    if printf '%s\n' "$_image_tag" | grep -Eqx '[0-9a-f]{7,40}|local'; then
+#
+# Общее с deploy.sh: каталог состояния STATE_DIR и проверка тега is_image_tag.
+# Автоподстановка IMAGE_TAG: если он не задан и есть непустой $STATE_DIR/current_tag - берём тег оттуда.
+# Не подставляем, если задан COMPOSE_CMD (нестандартный/чужой compose-проект, например e2e: у него свои образы,
+# а .deploy относится к боевому стеку) и если deploy.sh попросил только функции (IMAGE_TAG_LIB_NO_AUTO=1).
+STATE_DIR="${STATE_DIR:-.deploy}"
+
+# Тег попадает в команды docker: только git sha или 'local'.
+is_image_tag() { # $1 = тег
+    printf '%s\n' "$1" | grep -Eqx '[0-9a-f]{7,40}|local'
+}
+
+if [ -z "${IMAGE_TAG:-}" ] && [ -z "${COMPOSE_CMD:-}" ] && [ -z "${IMAGE_TAG_LIB_NO_AUTO:-}" ] && [ -s "$STATE_DIR/current_tag" ]; then
+    _image_tag="$(tr -d '[:space:]' < "$STATE_DIR/current_tag")"
+    if is_image_tag "$_image_tag"; then
         IMAGE_TAG="$_image_tag"
         export IMAGE_TAG
     else
-        echo "ПРЕДУПРЕЖДЕНИЕ: .deploy/current_tag повреждён, IMAGE_TAG не выставлен" >&2
+        echo "ПРЕДУПРЕЖДЕНИЕ: $STATE_DIR/current_tag повреждён, IMAGE_TAG не выставлен" >&2
     fi
     unset _image_tag
 fi

@@ -20,6 +20,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 ENV_FILE="${DEPLOY_ENV_FILE:-.env}"
 STATE_DIR=".deploy"
+# Общая с scripts/lib-image-tag.sh проверка тега (is_image_tag). Автоподстановку IMAGE_TAG из .deploy здесь не нужна:
+# deploy.sh сам задаёт IMAGE_TAG для каждой команды.
+export IMAGE_TAG_LIB_NO_AUTO=1
+# shellcheck source=/dev/null  # scripts/lib-image-tag.sh: CI запускает shellcheck без -x
+. scripts/lib-image-tag.sh
 WAIT_TIMEOUT="${DEPLOY_WAIT_TIMEOUT:-300}"
 SMOKE_RETRIES="${DEPLOY_SMOKE_RETRIES:-15}"
 SMOKE_SLEEP="${DEPLOY_SMOKE_SLEEP:-2}"
@@ -62,6 +67,13 @@ for arg in "$@"; do
         *) usage >&2; die "неизвестный аргумент: $arg" ;;
     esac
 done
+
+# ─── Защита от параллельных деплоев ──────────────────────────────────────────
+# Второй деплой/откат одновременно перепутал бы теги и контейнеры. Блокировка снимается при выходе процесса.
+command -v flock > /dev/null 2>&1 || die "нужна утилита flock (пакет util-linux)."
+(umask 077 && mkdir -p "$STATE_DIR")
+exec 9> "$STATE_DIR/lock"
+flock -n 9 || die "деплой уже идёт (блокировка $STATE_DIR/lock). Дождитесь его завершения."
 
 # ─── Загрузка настроек ───────────────────────────────────────────────────────
 # Файл не исполняется как shell (в нём бывают значения с пробелами, # и $): читаются только строки KEY=VALUE.
@@ -222,7 +234,7 @@ preflight() {
 read_state() {
     local v=""
     if [ -s "$STATE_DIR/$1" ]; then v="$(tr -d '[:space:]' < "$STATE_DIR/$1")"; fi
-    if [ -n "$v" ] && ! [[ "$v" =~ ^([0-9a-f]{7,40}|local)$ ]]; then
+    if [ -n "$v" ] && ! is_image_tag "$v"; then
         die "$STATE_DIR/$1 повреждён (ожидался git sha, получено '$v'). Удалите файл вручную."
     fi
     printf '%s' "$v"
@@ -246,7 +258,8 @@ do_backup() {
         return 0
     fi
     log "Бэкап перед деплоем: scripts/backup.sh --now"
-    ./scripts/backup.sh --now || die "бэкап не удался, деплой отменён (--skip-backup пропускает бэкап осознанно)."
+    # backup.sh видит COMPOSE_CMD и сам тег из .deploy не берёт: передаём тег работающего стека явно.
+    IMAGE_TAG="${CURRENT:-}" ./scripts/backup.sh --now || die "бэкап не удался, деплой отменён (--skip-backup пропускает бэкап осознанно)."
     local dir="${BACKUP_DIR:-./backups}"
     LAST_DUMP="$(find "$dir" -maxdepth 1 -name 'autoforyou_*.dump' 2> /dev/null | sort | tail -n 1 || true)"
     if [ -n "$LAST_DUMP" ]; then
@@ -420,9 +433,6 @@ fail_deploy() {
     exit 1
 }
 
-# Запоминаем предыдущий тег до запуска (нужен и автоматическому, и ручному откату).
-if [ -n "$CURRENT" ] && [ "$CURRENT" != "$TAG" ]; then write_state previous_tag "$CURRENT"; fi
-
 up_stack "$TAG" "$BUILD_ARG" || fail_deploy "docker compose up --wait не дождался healthy-сервисов."
 [ "$CF_CHANGED" = 1 ] && { log "Диапазоны Cloudflare изменились - перезапуск nginx."; dc restart nginx; }
 smoke || fail_deploy "smoke-проверка не прошла."
@@ -430,6 +440,9 @@ if [ "$DO_E2E" = 1 ]; then
     smoke_e2e || fail_deploy "Playwright @smoke не прошёл."
 fi
 
+# Теги меняются только после успешного smoke: упавший деплой не должен затирать настоящий предыдущий тег
+# (иначе ручной --rollback поднял бы тот же тег, а prune_old_tags удалил бы образы старого).
+if [ -n "$CURRENT" ] && [ "$CURRENT" != "$TAG" ]; then write_state previous_tag "$CURRENT"; fi
 write_state current_tag "$TAG"
 prune_old_tags
 log "Готово. Работает тег $TAG."
