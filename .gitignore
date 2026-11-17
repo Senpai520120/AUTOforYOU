@@ -84,3 +84,9 @@ private_media/
 
 # Состояние деплоя (теги образов для отката, задача 7.5)
 .deploy/
+
+# Terraform
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+infra/terraform/terraform.tfvars

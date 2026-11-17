@@ -1,0 +1,3 @@
+# Скопируйте в terraform.tfvars (он в .gitignore) и подставьте свой IP.
+# Узнать свой IP: curl https://checkip.amazonaws.com
+ssh_cidr = "x.x.x.x/32"
