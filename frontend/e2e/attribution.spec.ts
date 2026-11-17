@@ -50,8 +50,8 @@ test('успіх: UTM з калькулятора доходить до реєс
 }) => {
   const password = e2ePassword();
   await page.goto('/calculator?utm_source=tiktok&utm_campaign=test');
-  const stored = await page.evaluate(() => window.sessionStorage.getItem('afy:attribution'));
-  expect(stored).toContain('tiktok');
+  // UTM пишеться після гідратації: чекаємо, а не читаємо одразу після goto.
+  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem('afy:attribution') ?? '')).toContain('tiktok');
   await page.goto('/register');
   await fillRegister(page, uniqueEmail, password);
   const body = await submitRegister(page);
