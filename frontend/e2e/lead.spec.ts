@@ -215,9 +215,15 @@ test.describe('Гість', () => {
   });
 });
 
+/** UTM пишеться в sessionStorage після гідратації: без очікування наступний goto може піти раніше. */
+async function waitForAttribution(page: Page, text: string) {
+  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem('afy:attribution') ?? '')).toContain(text);
+}
+
 test.describe('Джерело заявки (Н-26)', () => {
   test('UTM зберігаються в sessionStorage, не в cookie, і йдуть у тілі запиту', async ({ page, context }) => {
     await page.goto('/calculator?utm_source=tiktok&utm_campaign=test');
+    await waitForAttribution(page, 'tiktok');
     await page.goto('/ua');
     await calculate(page);
     await fillLead(page, { name: '[E2E] UTM', phone: '0671234567' });
@@ -233,7 +239,9 @@ test.describe('Джерело заявки (Н-26)', () => {
 
   test('нова кампанія замінює стару; звичайний перехід не стирає', async ({ page }) => {
     await page.goto('/calculator?utm_source=tiktok&utm_campaign=a');
+    await waitForAttribution(page, 'tiktok');
     await page.goto('/calculator?utm_source=instagram');
+    await waitForAttribution(page, 'instagram');
     await page.goto('/ua');
     await calculate(page);
     await fillLead(page, { name: '[E2E] UTM2', phone: '0671234567' });
