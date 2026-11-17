@@ -2,7 +2,7 @@
 Tests for C2C-промт 4: favorites, notifications, saved_searches.
 """
 from django.test import TestCase
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APITestCase
 
 from favorites.models import Favorite
 from local_listings.models import City, LocalListing, Region
@@ -10,26 +10,13 @@ from notifications.models import Notification
 from notifications.services import create_notification, unread_count
 from saved_searches.models import SavedSearch
 from saved_searches.tasks import check_saved_searches
-from users.models import CustomUser
+from tests.factories import make_local_listing, make_user
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def make_user(email, role='buyer', **kw):
-    return CustomUser.objects.create_user(email=email, password='pass1234', role=role, **kw)
-
-
 def make_listing(owner, region, city, **kw):
-    defaults = dict(
-        make='Toyota', model='Camry', year=2020,
-        mileage_km=50000, fuel_type='petrol', transmission='auto',
-        body_type='sedan', condition='used',
-        price='500000', currency='UAH', price_type='fixed',
-        region=region, city=city,
-        status=LocalListing.Status.ACTIVE,
-        agreed_to_rules=True,
-    )
-    defaults.update(kw)
-    return LocalListing.objects.create(owner=owner, **defaults)
+    # Тонкая обёртка: регион/город передаются позиционно.
+    return make_local_listing(owner, region=region, city=city, **kw)
 
 
 class SetupMixin(TestCase):
@@ -81,13 +68,13 @@ class TestNotificationAPI(SetupMixin):
         self.auth(self.buyer)
         r = self.client.get('/api/v1/notifications/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(r.data), 1)
+        self.assertEqual(r.data['count'], 1)
 
     def test_other_user_cannot_see(self):
         create_notification(self.buyer.pk, Notification.Type.NEW_MESSAGE, 'Test', '')
         self.auth(self.seller)
         r = self.client.get('/api/v1/notifications/')
-        self.assertEqual(len(r.data), 0)
+        self.assertEqual(r.data['count'], 0)
 
     def test_unread_count_api(self):
         create_notification(self.buyer.pk, Notification.Type.LISTING_APPROVED, 'OK', '')
@@ -284,7 +271,55 @@ class TestSavedSearchTask(SetupMixin):
         # Run again — last_notified_at is now updated, so no new listings
         check_saved_searches()
         count_second = Notification.objects.filter(user=self.buyer, type=Notification.Type.SAVED_SEARCH_MATCH).count()
+        # Без этого тест зелёный и когда задача вообще не создаёт уведомлений (0 == 0).
+        self.assertGreater(count_first, 0)
         self.assertEqual(count_first, count_second)
+
+    def test_failure_in_one_search_does_not_break_others_and_rolls_back(self):
+        """Сбой на одном поиске: его уведомления откатываются, остальные обработаны."""
+        import datetime
+        from unittest.mock import patch
+
+        from django.utils import timezone
+        old = timezone.now() - datetime.timedelta(days=1)
+        bad = SavedSearch.objects.create(
+            user=self.buyer, name='Bad', filters={'make': 'Toyota'}, notify=True, last_notified_at=old)
+        other = make_user('other_ss@test.com')
+        good = SavedSearch.objects.create(
+            user=other, name='Good', filters={'make': 'Toyota'}, notify=True, last_notified_at=old)
+
+        from notifications.services import create_notification as real_create
+
+        def flaky(user_id, *args, **kwargs):
+            real_create(user_id, *args, **kwargs)
+            if user_id == self.buyer.pk:
+                raise RuntimeError('boom')
+
+        with patch('notifications.services.create_notification', side_effect=flaky):
+            result = check_saved_searches()
+
+        self.assertEqual(result, {'processed': 1})
+        self.assertEqual(Notification.objects.filter(user=self.buyer).count(), 0)
+        self.assertGreater(Notification.objects.filter(user=other).count(), 0)
+        bad.refresh_from_db()
+        good.refresh_from_db()
+        self.assertEqual(bad.last_notified_at, old)
+        self.assertGreater(good.last_notified_at, old)
+
+    def test_telegram_summary_sent_only_after_commit(self):
+        import datetime
+        from unittest.mock import patch
+
+        from django.utils import timezone
+        SavedSearch.objects.create(
+            user=self.buyer, name='Camry', filters={'make': 'Toyota'}, notify=True,
+            last_notified_at=timezone.now() - datetime.timedelta(days=1))
+        with patch('integrations.tasks.send_notification.delay') as send:
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                check_saved_searches()
+                send.assert_not_called()  # внутри транзакции отправки ещё нет
+            self.assertEqual(len(callbacks), 1)
+            send.assert_called_once()  # после коммита - ровно одна
 
     def test_task_skips_non_matching(self):
         """SavedSearch для Honda не спрацьовує на Toyota."""
@@ -301,3 +336,66 @@ class TestSavedSearchTask(SetupMixin):
         check_saved_searches()
         n = Notification.objects.filter(user=self.buyer, type=Notification.Type.SAVED_SEARCH_MATCH).first()
         self.assertIsNone(n)
+
+    def test_soft_time_limit_is_not_swallowed(self):
+        """SoftTimeLimitExceeded из обработки поиска пробрасывается, а не глотается общим except Exception."""
+        import datetime
+        from unittest.mock import patch
+
+        from celery.exceptions import SoftTimeLimitExceeded
+        from django.utils import timezone
+        SavedSearch.objects.create(
+            user=self.buyer, name='Camry', filters={'make': 'Toyota'}, notify=True,
+            last_notified_at=timezone.now() - datetime.timedelta(days=1))
+        with patch('saved_searches.tasks._process_search', side_effect=SoftTimeLimitExceeded()):
+            with self.assertRaises(SoftTimeLimitExceeded):
+                check_saved_searches()
+
+
+# ── Задача 4.7: пагинация, mark-read, шаблоны ────────────────────────────────
+
+class TestNotifications47(APITestCase):
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.user = make_user()
+        self.client.force_authenticate(self.user)
+
+    def test_list_paginated(self):
+        Notification.objects.bulk_create(
+            Notification(user=self.user, type=Notification.Type.NEW_MESSAGE, title=f'n{i}') for i in range(60))
+        r = self.client.get('/api/v1/notifications/')
+        self.assertEqual(r.data['count'], 60)
+        self.assertIsNotNone(r.data['next'])
+
+    def test_mark_read_validation_and_counts(self):
+        mine = create_notification(self.user.pk, Notification.Type.NEW_MESSAGE, 'mine')
+        create_notification(self.user.pk, Notification.Type.NEW_MESSAGE, 'mine2')
+        other = create_notification(make_user().pk, Notification.Type.NEW_MESSAGE, 'other')
+        url = '/api/v1/notifications/mark-read/'
+        self.assertEqual(self.client.post(url, {'id': 'abc'}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(url, {'id': other.pk}, format='json').data, {'marked': 0})
+        other.refresh_from_db()
+        self.assertFalse(other.is_read)
+        self.assertEqual(self.client.post(url, {'id': mine.pk}, format='json').data, {'marked': 1})
+        self.assertEqual(self.client.post(url, {'all': True}, format='json').data, {'marked': 1})
+
+    def test_template_change_changes_text(self):
+        from notifications.models import NotificationTemplate
+        from notifications.services import notify
+        NotificationTemplate.objects.update_or_create(
+            code='deal_confirmed', defaults={'title': 'Готово: {listing}', 'text': 'Т'})
+        with self.captureOnCommitCallbacks(execute=False):
+            notify(self.user.pk, 'deal_confirmed', {'listing': 'BMW X5 2019'})
+        self.assertEqual(Notification.objects.get(user=self.user).title, 'Готово: BMW X5 2019')
+
+    def test_broken_template_falls_back_and_logs(self):
+        from notifications.models import NotificationTemplate
+        from notifications.services import notify
+        NotificationTemplate.objects.update_or_create(
+            code='deal_confirmed', defaults={'title': 'Біда {unknown} {listing.__class__}', 'text': ''})
+        with self.assertLogs('notifications.services', level='ERROR'), \
+                self.captureOnCommitCallbacks(execute=False):
+            notify(self.user.pk, 'deal_confirmed', {'listing': 'BMW X5 2019'})
+        self.assertEqual(Notification.objects.get(user=self.user).title, 'Угоду підтверджено')

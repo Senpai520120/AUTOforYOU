@@ -1,17 +1,21 @@
 import { apiGet, apiPost } from '@/api/client';
 import type {
+  PaginatedResponse,
   ConversationSummary,
   ConversationDetail,
   ChatMessage,
   StartConversationResult,
 } from '@/lib/types';
 
-export function getConversations() {
-  return apiGet<ConversationSummary[]>('/api/v1/messages/conversations/');
+/** Список діалогів посторінково (4.7). */
+export function getConversations(page = 1) {
+  return apiGet<PaginatedResponse<ConversationSummary>>(`/api/v1/messages/conversations/?page=${page}`);
 }
 
-export function getConversation(id: number) {
-  return apiGet<ConversationDetail>(`/api/v1/messages/conversations/${id}/`);
+/** Останні MESSAGES_PAGE_SIZE повідомлень; `before` — id, раніше якого підвантажити порцію. */
+export function getConversation(id: number, before?: number) {
+  const q = before ? `?before=${before}` : '';
+  return apiGet<ConversationDetail>(`/api/v1/messages/conversations/${id}/${q}`);
 }
 
 export function sendMessage(conversationId: number, text: string) {

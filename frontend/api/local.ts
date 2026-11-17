@@ -3,11 +3,13 @@ import {
   LocalListing,
   LocalListingFilters,
   LocalListingImage,
+  LocalConfig,
   PromotionTariff,
   PromoteCheckout,
   PaginatedResponse,
   Region,
   City,
+  CityOption,
   VinPrefillResult,
 } from '@/lib/types';
 
@@ -42,8 +44,23 @@ export const localApi = {
   cities: (regionId: number) =>
     apiGet<City[]>(`/api/v1/local/regions/${regionId}/cities/`),
 
+  /** 8.2: пошук населеного пункту (автодоповнення); ліміти — з config(). */
+  searchCities: (params: { q: string; region?: number; limit?: number }, signal?: AbortSignal) => {
+    const qs = new URLSearchParams({ q: params.q });
+    if (params.region) qs.set('region', String(params.region));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return apiFetch<CityOption[]>(`/api/v1/local/cities/?${qs.toString()}`, { signal });
+  },
+
   vinPrefill: (vin: string) =>
     apiGet<VinPrefillResult>(`/api/v1/local/vin-prefill/${vin}/`),
+
+  /** Своє оголошення з телефоном - для редагування (10-Q1). Чуже - 404. */
+  ownerDetail: (id: number) =>
+    apiGet<LocalListing>(`/api/v1/local/my-listings/${id}/`),
+
+  config: () =>
+    apiGet<LocalConfig>('/api/v1/local/config/'),
 
   myListings: () =>
     apiGet<PaginatedResponse<LocalListing>>('/api/v1/local/my-listings/'),
@@ -68,4 +85,8 @@ export const localApi = {
 
   getContact: (listingId: number) =>
     apiGet<{ contact_phone: string | null }>(`/api/v1/local/listings/${listingId}/contact/`),
+
+  /** 4.5a: гість отримує номер після капчі (captcha_token + honeypot-поле website). */
+  getContactAsGuest: (listingId: number, captcha: { captcha_token?: string; website: string }) =>
+    apiPost<{ contact_phone: string | null }>(`/api/v1/local/listings/${listingId}/contact/`, captcha),
 };

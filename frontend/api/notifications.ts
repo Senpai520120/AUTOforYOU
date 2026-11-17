@@ -1,8 +1,8 @@
 import { apiGet, apiPost } from '@/api/client';
-import type { AppNotification } from '@/lib/types';
+import type { AppNotification, PaginatedResponse } from '@/lib/types';
 
-export function getNotifications() {
-  return apiGet<AppNotification[]>('/api/v1/notifications/');
+export function getNotifications(page = 1) {
+  return apiGet<PaginatedResponse<AppNotification>>(`/api/v1/notifications/?page=${page}`);
 }
 
 export function getUnreadCount() {
@@ -14,5 +14,5 @@ export function markRead(id: number) {
 }
 
 export function markAllRead() {
-  return apiPost<{ marked: string }>('/api/v1/notifications/mark-read/', { all: true });
+  return apiPost<{ marked: number }>('/api/v1/notifications/mark-read/', { all: true });
 }

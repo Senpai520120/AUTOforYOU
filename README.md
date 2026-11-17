@@ -25,7 +25,7 @@
 | Сповіщення | Telegram-бот на aiogram 3 |
 | Розгортання | Docker Compose: nginx, backend, frontend, celery worker і beat, bot, db, redis |
 | API-документація | drf-spectacular (Swagger / ReDoc) |
-| Тести | Django test runner (433) + Playwright (33) |
+| Тести | Django test runner (433) + Playwright (80 тестов, 6 из них `fixme`) |
 
 ---
 
@@ -47,6 +47,8 @@ docker compose ps
 `docker/entrypoint.sh` сам застосовує міграції та наповнює довідники — окремих команд запускати не потрібно.
 
 ### Локально, без Docker
+
+Робоче оточення Python — `.venv` (інших venv у корені немає).
 
 ```bash
 python -m venv .venv
@@ -82,13 +84,26 @@ npm run dev
 
 ### Backend — 433 тести
 
-```bash
-python manage.py test
+Робоче оточення Python — `.venv` (у PyCharm оберіть інтерпретатор `.venv\Scripts\python.exe`).
+
+```powershell
+scripts/test-backend.ps1              # Windows
+scripts/test-backend.sh               # Linux/Mac/Git Bash
+scripts/test-backend.ps1 pricing      # один застосунок
 ```
 
-Токен Telegram у тестах обнуляється автоматично, окремих змінних задавати не треба.
+Скрипти самі обнуляють `DATABASE_URL` і `REDIS_URL`: локальний `.env` — шаблон для Docker з хостами `db`/`redis`, а `core/settings.py` його підвантажує. Без обнулення тести йдуть у Postgres/Redis з `.env` або падають. Токен Telegram у тестах обнуляється автоматично.
 
-### E2E — 33 тести, Playwright
+### Інфраструктура — `scripts/check-infra.sh`
+
+Ті самі перевірки, що й джоба `infra-lint` та крок `nginx -t` у CI: LF у `*.sh`, shellcheck, `docker compose config`, `nginx -t` для всіх `TLS_MODE` і CSP, тести shell-скриптів, ехо-тест Cloudflare. Потрібен запущений Docker (~1 хв). У Git Bash на Windows тести shell-скриптів ідуть у контейнері `ubuntu:24.04`.
+
+```bash
+./scripts/check-infra.sh                # усі розділи
+./scripts/check-infra.sh nginx lf       # лише вибрані: lf shellcheck compose nginx shell-tests cloudflare
+```
+
+### E2E — 80 тестів, Playwright (6 `fixme` з посиланням на задачу)
 
 Потрібен піднятий стек. Запускати **з `frontend/`**, не з кореня репозиторію:
 
@@ -106,9 +121,76 @@ npx playwright test
 | `npm run test:e2e:report` | HTML-звіт останнього прогону |
 | `npm run test:e2e:codegen` | Запис дій у код |
 
+### Запуск e2e однією командою (задача 9.58)
+
+```powershell
+scripts\e2e-run.ps1 e2e/lead.spec.ts --project=chromium     # PowerShell (потрібен Git Bash)
+./scripts/e2e-run.sh --grep @smoke                             # Git Bash / Linux
+```
+
+Скрипт звіряє ключі `.env.e2e` із `.env.e2e.example` (друкує лише назви відсутніх ключів, не значення; одноразово `cp .env.e2e.example .env.e2e`), зупиняє dev-стек `docker compose down` **без `-v`**, піднімає e2e-стек, робить `FLUSHALL` і `e2e_seed`, запускає Playwright з вашими аргументами (`E2E_PASSWORD` береться з `.env.e2e`, не друкується), а потім завжди (навіть після падіння) виконує `scripts/e2e-cleanup.sh` і `docker compose up -d --scale bot=0`. Код повернення — код Playwright (`2` — не вистачає ключів у `.env.e2e`).
+
+Ліміти DRF у e2e-стеку послаблює один прапорець `E2E_RELAX_THROTTLES=true` у `.env.e2e.example` (діє лише разом з `E2E_SEED_ALLOWED=true`; не послаблює блокування входу `LOGIN_*` і ліміт `client_errors`). На сервері його не вмикати: `launch_check` повідомить про помилку.
+
+### E2E-стек (окремий compose-проект)
+
+Боєвий `.env` не використовується: беремо `.env.docker.example` + `E2E_SEED_ALLOWED=true`, `SECURE_SSL_REDIRECT=false` (у стека немає TLS, інакше API редіректить на https), `E2E_PASSWORD=<випадковий>` (лише для тестового стека).
+
+```bash
+docker compose -p autoforyou-e2e up -d --build
+docker compose -p autoforyou-e2e exec -T backend python manage.py e2e_seed
+cd frontend && E2E_PASSWORD=<той самий> npx playwright test
+docker compose -p autoforyou-e2e down -v
+```
+
+Конфіг відмовляється працювати з `E2E_BASE_URL`, якого немає в білому списку (localhost, 127.0.0.1, nginx, frontend), якщо не задано `E2E_ALLOW_REMOTE=1`. Деталі — [`docs/TEST_CASES.md`](docs/TEST_CASES.md).
+
 Детальний розбір усіх тест-кейсів — [`docs/TEST_CASES.md`](docs/TEST_CASES.md).
 
 ---
+
+## Вхід через SSO (Keycloak + AD)
+
+Кнопка «Увійти через SSO» на `/login` (задача SSO-1). Keycloak відповідає лише «хто ти»; ролі, бан і видалення лишаються в AUTOforYOU. Вимкнено за замовчуванням (`OIDC_ENABLED=false`): тоді маршрутів `oidc/` немає (404) і кнопки немає.
+
+**Запуск для розробки.** Спершу стек Users & Roles (він створює мережу `sso-shared` і Keycloak у ній), потім AUTOforYOU з overlay:
+
+```powershell
+cd D:\Django-application-e2e   # гілка feature/active-directory
+docker compose -f docker-compose.yml -f docker-compose.sso.yml -f docker-compose.ad.yml up -d --build --wait
+cd D:\pyCharm\AUTOforYOU
+# у .env: OIDC_CLIENT_SECRET=dev-only-autoforyou-secret (лише для dev)
+docker compose -f docker-compose.yml -f docker-compose.sso.yml up -d --build
+```
+
+Браузер ходить у Keycloak на `http://localhost:8080`, backend — на `http://keycloak:8080` (token, certs); `iss` у токенах завжди `http://localhost:8080/realms/myapp`. Консоль Keycloak: `http://localhost:8080/admin` (`admin` / `admin`).
+
+**Тестові учётки** (пароль у всіх `demo-password-123`): з AD — `ad_alice`, `ad_bob`, вимкнений `ad_disabled`; власні учётки Keycloak — `demo_user`, `demo_admin`. На формі Keycloak можна вводити логін або email.
+
+**Правила прив'язки** (`users/oidc.py`):
+- Спершу за `sub` (модель `OidcIdentity`), потім за email — лише якщо Keycloak підтвердив адресу (`email_verified: true`), без урахування регістру, рівно один користувач.
+- Нових користувачів SSO не створює: немає акаунта з цим email — `/login?sso_error=no_account` («спершу зареєструйтеся»), бо згоди з умовами пишуться лише при реєстрації.
+- Привілейовані (`is_staff`, `is_superuser`, роль `broker`/`moderator`/`admin`) за email не прив'язуються. Їх зв'язують вручну: `python manage.py link_oidc_user <email>=<sub>` (`sub` — ID користувача в консолі Keycloak; `--replace` замінює наявну прив'язку).
+- Не пускає `is_active=False`, бан, видалений або запланований до видалення акаунт. Роль і групи вхід через SSO не змінює.
+- Вихід користувача, що зайшов через SSO, завершує і сесію Keycloak (мітка-cookie `afy_sso`); Keycloak попросить підтвердити вихід.
+
+**Ловушка cookie.** Cookie не розрізняють порти: Users & Roles на `localhost:8000` і AUTOforYOU на `localhost` ділять `csrftoken`. Для ручної перевірки відкривайте Users & Roles на `http://127.0.0.1:8000`.
+
+**E2E.** Сценарій `@sso` (`frontend/e2e/sso.spec.ts`) пропускається без `E2E_SSO=1`. Потрібен користувач `ad_alice@corp.example.test` (його створює `e2e_seed`, коли `OIDC_ENABLED=true`): `cd frontend && E2E_SSO=1 npx playwright test e2e/sso.spec.ts --project=chromium --no-deps`.
+
+---
+
+## Захист від витоку секретів
+
+Перед комітом працює gitleaks (конфіг `.gitleaks.toml`, той самий у CI):
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files   # перевірка всього дерева
+```
+
+Ключі й токени — лише в `.env` (він у `.gitignore`), у репозиторій не потрапляють.
 
 ## URL-карта
 
@@ -125,7 +207,7 @@ npx playwright test
 | `/me/messages`, `/me/deals`, `/me/favorites`, `/me/saved-searches`, `/me/notifications` | Розділи кабінету |
 | `/me/shipments`, `/me/trusted-shops`, `/me/telegram`, `/me/calculations` | Логістика, партнери, бот, історія розрахунків |
 | `/terms`, `/rules`, `/refund`, `/privacy`, `/cookies` | Юридичні документи |
-| `/api/docs/` | Swagger UI |
+| `/api/docs/` | Swagger UI (только admin-роль; `API_DOCS_PUBLIC=true` открывает всем) |
 | `/api/redoc/` | ReDoc |
 | `/admin/` | Django Admin |
 
@@ -224,6 +306,7 @@ AUTOforYOU/
 | [`docs/TEST_CASES.md`](docs/TEST_CASES.md) | Розбір E2E-тестів на happy і negative path |
 | [`docs/BACKEND_TESTS.md`](docs/BACKEND_TESTS.md) | Розбір backend-тестів |
 | [`docs/DEMO.md`](docs/DEMO.md) | Сценарій демонстрації |
+| [`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md) | Чек-лист запуску для власника (змінні `.env`, адмінка, перевірки, `launch_check`) |
 | [`DEPLOY_NOTES.md`](DEPLOY_NOTES.md) | Розгортання простою мовою |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Журнал архітектурних рішень |
 | [`PROGRESS.md`](PROGRESS.md) | Журнал прогресу |

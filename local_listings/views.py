@@ -1,6 +1,8 @@
 import uuid
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import (
     Avg,
     Count,
@@ -12,21 +14,39 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, serializers, status
+from rest_framework.exceptions import NotAuthenticated, NotFound, PermissionDenied, Throttled
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
-from integrations.models import VinReport
-from integrations.providers import NHTSAVinDecodeProvider
+from core.c2c import payments_enabled
+from core.uploads import (
+    ImageUploadError,
+    allowed_formats,
+    make_thumbnail,
+    max_bytes_from_setting,
+    sanitize_image,
+)
+from integrations.captcha import DisabledVerifier, get_captcha_verifier, require_captcha
+from integrations.services import decode_vin
+from integrations.validators import normalize_vin
+from metrics.models import MetricKey
+from metrics.services import record_metric
+from users.display import public_display_name
+from users.permissions import IsEmailVerified
 
 from .filters import LocalListingFilter
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
+from .permissions import POSTING_CLOSED_DETAIL, CanPostLocalListing, PhoneVerifiedForPosting, posting_allowed
 from .serializers import (
+    CitySearchSerializer,
     CitySerializer,
     LocalListingCreateSerializer,
     LocalListingDetailSerializer,
@@ -36,6 +56,15 @@ from .serializers import (
     LocalListingUpdateSerializer,
     PromotionTariffSerializer,
     RegionSerializer,
+)
+from .services import min_photos, record_contact_view
+from .throttles import (
+    ContactDailyThrottle,
+    GuestAnonThrottle,
+    GuestContactThrottle,
+    ListingCreateDailyThrottle,
+    ListingCreateThrottle,
+    ip_hash,
 )
 
 
@@ -69,11 +98,18 @@ def _seller_stats_annotations():
         .annotate(avg=Avg('rating'))
         .values('avg')[:1]
     )
+    # 8.6: число активных объявлений продавца - подзапросом, без N+1
+    active_count = (
+        LocalListing.objects
+        .filter(owner=OuterRef('owner'), status=LocalListing.Status.ACTIVE)
+        .order_by().values('owner').annotate(total=Count('pk')).values('total')[:1]
+    )
     return {
         'seller_deals_count': Coalesce(
             Subquery(deals_count, output_field=IntegerField()), Value(0),
         ),
         'seller_avg_rating_agg': Subquery(avg_rating, output_field=FloatField()),
+        'seller_active_count': Coalesce(Subquery(active_count, output_field=IntegerField()), Value(0)),
     }
 
 
@@ -90,7 +126,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.owner == request.user or request.user.is_staff
+        return obj.owner == request.user or request.user.has_perm('local_listings.moderate_locallisting')
 
 
 @extend_schema_view(
@@ -122,11 +158,19 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     ),
 )
 class LocalListingListCreateView(generics.ListCreateAPIView):
+    # права по методу в get_permissions: GET - AllowAny, POST - IsAuthenticated
     filter_backends = [LocalListingFilter]
+    # 8.5: общие anon/user + лимит подачи (час и сутки), действует только на POST
+    throttle_classes = [AnonRateThrottle, UserRateThrottle, ListingCreateThrottle, ListingCreateDailyThrottle]
+
+    def check_throttles(self, request):
+        for throttle in self.get_throttles():
+            if not throttle.allow_request(request, self):
+                raise _throttled(throttle)
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [permissions.IsAuthenticated()]
+            return [permissions.IsAuthenticated(), CanPostLocalListing(), IsEmailVerified(), PhoneVerifiedForPosting()]
         return [permissions.AllowAny()]
 
     def get_serializer_class(self):
@@ -137,6 +181,10 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return _base_queryset().filter(status=LocalListing.Status.ACTIVE)
 
+    def perform_create(self, serializer):
+        serializer.save()
+        record_metric(MetricKey.LISTING_SUBMITTED)
+
 
 @extend_schema_view(
     get=extend_schema(tags=['local'], summary='Деталі місцевого оголошення'),
@@ -145,7 +193,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
 )
 class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
     http_method_names = ['get', 'patch', 'delete', 'head', 'options']
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrAdmin]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, CanPostLocalListing, IsOwnerOrAdmin]
 
     def get_serializer_class(self):
         if self.request.method == 'PATCH':
@@ -167,14 +215,14 @@ class LocalListingDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         if not user.is_authenticated:
             return qs.filter(status=LocalListing.Status.ACTIVE)
-        if user.is_staff:
+        if user.has_perm('local_listings.moderate_locallisting'):
             return qs
         return qs.filter(Q(status=LocalListing.Status.ACTIVE) | Q(owner=user))
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
         if request.method not in permissions.SAFE_METHODS:
-            if obj.owner != request.user and not request.user.is_staff:
+            if obj.owner != request.user and not request.user.has_perm('local_listings.moderate_locallisting'):
                 self.permission_denied(
                     request,
                     message='Тільки власник може редагувати оголошення.',
@@ -195,6 +243,57 @@ class MyListingsView(generics.ListAPIView):
         return _base_queryset().filter(owner=self.request.user).order_by('-created_at')
 
 
+@extend_schema(
+    tags=['local'],
+    summary='Моє оголошення (для редагування)',
+    description='Оголошення власника в будь-якому статусі разом із його телефоном (10-Q1). '
+                'Чужим - 404, анониму - 401. Модератор бачить будь-яке.',
+)
+class MyListingDetailView(generics.RetrieveAPIView):
+    serializer_class = LocalListingOwnerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.has_perm('local_listings.moderate_locallisting'):
+            return _base_queryset()
+        return _base_queryset().filter(owner=user)
+
+
+class LocalConfigSerializer(serializers.Serializer):
+    max_photos = serializers.IntegerField()
+    photo_max_size_mb = serializers.FloatField()
+    allowed_types = serializers.ListField(child=serializers.CharField())
+    max_active_listings = serializers.IntegerField()
+    posting_open = serializers.BooleanField()
+
+
+@extend_schema(
+    tags=['local'],
+    summary='Ліміти форми оголошення',
+    description='Ліміти фото й оголошень з налаштувань сервера (фронт не хардкодить). posting_open - чи може '
+                'поточний користувач подавати оголошення (флаг C2C_PUBLIC_POSTING_ENABLED або staff).',
+    responses=LocalConfigSerializer,
+)
+class LocalConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        max_bytes = max_bytes_from_setting('LOCAL_LISTING_PHOTO_MAX_SIZE_MB')
+        return Response({
+            'max_photos': int(settings.LOCAL_LISTING_MAX_PHOTOS),
+            'photo_max_size_mb': round(max_bytes / (1024 * 1024), 2),
+            'allowed_types': [f'image/{fmt.lower()}' for fmt in allowed_formats()],
+            'max_active_listings': int(settings.LOCAL_LISTING_MAX_ACTIVE or 0),
+            'min_photos': min_photos(),  # 8.4
+            'description_max': int(settings.LOCAL_LISTING_DESCRIPTION_MAX),  # 8.5
+            'posting_open': posting_allowed(request.user),
+            # 8.2: лимиты поиска населённого пункта - фронт их не хардкодит.
+            'city_search_min_chars': int(settings.CITY_SEARCH_MIN_CHARS),
+            'city_search_limit': int(settings.CITY_SEARCH_LIMIT),
+        })
+
+
 @extend_schema_view(
     get=extend_schema(
         tags=['local'],
@@ -204,27 +303,18 @@ class MyListingsView(generics.ListAPIView):
 )
 class VinPrefillView(APIView):
     permission_classes = [permissions.AllowAny]
+    # Тот же лимит, что у /vehicles/<vin>/decode/: оба ходят в NHTSA.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'expensive'
 
     def get(self, request, vin: str):
-        vin = vin.upper()
-        if len(vin) != 17:
-            return Response({'error': 'VIN має бути 17 символів.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        cached = VinReport.objects.filter(vin=vin, provider='nhtsa_vpic').first()
-        if cached:
-            return Response({**cached.report_data, 'cached': True})
-
-        provider = NHTSAVinDecodeProvider()
-        data = provider.decode(vin)
-
-        if 'error' not in data:
-            VinReport.objects.get_or_create(
-                vin=vin,
-                provider='nhtsa_vpic',
-                defaults={'report_data': data, 'demo': False},
-            )
-
-        return Response({**data, 'cached': False})
+        # Помощник формы подачи: пока подача закрыта (6.7), недоступен (аноним в открытом режиме - как раньше).
+        if not posting_allowed(request.user):
+            if not request.user.is_authenticated:
+                raise NotAuthenticated()
+            raise PermissionDenied(POSTING_CLOSED_DETAIL)
+        payload, http_status = decode_vin(normalize_vin(vin))
+        return Response(payload, status=http_status)
 
 
 @extend_schema(tags=['local'], summary='Список областей України')
@@ -235,25 +325,84 @@ class RegionListView(generics.ListAPIView):
     pagination_class = None
 
 
-@extend_schema(tags=['local'], summary='Міста за областю')
+def search_cities(q: str, region_id=None, limit=None):
+    """Поиск пункта (8.2): сначала начало слова, затем вхождение; внутри - крупные выше, потом по имени.
+
+    Короче CITY_SEARCH_MIN_CHARS - пусто. Только is_active. Не больше CITY_SEARCH_LIMIT.
+    """
+    from django.db.models import Case, When
+
+    from .places import normalize_place_name
+
+    term = normalize_place_name(q)
+    if len(term) < int(settings.CITY_SEARCH_MIN_CHARS):
+        return City.objects.none()
+    cap = int(settings.CITY_SEARCH_LIMIT)
+    limit = cap if limit is None else max(1, min(int(limit), cap))
+    qs = City.objects.filter(is_active=True, search_name__contains=term).select_related('region')
+    if region_id is not None:
+        qs = qs.filter(region_id=region_id)
+    word_start = Q(search_name__startswith=term) | Q(search_name__contains=f' {term}') | Q(
+        search_name__contains=f'-{term}')
+    return qs.annotate(
+        _rank=Case(When(word_start, then=Value(0)), default=Value(1), output_field=IntegerField()),
+    ).order_by('_rank', '-is_major', 'name', 'pk')[:limit]
+
+
+def _int_param(request, name):
+    raw = request.query_params.get(name)
+    if raw in (None, ''):
+        return None
+    if not (raw.isascii() and raw.isdigit() and len(raw) <= 18):
+        raise serializers.ValidationError({name: 'Очікується ціле число.'})
+    return int(raw)
+
+
+@extend_schema(
+    tags=['local'], summary='Пошук населеного пункту',
+    parameters=[
+        OpenApiParameter('q', OpenApiTypes.STR, description='Частина назви (не коротше CITY_SEARCH_MIN_CHARS)'),
+        OpenApiParameter('region', OpenApiTypes.INT, required=False),
+        OpenApiParameter('limit', OpenApiTypes.INT, required=False),
+    ],
+)
+class CitySearchView(generics.ListAPIView):
+    """GET /api/v1/local/cities/?q=&region=&limit= - автодополнение населённого пункта (8.2)."""
+    serializer_class = CitySearchSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'city_search'
+
+    def get_queryset(self):
+        return search_cities(
+            self.request.query_params.get('q', ''),
+            region_id=_int_param(self.request, 'region'),
+            limit=_int_param(self.request, 'limit'),
+        )
+
+
+@extend_schema(tags=['local'], summary='Міста за областю',
+               parameters=[OpenApiParameter('q', OpenApiTypes.STR, required=False)])
 class CityListView(generics.ListAPIView):
+    """Без q - только крупные города области (быстрый список); с q - поиск по области (8.2)."""
     serializer_class = CitySerializer
     permission_classes = [permissions.AllowAny]
     pagination_class = None
 
     def get_queryset(self):
         region_id = self.kwargs.get('region_id')
-        return City.objects.filter(region_id=region_id).select_related('region')
+        q = self.request.query_params.get('q', '')
+        if q:
+            return search_cities(q, region_id=region_id)
+        return City.objects.filter(region_id=region_id, is_major=True, is_active=True).select_related('region')
 
 
 # ─── Фото оголошень ───────────────────────────────────────────────────────────
 
-ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
-
-
 def _get_owned_listing(pk, user):
     listing = get_object_or_404(LocalListing, pk=pk)
-    if listing.owner != user and not user.is_staff:
+    if listing.owner != user and not user.has_perm('local_listings.moderate_locallisting'):
         return None, Response({'detail': 'Тільки власник може керувати фото.'}, status=status.HTTP_403_FORBIDDEN)
     return listing, None
 
@@ -264,8 +413,11 @@ def _get_owned_listing(pk, user):
     description='Завантажити одне або кілька фото. Перше фото стає головним, якщо головного ще немає.',
 )
 class LocalListingImageUploadView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanPostLocalListing]
     parser_classes = [MultiPartParser, FormParser]
+    # Каждый запрос декодирует и пересохраняет картинки (задача 1.10): отдельный лимит.
+    throttle_classes = [UserRateThrottle, ScopedRateThrottle]
+    throttle_scope = 'uploads'
 
     def post(self, request, pk):
         listing, err = _get_owned_listing(pk, request.user)
@@ -277,8 +429,7 @@ class LocalListingImageUploadView(APIView):
             return Response({'detail': 'Файли не передані (поле: images).'}, status=status.HTTP_400_BAD_REQUEST)
 
         max_photos = getattr(settings, 'LOCAL_LISTING_MAX_PHOTOS', 15)
-        max_size_mb = getattr(settings, 'LOCAL_LISTING_PHOTO_MAX_SIZE_MB', 8)
-        max_size_bytes = max_size_mb * 1024 * 1024
+        max_bytes = max_bytes_from_setting('LOCAL_LISTING_PHOTO_MAX_SIZE_MB')
 
         current_count = listing.images.count()
         if current_count + len(files) > max_photos:
@@ -287,27 +438,39 @@ class LocalListingImageUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        errors = []
+        # Тип — по содержимому (content_type и расширение клиента игнорируются), EXIF снимается,
+        # имя — uuid (задача 1.10). Сначала проверяются все файлы: всё или ничего.
+        errors, cleaned = [], []
+        # 8.4: ресайз и миниатюра готовятся для всех файлов до записи (всё или ничего).
+        max_side = int(settings.LOCAL_LISTING_PHOTO_MAX_SIDE)
+        thumb_side = int(settings.LOCAL_LISTING_THUMB_MAX_SIDE)
         for f in files:
-            if f.content_type not in ALLOWED_IMAGE_TYPES:
-                errors.append(f'{f.name}: тип {f.content_type} не підтримується (тільки jpg/png/webp).')
-            if f.size > max_size_bytes:
-                errors.append(f'{f.name}: розмір {f.size // 1024 // 1024} МБ перевищує ліміт {max_size_mb} МБ.')
+            try:
+                content = sanitize_image(f, max_bytes=max_bytes, max_side=max_side)
+                cleaned.append((content, make_thumbnail(content, max_side=thumb_side)))
+            except ImageUploadError as exc:
+                errors.append(f'{(f.name or "файл")[:100]}: {exc}')
         if errors:
             return Response({'detail': errors}, status=status.HTTP_400_BAD_REQUEST)
 
         has_primary = listing.images.filter(is_primary=True).exists()
         created = []
-        for i, f in enumerate(files):
-            is_primary = not has_primary and i == 0
-            img = LocalListingImage.objects.create(
-                listing=listing,
-                image=f,
-                is_primary=is_primary,
-            )
-            if is_primary:
-                has_primary = True
-            created.append(img)
+        try:
+            with transaction.atomic():
+                for i, (content, thumb) in enumerate(cleaned):
+                    is_primary = not has_primary and i == 0
+                    img = LocalListingImage(listing=listing, image=content, thumbnail=thumb, is_primary=is_primary)
+                    created.append(img)  # до save(): файл пишется в pre_save, строка может не записаться
+                    img.save()
+                    if is_primary:
+                        has_primary = True
+        except Exception:
+            # Строки откатились — файлы, уже записанные в хранилище, не должны остаться сиротами.
+            for img in created:
+                for f in (img.image, img.thumbnail):
+                    if f and f._committed:
+                        f.storage.delete(f.name)
+            raise
 
         return Response(
             LocalListingImageSerializer(created, many=True).data,
@@ -320,7 +483,7 @@ class LocalListingImageUploadView(APIView):
     summary='Видалити або призначити головним фото оголошення',
 )
 class LocalListingImageDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, CanPostLocalListing]
 
     def _get(self, pk, img_id, user):
         listing, err = _get_owned_listing(pk, user)
@@ -330,9 +493,16 @@ class LocalListingImageDetailView(APIView):
         return listing, img, None
 
     def delete(self, request, pk, img_id):
-        _, img, err = self._get(pk, img_id, request.user)
+        listing, img, err = self._get(pk, img_id, request.user)
         if err:
             return err
+        # 8.4: не опускать число фото ниже минимума (главное можно сначала заменить загрузкой нового).
+        need = min_photos()
+        if need and listing.images.count() - 1 < need:
+            return Response(
+                {'detail': f'Не можна видалити: потрібно щонайменше {need} фото.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         was_primary = img.is_primary
         img.delete()
         # якщо видалили головне — зробити наступне головним
@@ -356,26 +526,151 @@ class LocalListingImageDetailView(APIView):
 
 # ─── Контакт (захист телефону) ───────────────────────────────────────────────
 
-@extend_schema(
-    tags=['local'],
-    summary='Отримати телефон продавця (тільки авторизований)',
-    description='Повертає contact_phone. Обмеження: 20 запитів/год на акаунт.',
-)
+def _throttled(throttle):
+    """429 с текстом лимита без английского «Expected available in…»; Retry-After остаётся."""
+    message = getattr(throttle, 'message', None)
+    if message is None:
+        return Throttled(wait=throttle.wait())
+    exc = Throttled(detail=message)
+    wait = throttle.wait()
+    exc.wait = None if wait is None else max(1, int(wait))
+    return exc
+
+
+class _ContactPhoneSerializer(serializers.Serializer):
+    contact_phone = serializers.CharField(allow_null=True)
+
+
+class _GuestContactSerializer(serializers.Serializer):
+    captcha_token = serializers.CharField(required=False, allow_blank=True)
+    website = serializers.CharField(required=False, allow_blank=True)
+
+
 class LocalListingContactView(APIView):
-    """GET /api/v1/local/listings/<id>/contact/ — повертає телефон тільки авторизованому."""
-    permission_classes = [permissions.IsAuthenticated]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'contact'
+    """Телефон продавця (4.5a, F3.2, 05-S6).
+
+    GET - авторизованому: ліміти ``contact`` (година) і ``contact_daily`` (доба).
+    POST - гостю після капчі: порядок перевірок throttle → honeypot → капча → active → журнал і номер;
+    будь-яка відмова до останнього кроку номер не розкриває і журнал не пише.
+    Номер віддається лише active-оголошенню (інакше 404, без запису). Кожен показ - у ``ContactView``.
+    """
+    guest_throttle = None
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
+    def get_throttles(self):
+        user = getattr(self.request, 'user', None)
+        if user is not None and user.is_authenticated:
+            self.throttle_scope = 'contact'
+            return [ScopedRateThrottle(), ContactDailyThrottle()]
+        # Гість: загальний anon (ключ - HMAC IP) проти перебору капчі; добовий ліміт показів - у post().
+        return [GuestAnonThrottle()]
+
+    def check_throttles(self, request):
+        for throttle in self.get_throttles():
+            if not throttle.allow_request(request, self):
+                raise _throttled(throttle)
+
+    def _active_listing(self, pk):
+        # Тільки ACTIVE: pending/sold/hidden/expired/rejected - 404 (телефон не віддається до модерації).
+        return get_object_or_404(LocalListing, pk=pk, status=LocalListing.Status.ACTIVE)
+
+    def _reveal(self, listing, **who):
+        record_contact_view(listing, **who)
+        if listing.contact_phone:
+            record_metric(MetricKey.PHONE_VIEW)
+        return Response({'contact_phone': listing.contact_phone or None})
+
+    @extend_schema(tags=['local'], summary='Телефон продавця (авторизованому)', responses=_ContactPhoneSerializer)
+    def get(self, request, pk):
+        return self._reveal(self._active_listing(pk), user=request.user)
+
+    @extend_schema(tags=['local'], summary='Телефон продавця гостю після капчі', request=_GuestContactSerializer,
+                   responses=_ContactPhoneSerializer)
+    def post(self, request, pk):
+        if request.user.is_authenticated:
+            return self.get(request, pk)
+        if not settings.PHONE_LOG_IP_SALT:
+            # Без солі не порахувати ні ліміт, ні журнал гостя: показ закритий, номер не віддається.
+            return Response(
+                {'detail': 'Показ телефону гостям тимчасово недоступний. Увійдіть, щоб побачити номер.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if isinstance(get_captcha_verifier(), DisabledVerifier):
+            # CAPTCHA_PROVIDER=off: гостю без перевірки номер не віддаємо (ревью 4.5a).
+            return Response(
+                {'detail': 'Показ телефону гостям тимчасово недоступний. Увійдіть, щоб побачити номер.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        throttle = GuestContactThrottle()
+        if not throttle.allow_request(request, self):  # слот займається атомарно
+            raise _throttled(throttle)
+        try:
+            require_captcha(request, request.data, point='guest_phone')
+            listing = self._active_listing(pk)
+        except Exception:
+            throttle.release()  # показу не було - слот повертається
+            raise
+        return self._reveal(listing, ip_hash=ip_hash(throttle.get_ident(request)))
+
+
+# ─── Сторінка продавця (8.6, D3.1/J2.1) ──────────────────────────────────────
+
+SELLER_REVIEWS_LIMIT = 10
+
+
+def _public_review_text(text: str) -> str:
+    """Текст отзыва публичен с 8.6, но не модерируется: с контактами (телефон, email, ссылка) не показываем."""
+    from .antispam import detect_contacts
+    return '' if detect_contacts(text or '') else (text or '')
+
+
+@extend_schema(tags=['local'], summary='Публічна сторінка продавця', responses=None)
+class SellerPublicView(APIView):
+    """GET /api/v1/local/sellers/<id>/ - имя (public_display_name), «на сайті з», дилер, счётчики, отзывы, объявления.
+
+    404: нет такого, неактивный/удалённый пользователь, нет ни одного активного объявления и отзыва.
+    Email, телефон и фамилия целиком не отдаются.
+    """
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request, pk):
-        # Тільки ACTIVE. Раніше сюди входив і PENDING — телефон продавця
-        # віддавався до того, як оголошення пройшло модерацію.
-        listing = get_object_or_404(
-            LocalListing,
-            pk=pk,
-            status=LocalListing.Status.ACTIVE,
-        )
-        return Response({'contact_phone': listing.contact_phone or None})
+        from deals.models import Deal, Review
+
+        from .serializers import member_since
+
+        # Один и тот же 404 для всех причин (нет, неактивен, удалён, без публичных данных): перебором id
+        # нельзя узнать, какие аккаунты живые (ревью 8.6).
+        user = get_user_model().objects.filter(pk=pk, is_active=True, deleted_at__isnull=True).first()
+        if user is None:
+            raise NotFound()
+        listings = _base_queryset().filter(owner=user, status=LocalListing.Status.ACTIVE).order_by('-created_at')
+        reviews = Review.objects.filter(target=user).select_related('author').order_by('-created_at')
+        if not listings.exists() and not reviews.exists():
+            raise NotFound()
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(listings, request, view=self)
+        avg = reviews.aggregate(avg=Avg('rating'))['avg']
+        return Response({
+            'id': user.pk,
+            'display_name': public_display_name(user),
+            'member_since': member_since(user),
+            'is_verified_dealer': bool(user.is_verified_dealer),
+            'active_listings_count': listings.count(),
+            'deal_count': Deal.objects.filter(seller=user, status=Deal.Status.CONFIRMED).count(),
+            'avg_rating': round(avg, 2) if avg is not None else None,
+            'reviews': [
+                {'rating': r.rating, 'text': _public_review_text(r.text), 'created_at': r.created_at,
+                 'author_name': public_display_name(r.author)}
+                for r in reviews[:SELLER_REVIEWS_LIMIT]
+            ],
+            'listings': paginator.get_paginated_response(
+                LocalListingListSerializer(page, many=True, context={'request': request}).data,
+            ).data,
+        })
 
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────
@@ -394,7 +689,7 @@ class PromotionTariffListView(generics.ListAPIView):
     tags=['local'],
     summary='Замовити просування оголошення (LiqPay SANDBOX)',
     description=(
-        'Тільки власник оголошення. Body: `{"tariff": "<code>"}`. '
+        'Тільки власник оголошення (чуже - 404). ТОП/підняття - лише для активних, продовження - для активних і завершених (409 інакше). Body: `{"tariff": "<code>"}`. '
         'Повертає LiqPay checkout_url і form_data. '
         'Оплата в ТЕСТОВОМУ режимі (LIQPAY_SANDBOX=true).'
     ),
@@ -403,23 +698,37 @@ class LocalListingPromoteView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
-        listing = get_object_or_404(LocalListing, pk=pk)
-        if listing.owner != request.user and not request.user.is_staff:
-            return Response(
-                {'detail': 'Тільки власник може просувати оголошення.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        if not payments_enabled():  # 6.7: платные услуги закрыты, платёж не создаётся
+            raise Http404
+        # Чужое и несуществующее объявление неразличимы (404): не раскрываем существование.
+        listing = get_object_or_404(LocalListing, pk=pk, owner=request.user)
 
         tariff_code = request.data.get('tariff')
         if not tariff_code:
-            return Response({'detail': 'Поле tariff обов\'язкове.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': "Поле tariff обов'язкове."}, status=status.HTTP_400_BAD_REQUEST)
 
         tariff = get_object_or_404(PromotionTariff, code=tariff_code, active=True)
+
+        # TOP/BUMP - только для опубликованного; RENEW - для активного и истёкшего.
+        allowed = {LocalListing.Status.ACTIVE}
+        if tariff.type == PromotionTariff.TariffType.RENEW:
+            allowed.add(LocalListing.Status.EXPIRED)
+        if listing.status not in allowed:
+            return Response(
+                {'detail': 'Цей тариф не можна застосувати до оголошення в поточному статусі.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         order_id = f'promo-{listing.pk}-{tariff.code}-{uuid.uuid4().hex[:8]}'
         description = f'{tariff.name}: {listing.make} {listing.model} {listing.year}'
 
-        from payments.liqpay_client import LiqPayClient
         from payments.models import Payment
+        from payments.providers import get_payment_provider, unavailable_response
+        from payments.services import build_liqpay_urls
+
+        provider = get_payment_provider()
+        if not provider.is_configured():
+            return unavailable_response()
 
         payment = Payment.objects.create(
             user=request.user,
@@ -432,12 +741,12 @@ class LocalListingPromoteView(APIView):
             purpose=Payment.Purpose.LOCAL_LISTING_PROMOTE,
         )
 
-        client = LiqPayClient.from_settings()
-        checkout = client.create_checkout(
+        checkout = provider.create_checkout(
             order_id=order_id,
             amount=str(tariff.price),
             currency=tariff.currency,
             description=description,
+            **build_liqpay_urls(order_id),  # F5: server_url/result_url только из SITE_URL
         )
 
         return Response(

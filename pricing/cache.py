@@ -11,6 +11,7 @@ import logging
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,12 @@ KEYS = {
     'exchange': 'pricing:exchange_rates',
     'excise':   'pricing:customs_excise',
     'pension':  'pricing:pension_brackets',
+    'rules':    'pricing:customs_calc_rules',
+    'settings': 'pricing:calculator_settings',
+    'ua_delivery': 'pricing:ua_delivery_rates',
+    'broker_fees': 'pricing:broker_service_fees',
+    # Версия кэша расчётов страниц моделей (landings): любая правка тарифов сбрасывает её вместе с тарифами.
+    'landings_version': 'landings:version',
 }
 
 
@@ -98,6 +105,51 @@ def get_pension_brackets():
     return _load(KEYS['pension'], lambda: list(PensionFundBracket.objects.all()))
 
 
+def get_customs_rules():
+    from .models import CustomsCalcRule
+    return _load(KEYS['rules'], lambda: list(CustomsCalcRule.objects.all()))
+
+
+def get_ua_delivery_rates():
+    from .models import UaDeliveryRate
+    return _load(KEYS['ua_delivery'], lambda: list(UaDeliveryRate.objects.all()))
+
+
+def get_broker_service_fees():
+    from .models import BrokerServiceFee
+    return _load(KEYS['broker_fees'], lambda: list(BrokerServiceFee.objects.all()))
+
+
+def get_calculator_settings():
+    """Тексты калькулятора (2.6); запись pk=1 создаёт data-миграция, load() - страховка."""
+    from .models import CalculatorSettings
+    return _load(KEYS['settings'], CalculatorSettings.load)
+
+
+def get_catalog():
+    """Все справочники для чистого select_rates (pricing/calculator.py)."""
+    from .calculator import RateCatalog
+    return RateCatalog(
+        auction_fee_tiers=get_auction_fee_tiers(), auction_fixed_fees=get_auction_fixed_fees(),
+        us_land_routes=get_us_land_routes(), ocean_freight=get_ocean_freight(), eu_to_ua=get_eu_to_ua(),
+        exchange_rates=get_exchange_rates(), excise_rates=get_customs_excise(),
+        pension_brackets=get_pension_brackets(), customs_rules=get_customs_rules(),
+        ua_delivery_rates=get_ua_delivery_rates(), broker_service_fees=get_broker_service_fees(),
+    )
+
+
+def _delete_on_commit(keys: list, label: str) -> None:
+    """Удаление ключей после коммита: иначе параллельный запрос между delete и commit
+    перечитает старые тарифы и закэширует их на сутки. Вне транзакции on_commit срабатывает сразу."""
+    def _delete():
+        try:
+            cache.delete_many(keys)
+        except Exception:
+            logger.warning('pricing.cache: инвалидация %s не удалась', label, exc_info=True)
+
+    transaction.on_commit(_delete)
+
+
 def invalidate(key_name: str):
     """
     Инвалидация не должна ронять вызывающий код.
@@ -108,14 +160,8 @@ def invalidate(key_name: str):
     было замаскировано `|| true` — то есть при недоступном Redis сиды тихо
     не применялись, и никто об этом не узнавал.
     """
-    try:
-        cache.delete(KEYS[key_name])
-    except Exception:
-        logger.warning('pricing.cache: инвалидация %s не удалась', key_name, exc_info=True)
+    _delete_on_commit([KEYS[key_name], KEYS['landings_version']], key_name)
 
 
 def invalidate_all():
-    try:
-        cache.delete_many(list(KEYS.values()))
-    except Exception:
-        logger.warning('pricing.cache: полная инвалидация не удалась', exc_info=True)
+    _delete_on_commit(list(KEYS.values()), 'all')

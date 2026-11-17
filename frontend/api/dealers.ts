@@ -8,6 +8,11 @@ export interface ApplyPayload {
   documents?: string;
   // Обов'язкове: без згоди сервер відхиляє заявку з 400.
   agreed_to_processing: boolean;
+  // Обов'язкове: підтвердження 18+, без нього сервер відхиляє заявку з 400.
+  confirmed_age_18: boolean;
+  // Капча (задача 1.6): токен віджета або форм-токен honeypot + приховане поле.
+  captcha_token?: string;
+  website?: string;
 }
 
 export const dealersApi = {

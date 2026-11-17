@@ -38,3 +38,62 @@ class VinReport(models.Model):
     def __str__(self):
         flag = ' [ДЕМО]' if self.demo else ''
         return f'{self.vin} / {self.provider}{flag}'
+
+
+class IntegrationHealth(models.Model):
+    """Журнал здоровья внешнего провайдера: последний успех и последняя ошибка (задача 3.1).
+
+    Без него админ не увидит сбои: логи он не читает. Текст ошибки хранится без секретов.
+    """
+    provider_key = models.CharField(max_length=50, unique=True, verbose_name='Ключ провайдера')
+    last_success_at = models.DateTimeField(null=True, blank=True, verbose_name='Последний успех')
+    last_error_at = models.DateTimeField(null=True, blank=True, verbose_name='Последняя ошибка')
+    last_error = models.CharField(max_length=500, blank=True, verbose_name='Текст последней ошибки')
+    error_count = models.PositiveIntegerField(default=0, verbose_name='Число ошибок')
+    skipped_count = models.PositiveIntegerField(default=0, verbose_name='Пропусков (не налаштовано)')
+
+    class Meta:
+        verbose_name = 'Здоровье интеграции'
+        verbose_name_plural = 'Здоровье интеграций'
+        ordering = ['provider_key']
+
+    def __str__(self):
+        return self.provider_key
+
+
+class OutboxMessage(models.Model):
+    """Что демо-режим отправил бы вместо реального сервиса (письма, Telegram) - задача 3.4a.
+
+    Нужна, чтобы владелец и e2e видели уведомления без SMTP и бота. Пишется только в demo-режиме,
+    хранятся последние `DEMO_OUTBOX_KEEP` записей. В админке только чтение.
+    """
+    PROVIDER_CHOICES = [('email', 'Пошта'), ('telegram', 'Telegram')]
+
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, verbose_name='Провайдер')
+    recipient = models.CharField(max_length=255, blank=True, verbose_name='Отримувач')
+    subject = models.CharField(max_length=255, blank=True, verbose_name='Тема')
+    body = models.TextField(blank=True, verbose_name='Текст')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Час')
+
+    class Meta:
+        verbose_name = 'Outbox (демо-відправка)'
+        verbose_name_plural = 'Outbox (демо-відправки)'
+        ordering = ['-created_at', '-pk']
+
+    def __str__(self):
+        return f'{self.provider} -> {self.recipient or "-"}: {self.subject[:40]}'
+
+
+def write_outbox(provider: str, recipient: str = '', subject: str = '', body: str = '') -> 'OutboxMessage':
+    """Записывает демо-отправку и обрезает таблицу до `DEMO_OUTBOX_KEEP` последних записей."""
+    from django.conf import settings
+
+    row = OutboxMessage.objects.create(
+        provider=provider, recipient=str(recipient)[:255], subject=str(subject)[:255], body=body,
+    )
+    keep = max(1, int(getattr(settings, 'DEMO_OUTBOX_KEEP', 200)))
+    stale = OutboxMessage.objects.order_by('-created_at', '-pk').values_list('pk', flat=True)[keep:]
+    stale_ids = list(stale)
+    if stale_ids:
+        OutboxMessage.objects.filter(pk__in=stale_ids).delete()
+    return row

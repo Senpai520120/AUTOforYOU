@@ -1,7 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { localApi } from '@/api/local';
 import { PromotionTariff } from '@/lib/types';
+import { getErrorMessage } from '@/lib/errors';
+import Modal from '@/components/ui/Modal';
+import ErrorState from '@/components/ui/ErrorState';
+import LoadingState from '@/components/ui/LoadingState';
 
 interface Props {
   listingId: number;
@@ -28,17 +32,24 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState<unknown>(null);
 
-  useEffect(() => {
+  const loadTariffs = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     localApi.tariffs()
       .then(data => {
         setTariffs(data);
         const first = defaultType ? data.find(t => t.type === defaultType) : data[0];
         if (first) setSelected(first.code);
       })
-      .catch(() => setError('Не вдалося завантажити тарифи.'))
+      .catch(setLoadError)
       .finally(() => setLoading(false));
   }, [defaultType]);
+
+  useEffect(() => {
+    loadTariffs();
+  }, [loadTariffs]);
 
   async function handlePay() {
     if (!selected) return;
@@ -49,8 +60,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
       // Redirect to LiqPay hosted checkout page
       window.location.href = checkout.checkout_url;
     } catch (err: unknown) {
-      const e = err as { data?: { detail?: string } };
-      setError(e?.data?.detail ?? 'Помилка при створенні платежу.');
+      setError(getErrorMessage(err));
       setPaying(false);
     }
   }
@@ -58,13 +68,9 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
   const selectedTariff = tariffs.find(t => t.code === selected);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-slate-900">Просування оголошення</h2>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
-          </div>
+    <Modal title="Просування оголошення" onClose={onClose} showClose>
+      <div>
+        <div>
           <p className="text-sm text-slate-500 mb-4 truncate">{listingTitle}</p>
 
           {/* Sandbox notice */}
@@ -74,7 +80,11 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
           </div>
 
           {loading ? (
-            <p className="text-slate-400 text-sm text-center py-4">Завантаження тарифів...</p>
+            <LoadingState size="md" />
+          ) : loadError ? (
+            <div className="mb-4"><ErrorState error={loadError} onRetry={loadTariffs} /></div>
+          ) : tariffs.length === 0 ? (
+            <p className="text-center text-sm text-slate-500 py-6">Просування тимчасово недоступне</p>
           ) : (
             <div className="space-y-2 mb-4">
               {tariffs.map(t => (
@@ -94,7 +104,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span>{TYPE_ICONS[t.type]}</span>
+                      <span aria-hidden="true">{TYPE_ICONS[t.type]}</span>
                       <span className="font-medium text-slate-900 text-sm">{t.name}</span>
                       <span className="ml-auto text-sm font-bold text-blue-700 whitespace-nowrap">
                         {Number(t.price).toLocaleString('uk-UA')} {t.currency}
@@ -111,7 +121,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
             </div>
           )}
 
-          {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+          {error && <p role="alert" className="text-xs text-red-600 mb-3">{error}</p>}
 
           <div className="flex gap-2">
             <button
@@ -130,6 +140,6 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,7 +1,8 @@
 import asyncio
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+
+from telegram_bot.provider import get_telegram_provider, telegram_real_ready
 
 
 class Command(BaseCommand):
@@ -11,18 +12,21 @@ class Command(BaseCommand):
         'если старый бот работал в webhook-режиме.'
     )
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--drop-pending', action='store_true',
+            help='Выбросить накопленные, но ещё не обработанные апдейты (по умолчанию они сохраняются)',
+        )
+
     def handle(self, *args, **options):
-        token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-        if not token:
+        if not telegram_real_ready():
             raise CommandError(
                 'TELEGRAM_BOT_TOKEN не задан. Добавьте его в .env и повторите.'
             )
-        asyncio.run(self._run(token))
+        asyncio.run(self._run(options['drop_pending']))
 
-    async def _run(self, token: str) -> None:
-        from aiogram import Bot
-
-        bot = Bot(token=token)
+    async def _run(self, drop_pending: bool = False) -> None:
+        bot = get_telegram_provider().bot()
         try:
             info_before = await bot.get_webhook_info()
             if info_before.url:
@@ -30,7 +34,7 @@ class Command(BaseCommand):
             else:
                 self.stdout.write('Webhook не был установлен.')
 
-            await bot.delete_webhook(drop_pending_updates=True)
+            await bot.delete_webhook(drop_pending_updates=drop_pending)
 
             info_after = await bot.get_webhook_info()
             if not info_after.url:

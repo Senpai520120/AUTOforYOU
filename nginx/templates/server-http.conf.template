@@ -1,0 +1,8 @@
+# Режимы TLS_MODE=off и external: только :80. В external TLS снимает балансировщик,
+# X-Forwarded-Proto берётся из его заголовка (карта $forwarded_proto), редиректа по кругу нет.
+server {
+    listen 80 default_server;
+    server_name ${SERVER_NAMES};
+
+    include /etc/nginx/generated/locations.conf;
+}

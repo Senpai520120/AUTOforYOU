@@ -1,5 +1,7 @@
 'use client';
 import { useEffect } from 'react';
+import Link from 'next/link';
+import { reportError } from '@/lib/reportError';
 
 export default function Error({
   error,
@@ -9,11 +11,11 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    reportError(error);
   }, [error]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4" data-testid="error-page">
       <p className="text-6xl mb-4">⚠</p>
       <h2 className="text-2xl font-bold text-slate-900 mb-2">Щось пішло не так</h2>
       <p className="text-slate-500 mb-8 max-w-sm">
@@ -26,12 +28,18 @@ export default function Error({
         >
           Повторити
         </button>
-        <a
-          href="/listings"
+        <Link
+          href="/"
           className="border border-slate-300 hover:border-blue-300 text-slate-700 font-semibold px-6 py-3 rounded-xl transition-colors"
         >
-          Каталог
-        </a>
+          На головну
+        </Link>
+        <Link
+          href="/calculator"
+          className="border border-slate-300 hover:border-blue-300 text-slate-700 font-semibold px-6 py-3 rounded-xl transition-colors"
+        >
+          Калькулятор
+        </Link>
       </div>
     </div>
   );

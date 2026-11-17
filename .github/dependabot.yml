@@ -1,0 +1,25 @@
+# Обновления зависимостей раз в неделю (задача 7.5, 12-S11). Dependabot открывает PR; слияние - после зелёного CI.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+  # Dockerfile.backend, Dockerfile.frontend и образы в docker-compose*.yml (закреплены тегами).
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/docker/backup"
+    schedule:
+      interval: weekly
+  # SHA-закреплённые actions обновляются вместе с комментарием версии (# vX.Y.Z).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/use-require-auth';
 import { listingsApi } from '@/api/listings';
 import { Listing, PaginatedResponse } from '@/lib/types';
 import ListingCard from '@/components/listings/ListingCard';
@@ -9,22 +8,20 @@ import Spinner from '@/components/ui/Spinner';
 import Link from 'next/link';
 
 export default function B2BPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [data, setData] = useState<PaginatedResponse<Listing> | null>(null);
   const [fetching, setFetching] = useState(true);
 
-  const canAccess = user && (user.is_verified_dealer || user.role === 'admin');
+  const canAccess = user && (user.is_verified_dealer || user.is_admin_role);
 
   useEffect(() => {
-    if (!loading && !user) { router.push('/login'); return; }
-    if (!loading && user && !canAccess) return;
+    if (!loading && user && !canAccess) { setFetching(false); return; }
     if (user && canAccess) {
       listingsApi.b2bBoard({}).then(setData).finally(() => setFetching(false));
     } else if (!loading) {
       setFetching(false);
     }
-  }, [user, loading, canAccess, router]);
+  }, [user, loading, canAccess]);
 
   if (loading || fetching) return <div className="flex justify-center py-20"><Spinner /></div>;
 
@@ -34,14 +31,8 @@ export default function B2BPage() {
         <div className="text-5xl mb-4">🔒</div>
         <h1 className="text-2xl font-bold text-slate-900 mb-3">Доступ обмежено</h1>
         <p className="text-slate-500 mb-2">B2B-дошка доступна лише для верифікованих перекупників.</p>
-        <p className="text-slate-400 text-sm mb-6">Подайте заявку — менеджер розгляне її та активує доступ.</p>
+        <p className="text-slate-400 text-sm mb-6">Доступ відкривається менеджером.</p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            href="/dealers/apply"
-            className="bg-amber-500 hover:bg-amber-400 text-black px-6 py-2.5 rounded-xl font-semibold transition-colors"
-          >
-            Подати заявку на B2B
-          </Link>
           <Link href="/me" className="bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-800 transition-colors">
             До кабінету
           </Link>

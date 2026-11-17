@@ -1,21 +1,34 @@
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import Link from 'next/link';
+import LegalPage, { EmailOrMissing } from '@/components/legal/LegalPage';
+import { getSiteSettings, supportContact } from '@/lib/site-settings';
 
-export const metadata: Metadata = {
-  title: 'Правила розміщення оголошень | AUTOforYOU',
-};
+export const metadata: Metadata = buildMetadata({
+  title: 'Правила розміщення оголошень',
+  description:
+    'Правила розміщення оголошень про продаж авто на AUTOforYOU: що можна публікувати, обмеження, модерація.',
+  path: '/rules',
+});
 
-export default function RulesPage() {
+export const dynamic = 'force-dynamic';
+
+/** 1 день, 2–4 дні, 5+ днів (з урахуванням 11–14). */
+function daysWord(n: number): string {
+  const m100 = n % 100;
+  const m10 = n % 10;
+  if (m100 >= 11 && m100 <= 14) return 'днів';
+  if (m10 === 1) return 'день';
+  if (m10 >= 2 && m10 <= 4) return 'дні';
+  return 'днів';
+}
+
+export default async function RulesPage() {
+  const s = await getSiteSettings(0);
+  const maxActive = s ? s.local_listing_max_active : null;
+  const expiryDays = s ? s.local_listing_expiry_days : null;
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <div className="bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-4 py-3 mb-8 text-sm">
-        <strong>⚠ Шаблон — потребує перевірки юристом перед публікацією.</strong>{' '}
-        Вписати реальні реквізити, перевірити відповідність чинному законодавству України.
-      </div>
-
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">Правила розміщення оголошень</h1>
-
-      <div className="prose prose-slate max-w-none space-y-8 text-slate-700">
+    <LegalPage title="Правила розміщення оголошень" settings={s}>
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-3">1. Загальні положення</h2>
           <p>
@@ -30,16 +43,22 @@ export default function RulesPage() {
           <ul className="list-disc list-inside space-y-1">
             <li>Легкові автомобілі, що перебувають у власності або законному розпорядженні продавця.</li>
             <li>Транспортні засоби, що відповідають технічним та правовим вимогам для продажу в Україні.</li>
-            <li>Один продавець може мати не більше {'{LOCAL_LISTING_MAX_ACTIVE}'} активних оголошень одночасно.</li>
+            {maxActive !== null && (
+              <li>Один продавець може мати не більше {maxActive} активних оголошень одночасно.</li>
+            )}
           </ul>
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">3. Що забороняється</h2>
+          <h2 id="forbidden" className="text-xl font-semibold text-slate-800 mb-3">3. Що забороняється</h2>
           <ul className="list-disc list-inside space-y-1">
+            {/* 8.5 (N6.1): ПРОВЕРИТЬ С ЮРИСТОМ — чернетка формулювань */}
+            <li>Оголошення про автомобіль, що перебуває в розшуку.</li>
+            <li>Оголошення про автомобіль у заставі або під арештом без згоди заставодержателя чи органу, що наклав арешт.</li>
+            <li>Оголошення про автомобіль без документів, що підтверджують право продавця ним розпоряджатися.</li>
             <li>Розміщення недостовірної інформації про характеристики або стан автомобіля.</li>
             <li>Вказування неправдивої ціни або умов продажу.</li>
-            <li>Контактні дані (телефон, посилання на месенджери, сайти) в тексті оголошення — використовуйте відповідне поле «Контактний телефон».</li>
+            <li>Контактні дані (телефон, email, посилання на месенджери, сайти) в тексті оголошення — використовуйте відповідне поле «Контактний телефон».</li>
             <li>Дублювання оголошень (кілька оголошень про один і той самий автомобіль).</li>
             <li>Оголошення від імені іншої особи без відповідних повноважень.</li>
             <li>Реклама товарів або послуг, не пов'язаних з продажем конкретного транспортного засобу.</li>
@@ -92,8 +111,11 @@ export default function RulesPage() {
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-3">7. Термін дії оголошення</h2>
           <p>
-            Оголошення активне протягом 30 днів з моменту публікації. Після закінчення терміну оголошення
-            автоматично знімається з публікації. Продовження доступне через особистий кабінет.
+            {expiryDays !== null ? `Оголошення діє ${expiryDays} ${daysWord(expiryDays)} з моменту схвалення модератором. ` : 'Оголошення діє обмежений термін з моменту схвалення модератором. '}
+            Після закінчення терміну оголошення автоматично знімається з публікації.{' '}
+            {s?.payments_enabled === true
+              ? 'Продовження доступне через особистий кабінет.'
+              : 'Продовження безкоштовне й доступне через особистий кабінет.'}
           </p>
         </section>
 
@@ -105,11 +127,9 @@ export default function RulesPage() {
           </p>
         </section>
 
-        <p className="text-xs text-slate-400 mt-8 border-t border-slate-100 pt-4">
-          Версія: шаблон 2026 р. Потребує перевірки та затвердження юристом.
-          <br />Реквізити платформи: [вписати юридичну назву, ЄДРПОУ, адресу, контакти]
-        </p>
-      </div>
-    </div>
+      <p className="text-xs text-slate-500">
+        Контакти: <EmailOrMissing email={supportContact(s)} />
+      </p>
+    </LegalPage>
   );
 }

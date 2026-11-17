@@ -1,5 +1,8 @@
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
+
+from users.display import public_display_name
 
 from .models import Conversation, Message
 
@@ -7,9 +10,15 @@ User = get_user_model()
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name']
+        fields = ['id', 'display_name']
+
+    @extend_schema_field(serializers.CharField())
+    def get_display_name(self, obj):
+        return public_display_name(obj)
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -20,7 +29,7 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'sender_name', 'text', 'created_at', 'read_at']
 
     def get_sender_name(self, obj):
-        return obj.sender.first_name or obj.sender.email.split('@')[0]
+        return public_display_name(obj.sender)
 
 
 class ConversationListSerializer(serializers.ModelSerializer):
@@ -61,31 +70,43 @@ class ConversationListSerializer(serializers.ModelSerializer):
         return '/'
 
     def get_other_participant(self, obj):
+        # Из prefetch participants, без запроса на каждый диалог (06-Q6).
         user = self._user()
-        other = obj.participants.exclude(pk=user.pk).first()
+        other = next((p for p in obj.participants.all() if p.pk != user.pk), None)
         return ParticipantSerializer(other).data if other else None
 
+    @extend_schema_field(serializers.CharField())
     def get_last_message_text(self, obj):
-        msgs = list(obj.messages.all())
-        return msgs[-1].text[:100] if msgs else ''
+        text = getattr(obj, 'last_text', None)
+        return (text or '')[:100]
 
+    @extend_schema_field(serializers.IntegerField())
     def get_unread_count(self, obj):
-        user = self._user()
-        return sum(
-            1 for m in obj.messages.all()
-            if m.read_at is None and m.sender_id != user.pk
-        )
+        return getattr(obj, 'unread', 0) or 0
 
 
 class ConversationDetailSerializer(serializers.ModelSerializer):
     subject_title = serializers.SerializerMethodField()
     subject_url = serializers.SerializerMethodField()
     participants = ParticipantSerializer(many=True, read_only=True)
-    messages = MessageSerializer(many=True, read_only=True)
+    messages = serializers.SerializerMethodField()
+    has_earlier = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
-        fields = ['id', 'subject_title', 'subject_url', 'participants', 'messages', 'created_at', 'last_message_at']
+        fields = [
+            'id', 'subject_title', 'subject_url', 'participants', 'messages', 'has_earlier',
+            'created_at', 'last_message_at',
+        ]
+
+    @extend_schema_field(MessageSerializer(many=True))
+    def get_messages(self, obj):
+        # Порция последних MESSAGES_PAGE_SIZE сообщений (или более ранних по ?before=) - выбирает view.
+        return MessageSerializer(self.context.get('messages', []), many=True).data
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_has_earlier(self, obj):
+        return bool(self.context.get('has_earlier', False))
 
     def get_subject_title(self, obj):
         if obj.local_listing:

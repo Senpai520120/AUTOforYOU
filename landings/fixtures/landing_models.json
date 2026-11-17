@@ -1,0 +1,18 @@
+{
+  "_comment": "Стартовий список моделей - ДАНІ, не код. Джерело: docs/BUSINESS_PLAN.md розділ 3 (ніша: моделі масового пригону). Тут 13 з рекомендованих 30: решту додає власник (сюди або в адмінці). Ціни, паливо, об'єм і роки не заповнюються: їх вносить власник.",
+  "models": [
+    {"slug": "ford-escape", "make": "Ford", "model": "Escape"},
+    {"slug": "ford-fusion", "make": "Ford", "model": "Fusion"},
+    {"slug": "toyota-camry", "make": "Toyota", "model": "Camry"},
+    {"slug": "toyota-rav4", "make": "Toyota", "model": "RAV4"},
+    {"slug": "hyundai-sonata", "make": "Hyundai", "model": "Sonata"},
+    {"slug": "hyundai-tucson", "make": "Hyundai", "model": "Tucson"},
+    {"slug": "nissan-rogue", "make": "Nissan", "model": "Rogue"},
+    {"slug": "tesla-model-3", "make": "Tesla", "model": "Model 3"},
+    {"slug": "tesla-model-y", "make": "Tesla", "model": "Model Y"},
+    {"slug": "volkswagen-jetta", "make": "Volkswagen", "model": "Jetta"},
+    {"slug": "volkswagen-passat", "make": "Volkswagen", "model": "Passat"},
+    {"slug": "jeep-compass", "make": "Jeep", "model": "Compass"},
+    {"slug": "jeep-cherokee", "make": "Jeep", "model": "Cherokee"}
+  ]
+}

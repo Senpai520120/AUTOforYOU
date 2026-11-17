@@ -1,62 +1,66 @@
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import Link from 'next/link';
+import LegalPage, { EmailOrMissing } from '@/components/legal/LegalPage';
+import { getSiteSettings, supportContact } from '@/lib/site-settings';
+import { getPromotionTariffs } from '@/lib/site-config';
 
-export const metadata: Metadata = {
-  title: 'Політика повернення коштів | AUTOforYOU',
-};
+export const metadata: Metadata = buildMetadata({
+  title: 'Політика повернення коштів',
+  description:
+    'Політика повернення коштів за платні послуги просування оголошень на AUTOforYOU.',
+  path: '/refund',
+});
 
-export default function RefundPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function RefundPage() {
+  const s = await getSiteSettings(0);
+  const tariffs = s?.payments_enabled === true ? await getPromotionTariffs() : null;
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <p className="text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-4 py-2 mb-8">
-        Шаблон — потребує перевірки юристом перед публікацією
-      </p>
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">Політика повернення коштів</h1>
-
-      <div className="prose prose-slate max-w-none space-y-6 text-slate-700">
+    <LegalPage title="Політика повернення коштів" settings={s}>
         <section>
           <h2 className="text-xl font-semibold text-slate-800 mb-2">1. Які послуги є платними</h2>
           <p>
-            Реєстрація, подання оголошень, пошук і калькулятор — безкоштовні. Платними є лише
-            послуги просування власних оголошень:
+            Реєстрація, подання оголошень, пошук і калькулятор — безкоштовні.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse border border-slate-200 rounded">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="border border-slate-200 px-3 py-2 text-left">Послуга</th>
-                  <th className="border border-slate-200 px-3 py-2 text-left">Що дає</th>
-                  <th className="border border-slate-200 px-3 py-2 text-left">Строк</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="border border-slate-200 px-3 py-2">Продовження на 30 днів</td>
-                  <td className="border border-slate-200 px-3 py-2">Подовжує термін дії оголошення</td>
-                  <td className="border border-slate-200 px-3 py-2">30 днів</td>
-                </tr>
-                <tr>
-                  <td className="border border-slate-200 px-3 py-2">Підняти в топ списку</td>
-                  <td className="border border-slate-200 px-3 py-2">Одноразове підняття вгору списку</td>
-                  <td className="border border-slate-200 px-3 py-2">одноразово</td>
-                </tr>
-                <tr>
-                  <td className="border border-slate-200 px-3 py-2">ТОП 7 днів</td>
-                  <td className="border border-slate-200 px-3 py-2">Закріплення у ТОП-блоці каталогу</td>
-                  <td className="border border-slate-200 px-3 py-2">7 днів</td>
-                </tr>
-                <tr>
-                  <td className="border border-slate-200 px-3 py-2">ТОП 30 днів</td>
-                  <td className="border border-slate-200 px-3 py-2">Закріплення у ТОП-блоці каталогу</td>
-                  <td className="border border-slate-200 px-3 py-2">30 днів</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="text-sm text-slate-500 mt-2">
-            Актуальні ціни вказані на сторінці оголошення в момент замовлення послуги.
-            Оплата приймається через платіжний сервіс LiqPay.
-          </p>
+          {s?.payments_enabled !== true ? (
+            <p data-testid="refund-payments-off">
+              Платні послуги наразі недоступні, розміщення та продовження безкоштовні.
+            </p>
+          ) : tariffs && tariffs.length > 0 ? (
+            <>
+              <p>Платними є лише послуги просування власних оголошень:</p>
+              <div className="overflow-x-auto" data-testid="refund-tariffs">
+                <table className="w-full text-sm border-collapse border border-slate-200 rounded">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border border-slate-200 px-3 py-2 text-left">Послуга</th>
+                      <th className="border border-slate-200 px-3 py-2 text-left">Що дає</th>
+                      <th className="border border-slate-200 px-3 py-2 text-left">Строк</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tariffs.map((t) => (
+                      <tr key={t.id}>
+                        <td className="border border-slate-200 px-3 py-2">{t.name}</td>
+                        <td className="border border-slate-200 px-3 py-2">{t.description}</td>
+                        <td className="border border-slate-200 px-3 py-2">
+                          {t.duration_days > 0 ? `${t.duration_days} дн.` : 'одноразово'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-sm text-slate-500 mt-2">
+                Актуальні ціни вказані на сторінці оголошення в момент замовлення послуги.
+                Оплата приймається через платіжний сервіс LiqPay.
+              </p>
+            </>
+          ) : (
+            <p>Платних послуг наразі немає.</p>
+          )}
         </section>
 
         <section>
@@ -113,7 +117,7 @@ export default function RefundPage() {
           </ul>
           <p className="mt-2">
             Адреса для звернень:{' '}
-            <span className="font-mono text-slate-600">[email — заповнити]</span>
+            <EmailOrMissing email={supportContact(s)} />
           </p>
         </section>
 
@@ -136,10 +140,6 @@ export default function RefundPage() {
           </p>
         </section>
 
-        <p className="text-xs text-slate-400 mt-10 border-t pt-4">
-          Останнє оновлення: [дата — заповнити]
-        </p>
-      </div>
-    </div>
+    </LegalPage>
   );
 }

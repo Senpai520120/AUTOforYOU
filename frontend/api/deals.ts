@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from './client';
-import { Deal, ReviewPayload, SellerRating } from '@/lib/types';
+import { Deal, DealUser, ReviewPayload, SellerRating } from '@/lib/types';
 
 export const dealsApi = {
   list: () =>
@@ -21,7 +21,7 @@ export const dealsApi = {
     apiGet<SellerRating>(`/api/v1/deals/seller-rating/${userId}/`),
 
   listingBuyers: (listingId: number) =>
-    apiGet<{ id: number; email: string; first_name: string; last_name: string }[]>(
+    apiGet<DealUser[]>(
       `/api/v1/deals/listing-buyers/${listingId}/`
     ),
 };

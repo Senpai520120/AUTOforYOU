@@ -3,21 +3,29 @@ import { Suspense } from 'react';
 import ListingFilters from '@/components/listings/ListingFilters';
 import ListingsGrid from './ListingsGrid';
 import WholesaleHint from './WholesaleHint';
-import { buildQuery, serverGet, type SearchParams } from '@/lib/server-api';
+import { buildMetadata, hasFilters } from '@/lib/seo';
+import { fetchPaginated, type SearchParams } from '@/lib/server-api';
 import type { Listing, PaginatedResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Каталог авто',
-  description:
-    'Каталог автомобілів з аукціонів США Copart та IAAI. Фільтри за статусом, типом палива, ціною. В наявності та в дорозі.',
-  openGraph: {
-    title: 'Каталог авто — AUTOforYOU',
-    description: 'Автомобілі з США: Copart, IAAI. Фільтри за ціною, паливом, статусом.',
-    type: 'website',
-  },
-};
+/** Canonical — базовий шлях без query; сторінки з фільтрами не індексуються (задача 6.3). */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}): Promise<Metadata> {
+  const params = await searchParams;
+  return buildMetadata({
+    title: 'Каталог авто',
+    description:
+      'Каталог автомобілів з аукціонів США Copart та IAAI. Фільтри за статусом, типом палива, ціною. В наявності та в дорозі.',
+    // Рішення 6.3a: canonical каталогу завжди /listings (без query); сторінки пагінації індексуються, з фільтрами — noindex.
+    // Сторінка поза діапазоном показує першу (fetchPaginated) — canonical /listings це покриває.
+    path: '/listings',
+    noindex: hasFilters(params),
+  });
+}
 
 /** Має збігатися з _apply_filters у listings/views.py плюс search/ordering з DRF. */
 const LISTING_FILTERS = [
@@ -30,8 +38,8 @@ export default async function ListingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const data = await serverGet<PaginatedResponse<Listing>>(
-    `/api/v1/listings/${buildQuery(params, LISTING_FILTERS)}`,
+  const { data, page } = await fetchPaginated<PaginatedResponse<Listing>>(
+    '/api/v1/listings/', params, LISTING_FILTERS,
   );
 
   return (
@@ -45,7 +53,7 @@ export default async function ListingsPage({
       </Suspense>
 
       <div className="mt-6">
-        <ListingsGrid data={data} params={params} />
+        <ListingsGrid data={data} params={params} page={page} />
       </div>
     </div>
   );

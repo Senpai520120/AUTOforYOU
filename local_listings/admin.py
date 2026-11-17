@@ -3,8 +3,16 @@ from django.contrib.admin import helpers
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 
-from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
-from .services import approve_listing, reject_listing
+from .models import (
+    City,
+    ContactView,
+    ListingPriceHistory,
+    LocalListing,
+    LocalListingImage,
+    PromotionTariff,
+    Region,
+)
+from .services import ListingNotReadyError, approve_listing, min_photos, reject_listing
 
 # ─── Тарифи просування ────────────────────────────────────────────────────────
 
@@ -21,9 +29,14 @@ class PromotionTariffAdmin(admin.ModelAdmin):
 
 @admin.register(Region)
 class RegionAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug']
+    list_display = ['name', 'slug', 'katottg', 'is_active']
+    list_filter = ['is_active']
     prepopulated_fields = {'slug': ('name',)}
-    search_fields = ['name']
+    search_fields = ['name', 'katottg']
+
+    def get_readonly_fields(self, request, obj=None):
+        # 8.2: код КАТОТТГ после импорта меняет только import_katottg
+        return ['katottg'] if obj is not None and obj.katottg else []
 
 
 class CityInline(admin.TabularInline):
@@ -34,19 +47,36 @@ class CityInline(admin.TabularInline):
 
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
-    list_display = ['name', 'region', 'slug']
-    list_filter = ['region']
+    list_display = ['name', 'district_name', 'region', 'category', 'is_major', 'is_active']
+    list_filter = ['region', 'is_major', 'is_active']
+    list_select_related = ['region']
+    list_per_page = 100
     prepopulated_fields = {'slug': ('name',)}
-    search_fields = ['name', 'region__name']
+    search_fields = ['name', 'search_name', 'katottg', 'region__name']
+    exclude = ['search_name']
+
+    def get_readonly_fields(self, request, obj=None):
+        return ['katottg'] if obj is not None and obj.katottg else []
 
 
 # ─── Дії модерації ────────────────────────────────────────────────────────────
 
+def _can_moderate(request):
+    return request.user.has_perm('local_listings.moderate_locallisting')
+
+
 def approve_listings(modeladmin, request, queryset):
     """Масово одобрити вибрані оголошення (тільки pending)."""
+    if not _can_moderate(request):
+        modeladmin.message_user(request, 'Немає права модерувати оголошення.', messages.ERROR)
+        return
     count = 0
     for listing in queryset.filter(status=LocalListing.Status.PENDING):
-        approve_listing(listing, request.user)
+        try:
+            approve_listing(listing, request.user, request=request)
+        except ListingNotReadyError as exc:  # 8.4: мало фото - статус не меняется
+            modeladmin.message_user(request, f'#{listing.pk}: {exc}', messages.ERROR)
+            continue
         count += 1
     modeladmin.message_user(request, f'Опубліковано оголошень: {count}.', messages.SUCCESS)
 
@@ -56,11 +86,14 @@ approve_listings.short_description = 'Одобрити (→ active)'
 
 def reject_with_reason(modeladmin, request, queryset):
     """Відхилити вибрані оголошення з вказанням причини — проміжна форма."""
+    if not _can_moderate(request):
+        modeladmin.message_user(request, 'Немає права модерувати оголошення.', messages.ERROR)
+        return None
     if 'confirm' in request.POST:
         reason = request.POST.get('reason', '').strip() or 'Не відповідає правилам розміщення.'
         count = 0
         for listing in queryset.filter(status=LocalListing.Status.PENDING):
-            reject_listing(listing, request.user, reason)
+            reject_listing(listing, request.user, reason, request=request)
             count += 1
         modeladmin.message_user(request, f'Відхилено оголошень: {count}.', messages.WARNING)
         return HttpResponseRedirect(request.get_full_path())
@@ -82,10 +115,46 @@ reject_with_reason.short_description = 'Відхилити (з причиною)
 
 # ─── Список оголошень (усі) ───────────────────────────────────────────────────
 
+class EnoughPhotosFilter(admin.SimpleListFilter):
+    """8.4: «Достатньо фото» - число фото против LOCAL_LISTING_MIN_PHOTOS."""
+    title = 'Достатньо фото'
+    parameter_name = 'enough_photos'
+
+    def lookups(self, request, model_admin):
+        return [('yes', 'Так'), ('no', 'Ні')]
+
+    def queryset(self, request, queryset):
+        from django.db.models import Count
+        if self.value() not in ('yes', 'no'):
+            return queryset
+        qs = queryset.annotate(_photos=Count('images', distinct=True))
+        need = min_photos()
+        return qs.filter(_photos__gte=need) if self.value() == 'yes' else qs.filter(_photos__lt=need)
+
+
+class ListingPriceHistoryInline(admin.TabularInline):
+    """8.6: история цены - только чтение."""
+    model = ListingPriceHistory
+    extra = 0
+    fields = ['price', 'currency', 'changed_at']
+    readonly_fields = fields
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 class LocalListingImageInline(admin.TabularInline):
     model = LocalListingImage
     extra = 1
-    readonly_fields = ['created_at']
+    fields = ['preview', 'image', 'is_primary', 'created_at']
+    readonly_fields = ['preview', 'created_at']
+
+    @admin.display(description='Мініатюра')
+    def preview(self, obj):
+        from django.utils.html import format_html
+        f = obj.thumbnail or obj.image
+        return format_html('<img src="{}" style="max-height:60px">', f.url) if f else '—'
 
 
 @admin.register(LocalListing)
@@ -94,11 +163,21 @@ class LocalListingAdmin(admin.ModelAdmin):
         'short_title', 'owner', 'status', 'region', 'city',
         'seller_type', 'agreed_to_rules', 'has_contact_in_text', 'moderated_by', 'created_at',
     ]
-    list_filter = ['status', 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region', 'has_contact_in_text']
-    search_fields = ['make', 'model', 'owner__email', 'contact_phone']
-    readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'expiry_warned', 'bumped_at']
-    inlines = [LocalListingImageInline]
-    raw_id_fields = ['owner', 'region', 'city', 'moderated_by']
+    list_filter = ['status', EnoughPhotosFilter, 'fuel_type', 'body_type', 'transmission', 'seller_type', 'region',
+                   'has_contact_in_text']
+    search_fields = ['make', 'model', 'owner__email', 'contact_phone', 'source_channel']
+    readonly_fields = ['created_at', 'updated_at', 'moderated_at', 'agreed_to_rules_at', 'legal_confirmed', 'legal_confirmed_at',
+                       'expiry_warned', 'bumped_at', 'seller_type']  # 8.6: тип продавца определяет сервер
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change or {'price', 'currency'} & set(form.changed_data):
+            from .services import record_price_change
+            record_price_change(obj)  # 8.6: история цены и при правке в админке
+    inlines = [LocalListingImageInline, ListingPriceHistoryInline]
+    raw_id_fields = ['owner', 'moderated_by']
+    # 8.2: десятки тысяч пунктов - поиск вместо списка
+    autocomplete_fields = ['region', 'city']
     actions = [approve_listings, reject_with_reason]
 
     fieldsets = (
@@ -107,7 +186,7 @@ class LocalListingAdmin(admin.ModelAdmin):
                 'owner', 'make', 'model', 'year', 'mileage_km', 'engine_cc',
                 'fuel_type', 'transmission', 'body_type', 'condition',
                 'price', 'currency', 'price_type',
-                'region', 'city', 'description', 'contact_phone', 'seller_type',
+                'region', 'city', 'description', 'contact_phone', 'seller_type', 'source_channel',
             ),
         }),
         ('Статус і модерація', {
@@ -121,7 +200,7 @@ class LocalListingAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
         ('Згода з правилами', {
-            'fields': ('agreed_to_rules', 'agreed_to_rules_at'),
+            'fields': ('agreed_to_rules', 'agreed_to_rules_at', 'legal_confirmed', 'legal_confirmed_at'),
             'classes': ('collapse',),
         }),
         ('Термін дії і просування', {
@@ -133,6 +212,35 @@ class LocalListingAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    # Модератор (не superuser) змінює статус лише actions, а не формою: інакше через форму
+    # можна переписати власника, статус, відмітки модерації, телефон і тип продавця.
+    _MODERATOR_READONLY = [
+        'owner', 'status', 'moderated_by', 'moderated_at', 'promoted_until',
+        'expires_at', 'seller_type', 'contact_phone', 'source_channel',
+    ]
+
+    ATTRIBUTION_FIELDS = ('utm', 'referrer', 'entry_page_url')
+
+    def _can_see_attribution(self, request):
+        user = request.user
+        # Только право: доступ можно отозвать и у admin-роли (группа «Адміністратори» получает его в миграции).
+        return bool(user.is_active and user.has_perm('users.view_attribution'))
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is not None and self._can_see_attribution(request):
+            # Источник визита на момент подачи (2.14): только admin, только чтение.
+            fieldsets = (*fieldsets, ('Джерело візиту', {'fields': self.ATTRIBUTION_FIELDS, 'classes': ('collapse',)}))
+        return fieldsets
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            fields += [f for f in self._MODERATOR_READONLY if f not in fields]
+        if self._can_see_attribution(request):
+            fields += [f for f in self.ATTRIBUTION_FIELDS if f not in fields]
+        return fields
 
     @admin.display(description='Оголошення')
     def short_title(self, obj):
@@ -152,7 +260,7 @@ class PendingLocalListingProxy(LocalListing):
 @admin.register(PendingLocalListingProxy)
 class ModerationQueueAdmin(admin.ModelAdmin):
     list_display = ['short_title', 'owner_email', 'region', 'price', 'currency', 'has_contact_in_text', 'created_at']
-    list_filter = ['region', 'fuel_type', 'has_contact_in_text']
+    list_filter = [EnoughPhotosFilter, 'region', 'fuel_type', 'has_contact_in_text']
     search_fields = ['make', 'model', 'owner__email']
     readonly_fields = [
         'owner', 'make', 'model', 'year', 'mileage_km', 'engine_cc',
@@ -194,3 +302,68 @@ class ModerationQueueAdmin(admin.ModelAdmin):
     @admin.display(description='Власник')
     def owner_email(self, obj):
         return obj.owner.email
+
+
+# ─── Перегляди телефонів (4.5a, 05-S6) ────────────────────────────────────────
+
+@admin.register(ContactView)
+class ContactViewAdmin(admin.ModelAdmin):
+    """Журнал показів телефону: лише читання, лише модератор (право moderate_locallisting) або superuser.
+
+    Номера, user-agent і IP тут немає; у гостя - тільки хеш IP. Фільтр за користувачем/оголошенням -
+    з посилання сповіщення (?user__id__exact=…) або пошуком «=id».
+    """
+    list_display = ['created_at', 'who', 'listing', 'views_per_day']
+    list_filter = [('created_at', admin.DateFieldListFilter), 'is_guest']
+    search_fields = ['=user__id', '=listing__id', 'ip_hash']
+    list_select_related = ['user', 'listing']
+    date_hierarchy = 'created_at'
+    list_per_page = 100
+
+    def get_queryset(self, request):
+        from datetime import timedelta
+
+        from django.db.models import Count, OuterRef, Subquery
+        from django.utils import timezone
+
+        since = timezone.now() - timedelta(days=1)
+        per_user = (
+            ContactView.objects.filter(user=OuterRef('user'), created_at__gte=since)
+            .order_by().values('user').annotate(n=Count('pk')).values('n')
+        )
+        per_guest = (
+            ContactView.objects.filter(is_guest=True, ip_hash=OuterRef('ip_hash'), created_at__gte=since)
+            .order_by().values('ip_hash').annotate(n=Count('pk')).values('n')
+        )
+        return super().get_queryset(request).annotate(
+            _per_user=Subquery(per_user[:1]), _per_guest=Subquery(per_guest[:1]),
+        )
+
+    @admin.display(description='Хто')
+    def who(self, obj):
+        if obj.is_guest:
+            return f'Гість (хеш {obj.ip_hash[:8]}…)'
+        return obj.user or '—'
+
+    @admin.display(description='Переглядів за добу')
+    def views_per_day(self, obj):
+        return (obj._per_guest if obj.is_guest else obj._per_user) or 0
+
+    def _allowed(self, request):
+        user = request.user
+        return user.is_active and (user.is_superuser or user.has_perm('local_listings.moderate_locallisting'))
+
+    def has_module_permission(self, request):
+        return self._allowed(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._allowed(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

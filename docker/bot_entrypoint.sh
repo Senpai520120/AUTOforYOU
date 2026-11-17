@@ -5,4 +5,5 @@ if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
     echo "[bot] To enable the bot: add TELEGRAM_BOT_TOKEN to your .env file."
     exit 0
 fi
+echo "[bot] updates mode: ${TELEGRAM_UPDATES_MODE:-polling}"
 exec python manage.py run_bot

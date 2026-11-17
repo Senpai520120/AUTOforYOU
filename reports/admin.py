@@ -1,53 +1,79 @@
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
+from django.db import transaction
 
+from audit.models import AuditAction
+from audit.services import log_action
 from local_listings.models import LocalListing
+from users.admin import ask_reason
+from users.services import BLOCK_REASON_REQUIRED, block_user
 
 from .models import Report
 
 
+def _close_report(report, actor, request, new_status, action):
+    """Статус жалобы + запись журнала в одной транзакции с действием (1.13)."""
+    before = {'status': report.status}
+    report.status = new_status
+    report.save(update_fields=['status'])
+    log_action(actor, action, report, request=request, before=before, after={'status': new_status})
+
+
+@admin.action(permissions=['change'], description='Сховати оголошення + закрити скаргу')
 def hide_listing(modeladmin, request, queryset):
     """Сховати оголошення (скарга розглянута → listing hidden)."""
     count = 0
     for report in queryset.select_related('listing'):
-        if report.listing and report.listing.status == LocalListing.Status.ACTIVE:
-            report.listing.status = LocalListing.Status.HIDDEN
-            report.listing.save(update_fields=['status'])
-        report.status = Report.Status.REVIEWED
-        report.save(update_fields=['status'])
+        with transaction.atomic():
+            listing = report.listing
+            if listing and listing.status == LocalListing.Status.ACTIVE:
+                listing.status = LocalListing.Status.HIDDEN
+                listing.save(update_fields=['status'])
+                log_action(
+                    request.user, AuditAction.LISTING_HIDE, listing, request=request,
+                    reason=f'Скарга report#{report.pk}: {report.get_reason_display()}',
+                    before={'status': LocalListing.Status.ACTIVE}, after={'status': LocalListing.Status.HIDDEN},
+                )
+            _close_report(report, request.user, request, Report.Status.REVIEWED, AuditAction.REPORT_REVIEW)
         count += 1
     modeladmin.message_user(request, f'Оголошення сховано, скарги закриті: {count}.', messages.SUCCESS)
 
-hide_listing.short_description = 'Сховати оголошення + закрити скаргу'
 
-
+@admin.action(permissions=['change'], description='Заблокувати користувача + закрити скаргу (з причиною)')
 def ban_reported_user(modeladmin, request, queryset):
-    """Забанити користувача: is_banned=True, is_active=False, активні оголошення → hidden."""
-    count = 0
+    """Блокування через users.services.block_user (UserBlock, журнал, сесії, оголошення → hidden)."""
+    reason, response = ask_reason(
+        modeladmin, request, queryset, title='Блокування користувача за скаргою',
+        prompt='Вкажіть причину блокування', required_error=BLOCK_REASON_REQUIRED,
+    )
+    if response is not None:
+        return response
+    count = skipped = 0
     for report in queryset.select_related('reported_user', 'listing__owner'):
         target = report.reported_user or (report.listing.owner if report.listing else None)
         if not target:
             continue
-        if not target.is_banned:
-            target.is_banned = True
-            target.is_active = False
-            target.save(update_fields=['is_banned', 'is_active'])
-            LocalListing.objects.filter(
-                owner=target,
-                status__in=[LocalListing.Status.ACTIVE, LocalListing.Status.PENDING],
-            ).update(status=LocalListing.Status.HIDDEN)
-        report.status = Report.Status.REVIEWED
-        report.save(update_fields=['status'])
+        with transaction.atomic():
+            try:
+                block_user(target, request.user, reason, request=request)
+            except ValidationError:
+                skipped += 1  # співробітника або себе не блокуємо; скарга лишається відкритою
+                continue
+            _close_report(report, request.user, request, Report.Status.REVIEWED, AuditAction.REPORT_REVIEW)
         count += 1
-    modeladmin.message_user(request, f'Забанено користувачів, скарги закриті: {count}.', messages.WARNING)
+    modeladmin.message_user(
+        request, f'Заблоковано користувачів, скарги закриті: {count}. Пропущено: {skipped}.', messages.WARNING,
+    )
 
-ban_reported_user.short_description = 'Забанити користувача + закрити скаргу'
 
-
+@admin.action(permissions=['change'], description='Відхилити скарги')
 def dismiss_report(modeladmin, request, queryset):
-    queryset.update(status=Report.Status.DISMISSED)
-    modeladmin.message_user(request, 'Скарги відхилено.', messages.INFO)
-
-dismiss_report.short_description = 'Відхилити скарги'
+    count = 0
+    for report in queryset.exclude(status=Report.Status.DISMISSED):
+        with transaction.atomic():
+            _close_report(report, request.user, request, Report.Status.DISMISSED, AuditAction.REPORT_DISMISS)
+        count += 1
+    modeladmin.message_user(request, f'Скарги відхилено: {count}.', messages.INFO)
 
 
 @admin.register(Report)

@@ -1,20 +1,55 @@
+# Контекст сборки backend-образа (задача 7.3, 12-S4, аудит C6). Всё, чего тут нет в списке
+# исключений, попадает в образ через `COPY . .`: дамп БД, секреты, данные Postgres, ПДн.
 .git
+.github/
+.claude/
 .gitignore
+.idea/
 .venv
 venv
+node_modules/
 __pycache__
 **/__pycache__
 *.pyc
 *.pyo
 *.pyd
+# Секреты и локальные окружения. Шаблоны *.example безвредны, но образу они не нужны.
 .env
+.env.*
+.dev_secret_key
 db.sqlite3
 *.sqlite3
+# Дампы и данные БД, пользовательские файлы (ПДн)
+pgdata/
+*.sql
+dump.sql
 media/
+private_media/
 backups/
+# Артефакты тестов и кэши
+test-results/
+playwright-report/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.log
+# Исходники, которым нечего делать в backend-образе
 frontend/
-.idea/
+!frontend/e2e/fixtures/
 docs/
 tests/
 *.md
 openapi.yaml
+# Инфраструктура и служебные файлы разработчика: backend-образу не нужны
+nginx/
+nginx;C
+scripts/
+.agents/
+skills-lock.json
+kompas.html
+.gitleaks.toml
+.pre-commit-config.yaml
+docker-compose*.yml

@@ -1,8 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import Modal from '@/components/ui/Modal';
 import { useAuth } from '@/lib/auth-context';
 import { reportsApi } from '@/api/reports';
 import { ReportReason } from '@/lib/types';
+import { ApiError, firstDataMessage, getErrorMessage } from '@/lib/errors';
 
 interface Props {
   listingId?: number;
@@ -21,6 +23,8 @@ const REASONS: { value: ReportReason; label: string }[] = [
 
 export default function ReportButton({ listingId, reportedUserId, className = '' }: Props) {
   const { user } = useAuth();
+  const reasonId = useId();
+  const commentId = useId();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<ReportReason>('spam');
   const [comment, setComment] = useState('');
@@ -43,8 +47,9 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
       });
       setDone(true);
     } catch (err: unknown) {
-      const msg = (err as { detail?: string })?.detail || 'Не вдалося подати скаргу.';
-      setError(msg);
+      // 10-Q6: причина відмови сервера з err.data (detail, non_field_errors, перше поле).
+      const fromServer = err instanceof ApiError && err.status < 500 ? firstDataMessage(err.data) : null;
+      setError(fromServer ?? (err instanceof ApiError ? getErrorMessage(err) : 'Не вдалося подати скаргу.'));
     } finally {
       setLoading(false);
     }
@@ -60,9 +65,8 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-4">Поскаржитися</h3>
+        <Modal title="Поскаржитися" onClose={() => setOpen(false)}>
+          <div>
 
             {done ? (
               <div className="text-center py-4">
@@ -78,8 +82,9 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Причина</label>
+                  <label htmlFor={reasonId} className="block text-sm font-medium text-slate-700 mb-1">Причина</label>
                   <select
+                    id={reasonId}
                     value={reason}
                     onChange={e => setReason(e.target.value as ReportReason)}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
@@ -90,8 +95,9 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Коментар (необов'язково)</label>
+                  <label htmlFor={commentId} className="block text-sm font-medium text-slate-700 mb-1">Коментар (необов'язково)</label>
                   <textarea
+                    id={commentId}
                     value={comment}
                     onChange={e => setComment(e.target.value)}
                     rows={3}
@@ -99,7 +105,7 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
                     placeholder="Опишіть проблему..."
                   />
                 </div>
-                {error && <p className="text-sm text-red-600">{error}</p>}
+                {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
                 <div className="flex gap-2 justify-end">
                   <button
                     type="button"
@@ -119,7 +125,7 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
               </form>
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

@@ -1,0 +1,13 @@
+# /media/ (задача 1.10, 12-S7): nosniff и CSP sandbox, не-картинки - вложением.
+location /media/ {
+    alias /media/;
+    expires 7d;
+    add_header Content-Disposition $media_disposition always;
+    include /etc/nginx/generated/security-headers-media.conf;
+}
+
+# Фото трекинга до sanitize_existing_images лежали тут публично - больше не отдаём (задача 1.10).
+location /media/tracking_photos/ {
+    include /etc/nginx/generated/security-headers.conf;
+    return 404;
+}

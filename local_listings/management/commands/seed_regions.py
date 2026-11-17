@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 from django.utils.text import slugify
 
 from local_listings.models import City, Region
+from local_listings.places import normalize_place_name
 
 # (oblast_name, [cities...])
 # розширений перелік ~300+ міст — неповний КАТОТТГ, для повного потрібен офіційний CSV Мінцифри
@@ -143,6 +144,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--clear', action='store_true', help='Видалити існуючі дані перед засівом')
+        parser.add_argument('--force', action='store_true',
+                            help='Досіяти відсутні області/міста і в непорожньому довіднику')
 
     def handle(self, *args, **options):
         if options['clear']:
@@ -150,27 +153,39 @@ class Command(BaseCommand):
             Region.objects.all().delete()
             self.stdout.write('Очищено.')
 
+        # 1.18 (E2): на старті контейнера довідник засівається лише порожній; видалене адміном не повертається.
+        if not options['force'] and Region.objects.exists():
+            self.stdout.write('Регіони: пропущено, довідник не порожній (--force щоб досіяти).')
+            return
+
         regions_created = 0
         cities_created = 0
 
+        # 8.2: после import_katottg не плодим дублей - сопоставление по (область, нормализованное имя);
+        # найденные и созданные города из этого списка - крупные (быстрый список без ввода).
+        regions_by_name = {normalize_place_name(r.name): r for r in Region.objects.all()}
         for region_name, cities in _REGIONS:
-            slug = _slugify_uk(region_name)
-            region, created = Region.objects.get_or_create(
-                name=region_name,
-                defaults={'slug': slug},
-            )
-            if created:
+            region = regions_by_name.get(normalize_place_name(region_name))
+            if region is None:
+                region = Region.objects.create(name=region_name, slug=_slugify_uk(region_name))
+                regions_by_name[normalize_place_name(region_name)] = region
                 regions_created += 1
 
+            existing = {c.search_name or normalize_place_name(c.name): c for c in region.cities.all()}
             for city_name in cities:
+                city = existing.get(normalize_place_name(city_name))
+                if city is not None:
+                    if not city.is_major:
+                        city.is_major = True
+                        city.save(update_fields=['is_major'])
+                    continue
                 city_slug = _slugify_uk(city_name)
-                _, c_created = City.objects.get_or_create(
-                    region=region,
-                    slug=city_slug,
-                    defaults={'name': city_name},
+                if region.cities.filter(slug=city_slug).exists():
+                    continue
+                existing[normalize_place_name(city_name)] = City.objects.create(
+                    region=region, slug=city_slug, name=city_name, is_major=True,
                 )
-                if c_created:
-                    cities_created += 1
+                cities_created += 1
 
         self.stdout.write(
             self.style.SUCCESS(

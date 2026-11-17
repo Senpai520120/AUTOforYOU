@@ -11,9 +11,12 @@ import { pageHref, type SearchParams } from '@/lib/server-api';
 export default function ListingsGrid({
   data,
   params,
+  page = 1,
 }: {
   data: PaginatedResponse<Listing> | null;
   params: SearchParams;
+  /** Нормалізований номер сторінки (page.tsx). */
+  page?: number;
 }) {
   if (data === null) {
     return (
@@ -34,15 +37,14 @@ export default function ListingsGrid({
     );
   }
 
-  const rawPage = Array.isArray(params.page) ? params.page[0] : params.page;
-  const currentPage = Number(rawPage ?? 1);
+  const currentPage = page;
 
   return (
     <>
       <p className="text-sm text-slate-500 mb-4">Знайдено: {data.count}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {data.results.map(l => (
-          <ListingCard key={l.id} listing={l} />
+        {data.results.map((l, i) => (
+          <ListingCard key={l.id} listing={l} priority={i === 0} />
         ))}
       </div>
 
