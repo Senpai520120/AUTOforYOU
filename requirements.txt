@@ -6,27 +6,27 @@ django-cors-headers==4.9.0
 Pillow==13.0.0
 psycopg2-binary==2.9.13
 PyJWT==2.15.1
-# RS256 для PyJWT: проверка подписи id_token Keycloak (SSO-1).
+# RS256 РґР»СЏ PyJWT: РїСЂРѕРІРµСЂРєР° РїРѕРґРїРёСЃРё id_token Keycloak (SSO-1).
 cryptography==50.0.2
 drf-spectacular==0.29.0
 httpx==0.28.1
 liqpay==1.0
-# Промт 7: PostgreSQL URL-парсер и S3-хранилище
+# РџСЂРѕРјС‚ 7: PostgreSQL URL-РїР°СЂСЃРµСЂ Рё S3-С…СЂР°РЅРёР»РёС‰Рµ
 dj-database-url==2.3.0
 django-storages[s3]==1.14.4
 boto3==1.44.3
-# Промт 9: Redis-кэш (включается через REDIS_URL; без него — LocMemCache)
+# РџСЂРѕРјС‚ 9: Redis-РєСЌС€ (РІРєР»СЋС‡Р°РµС‚СЃСЏ С‡РµСЂРµР· REDIS_URL; Р±РµР· РЅРµРіРѕ вЂ” LocMemCache)
 django-redis==7.0.0
-# Промт 10: Celery (брокер Redis, переиспользует REDIS_URL; без него — eager mode)
+# РџСЂРѕРјС‚ 10: Celery (Р±СЂРѕРєРµСЂ Redis, РїРµСЂРµРёСЃРїРѕР»СЊР·СѓРµС‚ REDIS_URL; Р±РµР· РЅРµРіРѕ вЂ” eager mode)
 celery[redis]==5.7.0
-# kombu 5.7 требует redis-py>=6.1 (у нас 5.3.1 из django-redis) — воркер падает VersionMismatch (CI 2026-11-03)
+# kombu 5.7 С‚СЂРµР±СѓРµС‚ redis-py>=6.1 (Сѓ РЅР°СЃ 5.3.1 РёР· django-redis) вЂ” РІРѕСЂРєРµСЂ РїР°РґР°РµС‚ VersionMismatch (CI 2026-11-03)
 kombu==5.7.0
 django-celery-beat==2.9.0
-# flower==2.0.1  # опционально: мониторинг задач в dev (pip install flower вручную)
-# Промт 11: Telegram-бот (aiogram 3.x; без TELEGRAM_BOT_TOKEN бот не стартует, сайт работает)
+# flower==2.0.1  # РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ: РјРѕРЅРёС‚РѕСЂРёРЅРі Р·Р°РґР°С‡ РІ dev (pip install flower РІСЂСѓС‡РЅСѓСЋ)
+# РџСЂРѕРјС‚ 11: Telegram-Р±РѕС‚ (aiogram 3.x; Р±РµР· TELEGRAM_BOT_TOKEN Р±РѕС‚ РЅРµ СЃС‚Р°СЂС‚СѓРµС‚, СЃР°Р№С‚ СЂР°Р±РѕС‚Р°РµС‚)
 aiogram==3.29.0
-# Промт 15: WSGI-сервер для Docker/production (runserver НЕ використовується у Docker)
+# РџСЂРѕРјС‚ 15: WSGI-СЃРµСЂРІРµСЂ РґР»СЏ Docker/production (runserver РќР• РІРёРєРѕСЂРёСЃС‚РѕРІСѓС”С‚СЊСЃСЏ Сѓ Docker)
 gunicorn==26.0.0
 sentry-sdk[django,celery]==2.75.0
-# Тесты: manage.py test --parallel (задача 9.47): без tblib исключения из воркеров не передаются
+# РўРµСЃС‚С‹: manage.py test --parallel (Р·Р°РґР°С‡Р° 9.47): Р±РµР· tblib РёСЃРєР»СЋС‡РµРЅРёСЏ РёР· РІРѕСЂРєРµСЂРѕРІ РЅРµ РїРµСЂРµРґР°СЋС‚СЃСЏ
 tblib==3.2.2
