@@ -17,7 +17,7 @@
   "dependencies": {
     "next": "16.4.4",
     "react": "19.3.1",
-    "react-dom": "19.2.4",
+    "react-dom": "19.3.1",
     "server-only": "0.0.1"
   },
   "devDependencies": {
