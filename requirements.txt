@@ -13,10 +13,10 @@ httpx==0.28.1
 liqpay==1.0
 # Промт 7: PostgreSQL URL-парсер и S3-хранилище
 dj-database-url==2.3.0
-django-storages[s3]==1.14.4
+django-storages[s3]==1.14.6
 boto3==1.44.3
 # Промт 9: Redis-кэш (включается через REDIS_URL; без него — LocMemCache)
-django-redis==5.4.0
+django-redis==7.0.0
 # Промт 10: Celery (брокер Redis, переиспользует REDIS_URL; без него — eager mode)
 celery[redis]==5.4.0
 # kombu 5.7 требует redis-py>=6.1 (у нас 5.3.1 из django-redis) — воркер падает VersionMismatch (CI 2026-11-03)
