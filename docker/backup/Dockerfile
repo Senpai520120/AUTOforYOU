@@ -1,6 +1,6 @@
 # Сервис резервных копий (задача 7.4). Мажорная версия pg_dump совпадает с сервером: образ тот же, что у db
 # в docker-compose.yml (при смене версии db менять и здесь, иначе pg_dump откажется работать).
-FROM postgres:18.4-alpine
+FROM postgres:18.6-alpine
 
 RUN apk add --no-cache aws-cli curl gnupg tzdata
 
