@@ -26,7 +26,7 @@ django-celery-beat==2.9.0
 # Промт 11: Telegram-бот (aiogram 3.x; без TELEGRAM_BOT_TOKEN бот не стартует, сайт работает)
 aiogram==3.29.0
 # Промт 15: WSGI-сервер для Docker/production (runserver НЕ використовується у Docker)
-gunicorn==26.0.0
+gunicorn==27.0.1
 sentry-sdk[django,celery]==2.75.0
 # Тесты: manage.py test --parallel (задача 9.47): без tblib исключения из воркеров не передаются
 tblib==3.2.2
