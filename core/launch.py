@@ -280,7 +280,7 @@ def check_site_settings() -> list:
     else:
         findings.append(Finding(OK, 'Налаштування сайту: реквізити й контакти заповнені'))
     if not (obj.partner_name or '').strip():
-        findings.append(Finding(ERROR, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний'))
+        findings.append(Finding(ERROR, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний, замість форми заявки відвідувач бачить запасний контакт'))
     else:
         findings.append(Finding(OK, 'Назва партнера задана'))
     if not (obj.legal_docs_version or '').strip():

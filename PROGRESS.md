@@ -48,6 +48,15 @@
 - Полный бэкенд: 3204 теста, падают только 2 известных Windows-only (`test_entrypoint_refuses_debug_*`).
 - Заметки: кэш сборки Docker на сервере 3,4 ГБ, `deploy.sh` его не чистит (`docker builder prune` вручную или задача). Сервер после сессии — остановить (`aws ec2 stop-instances --instance-ids i-017e7dfd9fced32f5`), по слову владельца. Ключ `claude-deploy` с `IAMFullAccess` — деактивировать после работ.
 
+## Задача 10.7: тупики перед заявкой (2026-11-20) — ЗАВЕРШЕНО (e2e не запускался)
+
+- Новый `frontend/components/ui/FallbackContact.tsx`: контакты из `SiteSettings` (телефон `tel:`, `manager_contact`, email `mailto:`, бот/канал t.me), без контактов — честный текст `fallback-no-contact`; кнопка «Спробувати ще раз» (disabled + `aria-busy` при повторе). Хук `useFallbackSettings` грузит настройки только при входе в тупик.
+- `LeadForm`: настройки грузятся функцией с защитой от параллельных запросов; при пустом партнёре/сбое — «Заявки онлайн тимчасово недоступні» + контакт + повтор без перезагрузки; 503 при отправке показывает тот же блок.
+- `calculator/page.tsx`: «не завантажився» и «не налаштовано» (`calc-not-configured` сохранён) — контакт + повтор `pricingApi.options()` (счётчик попыток); `calc-errors.ts`: `showContact` только для 422 и 5xx/сети (не для 400/429), контакт под текстом ошибки.
+- `launch_check`: текст ошибки партнёра дополнен; тест проверяет код выхода и OK-ветку; мутация (убрать проверку `partner_name`) — тест красный. `LandingCalc` тупика не имеет (расчёт обязателен).
+- Проверки: `tsc` чисто, `npm run lint` 0 ошибок, `manage.py test core` 280 OK, `ruff` чисто. Playwright: `e2e/dead-ends.spec.ts` (новый), правки `lead.spec.ts`, `calculator-config.spec.ts` — не запускались; мутации e2e не прогонялись.
+- Осталось владельцу: заполнить контакты и партнёра в «Налаштування сайту» (LAUNCH_CHECKLIST).
+
 ## Задача 10.6: заявка не теряется молча (2026-11-19) — ЗАВЕРШЕНО (кроме пункта «осталось»)
 
 - Недоставленная заявка (после исчерпания попыток) дублируется владельцу в `FAILED_TASK_ALERT_CHAT_ID` / `_EMAIL` через `core.tasks._send_failed_task_alert` (`leads/notify.py`: `alert_owner_undelivered`, текст — только `public_id` и ссылка в админку). Сбой канала не роняет `resend_undelivered_leads` и не снимает `undelivered_alerted_at`; канал не настроен — `logger.warning`.

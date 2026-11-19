@@ -126,6 +126,7 @@ test.describe('Калькулятор: довідники з API', () => {
     await page.goto('/calculator');
     await expect(page.getByTestId('calc-not-configured')).toContainText('Калькулятор ще не налаштовано');
     await expect(page.getByRole('button', { name: 'Розрахувати' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Спробувати ще раз' })).toBeVisible();
   });
 
   test('2.18: «Чистий» обирається, розрахунок іде з title_type=clean і підсумок відрізняється від salvage', async ({ page }) => {

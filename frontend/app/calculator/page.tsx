@@ -12,6 +12,7 @@ import CalculatorFaq from '@/components/content/CalculatorFaq';
 import CalculatorHowWeCount from '@/components/calculator/CalculatorHowWeCount';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
+import FallbackContact, { useFallbackSettings } from '@/components/ui/FallbackContact';
 
 // Числові поля в стані форми — рядки: порожнє поле лишається порожнім (не 0), спрацьовує required.
 type CalcForm = Omit<CalcInputs, 'engine_cc' | 'vehicle_year' | 'battery_capacity_kwh' | 'ua_delivery_rate'> & {
@@ -102,6 +103,8 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
   const [result, setResult] = useState<CalcResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<CalcErrorView | null>(null);
+  const showContact = !!error?.showContact;
+  const contactSettings = useFallbackSettings(showContact);
   const listingParam = Number(params.get('listing'));
   const listingId = Number.isInteger(listingParam) && listingParam > 0 ? listingParam : undefined;
 
@@ -212,6 +215,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
             {error.details.length > 0 && (
               <ul className="list-disc ml-5 mt-1 text-xs">{error.details.map(d => <li key={d}>{d}</li>)}</ul>
             )}
+            {showContact && <FallbackContact settings={contactSettings} />}
           </div>
         )}
       </form>
@@ -236,20 +240,41 @@ function FormSkeleton() {
 function CalculatorLoader() {
   const [data, setData] = useState<CalcRatesResponse | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
-    pricingApi.options().then(setData).catch(() => setFailed(true));
-  }, []);
+    let alive = true;
+    pricingApi.options()
+      .then((d) => { if (alive) { setData(d); setFailed(false); } })
+      .catch(() => { if (alive) setFailed(true); })
+      .finally(() => { if (alive) setRetrying(false); });
+    return () => { alive = false; };
+  }, [attempt]);
+
+  const notConfigured = !!data && !data.options.is_configured;
+  const settings = useFallbackSettings(failed || notConfigured);
+  const retry = () => {
+    if (retrying) return;
+    setRetrying(true);
+    setAttempt((n) => n + 1);
+  };
 
   if (failed) {
-    return <p role="alert" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">Не вдалося завантажити калькулятор. Спробуйте пізніше.</p>;
+    return (
+      <div role="alert" data-testid="calc-load-failed" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-4">
+        <p>Не вдалося завантажити калькулятор.</p>
+        <FallbackContact settings={settings} onRetry={retry} retrying={retrying} />
+      </div>
+    );
   }
   if (!data) return <FormSkeleton />;
   if (!data.options.is_configured) {
     return (
-      <p data-testid="calc-not-configured" className="mt-4 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-4">
-        Калькулятор ще не налаштовано. Залиште заявку — брокер порахує вартість вручну.
-      </p>
+      <div data-testid="calc-not-configured" className="mt-4 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-4">
+        <p>Калькулятор ще не налаштовано. Розрахунок можна отримати в менеджера.</p>
+        <FallbackContact settings={settings} onRetry={retry} retrying={retrying} />
+      </div>
     );
   }
   return <CalculatorForm data={data} />;

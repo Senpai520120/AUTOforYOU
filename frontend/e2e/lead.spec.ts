@@ -378,7 +378,7 @@ test.describe('Партнер не налаштований', () => {
       await r.fulfill({ json: { ...real, partner_name: '', partner_consent_text: '' } });
     });
     await calculate(page);
-    await expect(page.getByText('партнера ще не налаштовано')).toBeVisible();
+    await expect(page.getByText('Заявки онлайн тимчасово недоступні')).toBeVisible();
     // Капча готова (honeypot-токен віддається через ~3 с): тільки тоді «неактивна» не пояснюється очікуванням.
     await expect(page.locator('input[name="website"]')).toBeAttached(); // конфіг капчі отримано
     await page.waitForTimeout(3500); // одноразове очікування мінімального часу заповнення капчі

@@ -4,7 +4,7 @@
  * Гість не втрачає введене: 401 тут не веде на /login (api/client не редиректить).
  */
 import { trackEvent } from '@/lib/analytics';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiGet, ApiError } from '@/api/client';
 import { leadsApi } from '@/api/leads';
@@ -13,6 +13,7 @@ import { getAttribution } from '@/lib/attribution';
 import { isCaptchaFailed, useAuthConfig, useCaptchaState } from '@/lib/captcha';
 import type { LeadContactMethod, LeadCreate, LeadNeededWhen, LeadSource, SiteSettings } from '@/lib/types';
 import Captcha from '@/components/ui/Captcha';
+import FallbackContact from '@/components/ui/FallbackContact';
 import LeadSuccess from './LeadSuccess';
 
 interface Props {
@@ -78,6 +79,11 @@ export default function LeadForm({
   const touched = useRef({ name: false, phone: false });
 
   const [consentText, setConsentText] = useState<string | null>(null);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [serverDown, setServerDown] = useState(false);
+  const loadingRef = useRef(false);
+  const aliveRef = useRef(true);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -96,13 +102,38 @@ export default function LeadForm({
   const [general, setGeneral] = useState('');
   const [publicId, setPublicId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    apiGet<SiteSettings>('/api/v1/site-settings/')
-      .then((s) => { if (alive) setConsentText(s.partner_consent_text?.trim() ?? ''); })
-      .catch(() => { if (alive) setConsentText(''); });
-    return () => { alive = false; };
+  // Завантаження налаштувань сайту; повтор не створює паралельних запитів.
+  const loadSettings = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setRetrying(true);
+    try {
+      const st = await apiGet<SiteSettings>('/api/v1/site-settings/');
+      if (!aliveRef.current) return;
+      setSiteSettings(st);
+      setConsentText(st.partner_consent_text?.trim() ?? '');
+    } catch {
+      if (!aliveRef.current) return;
+      setSiteSettings(null);
+      setConsentText('');
+    } finally {
+      loadingRef.current = false;
+      if (aliveRef.current) setRetrying(false);
+    }
   }, []);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSettings();
+    return () => { aliveRef.current = false; };
+  }, [loadSettings]);
+
+  const retry = async () => {
+    setServerDown(false);
+    setGeneral('');
+    await loadSettings();
+  };
 
   // Передзаповнення з профілю: лише поки користувач сам не чіпав поле.
   useEffect(() => {
@@ -168,7 +199,8 @@ export default function LeadForm({
       } else if (err instanceof ApiError && err.status === 429) {
         setGeneral('Забагато заявок, спробуйте пізніше.');
       } else if (err instanceof ApiError && err.status === 503) {
-        setGeneral('Прийом заявок тимчасово недоступний. Спробуйте пізніше.');
+        setServerDown(true);
+        setGeneral('');
       } else {
         setGeneral(GENERAL_ERROR);
       }
@@ -301,10 +333,12 @@ export default function LeadForm({
             onChange={(e) => setPartnerConsent(e.target.checked)} />
           <span data-testid="partner-consent-text">{consentText || 'Згода на передачу контактів партнеру'}</span>
         </label>
-        {consentText === '' && (
-          <p role="status" className="text-amber-700 text-xs mt-1">
-            Прийом заявок тимчасово недоступний: партнера ще не налаштовано.
-          </p>
+        {(consentText === '' || serverDown) && (
+          <div role="alert" data-testid="lead-unavailable"
+            className="mt-2 text-sm bg-amber-50 border border-amber-200 rounded p-3">
+            <p className="font-semibold text-amber-900">Заявки онлайн тимчасово недоступні</p>
+            <FallbackContact settings={siteSettings} onRetry={retry} retrying={retrying} />
+          </div>
         )}
         <FieldError id="lead-partner-err" text={errors.partner_consent} />
       </div>

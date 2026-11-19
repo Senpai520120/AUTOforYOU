@@ -5,6 +5,8 @@ export interface CalcErrorView {
   fieldErrors: Record<string, string>;
   message: string;
   details: string[];
+  /** Показати запасний контакт: лише 422 «не налаштовано» і збої мережі/5xx (не валідація, не 429). */
+  showContact?: boolean;
 }
 
 const NOT_CONFIGURED = 'Калькулятор ще не налаштовано для цих параметрів. Спробуйте інший порт чи аукціон або залиште заявку брокеру.';
@@ -50,10 +52,10 @@ export function describeCalcError(err: unknown): CalcErrorView {
   }
   if (status === 422) {
     const missing = Array.isArray(data?.missing) ? (data.missing as unknown[]).filter((m): m is string => typeof m === 'string') : [];
-    return { fieldErrors: {}, message: NOT_CONFIGURED, details: missing.map(humanize) };
+    return { fieldErrors: {}, message: NOT_CONFIGURED, details: missing.map(humanize), showContact: true };
   }
   if (status === 429) return { fieldErrors: {}, message: TOO_MANY, details: [] };
-  return { fieldErrors: {}, message: GENERIC, details: [] };
+  return { fieldErrors: {}, message: GENERIC, details: [], showContact: true };
 }
 
 // "0.1000" → "10", "0.0500" → "5", "0.125" → "12.5" — без parseFloat-округлення.

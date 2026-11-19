@@ -368,7 +368,8 @@ class SiteSettingsTests(LaunchCheckTestCase):
     def test_empty_partner_name_is_error_with_exact_text(self):
         SiteSettings.objects.filter(pk=1).update(partner_name='')
         code, out = self.run_check()
-        self.assertFails(code, out, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний')
+        self.assertFails(code, out, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний',
+                         'замість форми заявки відвідувач бачить запасний контакт')
 
     def test_empty_legal_version_is_error(self):
         SiteSettings.objects.filter(pk=1).update(legal_docs_version='')
@@ -383,7 +384,9 @@ class SiteSettingsTests(LaunchCheckTestCase):
         self.assertIn('строк зберігання платіжних документів не заданий', out)
 
     def test_filled_settings_give_no_site_settings_errors(self):
-        _code, out = self.run_check()
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('Назва партнера задана', out)
         self.assertIn('реквізити й контакти заповнені', out)
         self.assertNotIn('не відмічені як перевірені юристом', out)
 
