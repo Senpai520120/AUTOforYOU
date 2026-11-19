@@ -33,6 +33,7 @@ from .models import LandingSettings, ModelLandingPage
 
 ZERO = Decimal('0')
 CACHE_TTL = 600  # 10 минут; правка тарифов или страницы сбрасывает кэш сразу (версия + updated_at в ключе)
+CALC_SCHEMA = 'v2'  # 10.1: версия формы расчёта в кэше; менять при добавлении полей
 VERSION_KEY = 'landings:version'  # тот же ключ, что KEYS['landings_version'] в pricing.cache
 
 
@@ -56,7 +57,7 @@ def bump_cache_version() -> None:
 
 def cached_calculation(page: ModelLandingPage) -> dict | None:
     """build_landing_calculation с кэшем. Ключ: версия каталога, страница, updated_at, дата расчёта."""
-    key = f'landings:calc:{_cache_version()}:{page.pk}:{page.updated_at.timestamp()}:{timezone.localdate()}'
+    key = f'landings:calc:{CALC_SCHEMA}:{_cache_version()}:{page.pk}:{page.updated_at.timestamp()}:{timezone.localdate()}'
     try:
         hit = cache.get(key)
     except Exception:
@@ -165,6 +166,7 @@ def build_landing_calculation(page: ModelLandingPage, *, now=None) -> dict | Non
         'exchange_rate_date': selected.usd_to_uah.date.isoformat(),
         **exchange_rate_info(selected.usd_to_uah, selected.usd_to_eur, calc_date, settings.EXCHANGE_RATE_MAX_AGE_DAYS),
         'total_usd': str(result.total_usd),
+        'total_usd_full': str(result.total_usd_full),
         'total_uah': str(result.total_uah),
         'breakdown': result.to_dict(),
         'applied_rates': applied_rates(rates, inputs['fuel_type']),
@@ -212,6 +214,7 @@ def lead_calculation_snapshot(page: ModelLandingPage, calc: dict) -> dict:
         'rates_snapshot': calc['rates_snapshot'],
         'breakdown': calc['breakdown'],
         'total_usd': calc['total_usd'],
+        'total_usd_full': calc.get('total_usd_full') or calc['total_usd'],
         'total_uah': calc['total_uah'],
     }
 

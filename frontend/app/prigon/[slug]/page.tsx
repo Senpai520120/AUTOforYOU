@@ -85,7 +85,7 @@ export default async function LandingPage({ params }: Params) {
 
       <section id={LANDING_FORM_ID} className="scroll-mt-4">
         <LeadForm source="landing" landingSlug={p.slug} vehicleLabel={label}
-          defaultBudgetUsd={budgetFrom(p.calculation.total_usd)} />
+          defaultBudgetUsd={budgetFrom(p.calculation.total_usd_full ?? p.calculation.total_usd)} />
       </section>
 
       <p className="text-xs text-slate-500" data-testid="landing-disclaimer">

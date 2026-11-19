@@ -59,7 +59,7 @@ export default function LandingCalc({ calculation: c, termText, includedText }: 
           </span>
         )}
       </div>
-      <p className="text-3xl font-extrabold text-blue-900 font-mono" data-testid="landing-total-usd">{usd(c.total_usd)}</p>
+      <p className="text-3xl font-extrabold text-blue-900 font-mono" data-testid="landing-total-usd">{usd(c.total_usd_full ?? c.total_usd)}</p>
       <p className="text-sm text-slate-500 font-mono" data-testid="landing-total-uah">{uah(c.total_uah)}</p>
 
       {c.is_demo && (

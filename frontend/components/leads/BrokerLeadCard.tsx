@@ -105,7 +105,7 @@ function Snapshot({ lead }: { lead: BrokerLeadDetail }) {
         </dl>
       )}
       {snap.total_usd && (
-        <p className="mt-2 font-bold">Разом: ${Number(snap.total_usd).toLocaleString('uk-UA')}
+        <p className="mt-2 font-bold">Разом: ${Number(snap.total_usd_full ?? snap.total_usd).toLocaleString('uk-UA')}
           {snap.total_uah ? ` (≈ ${Number(snap.total_uah).toLocaleString('uk-UA')} грн)` : ''}
           {snap.is_estimate ? ' — орієнтовно' : ''}</p>
       )}

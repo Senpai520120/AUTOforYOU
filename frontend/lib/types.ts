@@ -87,6 +87,8 @@ export interface CalcBreakdown {
   customs_total_uah: string;
   total_usd: string;
   total_uah: string;
+  // 10.1: повна сума з акцизом, ПДВ і пенсійним збором; у старих розрахунків немає
+  total_usd_full?: string;
   is_estimate: boolean;
   // 2.7: після розмитнення; null / pending — «уточнюється менеджером»
   ua_delivery_usd: string | null;
@@ -720,6 +722,7 @@ export interface BrokerLeadDetail extends BrokerLeadRow {
     rates_snapshot?: Record<string, unknown>;
     breakdown?: Record<string, unknown>;
     total_usd?: string;
+    total_usd_full?: string | null;
     total_uah?: string;
   };
   listing: { id: number; url: string } | null;
@@ -762,6 +765,7 @@ export interface LandingListItem {
   make: string;
   model: string;
   total_usd: string;
+  total_usd_full?: string;
   total_uah: string;
   updated_at: string;
 }
@@ -780,6 +784,7 @@ export interface LandingCalculation {
   usd_to_uah: string;
   exchange_rate_date: string;
   total_usd: string;
+  total_usd_full?: string;
   total_uah: string;
   breakdown: CalcBreakdown;
   applied_rates: CalcResult['applied_rates'];

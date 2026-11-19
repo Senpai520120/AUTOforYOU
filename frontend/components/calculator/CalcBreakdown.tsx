@@ -69,9 +69,14 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-blue-800">
-            <td className="pt-3 font-bold text-blue-900 text-lg">РАЗОМ</td>
-            <td className="pt-3 text-right font-extrabold text-blue-900 text-lg font-mono">
-              ${Number(b.total_usd).toLocaleString()}
+            <td className="pt-3 font-bold text-blue-900 text-lg">
+              РАЗОМ
+              <span className="block text-xs font-normal text-slate-500">
+                (з митом, акцизом, ПДВ і пенсійним збором), орієнтовно
+              </span>
+            </td>
+            <td className="pt-3 text-right font-extrabold text-blue-900 text-lg font-mono" data-testid="calc-total-usd">
+              ${Number(b.total_usd_full ?? b.total_usd).toLocaleString()}
             </td>
             <td className="pt-3 text-right font-extrabold text-slate-600 text-base font-mono">
               {Number(b.total_uah).toLocaleString()} грн

@@ -162,6 +162,8 @@ class LandedCostBreakdown:
     broker_services_pending: bool = True
     # 9.51: у старых расчётов поля нет - читается как 0
     auction_fee_title_handling_usd: Decimal = ZERO
+    # 10.1: полная сумма в USD (с акцизом, ПДВ и пенсионным сбором) = total_uah / usd_to_uah, курс из снимка
+    total_usd_full: Decimal = ZERO
 
     def to_dict(self) -> dict:
         def conv(v):
@@ -203,8 +205,11 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
       4. Пошлина (USD) = customs_value_usd × duty_rate
       5. НДС (UAH) = (customs_value_uah + duty_uah + excise_uah) × vat_rate
       6. Пенсионный сбор = итоговая_стоимость_uah × pension_rate
-      7. Итого USD = auction_price + auction_fee + us_land + ocean + eu_to_ua + duty_usd
+      7. Итого USD (total_usd, без акциза, ПДВ и пенсионного сбора) =
+         auction_price + auction_fee + us_land + ocean + eu_to_ua + duty_usd
       8. Итого UAH = итого_USD × usd_to_uah + excise_uah + vat_uah + pension_uah
+      9. Полный итог USD (total_usd_full, 10.1) = итого_UAH / usd_to_uah - с акцизом, ПДВ и пенсионным
+         сбором, по курсу из того же снимка. Пошлина учтена один раз (внутри customs_total_uah).
 
     pension_brackets и rule (2.5, Q5): брекет пенсионного сбора выбирается здесь по базе из правила
     (rule.pension_bracket_base), ставка применяется к rule.pension_rate_base. Без брекетов -
@@ -280,6 +285,7 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
     customs_total_uah = excise_uah + duty_uah + vat_uah + pension_fund_uah
     total_uah = ((total_logistic_usd + after_customs_usd) * _d(rates.usd_to_uah)
                  + customs_total_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
+    total_usd_full = (total_uah / _d(rates.usd_to_uah)).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     return LandedCostBreakdown(
         auction_price_usd=price,
@@ -303,6 +309,7 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
         customs_total_uah=customs_total_uah,
         total_usd=total_usd,
         total_uah=total_uah,
+        total_usd_full=total_usd_full,
         is_estimate=True,
         ua_delivery_usd=ua_delivery_usd,
         ua_delivery_pending=ua_delivery_usd is None,

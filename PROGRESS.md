@@ -57,6 +57,12 @@
 - `npm run build` локально падает: Next 16.4.4 блокирует сборку как уязвимую (SecurityFatalError); чинят dependabot PR #70/#67 (next 16.4.6) — решение владельца.
 - Заметки: Playwright не читает `.env.e2e` — `E2E_PASSWORD` надо передавать в окружение; `scripts/e2e-run.sh` поднимает dev обратно с `--scale bot=0`.
 
+## Задача 10.1: полная сумма «РАЗОМ» в USD (2026-11-19) — ЗАВЕРШЕНО (кроме пунктов «осталось»)
+
+- Новое поле `total_usd_full = total_uah / usd_to_uah` (Decimal, 2 знака, курс из того же RateSnapshot) в `LandedCostBreakdown`/`breakdown`; `total_usd` и колонки не менялись, миграций нет. Лендинг: `total_usd_full` в `calculation`, списке и `lead_calculation_snapshot`; `build_calculation_snapshot` несёт его из `breakdown` (None у старых). UI: `total_usd_full ?? total_usd` в `CalcBreakdown`, `LandingCalc`, бюджет `/prigon/[slug]`, `BrokerLeadCard`, `/me/calculations`, админки лендингов и заявок.
+- Проверки: `manage.py test pricing landings leads` 686 OK; `tsc --noEmit` чисто; мутация `total_usd_full = total_usd` — 3 новых теста красные. e2e дописаны (`landing`, `calculator-config`, `calculator-ua-delivery`), не запускались.
+- Осталось: `security-reviewer` (денежная задача); `openapi.yaml` не регенерирован (контейнер backend на старом образе, нужен rebuild + spectacular против PostgreSQL); прогон e2e; Telegram/email брокеру (`leads/notify.py`) всё ещё показывает старую сумму `Lead.total_usd` — вопрос владельцу.
+
 ## Задача 8.6 (часть 2 из 2): доверие к продавцу — фронт (2026-11-09)
 
 - Бейдж «✓ Перевірений дилер» (по `seller_type=dealer` из API, сервер отдаёт его только верифицированным) на карточке, странице объявления и странице продавца; выбора типа в форме подачи нет, верифицированному дилеру — строка «Ви публікуєте як перевірений дилер».

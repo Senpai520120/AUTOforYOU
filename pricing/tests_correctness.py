@@ -3,7 +3,7 @@
 23-D40, 23-D42...23-D46. Сид-тарифы - seed_rates + seed_auction_fees; ставки законодательства не проверяются (Q5).
 """
 from datetime import date, timedelta
-from decimal import Decimal as D
+from decimal import ROUND_HALF_UP, Decimal as D
 from types import SimpleNamespace
 
 from django.core.exceptions import ValidationError
@@ -214,6 +214,18 @@ class OverlapLatestAppliedTests(SeededCase):
                          ('7777.00', '6666.00', '55.00'))
 
 
+    def test_saved_breakdown_has_total_usd_full_at_snapshot_rate(self):
+        b = self.calc().json()['breakdown']
+        saved = Calculation.objects.get()
+        self.assertEqual(saved.breakdown['total_usd_full'], b['total_usd_full'])
+        self.assertEqual(str(saved.total_usd), b['total_usd'])
+        usd_to_uah = D(saved.rates_snapshot['usd_to_uah'])
+        self.assertEqual(D(b['total_usd_full']), (D(b['total_uah']) / usd_to_uah).quantize(D('0.01'), ROUND_HALF_UP))
+        ExchangeRate.objects.filter(from_currency='USD', to_currency='UAH').update(rate=usd_to_uah * 2)
+        saved.refresh_from_db()
+        self.assertEqual(saved.breakdown['total_usd_full'], b['total_usd_full'])
+
+
 # ─── Курс по дате ────────────────────────────────────────────────────────────
 
 class ExchangeRateDateTests(SeededCase):
@@ -313,14 +325,14 @@ class CustomsRuleTests(SeededCase):
             rule.pension_rate_base = rate_base
             rule.save()
             got = D(self.calc().json()['breakdown']['pension_fund_uah'])
-            self.assertEqual(got, (base_uah * D('0.03')).quantize(D('0.01')), rate_base)
+            self.assertEqual(got, (base_uah * D('0.03')).quantize(D('0.01'), ROUND_HALF_UP), rate_base)
         # выбор брекета по полной стоимости: цена ниже первого порога, а полная - выше
         rule.pension_bracket_base = PENSION_BASE_TOTAL
         rule.pension_rate_base = PENSION_BASE_TOTAL
         rule.save()
         big = self.calc(auction_price_usd='11000').json()['breakdown']
         total_before = D(big['total_uah']) - D(big['pension_fund_uah'])
-        self.assertEqual(D(big['pension_fund_uah']), (total_before * D('0.04')).quantize(D('0.01')))
+        self.assertEqual(D(big['pension_fund_uah']), (total_before * D('0.04')).quantize(D('0.01'), ROUND_HALF_UP))
 
     def test_rules_by_date(self):
         CustomsCalcRule.objects.filter(pk=self._rule().pk).update(valid_to=TODAY - timedelta(days=1))
@@ -422,7 +434,7 @@ class EvTests(SeededCase):
         resp = self.calc(fuel_type='electric', battery_capacity_kwh='75.5')
         self.assertEqual(resp.status_code, 201)
         rate = CustomsExciseRate.objects.get(fuel_type='electric').ev_excise_eur_per_kwh
-        self.assertEqual(D(resp.json()['breakdown']['excise_eur']), (rate * D('75.5')).quantize(D('0.01')))
+        self.assertEqual(D(resp.json()['breakdown']['excise_eur']), (rate * D('75.5')).quantize(D('0.01'), ROUND_HALF_UP))
         self.assertNotEqual(D(resp.json()['breakdown']['excise_eur']), D('0'))
 
     def test_phev_calculates(self):

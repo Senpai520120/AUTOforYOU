@@ -45,7 +45,7 @@ export default function MyCalculationsPage() {
                 <div>
                   <p className="text-xs text-slate-500">{new Date(c.created_at).toLocaleString('uk-UA')}</p>
                   <p className="font-bold text-blue-800 text-xl mt-1">
-                    ${Number(c.total_usd).toLocaleString()} / {Number(c.total_uah).toLocaleString()} грн
+                    ${Number(c.breakdown?.total_usd_full ?? c.total_usd).toLocaleString()} / {Number(c.total_uah).toLocaleString()} грн
                   </p>
                 </div>
                 <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold">⚠ Орієнтовно</span>

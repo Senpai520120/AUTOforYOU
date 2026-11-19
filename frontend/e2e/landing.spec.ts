@@ -49,7 +49,9 @@ test.describe('Сторінка моделі', () => {
     expect(api.calculation.exclusions.length).toBeGreaterThan(0);
     await expect(page.getByTestId('calc-exclusions')).toContainText(api.calculation.exclusions[0]);
     expect(digits(await page.getByTestId('landing-total-usd').textContent()))
-      .toBe(Math.round(Number(api.calculation.total_usd)));
+      .toBe(Math.round(Number(api.calculation.total_usd_full)));
+    // 10.1: «РАЗОМ» включає акциз, ПДВ і пенсійний збір, тож строго більше суми без митних платежів
+    expect(Number(api.calculation.total_usd_full)).toBeGreaterThan(Number(api.calculation.total_usd));
     expect(digits(await page.getByTestId('landing-total-uah').textContent()))
       .toBe(Math.round(Number(api.calculation.total_uah)));
     await expect(page.getByTestId('landing-estimate')).toHaveText('Орієнтовний розрахунок');
@@ -71,7 +73,7 @@ test.describe('Сторінка моделі', () => {
 
     // Форма передзаповнена маркою/моделлю й бюджетом з розрахунку; липкої панелі на десктопі немає.
     await expect(page.getByTestId('lead-vehicle')).toContainText('[E2E] Toyota Camry');
-    await expect(page.getByLabel(/Бюджет/)).toHaveValue(String(Math.round(Number(api.calculation.total_usd))));
+    await expect(page.getByLabel(/Бюджет/)).toHaveValue(String(Math.round(Number(api.calculation.total_usd_full))));
     await expect(page.getByTestId('landing-mobile-bar')).toBeHidden();
 
     // Sitemap: сторінка є, чернетки немає.
@@ -92,7 +94,7 @@ test.describe('Сторінка моделі', () => {
       if (route.request().method() !== 'POST') return route.continue();
       const body = route.request().postDataJSON();
       await route.continue({
-        postData: JSON.stringify({ ...body, total_usd: '1.00', total_uah: '1.00', calculation_snapshot: { total_usd: '1.00' } }),
+        postData: JSON.stringify({ ...body, total_usd: '1.00', total_usd_full: '1.00', total_uah: '1.00', calculation_snapshot: { total_usd: '1.00', total_usd_full: '1.00' } }),
       });
     });
     await fillLead(page, name);
@@ -110,6 +112,7 @@ test.describe('Сторінка моделі', () => {
     expect(list.results).toHaveLength(1);
     const detail = await (await broker.get(`/api/v1/broker/leads/${list.results[0].id}/`)).json();
     expect(detail.calculation_snapshot.total_usd).toBe(landing.calculation.total_usd);
+    expect(detail.calculation_snapshot.total_usd_full).toBe(landing.calculation.total_usd_full);
   });
 
   test('без згоди на обробку ПДн запит не йде', async ({ page }) => {

@@ -16,7 +16,12 @@ async function calculate(page: Page) {
   return resp;
 }
 
-const money = (text: string) => Number(text.replace(/[^\d.]/g, ''));
+// 10.1: «РАЗОМ» тепер з копійками, роздільник залежить від локалі (крапка чи кома) — розбираємо обидва.
+const money = (text: string) => {
+  const t = text.replace(/[^\d.,]/g, '');
+  const m = t.match(/^(.*?)[.,](\d{1,2})$/);
+  return m ? Number(`${m[1].replace(/[.,]/g, '')}.${m[2]}`) : Number(t.replace(/[.,]/g, ''));
+};
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem('cookie_consent', 'necessary'));
@@ -26,7 +31,7 @@ test('місто обрано — доставка й послуги броке�
   await page.goto('/calculator');
   const totalOf = async () => money(await page.getByRole('row').filter({ hasText: 'РАЗОМ' }).getByRole('cell').nth(1).innerText());
 
-  await calculate(page);
+  const first = (await (await calculate(page)).json()).breakdown;
   const withoutCity = await totalOf();
 
   await page.getByLabel('Доставка по Україні (місто)').selectOption({ label: '[E2E] Київ' });
@@ -37,7 +42,13 @@ test('місто обрано — доставка й послуги броке�
   await expect(page.getByRole('row').filter({ hasText: '[E2E] Послуги брокера' })).toContainText('$500');
   await expect(page.getByTestId('calc-estimate-note')).toContainText('Курс НБУ на');
   await expect(page.getByTestId('calc-estimate-note')).toContainText('Тарифи на');
-  expect(await totalOf()).toBe(withoutCity + 300);
+  // доставка по Україні (300) йде після розмитнення — подорожчання на неї рівно в USD, без податків
+  const b = (await resp.json()).breakdown;
+  expect(Number(b.total_usd_full) - Number(first.total_usd_full)).toBeCloseTo(Number(b.ua_delivery_usd), 2);
+  expect(await totalOf()).toBeCloseTo(withoutCity + Number(b.ua_delivery_usd), 2);
+  // 10.1: «РАЗОМ» у USD = breakdown.total_usd_full (з акцизом, ПДВ і пенсійним збором), більше за total_usd
+  expect(Number(b.total_usd_full)).toBeGreaterThan(Number(b.total_usd));
+  expect(await totalOf()).toBeCloseTo(Number(b.total_usd_full), 2);
 });
 
 test('без міста — «уточнюється менеджером», сторінка не падає', async ({ page }) => {

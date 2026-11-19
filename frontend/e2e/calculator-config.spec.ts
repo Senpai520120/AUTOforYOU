@@ -143,6 +143,7 @@ test.describe('Калькулятор: довідники з API', () => {
     expect(JSON.parse((await reqPromise).postData() ?? '{}').title_type).toBe('clean');
     await expect(page.getByTestId('calc-result')).toBeVisible();
     expect(clean.breakdown.total_usd).not.toBe(salvage.breakdown.total_usd);
+    expect(clean.breakdown.total_usd_full).not.toBe(salvage.breakdown.total_usd_full);
   });
 
   test('2.18: у довіднику немає тирів clean — вибору «Чистий» немає', async ({ page }) => {

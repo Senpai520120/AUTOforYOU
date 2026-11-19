@@ -119,6 +119,7 @@ def build_calculation_snapshot(calculation) -> dict:
         'rates_snapshot': calculation.rates_snapshot,
         'breakdown': calculation.breakdown,
         'total_usd': str(calculation.total_usd),
+        'total_usd_full': (calculation.breakdown or {}).get('total_usd_full'),
         'total_uah': str(calculation.total_uah),
     }
 

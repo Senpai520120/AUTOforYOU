@@ -84,6 +84,9 @@ class CalculationServiceTests(SeededCase):
             LandedCostInputs(Decimal('5000'), 2000, 'petrol', 2018, today.year), rates, sel.pension_brackets, sel.rule)
         self.assertEqual(calc['total_usd'], str(expected.total_usd))
         self.assertEqual(calc['total_uah'], str(expected.total_uah))
+        self.assertEqual(calc['total_usd_full'], str(expected.total_usd_full))
+        self.assertEqual(calc['breakdown']['total_usd_full'], str(expected.total_usd_full))
+        self.assertGreater(Decimal(calc['total_usd_full']), Decimal(calc['total_usd']))
         self.assertIs(calc['is_estimate'], True)
         self.assertEqual(calc['rates_valid_from'], sel.rates_updated_on.isoformat())
 
@@ -193,6 +196,26 @@ class LandingApiTests(SeededCase):
         super().setUp()
         self.client = APIClient()
 
+    def test_stale_cached_calc_without_total_usd_full_does_not_crash(self):
+        """10.1: dict из кэша старой схемы (без поля) не роняет список и деталку."""
+        page = make_page(is_published=True)
+        old = build_landing_calculation(page)
+        del old['total_usd_full']
+        with mock.patch('landings.services.cached_calculation', return_value=old):
+            detail = self.client.get(detail_url(page.slug))
+            listing = self.client.get(LIST_URL)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()['calculation']['total_usd_full'], old['total_usd'])
+        self.assertEqual(listing.status_code, 200)
+
+    def test_cache_key_has_schema_version(self):
+        page = make_page(is_published=True)
+        with mock.patch('landings.services.cache') as fake:
+            fake.get.return_value = None
+            from landings.services import cached_calculation
+            cached_calculation(page)
+        self.assertIn(':v2:', fake.set.call_args[0][0])
+
     def test_detail_ok_and_matches_service(self):
         page = make_page(is_published=True, typical_term_text='два-три місяці')
         resp = self.client.get(detail_url(page.slug))
@@ -204,6 +227,9 @@ class LandingApiTests(SeededCase):
         self.assertEqual(data['calculation']['total_uah'], calc['total_uah'])
         self.assertIsInstance(data['calculation']['total_usd'], str)
         Decimal(data['calculation']['total_usd'])
+        self.assertEqual(data['calculation']['total_usd_full'], calc['total_usd_full'])
+        self.assertIsInstance(data['calculation']['total_usd_full'], str)
+        Decimal(data['calculation']['total_usd_full'])
         self.assertEqual(data['calculation']['rates_valid_from'], calc['rates_valid_from'])
         self.assertEqual(data['calculation']['currency'], 'USD')
         self.assertEqual(data['typical_term_text'], 'два-три місяці')
@@ -254,7 +280,7 @@ class LandingApiTests(SeededCase):
         make_page(slug='hidden')
         results = self.client.get(LIST_URL).json()['results']
         self.assertEqual(len(results), 1)
-        self.assertEqual(set(results[0]), {'slug', 'make', 'model', 'total_usd', 'total_uah', 'updated_at'})
+        self.assertEqual(set(results[0]), {'slug', 'make', 'model', 'total_usd', 'total_usd_full', 'total_uah', 'updated_at'})
         self.assertEqual(results[0]['slug'], page.slug)
 
     def test_get_writes_nothing(self):
@@ -526,12 +552,15 @@ class LeadWithLandingSlugTests(SeededCase):
         self.assertEqual(snap['rates_valid_from'], calc['rates_valid_from'])
         self.assertIn('excise_eur_per_100cc', snap['rates_snapshot'])
         self.assertEqual(snap['breakdown']['total_usd'], calc['total_usd'])
+        self.assertEqual(snap['total_usd_full'], calc['total_usd_full'])
+        self.assertEqual(snap['breakdown']['total_usd_full'], calc['total_usd_full'])
         self.assertEqual(lead.total_usd, Decimal(calc['total_usd']))
         self.assertEqual(lead.total_uah, Decimal(calc['total_uah']))
         self.assertEqual(Calculation.objects.count(), 0)
 
     def test_client_supplied_amounts_and_urls_are_ignored(self):
-        resp = self.post(total_usd='1', total_uah='1', calculation_snapshot={'total_usd': '1'},
+        resp = self.post(total_usd='1', total_usd_full='1', total_uah='1',
+                         calculation_snapshot={'total_usd': '1', 'total_usd_full': '1'},
                          entry_page_url='/evil', source='calculator', vehicle_label='Подмена')
         self.assertEqual(resp.status_code, 201)
         lead = Lead.objects.get()
@@ -541,6 +570,7 @@ class LeadWithLandingSlugTests(SeededCase):
         calc = build_landing_calculation(self.page)
         self.assertEqual(lead.total_usd, Decimal(calc['total_usd']))
         self.assertEqual(lead.calculation_snapshot['total_usd'], calc['total_usd'])
+        self.assertEqual(lead.calculation_snapshot['total_usd_full'], calc['total_usd_full'])
 
     def test_unknown_or_unpublished_slug_is_400(self):
         make_page(slug='draft')

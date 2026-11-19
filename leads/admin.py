@@ -210,7 +210,7 @@ class LeadAdmin(admin.ModelAdmin):
             return '—'
         inputs = snap.get('inputs_snapshot') or {}
         parts = [f'{k}: {inputs[k]}' for k in ('make', 'year', 'fuel_type', 'auction_price') if k in inputs]
-        return format_html('Разом: ${} / {} грн. {}', snap.get('total_usd'), snap.get('total_uah'),
+        return format_html('Разом: ${} / {} грн. {}', snap.get('total_usd_full') or snap.get('total_usd'), snap.get('total_uah'),
                            '; '.join(parts))
 
     def has_add_permission(self, request):

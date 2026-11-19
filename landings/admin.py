@@ -35,7 +35,7 @@ class ModelLandingPageAdmin(AdminOnlyMixin, admin.ModelAdmin):
         if calc is None:
             # Опублікована сторінка без розрахунку на сайті не показується (404) - це видно одразу.
             return 'немає розрахунку' + (' (сторінка прихована)' if obj.is_published else '')
-        return f'${calc["total_usd"]} / {calc["total_uah"]} грн'
+        return f'${calc.get("total_usd_full") or calc["total_usd"]} / {calc["total_uah"]} грн'
 
     @admin.display(description='Попередній перегляд розрахунку')
     def calculation_preview(self, obj):
@@ -45,7 +45,7 @@ class ModelLandingPageAdmin(AdminOnlyMixin, admin.ModelAdmin):
         if calc is None:
             return 'Розрахунок не виконується: заповніть вхідні дані та перевірте, що діють усі ставки.'
         return format_html('Разом: ${} / {} грн. Ставки від {}. Орієнтовний розрахунок.',
-                           calc['total_usd'], calc['total_uah'], calc['rates_valid_from'])
+                           calc.get('total_usd_full') or calc['total_usd'], calc['total_uah'], calc['rates_valid_from'])
 
     def _warn(self, request):
         warning = publication_warning()
