@@ -1,16 +1,18 @@
 import Link from 'next/link';
 import CookieSettingsLink from '@/components/ui/CookieSettingsLink';
 import { getSiteConfig, getDemoStatus } from '@/lib/site-config';
-import { ownerTitle } from '@/lib/site-settings';
+import { ownerTitle, partnerPhrase } from '@/lib/site-settings';
+import { getAbout } from '@/lib/about';
 import { isHowItWorksPublished } from '@/lib/content';
 import { hasLandings } from '@/lib/landings';
-import { FAQ_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
+import { ABOUT_LABEL, FAQ_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 
 /** Серверний підвал: реквізити з налаштувань сайту; при недоступному API — без них. */
 export default async function Footer() {
   const [s, isDemo, trustPages, landings] = await Promise.all([
     getSiteConfig(60), getDemoStatus(), isHowItWorksPublished(), hasLandings(),
   ]);
+  const hasAbout = !!s?.about_text?.trim();
   const owner = ownerTitle(s);
   const tgUrl = s?.telegram_channel_url && /^https:\/\/t\.me\//.test(s.telegram_channel_url) ? s.telegram_channel_url : '';
   const botUrl = s?.telegram_bot_username ? `https://t.me/${s.telegram_bot_username}` : '';
@@ -57,10 +59,11 @@ export default async function Footer() {
             )}
           </p>
         )}
-        {(trustPages || landings) && (
+        {(trustPages || landings || hasAbout) && (
           <nav aria-label="Інформація про пригон" className="mt-4 flex justify-center gap-5 text-xs text-slate-400 flex-wrap">
             {trustPages && <Link href="/how-it-works" className="hover:text-slate-300 transition-colors">{HOW_IT_WORKS_LABEL}</Link>}
             {landings && <Link href="/prigon" className="hover:text-slate-300 transition-colors" data-testid="footer-link-prigon">{LANDING_INDEX_LABEL}</Link>}
+            {hasAbout && <Link href="/about" className="hover:text-slate-300 transition-colors" data-testid="footer-link-about">{ABOUT_LABEL}</Link>}
             {trustPages && <Link href="/how-it-works#faq-block-title" className="hover:text-slate-300 transition-colors">{FAQ_LABEL}</Link>}
           </nav>
         )}
@@ -73,7 +76,7 @@ export default async function Footer() {
           <CookieSettingsLink />
         </nav>
         <p className="mt-3 text-xs text-slate-400">
-          Послугу пригону надає партнер, а не AUTOforYOU
+          {partnerPhrase(s?.partner_name)}
         </p>
         {isDemo === true && (
           <p className="mt-1 text-xs text-slate-400" data-testid="footer-demo-note">

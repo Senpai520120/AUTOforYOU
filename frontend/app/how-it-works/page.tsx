@@ -6,6 +6,8 @@ import PopularModels from '@/components/landing/PopularModels';
 import FaqBlock from '@/components/content/FaqBlock';
 import { getHowItWorks } from '@/lib/content';
 import { getLandingList } from '@/lib/landings';
+import { getSiteConfig } from '@/lib/site-config';
+import { partnerPhrase } from '@/lib/site-settings';
 import { HOW_IT_WORKS_LABEL, HOW_IT_WORKS_SOON, CALC_COST_LABEL, HOME_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
 import { breadcrumbLd } from '@/lib/jsonld';
@@ -31,6 +33,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HowItWorksPage() {
   const data = await getHowItWorks();
   const models = data?.published ? await getLandingList() : null;
+  const settings = data?.published ? await getSiteConfig() : null;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
@@ -80,10 +83,12 @@ export default async function HowItWorksPage() {
             </p>
           </div>
 
-          <p className="mt-6 text-sm">
-            <Link href="/prigon" className="text-blue-700 underline" data-testid="how-link-prigon">{LANDING_INDEX_LABEL}: моделі та орієнтовна ціна</Link>
-          </p>
-          <p className="mt-6 text-xs text-slate-500">Послугу пригону надає партнер, а не AUTOforYOU.</p>
+          {models !== null && models.length > 0 && (
+            <p className="mt-6 text-sm">
+              <Link href="/prigon" className="text-blue-700 underline" data-testid="how-link-prigon">{LANDING_INDEX_LABEL}: моделі та орієнтовна ціна</Link>
+            </p>
+          )}
+          <p className="mt-6 text-xs text-slate-500" data-testid="how-partner-phrase">{partnerPhrase(settings?.partner_name)}.</p>
         </>
       )}
     </div>

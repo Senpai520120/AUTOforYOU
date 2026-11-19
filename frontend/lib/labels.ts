@@ -60,3 +60,4 @@ export function memberSinceLabel(value: string | null | undefined): string {
   const month = MONTHS_GENITIVE[Number(m[2]) - 1];
   return month ? `на сайті з ${month} ${m[1]}` : '';
 }
+export const ABOUT_LABEL = 'Про нас';

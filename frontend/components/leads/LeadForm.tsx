@@ -13,7 +13,7 @@ import { getAttribution } from '@/lib/attribution';
 import { isCaptchaFailed, useAuthConfig, useCaptchaState } from '@/lib/captcha';
 import type { LeadContactMethod, LeadCreate, LeadNeededWhen, LeadSource, SiteSettings } from '@/lib/types';
 import Captcha from '@/components/ui/Captcha';
-import FallbackContact from '@/components/ui/FallbackContact';
+import FallbackContact, { ContactList } from '@/components/ui/FallbackContact';
 import LeadSuccess from './LeadSuccess';
 
 interface Props {
@@ -142,7 +142,7 @@ export default function LeadForm({
     if (!touched.current.phone) setPhone(user.phone ?? '');
   }, [user]);
 
-  if (publicId) return <LeadSuccess publicId={publicId} onNew={onNew} newLabel={newLabel} />;
+  if (publicId) return <LeadSuccess publicId={publicId} onNew={onNew} newLabel={newLabel} settings={siteSettings} />;
 
   const partnerReady = !!consentText;
   const canSubmit = captcha.ready && partnerReady && partnerConsent && !submitting;
@@ -355,6 +355,13 @@ export default function LeadForm({
 
       {general && (
         <p role="alert" className="text-red-600 text-sm bg-red-50 border border-red-200 rounded p-3">{general}</p>
+      )}
+
+      {siteSettings?.partner_name?.trim() && (
+        <div data-testid="lead-partner-info" className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-3">
+          <p>Заявку обробляє партнер: <span className="font-semibold">{siteSettings.partner_name.trim()}</span></p>
+          <ContactList settings={siteSettings} title="Контакти:" />
+        </div>
       )}
 
       <button type="submit" disabled={!canSubmit}

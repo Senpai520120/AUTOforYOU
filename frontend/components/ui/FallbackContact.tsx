@@ -54,28 +54,37 @@ interface Props {
   retrying?: boolean;
 }
 
+/** Лише контакти (без кнопки повтору і без тексту про недоступність); null, якщо контактів немає. */
+export function ContactList({ settings, title = "Зв'яжіться з нами напряму:" }: { settings: SiteSettings | null; title?: string }) {
+  const links = contactLinks(settings);
+  if (links.length === 0) return null;
+  return (
+    <div data-testid="fallback-contact">
+      <p className="text-sm text-slate-700">{title}</p>
+      <ul className="mt-1 space-y-1 text-sm">
+        {links.map((l) => (
+          <li key={l.key}>
+            {l.href ? (
+              <a href={l.href} className="text-blue-700 underline"
+                {...(l.href.startsWith('https:') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+                {l.label}
+              </a>
+            ) : (
+              <span className="text-slate-800">{l.label}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function FallbackContact({ settings, onRetry, retrying = false }: Props) {
   const links = contactLinks(settings);
   return (
     <div className="mt-3">
       {links.length > 0 ? (
-        <div data-testid="fallback-contact">
-          <p className="text-sm text-slate-700">Зв&apos;яжіться з нами напряму:</p>
-          <ul className="mt-1 space-y-1 text-sm">
-            {links.map((l) => (
-              <li key={l.key}>
-                {l.href ? (
-                  <a href={l.href} className="text-blue-700 underline"
-                    {...(l.href.startsWith('https:') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
-                    {l.label}
-                  </a>
-                ) : (
-                  <span className="text-slate-800">{l.label}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ContactList settings={settings} />
       ) : (
         <p data-testid="fallback-no-contact" className="text-sm text-slate-700">{NO_CONTACT_TEXT}</p>
       )}

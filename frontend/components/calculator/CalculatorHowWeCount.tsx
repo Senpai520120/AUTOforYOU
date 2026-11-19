@@ -1,4 +1,8 @@
+'use client';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { apiGet } from '@/api/client';
+import type { HowItWorksData } from '@/lib/types';
 import { HOW_IT_WORKS_LABEL } from '@/lib/labels';
 
 /**
@@ -6,6 +10,15 @@ import { HOW_IT_WORKS_LABEL } from '@/lib/labels';
  * Без цифр і обіцянок: суми, дата ставок і перелік «що не входить» приходять з API разом із результатом.
  */
 export default function CalculatorHowWeCount() {
+  // Посилання на «Як працює пригон» лише коли розділ опубліковано; збій API = без посилання.
+  const [howItWorksOn, setHowItWorksOn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    apiGet<HowItWorksData>('/api/v1/content/how-it-works/')
+      .then((d) => { if (alive) setHowItWorksOn(d.published === true); })
+      .catch(() => { if (alive) setHowItWorksOn(false); });
+    return () => { alive = false; };
+  }, []);
   return (
     <section className="mt-10" data-testid="calculator-how-we-count" aria-labelledby="how-we-count-title">
       <h2 id="how-we-count-title" className="font-semibold text-slate-900 mb-2">Як рахуємо</h2>
@@ -16,8 +29,12 @@ export default function CalculatorHowWeCount() {
         орієнтовний: остаточну суму підтверджує митний брокер.
       </p>
       <p className="mt-3 text-sm">
-        <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>
-        {' · '}
+        {howItWorksOn && (
+          <>
+            <Link href="/how-it-works" className="text-blue-700 underline" data-testid="calc-link-how-it-works">{HOW_IT_WORKS_LABEL}</Link>
+            {' · '}
+          </>
+        )}
         <Link href="/prigon" className="text-blue-700 underline" data-testid="calc-link-prigon">Пригон за моделями</Link>
       </p>
     </section>

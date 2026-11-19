@@ -48,6 +48,12 @@
 - Полный бэкенд: 3204 теста, падают только 2 известных Windows-only (`test_entrypoint_refuses_debug_*`).
 - Заметки: кэш сборки Docker на сервере 3,4 ГБ, `deploy.sh` его не чистит (`docker builder prune` вручную или задача). Сервер после сессии — остановить (`aws ec2 stop-instances --instance-ids i-017e7dfd9fced32f5`), по слову владельца. Ключ `claude-deploy` с `IAMFullAccess` — деактивировать после работ.
 
+## Задача 10.8: доверие (2026-11-20) — ЗАВЕРШЕНО (10.8a + 10.8b; e2e написаны, не запускались)
+
+- Бэкенд: `SiteSettings.about_text`, `lead_response_hours` (null, min 1), `lead_next_steps`; миграция `site_settings/0004_trust_fields.py` (3 AddField); публичный API, админка «Довіра»; тесты `site_settings/tests_trust.py` (мутация: поле убрано из `fields` — 4 теста красные). Сид e2e: `partner_name`, `about_text`, `lead_response_hours=4`, `lead_next_steps` с `[E2E]`.
+- Фронт: `ContactList` в `FallbackContact.tsx` (контакты без кнопки), блок `lead-partner-info` в `LeadForm`, срок и `lead-next-steps` в `LeadSuccess` (до 6 шагов, текст без HTML), `partnerPhrase()` в подвале и `/how-it-works`, `/about` (`force-dynamic`, `notFound()` при пустом), ссылка «Про нас» в подвале и sitemap только при тексте. Ссылка на `/how-it-works` скрыта в `CalculatorHowWeCount` (клиентский запрос), `/prigon`, `/prigon/[slug]`; ссылка на `/prigon` в `how-it-works` — только при непустом списке.
+- e2e: `frontend/e2e/trust.spec.ts`; пустые состояния — `test.fixme('TRUST-1 → 10.8')`. Открыто: `openapi.yaml` не регенерирован (только против PostgreSQL), фразы про партнёра на `/prigon*` остались безымянными.
+
 ## Задача 10.5: «Мінімум до запуску» в LAUNCH_CHECKLIST (2026-11-20) — ЗАВЕРШЕНО (только документация)
 
 - `docs/LAUNCH_CHECKLIST.md`: в начале раздел «Мінімум до запуску» — 38 пунктов (сервер/домен/HTTPS, `.env`, деплой, админка, тарифы, `launch_check`, смоук), каждый со ссылкой на раздел; задача — `docs/tasks/10.5-launch-checklist-minimum.md`.

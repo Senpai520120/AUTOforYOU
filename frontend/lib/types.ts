@@ -546,6 +546,10 @@ export interface SiteSettings {
   telegram_channel_url: string;
   partner_name: string;
   partner_legal_name: string;
+  /** Довіра (задача 10.8): порожньо = не показувати. */
+  about_text: string;
+  lead_response_hours: number | null;
+  lead_next_steps: string;
   /** Готовий текст згоди партнеру (єдине джерело — бекенд; порожній, якщо партнера немає). */
   partner_consent_text: string;
   data_retention_years: number | null;

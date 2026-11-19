@@ -50,3 +50,9 @@ export function privacyContact(s: SiteSettings | null): string {
 export function supportContact(s: SiteSettings | null): string {
   return s?.support_email || s?.privacy_email || '';
 }
+
+/** Фраза-застереження про партнера; з іменем, якщо воно задане в налаштуваннях (задача 10.8). */
+export function partnerPhrase(name?: string | null): string {
+  const n = name?.trim();
+  return n ? `Послугу пригону надає партнер ${n}, а не AUTOforYOU` : 'Послугу пригону надає партнер, а не AUTOforYOU';
+}

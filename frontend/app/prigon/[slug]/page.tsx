@@ -6,6 +6,7 @@ import LeadForm from '@/components/leads/LeadForm';
 import LandingCalc from '@/components/landing/LandingCalc';
 import LandingMobileBar, { LANDING_FORM_ID } from '@/components/landing/LandingMobileBar';
 import LandingVisitTracker from '@/components/landing/LandingVisitTracker';
+import { isHowItWorksPublished } from '@/lib/content';
 import { calculatorHref, getLanding, getLandingList, similarLandings } from '@/lib/landings';
 import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
@@ -67,7 +68,8 @@ export default async function LandingPage({ params }: Params) {
     { name: label, path: `/prigon/${p.slug}` },
   ];
   // null (API недоступне) — просто без блоку.
-  const similar = similarLandings(await getLandingList(), p.slug, p.make);
+  const [landingList, howItWorksOn] = await Promise.all([getLandingList(), isHowItWorksPublished()]);
+  const similar = similarLandings(landingList, p.slug, p.make);
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 pb-28 md:pb-10 space-y-6">
       <JsonLd data={breadcrumbLd(crumbs)} />
@@ -85,7 +87,7 @@ export default async function LandingPage({ params }: Params) {
         <Link href={calculatorHref(p.calculation.inputs)} className="text-blue-700 underline" data-testid="landing-calc-link">
           {CALC_COST_LABEL} під ваші параметри
         </Link>
-        <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>
+        {howItWorksOn && <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>}
         <Link href="/prigon" className="text-blue-700 underline">Інші моделі</Link>
       </nav>
 

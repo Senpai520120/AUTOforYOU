@@ -3,6 +3,7 @@ import Link from 'next/link';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorState from '@/components/ui/ErrorState';
 import { getLandingList } from '@/lib/landings';
+import { isHowItWorksPublished } from '@/lib/content';
 import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
 import { breadcrumbLd } from '@/lib/jsonld';
@@ -25,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function LandingIndexPage() {
-  const list = await getLandingList();
+  const [list, howItWorksOn] = await Promise.all([getLandingList(), isHowItWorksPublished()]);
   const crumbs = [{ name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' }];
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
@@ -51,7 +52,7 @@ export default async function LandingIndexPage() {
       )}
 
       <p className="mt-8 flex flex-wrap gap-4 text-sm">
-        <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>
+        {howItWorksOn && <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>}
         <Link href="/calculator" className="text-blue-700 underline" data-testid="prigon-link-calculator">{CALC_COST_LABEL}</Link>
       </p>
       <p className="mt-4 text-xs text-slate-500">Послугу пригону надає партнер, а не AUTOforYOU.</p>

@@ -93,6 +93,22 @@ class SiteSettings(models.Model):
         help_text='Тільки якщо змінились категорії даних, цілі, отримувачі або строки зберігання.',
     )
 
+    # 10.8: довіра. Порожньо = нічого не показується.
+    about_text = models.TextField(
+        'Текст сторінки "Про нас"', blank=True, default='',
+        help_text='Звичайний текст, абзаци розділяйте порожнім рядком, HTML не підтримується. '
+                  'Порожньо - сторінки й посилання на неї немає.',
+    )
+    lead_response_hours = models.PositiveSmallIntegerField(
+        'Орієнтовний час відповіді на заявку, годин', null=True, blank=True,
+        validators=[MinValueValidator(1)],
+        help_text='Не обіцяйте те, чого не можете виконати; порожньо - строк не показується.',
+    )
+    lead_next_steps = models.TextField(
+        'Що далі після заявки: по одному кроку в рядку', blank=True, default='',
+        help_text='Показується на екрані після відправки заявки (до 6 кроків). Порожньо - блок прихований.',
+    )
+
     updated_at = models.DateTimeField('Оновлено', auto_now=True)
 
     class Meta:
