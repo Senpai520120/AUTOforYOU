@@ -1,8 +1,10 @@
+import hashlib
 import logging
 from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
@@ -231,6 +233,24 @@ def _send_to_all(send_email, recipients, subject, body, lead_id):
 RESEND_NOTIFY_BATCH = 50
 
 
+OWNER_ALERT_WINDOW = timedelta(days=1)  # заявки, помеченные админам раньше суток назад, владельцу не шлём
+OWNER_ALERT_KEY = 'leads:owner_undelivered_alerted:{}'
+OWNER_ALERT_KEY_TTL = 7 * 24 * 3600
+
+
+def _alert_owner_pending(undelivered, max_attempts: int, now) -> None:
+    """Один сводный алерт владельцу по заявкам, о которых он ещё не знает (признак - ключ кэша).
+
+    Недоставка в оба канала ключ не ставит: следующий прогон повторит.
+    """
+    recent = undelivered.filter(notify_attempts__gte=max_attempts, undelivered_alerted_at__gte=now - OWNER_ALERT_WINDOW)
+    leads = list(recent.order_by('pk')[:RESEND_NOTIFY_BATCH])
+    known = cache.get_many([OWNER_ALERT_KEY.format(lead.pk) for lead in leads])
+    pending = [lead for lead in leads if OWNER_ALERT_KEY.format(lead.pk) not in known]
+    if pending and notify.alert_owner_undelivered(pending):
+        cache.set_many({OWNER_ALERT_KEY.format(lead.pk): 1 for lead in pending}, OWNER_ALERT_KEY_TTL)
+
+
 # Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
 @shared_task(base=ResilientTask, name='leads.tasks.resend_undelivered_leads', soft_time_limit=900, time_limit=960)
 def resend_undelivered_leads():
@@ -268,13 +288,53 @@ def resend_undelivered_leads():
     for lead in exhausted[:RESEND_NOTIFY_BATCH]:
         # Метка ставится атомарно: второй запуск не пришлёт то же предупреждение.
         if Lead.objects.filter(pk=lead.pk, undelivered_alerted_at__isnull=True).update(undelivered_alerted_at=now):
-            notify.alert_admins_undelivered(lead)
+            try:
+                notify.alert_admins_undelivered(lead)
+            except Exception as exc:  # сбой in-app не должен глушить владельца, остальные заявки и досыл
+                logger.warning('lead.undelivered lead_id=%s: in-app алерт не створено (%s)', lead.pk, type(exc).__name__)
             logger.warning('lead.undelivered lead_id=%s attempts=%s', lead.pk, lead.notify_attempts)
             alerted += 1
+    try:
+        _alert_owner_pending(undelivered, max_attempts, now)
+    except Exception as exc:
+        logger.warning('lead.undelivered: алерт владельцу упал (%s)', type(exc).__name__)
 
     for lead_id in ids:
         notify_broker_new_lead.delay(lead_id)  # повторяет Telegram и, если он не доставил, email
     return {'resent': len(ids), 'alerted': alerted}
+
+
+@shared_task(base=ResilientTask, name='leads.tasks.alert_unanswered_leads', ignore_result=True)
+def alert_unanswered_leads():
+    """Раз в час: алерт владельцу о заявках без ответа брокера дольше порогов (10.6).
+
+    Определение «без ответа» - metrics.reports.unanswered_leads. Тот же набор не шлётся чаще, чем раз в
+    LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES (кэш); рост набора даёт новый алерт; при недоставке ключ откатывается.
+    """
+    from metrics.reports import unanswered_leads
+
+    warn_ids, critical_ids = unanswered_leads()
+    if not warn_ids:
+        return
+    if not notify.owner_channel_configured():
+        # До cache.add: иначе пауза включилась бы без отправки.
+        logger.warning('lead.unanswered: заявок без ответа %s, но канал алерта владельцу не настроен', len(warn_ids))
+        return
+    digest = hashlib.sha256(f'{warn_ids}|{critical_ids}'.encode()).hexdigest()[:16]
+    cache_key = f'leads:unanswered_alert:{digest}'
+    cooldown = int(settings.LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES) * 60
+    try:
+        if not cache.add(cache_key, 1, timeout=cooldown):
+            return
+    except Exception:  # Redis недоступен: лучше повторить алерт, чем промолчать
+        logger.warning('lead.unanswered: кэш недоступен, дедупликации нет')
+    from core.tasks import _send_failed_task_alert
+    text = notify.build_owner_unanswered_text(len(warn_ids), len(critical_ids))
+    if not _send_failed_task_alert(text, notify.OWNER_UNANSWERED_SUBJECT):
+        try:
+            cache.delete(cache_key)
+        except Exception:
+            logger.warning('lead.unanswered: кэш недоступен')
 
 
 @shared_task(bind=True, name='leads.tasks.send_journal')

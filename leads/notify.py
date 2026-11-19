@@ -1,5 +1,6 @@
 """Сборка текста уведомления брокеру и in-app рассылка. Все значения от гостя экранируются."""
 import html
+import logging
 import re
 from collections import defaultdict
 from decimal import Decimal
@@ -16,6 +17,8 @@ from notifications.models import Notification
 from notifications.services import create_notification
 
 from .models import ContactMethod, Lead, LeadNotificationSettings
+
+logger = logging.getLogger(__name__)
 
 TELEGRAM_LIMIT = 4096
 DIRECT = 'пряме'
@@ -222,3 +225,46 @@ def alert_admins_undelivered(lead: Lead) -> int:
             link=admin_url(lead))
         count += 1
     return count
+
+
+OWNER_UNDELIVERED_SUBJECT = 'AUTOforYOU: заявку не доставлено брокеру'
+OWNER_UNANSWERED_SUBJECT = 'AUTOforYOU: заявки без відповіді брокера'
+
+
+def owner_channel_configured() -> bool:
+    return bool(settings.FAILED_TASK_ALERT_CHAT_ID or settings.FAILED_TASK_ALERT_EMAIL)
+
+
+def build_owner_undelivered_text(leads: list[Lead]) -> str:
+    """Один сводный текст владельцу: номера заявок и ссылка на список. Имя, телефон, email, комментарий - никогда."""
+    ids = ', '.join(lead.public_id for lead in leads)
+    return (f'⚠ AUTOforYOU: не доставлено брокеру заявок: {len(leads)} ({ids}). Telegram і email не спрацювали '
+            f'після всіх спроб.\nСписок в адмінці: {unanswered_list_url()}')
+
+
+def alert_owner_undelivered(leads: list[Lead]) -> bool:
+    """Один сводный алерт владельцу в FAILED_TASK_ALERT_CHAT_ID / _EMAIL. Не бросает исключений, False - не дошло."""
+    ids = [lead.pk for lead in leads]
+    if not owner_channel_configured():
+        logger.warning('lead.undelivered lead_ids=%s: канал алерта владельцу не налаштовано', ids)
+        return False
+    from core.tasks import _send_failed_task_alert  # импорт внутри: без циклов
+    try:
+        delivered = _send_failed_task_alert(build_owner_undelivered_text(leads), OWNER_UNDELIVERED_SUBJECT)
+    except Exception as exc:
+        logger.warning('lead.undelivered lead_ids=%s: алерт владельцу не відправлено (%s)', ids, type(exc).__name__)
+        return False
+    if not delivered:
+        logger.warning('lead.undelivered lead_ids=%s: алерт владельцу не дійшов, буде повтор', ids)
+    return delivered
+
+
+def unanswered_list_url() -> str:
+    return settings.SITE_URL.rstrip('/') + reverse('admin:leads_lead_changelist')
+
+
+def build_owner_unanswered_text(warn_count: int, critical_count: int) -> str:
+    """Текст владельцу: два числа и ссылка на список заявок. Без id заявок и ПДн."""
+    return (f'⚠ AUTOforYOU: заявок без відповіді брокера понад {settings.LEAD_UNANSWERED_WARN_HOURS} год: '
+            f'{warn_count}, понад {settings.LEAD_UNANSWERED_CRITICAL_HOURS} год: {critical_count}.\n'
+            f'Список в адмінці: {unanswered_list_url()}')

@@ -48,6 +48,16 @@
 - Полный бэкенд: 3204 теста, падают только 2 известных Windows-only (`test_entrypoint_refuses_debug_*`).
 - Заметки: кэш сборки Docker на сервере 3,4 ГБ, `deploy.sh` его не чистит (`docker builder prune` вручную или задача). Сервер после сессии — остановить (`aws ec2 stop-instances --instance-ids i-017e7dfd9fced32f5`), по слову владельца. Ключ `claude-deploy` с `IAMFullAccess` — деактивировать после работ.
 
+## Задача 10.6: заявка не теряется молча (2026-11-19) — ЗАВЕРШЕНО (кроме пункта «осталось»)
+
+- Недоставленная заявка (после исчерпания попыток) дублируется владельцу в `FAILED_TASK_ALERT_CHAT_ID` / `_EMAIL` через `core.tasks._send_failed_task_alert` (`leads/notify.py`: `alert_owner_undelivered`, текст — только `public_id` и ссылка в админку). Сбой канала не роняет `resend_undelivered_leads` и не снимает `undelivered_alerted_at`; канал не настроен — `logger.warning`.
+- `metrics.reports.unanswered_leads()` — единое определение «без ответа» (`first_response_at` пусто, статус `new`; порог включительно). Задача `leads.tasks.alert_unanswered_leads` (`ResilientTask`, beat `_crontab(minute=5)`, `expire_seconds=3300`): алерт с двумя числами и ссылкой на список, без id и ПДн; дедуп `cache.add` по хэшу (счётчики + набор id), откат ключа при недоставке. Строки «Без відповіді > N год» в `render_report`.
+- `.env`: `LEAD_UNANSWERED_WARN_HOURS` (2), `LEAD_UNANSWERED_CRITICAL_HOURS` (24), `LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES` (360). Миграций нет.
+- Тесты: `leads/tests_alerts.py` (17), `metrics/tests_report.py` (+1). Мутации проверены: снятие вызова владельцу, ПДн в тексте, границы `<=`, статус spam, снятие дедупа, откат ключа, хэш набора id, порог в отчёте.
+- Правки по ревью безопасности: (1) недоставка алерта владельцу больше не теряется: признак «владелец знает» — ключ кэша на заявку, при неудаче в оба канала ключа нет, следующий прогон (10 мин) повторяет, в лог — предупреждение с pk; (2) `alert_admins_undelivered` изолирован try/except, досыл `notify_broker_new_lead.delay` ставится всегда; (3) один сводный алерт владельцу на прогон (список `public_id`, ссылка на список), не более 50 заявок и только метки за последние сутки; (4) строки отчёта подписаны «Без відповіді зараз > N год» (срез на момент отчёта).
+- Осталось (из ревью): ключ дедупа `alert_unanswered_leads` включает набор id, поэтому при уменьшении набора (часть заявок отвечена) придёт повторный алерт с меньшими числами — оставлено как есть.
+- Осталось: серверная защита от двойного клика (дубль заявки при быстрых повторных POST; нужны поле idempotency и миграция, M). Для владельца: задать `FAILED_TASK_ALERT_*` на проде, подтвердить пороги 2/24 ч после пилота (`docs/LAUNCH_CHECKLIST.md`).
+
 ## Задача 2.18: «Clean» в калькуляторе и таблицы buyer fee (2026-11-19) — ЗАВЕРШЕНО
 
 - Причина — данные dev-БД, не код: до засева `check_fee_tables` давал 461 расхождение (код 1); после `seed_auction_fees --update` код 0, `title_types` = any/clean/salvage. Дыры в `build_form_options` нет.

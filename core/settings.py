@@ -755,6 +755,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'leads.tasks.resend_undelivered_leads',
         'schedule': float(_positive_int_env('LEAD_NOTIFY_RETRY_MINUTES', 10) * 60),
     },
+    # Заявки без ответа брокера дольше порогов: алерт владельцу раз в час (10.6)
+    'alert-unanswered-leads': {
+        'task': 'leads.tasks.alert_unanswered_leads',
+        'schedule': _crontab(minute=5),
+        'options': {'expire_seconds': 3300},
+    },
 }
 
 # ─── Telegram-бот ─────────────────────────────────────────────────────────────
@@ -788,6 +794,10 @@ FUNNEL_REPORT_CHAT_ID = os.environ.get('FUNNEL_REPORT_CHAT_ID', '').strip()
 FUNNEL_REPORT_EMAIL = os.environ.get('FUNNEL_REPORT_EMAIL', '').strip()
 LEAD_NOTIFY_RETRY_MINUTES = _positive_int_env('LEAD_NOTIFY_RETRY_MINUTES', 10)
 LEAD_NOTIFY_MAX_ATTEMPTS = _positive_int_env('LEAD_NOTIFY_MAX_ATTEMPTS', 5)
+# Заявки без ответа брокера (10.6): пороги в часах и пауза между одинаковыми алертами (каналы FAILED_TASK_ALERT_*).
+LEAD_UNANSWERED_WARN_HOURS = _positive_int_env('LEAD_UNANSWERED_WARN_HOURS', 2)
+LEAD_UNANSWERED_CRITICAL_HOURS = _positive_int_env('LEAD_UNANSWERED_CRITICAL_HOURS', 24)
+LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES = _positive_int_env('LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES', 360)
 
 # URL сайта — используется в Telegram-постах (ссылки на листинги)
 SITE_URL = os.environ.get('SITE_URL', '') or 'http://localhost'

@@ -143,6 +143,19 @@ class RenderReportTests(TestCase):
         self.assertIn('депозит → викуп: —', text)
         self.assertIn('Медіана першої відповіді: немає даних', text)
 
+    @override_settings(LEAD_UNANSWERED_WARN_HOURS=2, LEAD_UNANSWERED_CRITICAL_HOURS=24)
+    def test_unanswered_counts_are_in_report(self):
+        now = datetime(2026, 3, 10, 12, 0, tzinfo=KYIV)
+        lead_at(now - timedelta(hours=3))
+        lead_at(now - timedelta(hours=30))
+        answered = lead_at(now - timedelta(hours=30))
+        Lead.objects.filter(pk=answered.pk).update(first_response_at=now)
+        with mock.patch('django.utils.timezone.now', return_value=now):
+            text = self.render()
+        self.assertIn('Без відповіді зараз > 2 год: 2', text)
+        self.assertIn('Без відповіді зараз > 24 год: 1', text)
+        self.assertIn('Медіана першої відповіді:', text)
+
     def test_duration_format(self):
         lead = lead_at(INSIDE)
         Lead.objects.filter(pk=lead.pk).update(first_response_at=INSIDE + timedelta(minutes=85))
