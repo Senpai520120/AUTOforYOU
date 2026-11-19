@@ -56,7 +56,8 @@ test.describe('Юридичні сторінки з реквізитами', () 
     for (const href of ['/terms', '/rules', '/refund', '/privacy', '/cookies']) {
       await expect(footer.locator(`a[href="${href}"]`)).toHaveCount(1);
     }
-    await expect(footer.getByText('Послугу пригону надає партнер, а не AUTOforYOU')).toBeVisible();
+    // 10.8: в дисклеймер подставляется имя партнёра из SiteSettings (partnerPhrase).
+    await expect(footer.getByText(/Послугу пригону надає партнер( .+)?, а не AUTOforYOU/)).toBeVisible();
   });
 
   // Порожні налаштування: у e2e-сіді вони заповнені, а змінити їх з браузера немає як
