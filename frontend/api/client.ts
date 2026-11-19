@@ -123,8 +123,10 @@ export function apiGet<T>(path: string) {
   return apiFetch<T>(path);
 }
 
-export function apiPost<T>(path: string, body?: unknown) {
-  return apiFetch<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
+export function apiPost<T>(path: string, body?: unknown, headers?: Record<string, string>) {
+  return apiFetch<T>(path, {
+    method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), ...(headers ? { headers } : {}),
+  });
 }
 
 export function apiPut<T>(path: string, body: unknown) {

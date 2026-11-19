@@ -685,6 +685,8 @@ export interface BrokerLeadRow {
   partner_status_display: string;
   qualification: LeadQualification;
   qualification_display: string;
+  /** public_id першої заявки, якщо це повтор (10.13); інакше null. */
+  duplicate_of: string | null;
   total_usd: string | null;
   total_uah: string | null;
   source: LeadSource;

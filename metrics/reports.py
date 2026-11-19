@@ -46,7 +46,8 @@ def unanswered_leads(now=None):
     LEAD_UNANSWERED_CRITICAL_HOURS. Вторые входят в первые.
     """
     now = now or timezone.now()
-    base = Lead.objects.filter(first_response_at__isnull=True, status=LeadStatus.NEW)
+    # Повторы заявки (10.13) не считаются: брокер отвечает на первую.
+    base = Lead.objects.filter(first_response_at__isnull=True, status=LeadStatus.NEW, duplicate_of__isnull=True)
     warn_at = now - timedelta(hours=int(settings.LEAD_UNANSWERED_WARN_HOURS))
     critical_at = now - timedelta(hours=int(settings.LEAD_UNANSWERED_CRITICAL_HOURS))
     warn_ids = list(base.filter(created_at__lte=warn_at).order_by('pk').values_list('pk', flat=True))

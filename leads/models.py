@@ -256,6 +256,13 @@ class Lead(models.Model):
     last_notify_attempt_at = models.DateTimeField('Остання спроба сповіщення', null=True, blank=True)
     undelivered_alerted_at = models.DateTimeField('Адмінів попереджено', null=True, blank=True, editable=False)
 
+    # 10.13: защита от дубля. Ключ от клиента (одна отправка формы); повтор того же телефона в окне ссылается на первую заявку.
+    idempotency_key = models.UUIDField('Ключ ідемпотентності', null=True, blank=True, unique=True, editable=False)
+    duplicate_of = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL, related_name='duplicates',
+        editable=False, verbose_name='Повтор заявки',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -266,6 +273,7 @@ class Lead(models.Model):
         permissions = [('view_funnel', 'Може переглядати «Воронку за місяць»')]
         indexes = [
             models.Index(fields=['status', '-created_at'], name='lead_status_created_idx'),
+            models.Index(fields=['phone', '-created_at'], name='lead_phone_created_idx'),
         ]
         constraints = [
             models.CheckConstraint(

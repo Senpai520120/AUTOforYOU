@@ -171,6 +171,12 @@ export default function BrokerLeadCard({ id }: { id: number }) {
         <Link href="/broker/leads" className="text-blue-600 hover:underline text-sm">← Заявки</Link>
         <h1 className="text-xl font-bold text-slate-900 font-mono">{lead.public_id}</h1>
         <LeadStatusBadge status={lead.status} label={lead.status_display} />
+        {lead.duplicate_of && (
+          <span data-testid="lead-duplicate-badge"
+            className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+            Повтор заявки {lead.duplicate_of}
+          </span>
+        )}
       </div>
 
       <Section title="Клієнт">

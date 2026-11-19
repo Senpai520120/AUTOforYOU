@@ -130,7 +130,15 @@ export default function BrokerLeadList() {
                 className="block min-w-0 break-words bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-sm">
                 <div className="flex flex-wrap justify-between items-start gap-2">
                   <div className="min-w-0">
-                    <p className="font-mono font-bold text-slate-900">{lead.public_id}</p>
+                    <p className="font-mono font-bold text-slate-900">
+                      {lead.public_id}
+                      {lead.duplicate_of && (
+                        <span data-testid="lead-duplicate-badge"
+                          className="ml-2 align-middle rounded bg-amber-100 px-1.5 py-0.5 font-sans text-xs font-semibold text-amber-800">
+                          Повтор {lead.duplicate_of}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-slate-500">{fmt(lead.created_at)}</p>
                   </div>
                   <LeadStatusBadge status={lead.status} label={lead.status_display} />

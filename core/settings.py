@@ -217,6 +217,10 @@ CORS_ALLOWED_ORIGINS = (
 # С задачи 1.3 вход живёт в cookie: «все origin» + credentials позволили бы
 # любому сайту читать личные данные пользователя. Открытый CORS — только без cookie.
 CORS_ALLOW_CREDENTIALS = not CORS_ALLOW_ALL_ORIGINS
+# Заголовки запроса, разрешённые в preflight: стандартный набор django-cors-headers + Idempotency-Key (10.13).
+from corsheaders.defaults import default_headers as _default_cors_headers  # noqa: E402
+
+CORS_ALLOW_HEADERS = (*_default_cors_headers, 'idempotency-key')
 
 # ─── CSRF (задача 1.3) ────────────────────────────────────────────────────────
 # JWT лежит в httpOnly-cookie, поэтому запросы, аутентифицированные cookie,
@@ -798,6 +802,11 @@ LEAD_NOTIFY_MAX_ATTEMPTS = _positive_int_env('LEAD_NOTIFY_MAX_ATTEMPTS', 5)
 LEAD_UNANSWERED_WARN_HOURS = _positive_int_env('LEAD_UNANSWERED_WARN_HOURS', 2)
 LEAD_UNANSWERED_CRITICAL_HOURS = _positive_int_env('LEAD_UNANSWERED_CRITICAL_HOURS', 24)
 LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES = _positive_int_env('LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES', 360)
+# Повтор заявки с тем же телефоном (10.13): окно в минутах; 0 выключает проверку по телефону (ключ работает всегда).
+try:
+    LEAD_DUPLICATE_WINDOW_MINUTES = max(0, int(os.environ.get('LEAD_DUPLICATE_WINDOW_MINUTES', '') or 60))
+except ValueError:
+    LEAD_DUPLICATE_WINDOW_MINUTES = 60
 
 # URL сайта — используется в Telegram-постах (ссылки на листинги)
 SITE_URL = os.environ.get('SITE_URL', '') or 'http://localhost'

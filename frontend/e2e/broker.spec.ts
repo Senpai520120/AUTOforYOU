@@ -152,6 +152,8 @@ test.describe('Мобільний @mobile', () => {
 
   test('/broker/leads на вузькому екрані без горизонтального скролу @mobile', async ({ page }) => {
     await page.goto('/broker/leads');
+    // Пагінація: інші спеки (lead, lead-duplicates, trust) створюють заявки і виштовхують засіяну з першої сторінки.
+    await searchLeads(page, 'Клієнт брокера');
     await expect(row(page, CLIENT_LEAD)).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);

@@ -40,13 +40,14 @@ def _in_app_once(lead: Lead, cfg: LeadNotificationSettings) -> None:
     # Флаг ставится атомарно, чтобы повтор задачи не задвоил уведомления.
     if Lead.objects.filter(pk=lead.pk, broker_in_app_sent=False).update(broker_in_app_sent=True):
         lead.broker_in_app_sent = True
-        notify.notify_brokers_in_app(f'Нова заявка {lead.public_id}', notify.cabinet_url(lead))
+        title = f'Повторна заявка {lead.public_id}' if lead.duplicate_of_id else f'Нова заявка {lead.public_id}'
+        notify.notify_brokers_in_app(title, notify.cabinet_url(lead))
 
 
 @shared_task(bind=True, name='leads.tasks.notify_broker_new_lead')
 def notify_broker_new_lead(self, lead_id: int, force: bool = False):
     """Личное уведомление брокеру: Telegram, затем (если Telegram не доставил) резервный email (2.12)."""
-    lead = Lead.objects.filter(pk=lead_id).first()
+    lead = Lead.objects.select_related('duplicate_of').filter(pk=lead_id).first()
     if lead is None:
         logger.warning('lead.notify lead_id=%s not found', lead_id)
         return {'status': 'not_found'}
@@ -169,7 +170,7 @@ def notify_broker_email(self, lead_id: int, force: bool = False):
     """
     from integrations.email import send_email
 
-    lead = Lead.objects.filter(pk=lead_id).first()
+    lead = Lead.objects.select_related('duplicate_of').filter(pk=lead_id).first()
     if lead is None:
         return {'status': 'not_found'}
     if lead.email_status == NotifyStatus.SENT and not force:

@@ -50,6 +50,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 const GENERAL_ERROR = 'Не вдалося надіслати заявку. Спробуйте ще раз пізніше.';
 
+/** UUID v4; crypto.randomUUID недоступний у незахищеному контексті (http), тоді - getRandomValues. */
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 function FieldError({ id, text }: { id: string; text?: string }) {
   if (!text) return null;
   return <p id={id} role="alert" className="text-red-600 text-xs mt-1">{text}</p>;
@@ -83,6 +93,9 @@ export default function LeadForm({
   const [retrying, setRetrying] = useState(false);
   const [serverDown, setServerDown] = useState(false);
   const loadingRef = useRef(false);
+  // Ключ ідемпотентності однієї відправки (10.13): не змінюється при помилках, змінюється після успіху.
+  const keyRef = useRef<string | null>(null);
+  const inFlightRef = useRef(false);
   const aliveRef = useRef(true);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -149,7 +162,7 @@ export default function LeadForm({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting || inFlightRef.current) return;
     const local: Errors = {};
     if (!name.trim()) local.name = "Вкажіть ім'я.";
     if (!phone.trim()) local.phone = 'Вкажіть телефон.';
@@ -182,9 +195,12 @@ export default function LeadForm({
       ...captcha.payload(),
     };
 
+    inFlightRef.current = true;
+    keyRef.current ??= newIdempotencyKey();
     setSubmitting(true);
     try {
-      const created = await leadsApi.create(payload);
+      const created = await leadsApi.create(payload, keyRef.current);
+      keyRef.current = null; // наступна відправка («Надіслати ще») - нова заявка з новим ключем
       setPublicId(created.public_id);
       trackEvent('lead_submit', { source }); // лише категорія джерела, без ПДн
     } catch (err) {
@@ -198,6 +214,9 @@ export default function LeadForm({
         }
       } else if (err instanceof ApiError && err.status === 429) {
         setGeneral('Забагато заявок, спробуйте пізніше.');
+      } else if (err instanceof ApiError && err.status === 409) {
+        keyRef.current = null; // ключ зайнятий іншими даними: наступна спроба - з новим
+        setGeneral(err.message.startsWith('HTTP ') ? GENERAL_ERROR : err.message);
       } else if (err instanceof ApiError && err.status === 503) {
         setServerDown(true);
         setGeneral('');
@@ -205,6 +224,7 @@ export default function LeadForm({
         setGeneral(GENERAL_ERROR);
       }
     } finally {
+      inFlightRef.current = false;
       setSubmitting(false);
       captcha.bump(); // токен одноразовий: новий після кожної відповіді сервера
     }

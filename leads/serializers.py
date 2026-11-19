@@ -191,11 +191,14 @@ class BrokerLeadListSerializer(_AssigneeMixin, serializers.ModelSerializer):
     utm_source = serializers.SerializerMethodField()
     car = serializers.SerializerMethodField()
     assigned_to = serializers.SerializerMethodField()
+    duplicate_of = serializers.SlugRelatedField(
+        slug_field='public_id', read_only=True, allow_null=True, label='Повтор заявки',
+        help_text='Номер першої заявки, якщо це повтор; лише в кабінеті брокера.')
 
     class Meta:
         model = Lead
         fields = [
-            'id', 'public_id', 'created_at', 'name', 'phone', 'contact_method', 'status', 'status_display',
+            'id', 'public_id', 'duplicate_of', 'created_at', 'name', 'phone', 'contact_method', 'status', 'status_display',
             'partner_status', 'partner_status_display', 'total_usd', 'total_uah', 'source', 'source_display',
             'utm_source', 'first_response_at', 'assigned_to', 'car', 'qualification', 'qualification_display',
         ]

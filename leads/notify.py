@@ -98,14 +98,23 @@ def _render(template: str, raw: dict[str, str], caps: dict[str, int]) -> str:
     return template.format_map(safe)
 
 
+def duplicate_note(lead: Lead) -> str:
+    """Пометка для повтора заявки (10.13): только номер первой заявки, без ПДн. Для обычной заявки пусто."""
+    if not lead.duplicate_of_id:
+        return ''
+    return f'🔁 Повтор заявки {lead.duplicate_of.public_id}'
+
+
 def render_new_lead_text(lead: Lead, template: str) -> str:
     """Подставляет экранированные значения. Поля обрезаются ДО escape, пока текст не влезет в лимит.
     Неизвестный плейсхолдер даёт пустую строку. MessageTooLong, если не влезает и без полей гостя."""
     template = template if template.strip() else FALLBACK_TEMPLATE
     raw = raw_context(lead)
+    note = duplicate_note(lead)
+    prefix = html.escape(note) + chr(10) if note else ''
     caps = {k: 10 ** 6 for k in _GUEST_FIELDS}
     while True:
-        text = _render(template, raw, caps)
+        text = prefix + _render(template, raw, caps)
         if tg_len(text) <= TELEGRAM_LIMIT:
             return text
         # Режем поля по очереди: сначала комментарий и источник.
@@ -193,8 +202,13 @@ def render_new_lead_email(lead: Lead, cfg: LeadNotificationSettings) -> tuple[st
     raw = defaultdict(str, email_context(lead))
     subject_tpl = cfg.email_subject_template if cfg.email_subject_template.strip() else FALLBACK_EMAIL_SUBJECT
     body_tpl = cfg.email_body_template if cfg.email_body_template.strip() else FALLBACK_EMAIL_BODY
-    subject = _LINE_BREAKS.sub(' ', subject_tpl.format_map(raw)).strip()[:SUBJECT_MAX]
-    return subject, body_tpl.format_map(raw)
+    subject = _LINE_BREAKS.sub(' ', subject_tpl.format_map(raw)).strip()
+    body = body_tpl.format_map(raw)
+    note = duplicate_note(lead)
+    if note:
+        subject = f'{note}: {subject}'
+        body = note + chr(10) + chr(10) + body
+    return subject[:SUBJECT_MAX], body
 
 
 def email_channel_configured() -> bool:
