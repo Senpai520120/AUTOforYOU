@@ -65,6 +65,8 @@ class Command(BaseCommand):
         with open(os.devnull, 'w') as sink:
             for name in ('seed_regions', 'seed_rates', 'seed_auction_fees'):
                 call_command(name, stdout=sink)
+            # 2.18: на стенде со старыми тирами (без clean) привести сетки к CSV; на свежем стенде - no-op.
+            call_command('seed_auction_fees', '--update', stdout=sink)
 
         with transaction.atomic():
             users = self._users(password)

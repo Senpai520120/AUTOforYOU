@@ -128,6 +128,34 @@ test.describe('Калькулятор: довідники з API', () => {
     await expect(page.getByRole('button', { name: 'Розрахувати' })).toHaveCount(0);
   });
 
+  test('2.18: «Чистий» обирається, розрахунок іде з title_type=clean і підсумок відрізняється від salvage', async ({ page }) => {
+    await page.goto('/calculator');
+    await page.getByText('Параметри збору аукціону').click(); // «Тип титулу» у згорнутому <details>
+    const titleSelect = page.getByLabel('Тип титулу');
+    await expect(titleSelect.locator('option[value="clean"]')).toHaveText('Чистий (clean)');
+
+    await titleSelect.selectOption('salvage');
+    const salvage = (await (await calculate(page)).json()) as CalcResult;
+
+    await titleSelect.selectOption({ label: 'Чистий (clean)' });
+    const reqPromise = page.waitForRequest(isCalc);
+    const clean = (await (await calculate(page)).json()) as CalcResult;
+    expect(JSON.parse((await reqPromise).postData() ?? '{}').title_type).toBe('clean');
+    await expect(page.getByTestId('calc-result')).toBeVisible();
+    expect(clean.breakdown.total_usd).not.toBe(salvage.breakdown.total_usd);
+  });
+
+  test('2.18: у довіднику немає тирів clean — вибору «Чистий» немає', async ({ page }) => {
+    await patchRates(page, (b) => ({
+      ...b,
+      options: { ...b.options, title_types: b.options.title_types.filter((t) => t.value !== 'clean') },
+    }));
+    await page.goto('/calculator');
+    await page.getByText('Параметри збору аукціону').click();
+    await expect(page.getByLabel('Тип титулу')).toBeVisible();
+    await expect(page.getByLabel('Тип титулу').locator('option[value="clean"]')).toHaveCount(0);
+  });
+
   test('підписи ставок — з відповіді: бензин «Мито 10%», електро «Мито 0%»', async ({ page }) => {
     await page.goto('/calculator');
     await calculate(page);
