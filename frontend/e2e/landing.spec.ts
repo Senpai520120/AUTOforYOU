@@ -243,6 +243,42 @@ test.describe('Сторінка моделі', () => {
     expect(await block.getByTestId('popular-model').count()).toBeLessThanOrEqual(6);
   });
 
+  test('10.10: «Коротко про модель» і FAQ на Camry; FAQPage JSON-LD збігається з питаннями', async ({ page }) => {
+    test.setTimeout(150_000);
+    await openLanding(page);
+    const facts = page.getByTestId('model-facts');
+    await expect(facts).toContainText('Коротко про модель');
+    await expect(facts).toContainText('[E2E] XV70');
+    await expect(facts).toContainText('Бензин');
+    await expect(facts).toContainText('2000 см³');
+    const faq = page.getByTestId('model-faq');
+    await expect(faq.getByTestId('model-faq-item')).toHaveCount(2);
+    await faq.getByText('[E2E] Перше питання?').click();
+    await expect(faq.getByText('[E2E] Перша відповідь.')).toBeVisible();
+    await expect(page.getByText('[E2E] Неактивне питання?')).toHaveCount(0);
+
+    const ld = await page.locator('script[type="application/ld+json"]').allTextContents();
+    const block = ld.map((t) => JSON.parse(t)).flat().find((b) => b['@type'] === 'FAQPage');
+    expect(block['@context']).toBe('https://schema.org');
+    const names = block.mainEntity.map((q: { name: string }) => q.name);
+    expect(names).toEqual(['[E2E] Перше питання?', '[E2E] Друге питання?']);
+    expect(block.mainEntity[0].acceptedAnswer.text).toBe('[E2E] Перша відповідь.');
+  });
+
+  test('10.10: без FAQ і без покоління (Honda Accord) блоку FAQ і FAQPage немає', async ({ page }) => {
+    test.setTimeout(150_000);
+    await expect(async () => {
+      await page.goto('/prigon/e2e-honda-accord');
+      await expect(page.getByTestId('landing-h1')).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 90_000, intervals: [5_000] });
+    await expect(page.getByTestId('model-faq')).toHaveCount(0);
+    await expect(page.getByText('Поширені запитання')).toHaveCount(0);
+    await expect(page.getByTestId('model-facts')).not.toContainText('Покоління');
+    const ld = await page.locator('script[type="application/ld+json"]').allTextContents();
+    const types = ld.map((t) => JSON.parse(t)).flat().map((b) => b['@type']);
+    expect(types).not.toContain('FAQPage');
+  });
+
   test.fixme('LAND-2 → пункт «Пригон» і блок «Популярні моделі» приховані при порожньому довіднику (потрібен стек без опублікованих лендингів)', async () => {});
 
   test.fixme('LAND-1 → SSR-запит Next не перехоплюється page.route: чесну помилку при недоступному API перевірити на стеку без backend', async () => {});

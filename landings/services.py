@@ -29,7 +29,7 @@ from pricing.calculator import (
 )
 from pricing.views import FORM_DEFAULTS
 
-from .models import LandingSettings, ModelLandingPage
+from .models import THIN_TEXT_ERROR, LandingSettings, ModelLandingPage
 
 ZERO = Decimal('0')
 CACHE_TTL = 600  # 10 минут; правка тарифов или страницы сбрасывает кэш сразу (версия + updated_at в ключе)
@@ -177,6 +177,22 @@ def build_landing_calculation(page: ModelLandingPage, *, now=None) -> dict | Non
 
 def can_publish(page: ModelLandingPage) -> bool:
     return build_landing_calculation(page) is not None
+
+
+def unique_text_length(page: ModelLandingPage) -> int:
+    """Длина уникального текста: вступ + опис + «що входить у ціну» (после strip). Заголовки, meta и FAQ не считаются."""
+    return sum(len((getattr(page, f) or '').strip()) for f in ('intro', 'description', 'included_text'))
+
+
+def text_length_error(page: ModelLandingPage) -> str | None:
+    length, minimum = unique_text_length(page), LandingSettings.get_solo().min_text_chars
+    return THIN_TEXT_ERROR.format(length=length, minimum=minimum) if length < minimum else None
+
+
+def thin_published_pages() -> list[ModelLandingPage]:
+    """Опубликованные страницы с текстом короче порога (для launch_check)."""
+    minimum = LandingSettings.get_solo().min_text_chars
+    return [p for p in published_pages() if unique_text_length(p) < minimum]
 
 
 def published_pages():

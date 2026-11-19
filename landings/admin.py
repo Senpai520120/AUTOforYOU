@@ -3,8 +3,14 @@ from django.utils.html import format_html
 
 from content.admin import AdminOnlyMixin
 
-from .models import LandingSettings, ModelLandingPage
-from .services import build_landing_calculation, publication_warning
+from .models import LandingFaqItem, LandingSettings, ModelLandingPage
+from .services import build_landing_calculation, publication_warning, unique_text_length
+
+
+class LandingFaqItemInline(admin.TabularInline):
+    model = LandingFaqItem
+    extra = 0
+    fields = ('order', 'question', 'answer', 'is_active')
 
 
 @admin.register(ModelLandingPage)
@@ -13,14 +19,15 @@ class ModelLandingPageAdmin(AdminOnlyMixin, admin.ModelAdmin):
     list_editable = ('sort_order',)
     list_filter = ('is_published',)
     search_fields = ('slug', 'make', 'model')
-    readonly_fields = ('calculation_preview', 'created_at', 'updated_at')
+    readonly_fields = ('calculation_preview', 'text_length', 'created_at', 'updated_at')
     actions = ['publish_selected']
+    inlines = [LandingFaqItemInline]
     fieldsets = (
-        (None, {'fields': ('slug', 'make', 'model', 'year_from', 'year_to', 'is_published', 'sort_order')}),
+        (None, {'fields': ('slug', 'make', 'model', 'year_from', 'year_to', 'generation', 'is_published', 'sort_order')}),
         ('Вхідні дані розрахунку', {'fields': (
             'calc_year', 'auction_price_usd', 'fuel_type', 'engine_cc', 'battery_capacity_kwh', 'auction',
             'auction_location', 'us_port', 'eu_port', 'calculation_preview')}),
-        ('Тексти', {'fields': ('h1', 'intro', 'description', 'included_text', 'typical_term_text',
+        ('Тексти', {'fields': ('text_length', 'h1', 'intro', 'description', 'included_text', 'typical_term_text',
                                'meta_title', 'meta_description')}),
         ('Службове', {'fields': ('created_at', 'updated_at')}),
     )
@@ -28,6 +35,10 @@ class ModelLandingPageAdmin(AdminOnlyMixin, admin.ModelAdmin):
     @admin.display(description='Модель', ordering='make')
     def title_display(self, obj):
         return obj.title
+
+    @admin.display(description='Довжина унікального тексту')
+    def text_length(self, obj):
+        return unique_text_length(obj) if obj is not None and obj.pk else 'Збережіть сторінку.'
 
     @admin.display(description='Розрахунок')
     def calculation_total(self, obj):
@@ -65,10 +76,9 @@ class ModelLandingPageAdmin(AdminOnlyMixin, admin.ModelAdmin):
     def publish_selected(self, request, queryset):
         published = 0
         for page in queryset.filter(is_published=False):
-            if page.has_draft_marker():
-                self.message_user(request, f'{page}: у текстах лишилась позначка «перевірити».', messages.WARNING)
-            elif build_landing_calculation(page) is None:
-                self.message_user(request, f'{page}: немає розрахунку (вхідні дані або ставки).', messages.WARNING)
+            error = page.publication_error()
+            if error:
+                self.message_user(request, f'{page}: {error}', messages.WARNING)
             else:
                 page.is_published = True
                 page.save(update_fields=['is_published', 'updated_at'])

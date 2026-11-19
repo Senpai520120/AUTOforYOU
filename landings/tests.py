@@ -17,8 +17,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.throttling import SimpleRateThrottle
 
-from landings.models import LandingSettings, ModelLandingPage
-from landings.services import build_landing_calculation, bump_cache_version, can_publish
+from landings.models import LandingFaqItem, LandingSettings, ModelLandingPage
+from landings.services import build_landing_calculation, bump_cache_version, can_publish, thin_published_pages
 from leads.models import Lead
 from pricing import cache as pricing_cache
 from pricing.cache import invalidate_all
@@ -43,6 +43,9 @@ PAGE_FIELDS = dict(
     auction_price_usd=Decimal('5000'), fuel_type='petrol', engine_cc=2000,
     auction='copart', auction_location='general', us_port='houston', eu_port='klaipeda',
 )
+
+MIN_CHARS = LandingSettings._meta.get_field('min_text_chars').default
+LONG_TEXT = 'a' * MIN_CHARS
 
 
 def make_page(slug='toyota-camry', **kw):
@@ -191,6 +194,68 @@ class PublishValidationTests(SeededCase):
             page.full_clean()
 
 
+class TextThresholdTests(SeededCase):
+    MESSAGE = 'Текст замалий: {} із {} символів (вступ, опис, що входить у ціну). Допишіть унікальний текст про модель.'
+
+    def test_short_text_rejected_with_exact_message(self):
+        page = ModelLandingPage(slug='t', is_published=True, **{**PAGE_FIELDS, 'intro': 'a' * (MIN_CHARS - 1)})
+        with self.assertRaisesMessage(ValidationError, self.MESSAGE.format(MIN_CHARS - 1, MIN_CHARS)):
+            page.full_clean()
+
+    def test_exact_threshold_passes(self):
+        ModelLandingPage(slug='ok', is_published=True, **{**PAGE_FIELDS, 'intro': LONG_TEXT}).full_clean()
+
+    def test_one_below_threshold_fails(self):
+        bad = ModelLandingPage(slug='bad', is_published=True, **{**PAGE_FIELDS, 'intro': LONG_TEXT[:-1]})
+        with self.assertRaisesMessage(ValidationError, 'Текст замалий'):
+            bad.full_clean()
+
+    def test_sum_of_three_fields_and_strip(self):
+        third = MIN_CHARS // 3
+        page = ModelLandingPage(slug='sum', is_published=True, **{
+            **PAGE_FIELDS, 'intro': ' ' + 'a' * third + ' ', 'description': 'b' * third,
+            'included_text': 'c' * (MIN_CHARS - 2 * third), 'h1': 'h' * 150})
+        page.full_clean()
+
+    def test_h1_meta_and_term_not_counted(self):
+        page = ModelLandingPage(slug='nc', is_published=True, **{
+            **PAGE_FIELDS, 'h1': 'h' * 200, 'typical_term_text': 't' * 200, 'meta_title': 'm' * 120,
+            'meta_description': 'd' * 300})
+        with self.assertRaisesMessage(ValidationError, 'Текст замалий: 0 із'):
+            page.full_clean()
+
+    def test_changed_setting_changes_result(self):
+        LandingSettings.objects.update_or_create(pk=1, defaults={'min_text_chars': 100})
+        page = ModelLandingPage(slug='cfg', is_published=True, **{**PAGE_FIELDS, 'intro': 'a' * 100})
+        page.full_clean()
+        LandingSettings.objects.update_or_create(pk=1, defaults={'min_text_chars': 101})
+        with self.assertRaisesMessage(ValidationError, 'Текст замалий: 100 із 101'):
+            page.full_clean()
+
+    def test_already_published_short_page_is_not_touched(self):
+        page = make_page(is_published=True)  # короткий текст, опубликована до появления порога
+        page.sort_order = 5
+        page.full_clean()
+        page.save()
+        self.assertEqual(APIClient().get(detail_url(page.slug)).status_code, 200)
+        page.refresh_from_db()
+        self.assertTrue(page.is_published)
+
+    def test_republishing_short_page_is_checked(self):
+        page = make_page(is_published=True)
+        ModelLandingPage.objects.filter(pk=page.pk).update(is_published=False)
+        page.refresh_from_db()
+        page.is_published = True
+        with self.assertRaisesMessage(ValidationError, 'Текст замалий'):
+            page.full_clean()
+
+    def test_thin_published_pages_excludes_drafts_and_thick(self):
+        make_page(slug='thin', is_published=True)
+        make_page(slug='thick', is_published=True, intro=LONG_TEXT)
+        make_page(slug='draft')
+        self.assertEqual([p.slug for p in thin_published_pages()], ['thin'])
+
+
 class LandingApiTests(SeededCase):
     def setUp(self):
         super().setUp()
@@ -245,6 +310,44 @@ class LandingApiTests(SeededCase):
         self.assertEqual(set(data) & {'id', 'is_published', 'sort_order', 'created_at', 'rates_snapshot'}, set())
         self.assertNotIn('rates_snapshot', data['calculation'])
         self.assertNotIn('meta', str(data['calculation'].keys()))
+
+    def test_model_data_returned_when_filled(self):
+        page = make_page(is_published=True, generation='XV70')
+        data = self.client.get(detail_url(page.slug)).json()
+        self.assertEqual((data['fuel_type'], data['engine_cc'], data['generation']), ('Бензин', 2000, 'XV70'))
+        self.assertNotIn('battery_capacity_kwh', data)
+
+    def test_battery_returned_for_ev(self):
+        page = make_page(is_published=True, fuel_type='electric', engine_cc=None,
+                         battery_capacity_kwh=Decimal('75.5'))
+        data = self.client.get(detail_url(page.slug)).json()
+        self.assertEqual(data['battery_capacity_kwh'], '75.5')
+        self.assertNotIn('engine_cc', data)
+
+    def test_empty_model_data_not_in_response(self):
+        page = make_page(is_published=True)
+        data = self.client.get(detail_url(page.slug)).json()
+        self.assertEqual(set(data) & {'battery_capacity_kwh', 'generation', 'faq'}, set())
+
+    def test_faq_only_active_clean_ordered(self):
+        page = make_page(is_published=True)
+        LandingFaqItem.objects.create(page=page, question='Друге?', answer='Б', order=2, is_active=True)
+        LandingFaqItem.objects.create(page=page, question='Перше?', answer='А', order=1, is_active=True)
+        LandingFaqItem.objects.create(page=page, question='Неактивне?', answer='В', order=0)
+        LandingFaqItem.objects.create(page=page, question='Чернетка?', answer='[ПЕРЕВІРИТИ]', order=0, is_active=True)
+        faq = self.client.get(detail_url(page.slug)).json()['faq']
+        self.assertEqual(faq, [{'question': 'Перше?', 'answer': 'А'}, {'question': 'Друге?', 'answer': 'Б'}])
+
+    def test_faq_without_active_items_has_no_key(self):
+        page = make_page(is_published=True)
+        LandingFaqItem.objects.create(page=page, question='Неактивне?', answer='В')
+        self.assertNotIn('faq', self.client.get(detail_url(page.slug)).json())
+
+    def test_faq_of_other_page_not_leaked(self):
+        page = make_page(is_published=True)
+        other = make_page(slug='other')
+        LandingFaqItem.objects.create(page=other, question='Чуже?', answer='В', is_active=True)
+        self.assertNotIn('faq', self.client.get(detail_url(page.slug)).json())
 
     def test_unpublished_is_404_and_not_in_list(self):
         page = make_page()
@@ -384,17 +487,26 @@ class AdminTests(SeededCase):
                            follow=True)
 
     def test_action_publishes_only_pages_with_calculation(self):
-        good = make_page(slug='good')
-        no_price = make_page(slug='no-price', auction_price_usd=None)
-        marked = make_page(slug='marked', intro='[ПЕРЕВІРИТИ ЗІ ВЛАСНИКОМ: вступ]')
+        good = make_page(slug='good', intro=LONG_TEXT)
+        no_price = make_page(slug='no-price', auction_price_usd=None, intro=LONG_TEXT)
+        marked = make_page(slug='marked', intro='[ПЕРЕВІРИТИ ЗІ ВЛАСНИКОМ: вступ]' + LONG_TEXT)
         resp = self.post_action(make_staff(superuser=True), [good, no_price, marked])
         self.assertEqual(resp.status_code, 200)
         for p in (good, no_price, marked):
             p.refresh_from_db()
         self.assertEqual((good.is_published, no_price.is_published, marked.is_published), (True, False, False))
         text = resp.content.decode()
-        self.assertIn('Toyota Camry: немає розрахунку', text)
-        self.assertIn('позначка', text)
+        self.assertIn('Toyota Camry: Не можна опублікувати без розрахунку', text)
+        self.assertIn('Toyota Camry: Приберіть позначку', text)
+
+    def test_action_rejects_short_text_with_exact_message(self):
+        short = make_page(slug='short', intro='a' * (MIN_CHARS - 1))
+        resp = self.post_action(make_staff(superuser=True), [short])
+        short.refresh_from_db()
+        self.assertFalse(short.is_published)
+        self.assertIn(f'Toyota Camry: Текст замалий: {MIN_CHARS - 1} із {MIN_CHARS} символів '
+                      '(вступ, опис, що входить у ціну). Допишіть унікальний текст про модель.',
+                      resp.content.decode())
 
     def test_only_admin_sees_module(self):
         for user, code in ((make_staff(), 403), (make_broker(is_staff=True), 403), (make_staff(superuser=True), 200)):

@@ -48,6 +48,14 @@
 - Полный бэкенд: 3204 теста, падают только 2 известных Windows-only (`test_entrypoint_refuses_debug_*`).
 - Заметки: кэш сборки Docker на сервере 3,4 ГБ, `deploy.sh` его не чистит (`docker builder prune` вручную или задача). Сервер после сессии — остановить (`aws ec2 stop-instances --instance-ids i-017e7dfd9fced32f5`), по слову владельца. Ключ `claude-deploy` с `IAMFullAccess` — деактивировать после работ.
 
+## Задача 10.10: лендинги без «тонкого контента» (2026-11-20) — ЗАВЕРШЕНО (e2e написаны, не запускались)
+
+- Порог: `LandingSettings.min_text_chars` (умолчание 600, min 100, допущение — ждёт владельца, 600-1000). Длина = `intro + description + included_text` после `strip` (`services.unique_text_length`). Условия публикации в одном месте — `ModelLandingPage.publication_error()` (позначка, расчёт, текст); `clean()` проверяет текст только при переходе в «опубликовано» (сверка с БД), `publish_selected` вызывает тот же метод. Опубликованные короткие не трогаются.
+- `launch_check`: `check_landing_content` — WARNING «Тонкий контент на N …: slug…», OK, молчит без лендингов.
+- API: `fuel_type` (название), `engine_cc`, `battery_capacity_kwh`, новое `generation`, `faq` (активные, без позначки, по `order`) — пустое не отдаётся. Модель `LandingFaqItem` (inline в админке). Миграция `landings/0002_thin_content_faq.py` (только добавление). Кэш расчёта не менялся, версия `v2` прежняя.
+- Фронт: `ModelFacts`, `ModelFaq` (`<details>`), `faqLd` (`buildFaqLd` в `jsonld-core.ts`); e2e в `landing.spec.ts` (Camry с FAQ, Accord без), сид обновлён.
+- Тесты: landings/core/users зелёные; мутации (снять порог, отдавать пустое) ловятся. `openapi.yaml` не менялся: деталь лендинга в схеме без полей.
+
 ## Задача 10.8: доверие (2026-11-20) — ЗАВЕРШЕНО (10.8a + 10.8b; e2e написаны, не запускались)
 
 - Бэкенд: `SiteSettings.about_text`, `lead_response_hours` (null, min 1), `lead_next_steps`; миграция `site_settings/0004_trust_fields.py` (3 AddField); публичный API, админка «Довіра»; тесты `site_settings/tests_trust.py` (мутация: поле убрано из `fields` — 4 теста красные). Сид e2e: `partner_name`, `about_text`, `lead_response_hours=4`, `lead_next_steps` с `[E2E]`.

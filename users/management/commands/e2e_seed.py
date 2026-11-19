@@ -312,7 +312,7 @@ class Command(BaseCommand):
 
         from django.core.cache import cache
 
-        from landings.models import ModelLandingPage
+        from landings.models import LandingFaqItem, ModelLandingPage
         from landings.services import can_publish
         from pricing import cache as pricing_cache
 
@@ -326,7 +326,8 @@ class Command(BaseCommand):
             'us_port': 'houston', 'eu_port': 'klaipeda',
         }
         texts = {
-            'intro': f'{E2E_PREFIX} Вступ сторінки моделі.',
+            # Достатньо для порога LandingSettings.min_text_chars (10.10): повтор тестової фрази, не контент.
+            'intro': f'{E2E_PREFIX} Вступ сторінки моделі. ' + 'Тестовий текст для перевірки порога. ' * 20,
             'included_text': f'{E2E_PREFIX} Аукціонний збір, доставка, розмитнення.',
             'typical_term_text': f'{E2E_PREFIX} 2-3 місяці',
         }
@@ -336,7 +337,17 @@ class Command(BaseCommand):
         self._note('landing_page', created)
         if created and can_publish(page):
             page.is_published = True
+            page.generation = f'{E2E_PREFIX} XV70'
             page.save()
+        # FAQ только у Camry: у Accord блока нет (проверка «пусто не рендерится»), неактивный вопрос не показывается.
+        for order, (question, answer, active) in enumerate((
+            (f'{E2E_PREFIX} Перше питання?', f'{E2E_PREFIX} Перша відповідь.', True),
+            (f'{E2E_PREFIX} Друге питання?', f'{E2E_PREFIX} Друга відповідь.', True),
+            (f'{E2E_PREFIX} Неактивне питання?', f'{E2E_PREFIX} Неактивна відповідь.', False),
+        ), start=1):
+            _, faq_created = LandingFaqItem.objects.get_or_create(
+                page=page, question=question, defaults={'answer': answer, 'order': order, 'is_active': active})
+            self._note('landing_faq', faq_created)
         # Второй опубликованный лендинг той же марки: нужен для блока «Схожі моделі» (задача 10.9).
         similar, created = ModelLandingPage.objects.get_or_create(
             slug='e2e-honda-accord',

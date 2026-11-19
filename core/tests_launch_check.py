@@ -587,3 +587,35 @@ class MetricsAndTasksTests(LaunchCheckTestCase):
         code, out = self.run_check()
         self.assertOk(code, out)
         self.assertIn('[ІНФО   ] Невдалі Celery-завдання (8.9) у журналі: 2', out)
+
+
+class LandingContentTests(LaunchCheckTestCase):
+    @staticmethod
+    def page(slug, *, published, text_len):
+        from landings.models import ModelLandingPage
+        return ModelLandingPage.objects.create(
+            slug=slug, make='A', model=slug, is_published=published, intro='x' * text_len)
+
+    def test_no_landings_is_silent(self):
+        _code, out = self.run_check()
+        self.assertNotIn('Тонкий контент', out)
+        self.assertNotIn('унікального тексту', out)
+
+    def test_thin_published_pages_listed_as_warning(self):
+        from landings.models import LandingSettings
+        minimum = LandingSettings.get_solo().min_text_chars
+        self.page('thin-one', published=True, text_len=minimum - 1)
+        self.page('thick-one', published=True, text_len=minimum)
+        self.page('thin-draft', published=False, text_len=1)
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('Тонкий контент на 1 опублікованих сторінках: thin-one', out)
+        self.assertNotIn('thick-one', out)
+        self.assertNotIn('thin-draft', out)
+
+    def test_all_thick_is_ok(self):
+        from landings.models import LandingSettings
+        self.page('thick-one', published=True, text_len=LandingSettings.get_solo().min_text_chars)
+        _code, out = self.run_check()
+        self.assertIn('Усі опубліковані сторінки моделей мають достатньо унікального тексту', out)
+        self.assertNotIn('Тонкий контент', out)

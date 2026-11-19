@@ -808,6 +808,11 @@ export interface LandingDetail {
   model: string;
   year_from: number | null;
   year_to: number | null;
+  generation?: string;
+  fuel_type?: string;
+  engine_cc?: number;
+  battery_capacity_kwh?: string;
+  faq?: { question: string; answer: string }[];
   h1: string;
   intro: string;
   description: string;

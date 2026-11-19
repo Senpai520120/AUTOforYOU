@@ -444,6 +444,19 @@ def check_seeding(threshold: int | None) -> list:
     return [Finding(OK, f'Активних оголошень {count} (поріг засіву {threshold})')]
 
 
+def check_landing_content() -> list:
+    from landings.models import ModelLandingPage
+    from landings.services import thin_published_pages
+
+    if not ModelLandingPage.objects.filter(is_published=True).exists():
+        return []
+    thin = thin_published_pages()
+    if thin:
+        return [Finding(WARNING, f'Тонкий контент на {len(thin)} опублікованих сторінках: '
+                                 f'{", ".join(p.slug for p in thin)}')]
+    return [Finding(OK, 'Усі опубліковані сторінки моделей мають достатньо унікального тексту')]
+
+
 def run_checks(wave: int = 1, seed_threshold: int | None = None) -> list:
     """Все проверки режима ВОЛНЫ-1. Только чтение."""
     if wave != 1:
@@ -452,7 +465,7 @@ def run_checks(wave: int = 1, seed_threshold: int | None = None) -> list:
     for check in (
         check_required_vars, check_flags, check_captcha, check_phone_log_salt, check_integrations, check_carvertical_url,
         check_site_settings, check_tariffs, check_roles, check_lead_notifications, check_photo_mode,
-        check_backup_mark, check_metrics_and_tasks,
+        check_backup_mark, check_metrics_and_tasks, check_landing_content,
     ):
         findings.extend(check())
     findings.extend(check_seeding(seed_threshold))
