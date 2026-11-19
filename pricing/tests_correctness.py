@@ -3,7 +3,8 @@
 23-D40, 23-D42...23-D46. Сид-тарифы - seed_rates + seed_auction_fees; ставки законодательства не проверяются (Q5).
 """
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal as D
+from decimal import ROUND_HALF_UP
+from decimal import Decimal as D
 from types import SimpleNamespace
 
 from django.core.exceptions import ValidationError
