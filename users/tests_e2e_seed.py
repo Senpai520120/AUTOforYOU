@@ -105,6 +105,7 @@ class E2ESeedTests(CleanCacheTestCase):  # читает тарифы через 
         # Страницы моделей (2.16): опубликована та, у которой считается расчёт; черновик остаётся черновиком.
         from landings.models import ModelLandingPage
         self.assertTrue(ModelLandingPage.objects.get(slug='e2e-toyota-camry').is_published)
+        self.assertTrue(ModelLandingPage.objects.get(slug='e2e-honda-accord').is_published)
         self.assertFalse(ModelLandingPage.objects.get(slug='e2e-draft').is_published)
 
     def test_sso_user_only_with_oidc_enabled(self):

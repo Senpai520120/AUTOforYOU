@@ -170,6 +170,81 @@ test.describe('Сторінка моделі', () => {
     }
   });
 
+  // Задача 10.9: ссылки на лендинги (шапка, подвал, главная), крошки, «Схожі моделі».
+  // Серверный кеш fetch (LANDING_REVALIDATE_SECONDS) мог запомнить пустой список до e2e_seed: toPass с перезагрузкой.
+  test('шапка: «Пригон авто з США» веде на /prigon @smoke', async ({ page }) => {
+    test.setTimeout(150_000);
+    await expect(async () => {
+      await page.goto('/calculator');
+      await expect(page.getByRole('banner').getByRole('link', { name: 'Пригон авто з США' })).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 90_000, intervals: [5_000] });
+    await page.getByRole('banner').getByRole('link', { name: 'Пригон авто з США' }).click();
+    await expect(page).toHaveURL(/\/prigon$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Пригон авто з США' })).toBeVisible();
+  });
+
+  test('підвал: «Пригон авто з США» веде на /prigon @smoke', async ({ page }) => {
+    test.setTimeout(150_000);
+    await expect(async () => {
+      await page.goto('/calculator');
+      await expect(page.getByTestId('footer-link-prigon')).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 90_000, intervals: [5_000] });
+    await page.getByTestId('footer-link-prigon').click();
+    await expect(page).toHaveURL(/\/prigon$/);
+  });
+
+  test('головна: «Популярні моделі» з [E2E] Toyota Camry, без чернетки, веде на сторінку моделі @smoke', async ({ page }) => {
+    test.setTimeout(150_000);
+    await expect(async () => {
+      await page.goto('/');
+      await expect(page.getByTestId('popular-models')).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 90_000, intervals: [5_000] });
+    const block = page.getByTestId('popular-models');
+    await expect(block).not.toContainText('Чернетка');
+    await expect(block.getByTestId('popular-model').first()).toBeVisible();
+    await expect(block.getByRole('link', { name: 'Усі моделі' })).toHaveAttribute('href', '/prigon');
+    await block.getByRole('link', { name: '[E2E] Toyota Camry' }).click();
+    await expect(page).toHaveURL(new RegExp(`/prigon/${SLUG}$`));
+  });
+
+  test('сторінка моделі: видимі крихти збігаються з BreadcrumbList, остання без посилання @smoke', async ({ page }) => {
+    test.setTimeout(150_000);
+    await openLanding(page);
+    const nav = page.getByRole('navigation', { name: 'Хлібні крихти' });
+    const items = nav.getByRole('listitem');
+    await expect(items).toHaveCount(3);
+    await expect(nav.getByRole('link')).toHaveCount(2);
+    await expect(nav.getByRole('link', { name: 'Головна' })).toHaveAttribute('href', '/');
+    await expect(nav.getByRole('link', { name: 'Пригон авто з США' })).toHaveAttribute('href', '/prigon');
+    const last = nav.locator('[aria-current="page"]');
+    await expect(last).toHaveCount(1);
+    await expect(last).toHaveText('[E2E] Toyota Camry');
+    await expect(last).not.toHaveAttribute('href', /.*/);
+
+    const ld = await page.locator('script[type="application/ld+json"]').allTextContents();
+    const list = ld.map((t) => JSON.parse(t)).flat().find((b) => b['@type'] === 'BreadcrumbList');
+    const names = list.itemListElement.map((c: { name: string }) => c.name);
+    expect(names).toEqual(['Головна', 'Пригон авто з США', '[E2E] Toyota Camry']);
+    const html = (await items.allTextContents()).map((t) => t.replace('›', '').trim());
+    expect(html).toEqual(names);
+  });
+
+  test('сторінка моделі: «Схожі моделі» з іншою моделлю, без поточної, не довші ліміту (6) @smoke', async ({ page }) => {
+    test.setTimeout(150_000);
+    // e2e_seed публікує два [E2E]-лендинги однієї марки: Toyota Camry (поточний) і Honda Accord.
+    await expect(async () => {
+      await page.goto(URL);
+      await expect(page.getByTestId('similar-models')).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 90_000, intervals: [5_000] });
+    const block = page.getByTestId('similar-models');
+    await expect(block.getByRole('link', { name: '[E2E] Honda Accord' })).toHaveAttribute('href', '/prigon/e2e-honda-accord');
+    await expect(block).not.toContainText('Toyota Camry');
+    await expect(block).not.toContainText('Чернетка');
+    expect(await block.getByTestId('popular-model').count()).toBeLessThanOrEqual(6);
+  });
+
+  test.fixme('LAND-2 → пункт «Пригон» і блок «Популярні моделі» приховані при порожньому довіднику (потрібен стек без опублікованих лендингів)', async () => {});
+
   test.fixme('LAND-1 → SSR-запит Next не перехоплюється page.route: чесну помилку при недоступному API перевірити на стеку без backend', async () => {});
 });
 
@@ -182,5 +257,16 @@ test.describe('Сторінка моделі на мобільному @mobile',
     await bar.getByRole('button', { name: 'Залишити заявку' }).click();
     await expect(page.getByTestId('lead-form')).toBeInViewport();
     await expect(page.getByLabel("Ім'я")).toBeFocused();
+  });
+
+  test('бургер-меню: «Пригон авто з США» веде на /prigon', async ({ page }) => {
+    test.setTimeout(150_000);
+    await expect(async () => {
+      await page.goto('/calculator');
+      await page.getByRole('button', { name: 'Меню' }).click();
+      await expect(page.getByRole('navigation', { name: 'Мобільне меню' }).getByRole('link', { name: 'Пригон авто з США' })).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 90_000, intervals: [5_000] });
+    await page.getByRole('navigation', { name: 'Мобільне меню' }).getByRole('link', { name: 'Пригон авто з США' }).click();
+    await expect(page).toHaveURL(/\/prigon$/);
   });
 });

@@ -48,6 +48,14 @@
 - Полный бэкенд: 3204 теста, падают только 2 известных Windows-only (`test_entrypoint_refuses_debug_*`).
 - Заметки: кэш сборки Docker на сервере 3,4 ГБ, `deploy.sh` его не чистит (`docker builder prune` вручную или задача). Сервер после сессии — остановить (`aws ec2 stop-instances --instance-ids i-017e7dfd9fced32f5`), по слову владельца. Ключ `claude-deploy` с `IAMFullAccess` — деактивировать после работ.
 
+## Задача 10.9: ссылки на лендинги (2026-11-20) — ЗАВЕРШЕНО (e2e написаны, не запускались)
+
+- Новое: `components/landing/PopularModels.tsx` (общий для `/how-it-works` и главной, `limit`, `showAll`), `SimilarModels.tsx`, `components/ui/Breadcrumbs.tsx` (`<nav aria-label>` + `<ol>`, последняя крошка `span aria-current="page"`, те же `crumbs`, что в `breadcrumbLd`). В `lib/landings.ts`: `POPULAR_LANDINGS_LIMIT`/`SIMILAR_LANDINGS_LIMIT` (6/6, допущение), `hasLandings()`, `similarLandings()` (та же марка без учёта регистра, затем порядок API, без текущей).
+- `layout.tsx` считает `hasLandings` и передаёт в `Header` -> `getNavLinks(user, c2c, hasLandings)`; подвал показывает `/how-it-works`, `/prigon`, FAQ каждый по своему условию. При `getLandingList() === null` или `[]` блоков и пунктов нет, страницы не падают (build без backend).
+- Главная: title «AUTOforYOU — пригон авто з США під ключ», h1 «Пригон авто з США під ключ в Україну», новое description (<=160). Блок «Популярні моделі» + «Усі моделі» под «Як це працює». Крошки на `/prigon` и `/prigon/[slug]`, «Схожі моделі» на лендинге.
+- Проверки: `npx tsc --noEmit` чисто, `npm run lint` 0 ошибок. e2e: `landing.spec.ts` (шапка, подвал, бургер, главная, крошки vs JSON-LD, схожі), `seo.spec.ts` (пригон в SEO главной), обновлён h1 в `home/ssr/mobile.spec.ts`; `test.fixme('LAND-2 …')` для пустого справочника. Ручная проверка пустого справочника и `npm run build` не выполнялись.
+- Открыто: в e2e-сиде один опубликованный лендинг, поэтому «Схожі моделі» проверяются условно (блока нет); кеш SSR 60 с — после публикации пункт появляется не сразу.
+
 ## Задача 10.7: тупики перед заявкой (2026-11-20) — ЗАВЕРШЕНО (e2e не запускался)
 
 - Новый `frontend/components/ui/FallbackContact.tsx`: контакты из `SiteSettings` (телефон `tel:`, `manager_contact`, email `mailto:`, бот/канал t.me), без контактов — честный текст `fallback-no-contact`; кнопка «Спробувати ще раз» (disabled + `aria-busy` при повторе). Хук `useFallbackSettings` грузит настройки только при входе в тупик.

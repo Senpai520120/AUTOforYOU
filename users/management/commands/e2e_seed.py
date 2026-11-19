@@ -334,6 +334,14 @@ class Command(BaseCommand):
         if created and can_publish(page):
             page.is_published = True
             page.save()
+        # Второй опубликованный лендинг той же марки: нужен для блока «Схожі моделі» (задача 10.9).
+        similar, created = ModelLandingPage.objects.get_or_create(
+            slug='e2e-honda-accord',
+            defaults={'make': E2E_PREFIX, 'model': 'Honda Accord', 'sort_order': 9992, **inputs, **texts})
+        self._note('landing_page', created)
+        if created and can_publish(similar):
+            similar.is_published = True
+            similar.save()
         draft, created = ModelLandingPage.objects.get_or_create(
             slug='e2e-draft', defaults={'make': E2E_PREFIX, 'model': 'Чернетка', 'sort_order': 9991})
         self._note('landing_page', created)

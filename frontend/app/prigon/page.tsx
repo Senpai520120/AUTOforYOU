@@ -7,6 +7,7 @@ import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } 
 import { buildMetadata } from '@/lib/seo';
 import { breadcrumbLd } from '@/lib/jsonld';
 import JsonLd from '@/components/seo/JsonLd';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function LandingIndexPage() {
   const list = await getLandingList();
+  const crumbs = [{ name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' }];
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <JsonLd data={breadcrumbLd([{ name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' }])} />
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Пригон авто з США</h1>
+      <JsonLd data={breadcrumbLd(crumbs)} />
+      <Breadcrumbs crumbs={crumbs} />
+      <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-6">Пригон авто з США</h1>
 
       {list === null && <ErrorState error={null} />}
       {list !== null && list.length === 0 && (

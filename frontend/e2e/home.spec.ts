@@ -14,7 +14,7 @@ test.describe('Головна сторінка @smoke', () => {
   });
 
   test('hero веде в калькулятор', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Авто з США під ключ в Україну' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Пригон авто з США під ключ в Україну' })).toBeVisible();
 
     const calc = page.getByRole('link', { name: 'Порахувати вартість' });
     await expect(calc).toBeVisible();

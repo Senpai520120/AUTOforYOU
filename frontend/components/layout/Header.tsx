@@ -8,7 +8,7 @@ import { useVisibleInterval } from '@/lib/useVisibleInterval';
 import { useC2C } from '@/components/c2c/C2CProvider';
 import MobileNav, { getNavLinks } from '@/components/layout/MobileNav';
 
-export default function Header() {
+export default function Header({ hasLandings = false }: { hasLandings?: boolean }) {
   const { user, logout } = useAuth();
   const c2c = useC2C();
   // Переписка закрита (C2C вимкнено або «засів») — іконки й опитування messages/unread-count немає.
@@ -30,7 +30,7 @@ export default function Header() {
   // Опит кожні 30 с; на прихованій вкладці пауза, при поверненні — одразу.
   useVisibleInterval(loadCounts, 30000, !!user);
 
-  const navLinks = getNavLinks(user, c2c);
+  const navLinks = getNavLinks(user, c2c, hasLandings);
   const handleLogout = () => { void logout(); };
 
   return (

@@ -3,11 +3,14 @@ import CookieSettingsLink from '@/components/ui/CookieSettingsLink';
 import { getSiteConfig, getDemoStatus } from '@/lib/site-config';
 import { ownerTitle } from '@/lib/site-settings';
 import { isHowItWorksPublished } from '@/lib/content';
-import { FAQ_LABEL, HOW_IT_WORKS_LABEL } from '@/lib/labels';
+import { hasLandings } from '@/lib/landings';
+import { FAQ_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 
 /** Серверний підвал: реквізити з налаштувань сайту; при недоступному API — без них. */
 export default async function Footer() {
-  const [s, isDemo, trustPages] = await Promise.all([getSiteConfig(60), getDemoStatus(), isHowItWorksPublished()]);
+  const [s, isDemo, trustPages, landings] = await Promise.all([
+    getSiteConfig(60), getDemoStatus(), isHowItWorksPublished(), hasLandings(),
+  ]);
   const owner = ownerTitle(s);
   const tgUrl = s?.telegram_channel_url && /^https:\/\/t\.me\//.test(s.telegram_channel_url) ? s.telegram_channel_url : '';
   const botUrl = s?.telegram_bot_username ? `https://t.me/${s.telegram_bot_username}` : '';
@@ -54,10 +57,11 @@ export default async function Footer() {
             )}
           </p>
         )}
-        {trustPages && (
+        {(trustPages || landings) && (
           <nav aria-label="Інформація про пригон" className="mt-4 flex justify-center gap-5 text-xs text-slate-400 flex-wrap">
-            <Link href="/how-it-works" className="hover:text-slate-300 transition-colors">{HOW_IT_WORKS_LABEL}</Link>
-            <Link href="/how-it-works#faq-block-title" className="hover:text-slate-300 transition-colors">{FAQ_LABEL}</Link>
+            {trustPages && <Link href="/how-it-works" className="hover:text-slate-300 transition-colors">{HOW_IT_WORKS_LABEL}</Link>}
+            {landings && <Link href="/prigon" className="hover:text-slate-300 transition-colors" data-testid="footer-link-prigon">{LANDING_INDEX_LABEL}</Link>}
+            {trustPages && <Link href="/how-it-works#faq-block-title" className="hover:text-slate-300 transition-colors">{FAQ_LABEL}</Link>}
           </nav>
         )}
         <nav aria-label="Юридичні документи" className="mt-4 flex justify-center gap-5 text-xs text-slate-400 flex-wrap">

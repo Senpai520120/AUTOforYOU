@@ -10,6 +10,11 @@ import type { LandingDetail, LandingListItem } from '@/lib/types';
 
 const DEFAULT_REVALIDATE = 60;
 
+/** Скільки моделей у блоці «Популярні моделі» на головній (допущення виконавця, задача 10.9). */
+export const POPULAR_LANDINGS_LIMIT = 6;
+/** Скільки моделей у блоці «Схожі моделі» на сторінці моделі. */
+export const SIMILAR_LANDINGS_LIMIT = 6;
+
 /** Час кешу запитів у секундах; некоректне значення = типовий. */
 export function landingRevalidate(): number {
   const n = Number(process.env.LANDING_REVALIDATE_SECONDS);
@@ -61,4 +66,25 @@ export function calculatorHref(inputs: LandingDetail['calculation']['inputs']): 
   if (inputs.us_port) p.set('us_port', inputs.us_port);
   const q = p.toString();
   return q ? `/calculator?${q}` : '/calculator';
+}
+
+/** Є хоча б одна опублікована сторінка: від цього залежить пункт «Пригон» у шапці й підвалі. API недоступне = немає. */
+export async function hasLandings(): Promise<boolean> {
+  const list = await getLandingList();
+  return !!list && list.length > 0;
+}
+
+/**
+ * Схожі моделі: спершу та сама марка (без урахування регістру), потім решта в порядку API;
+ * поточна сторінка виключена, не більше limit.
+ */
+export function similarLandings(
+  list: LandingListItem[] | null, currentSlug: string, make: string, limit = SIMILAR_LANDINGS_LIMIT,
+): LandingListItem[] {
+  if (!list) return [];
+  const key = (v: string) => v.trim().toLowerCase();
+  const others = list.filter((l) => l.slug !== currentSlug);
+  const same = others.filter((l) => key(l.make) === key(make));
+  const rest = others.filter((l) => key(l.make) !== key(make));
+  return [...same, ...rest].slice(0, Math.max(0, limit));
 }

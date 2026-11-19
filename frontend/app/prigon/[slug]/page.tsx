@@ -6,11 +6,13 @@ import LeadForm from '@/components/leads/LeadForm';
 import LandingCalc from '@/components/landing/LandingCalc';
 import LandingMobileBar, { LANDING_FORM_ID } from '@/components/landing/LandingMobileBar';
 import LandingVisitTracker from '@/components/landing/LandingVisitTracker';
-import { calculatorHref, getLanding } from '@/lib/landings';
+import { calculatorHref, getLanding, getLandingList, similarLandings } from '@/lib/landings';
 import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
 import { breadcrumbLd } from '@/lib/jsonld';
 import JsonLd from '@/components/seo/JsonLd';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import SimilarModels from '@/components/landing/SimilarModels';
 
 // Дані з API: без force-dynamic Next пререндерить сторінку під час build, коли backend недоступний.
 // Кеш запиту — LANDING_REVALIDATE_SECONDS (lib/landings.ts).
@@ -60,12 +62,16 @@ export default async function LandingPage({ params }: Params) {
 
   const p = result.data;
   const label = `${p.make} ${p.model}`.trim();
+  const crumbs = [
+    { name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' },
+    { name: label, path: `/prigon/${p.slug}` },
+  ];
+  // null (API недоступне) — просто без блоку.
+  const similar = similarLandings(await getLandingList(), p.slug, p.make);
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 pb-28 md:pb-10 space-y-6">
-      <JsonLd data={breadcrumbLd([
-        { name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' },
-        { name: label, path: `/prigon/${p.slug}` },
-      ])} />
+      <JsonLd data={breadcrumbLd(crumbs)} />
+      <Breadcrumbs crumbs={crumbs} />
       <header>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900" data-testid="landing-h1">{p.h1}</h1>
         {p.intro && <p className="mt-3 text-slate-700 whitespace-pre-line">{p.intro}</p>}
@@ -82,6 +88,8 @@ export default async function LandingPage({ params }: Params) {
         <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>
         <Link href="/prigon" className="text-blue-700 underline">Інші моделі</Link>
       </nav>
+
+      <SimilarModels models={similar} />
 
       <section id={LANDING_FORM_ID} className="scroll-mt-4">
         <LeadForm source="landing" landingSlug={p.slug} vehicleLabel={label}

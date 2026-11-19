@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import type { C2CFlags } from '@/lib/c2c-flags';
+import { LANDING_INDEX_LABEL } from '@/lib/labels';
 
 export interface NavLink {
   href: string;
@@ -20,9 +21,11 @@ interface NavUser {
  * Єдиний список посилань навігації: ним користуються і десктопна nav, і бургер-панель.
  * Умови (прапорець C2C, роль) — в одному місці.
  */
-export function getNavLinks(user: NavUser | null, c2c: Pick<C2CFlags, 'enabled'>): NavLink[] {
+export function getNavLinks(user: NavUser | null, c2c: Pick<C2CFlags, 'enabled'>, hasLandings = false): NavLink[] {
   const links: NavLink[] = [];
   if (c2c.enabled) links.push({ href: '/ua', label: 'Каталог Україна', className: 'text-amber-300' });
+  // /prigon — лише коли є опубліковані сторінки: без 404 і порожнього індексу.
+  if (hasLandings) links.push({ href: '/prigon', label: LANDING_INDEX_LABEL });
   links.push({ href: '/calculator', label: 'Калькулятор' });
   // role приходить із сервера й клієнтом не змінюється; реальний доступ перевіряє API (403).
   if (user && (user.role === 'broker' || user.is_admin_role)) links.push({ href: '/broker/leads', label: 'Заявки' });
