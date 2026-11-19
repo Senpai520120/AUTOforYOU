@@ -48,6 +48,12 @@
 - Полный бэкенд: 3204 теста, падают только 2 известных Windows-only (`test_entrypoint_refuses_debug_*`).
 - Заметки: кэш сборки Docker на сервере 3,4 ГБ, `deploy.sh` его не чистит (`docker builder prune` вручную или задача). Сервер после сессии — остановить (`aws ec2 stop-instances --instance-ids i-017e7dfd9fced32f5`), по слову владельца. Ключ `claude-deploy` с `IAMFullAccess` — деактивировать после работ.
 
+## Задача 10.5: «Мінімум до запуску» в LAUNCH_CHECKLIST (2026-11-20) — ЗАВЕРШЕНО (только документация)
+
+- `docs/LAUNCH_CHECKLIST.md`: в начале раздел «Мінімум до запуску» — 38 пунктов (сервер/домен/HTTPS, `.env`, деплой, админка, тарифы, `launch_check`, смоук), каждый со ссылкой на раздел; задача — `docs/tasks/10.5-launch-checklist-minimum.md`.
+- Закрыто: отзыв и перевыпуск токена бота (разделы 0, «Секреты», 8), вопрос Q1, `NEXT_PUBLIC_DEMO_MODE`. Объединены дубли: pre-commit и gitleaks, `PHONE_LOG_IP_SALT`, `TELEGRAM_UPDATES_MODE`, `NEXT_PUBLIC_*`, проверка `E2E_SEED_ALLOWED` и ролей. Пункты, которые ловит `launch_check`, помечены «(launch_check)».
+- Под «Після запуску» перенесены регулярные обязанности (7.12) и открытые решения (8); пункт про `access_log` nginx (ПДн) оставлен до запуска (7.1). Помечено «перевірити»: токен на сервере, `next` после аудита 2026-10-25, `OPENDATABOT_API_KEY`.
+
 ## Задача 10.9: ссылки на лендинги (2026-11-20) — ЗАВЕРШЕНО (e2e написаны, не запускались)
 
 - Новое: `components/landing/PopularModels.tsx` (общий для `/how-it-works` и главной, `limit`, `showAll`), `SimilarModels.tsx`, `components/ui/Breadcrumbs.tsx` (`<nav aria-label>` + `<ol>`, последняя крошка `span aria-current="page"`, те же `crumbs`, что в `breadcrumbLd`). В `lib/landings.ts`: `POPULAR_LANDINGS_LIMIT`/`SIMILAR_LANDINGS_LIMIT` (6/6, допущение), `hasLandings()`, `similarLandings()` (та же марка без учёта регистра, затем порядок API, без текущей).
