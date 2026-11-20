@@ -83,6 +83,7 @@ test.describe('GA4: тільки після згоди', () => {
     const form = page.getByTestId('lead-form');
     await form.getByLabel("Ім'я").fill('[E2E] Аналітика');
     await form.getByLabel('Телефон').fill('067 765 43 21');
+    await form.getByRole('button', { name: /Додати деталі/ }).click();
     await form.getByLabel('Email').fill('analytics@e2e.test');
     await form.getByLabel(/обробку персональних даних/).check();
     await form.getByLabel(/передачу моїх контактних даних партнеру/).check();

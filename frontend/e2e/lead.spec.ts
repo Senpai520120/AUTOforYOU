@@ -68,17 +68,19 @@ test.describe('Гість', () => {
     await expect(form.getByLabel('WhatsApp')).toHaveCount(0);
     await expect(form.getByLabel('Дзвінок')).toBeChecked();
     await fillLead(page, { name: '[E2E] Email', phone: '0671234567' });
+    await form.getByRole('button', { name: /Додати деталі/ }).click();
     await form.getByLabel(/^Email/).fill('not-an-email');
     await expectNoRequest(page, LEADS_URL, async () => {
       await submitBtn(page).click();
     });
     await expect(form.getByText('Вкажіть коректний email.')).toBeVisible();
+    await expect(form.getByLabel(/^Email/)).toBeFocused(); // 10.12: фокус на першому полі з помилкою
   });
 
   test('бюджет і місто: заявка приймається, показано код AFY', async ({ page }) => {
     await calculate(page);
     const form = page.getByTestId('lead-form');
-    await form.getByRole('button', { name: 'Ще' }).click();
+    await form.getByRole('button', { name: /Додати деталі/ }).click();
     await form.getByLabel(/Бюджет/).fill('25000');
     await form.getByLabel('Місто').fill('Київ');
     await form.getByLabel('Коли потрібне авто').selectOption('asap');
@@ -87,6 +89,48 @@ test.describe('Гість', () => {
     expect(resp.status()).toBe(201);
     expect(body).toMatchObject({ budget_usd: '25000', city: 'Київ', needed_when: 'asap' });
     await expect(page.getByTestId('lead-success')).toContainText('AFY-');
+  });
+
+  test('10.12: заявка йде лише з кроком 1 (без бюджету, міста, коментаря, email)', async ({ page }) => {
+    await calculate(page);
+    const form = page.getByTestId('lead-form');
+    await expect(form.getByRole('button', { name: /Додати деталі/ })).toHaveAttribute('aria-expanded', 'false');
+    await expect(form.getByLabel('Місто')).toBeHidden();
+    await fillLead(page, { name: '[E2E] Лише крок 1', phone: '0671234567' });
+    const { resp, body } = await submitAndWait(page);
+    expect(resp.status()).toBe(201);
+    for (const key of ['budget_usd', 'city', 'comment', 'email', 'needed_when']) expect(body).not.toHaveProperty(key);
+    await expect(page.getByTestId('lead-success')).toContainText('AFY-');
+  });
+
+  test('10.12: кнопка біля підсумку веде до форми й ставить фокус, нічого не надсилає', async ({ page }) => {
+    await calculate(page);
+    await expectNoRequest(page, LEADS_URL, async () => {
+      await page.getByTestId('calc-result').getByRole('button', { name: 'Залишити заявку' }).click();
+      await expect(page.getByTestId('lead-form').getByLabel("Ім'я")).toBeFocused();
+    });
+  });
+
+  test('10.12: помилка -> фокус на першому полі з помилкою, aria-invalid', async ({ page }) => {
+    await calculate(page);
+    const form = page.getByTestId('lead-form');
+    await form.getByLabel(/передачу моїх контактних даних партнеру/).check();
+    await submitBtn(page).click();
+    await expect(form.getByText("Вкажіть ім'я.")).toBeVisible();
+    await expect(form.getByLabel("Ім'я")).toBeFocused();
+    await expect(form.getByLabel("Ім'я")).toHaveAttribute('aria-invalid', 'true');
+    await expect(form.getByLabel('Телефон')).toHaveAttribute('aria-invalid', 'true');
+    await form.getByLabel("Ім'я").fill('[E2E] Фокус');
+    await submitBtn(page).click();
+    await expect(form.getByLabel('Телефон')).toBeFocused();
+  });
+
+  test('10.12: кнопка неактивна без згоди партнеру - видимий текст причини', async ({ page }) => {
+    await calculate(page);
+    const form = page.getByTestId('lead-form');
+    await expect(submitBtn(page)).toBeDisabled();
+    await expect(form.getByTestId('lead-submit-hint')).toContainText('погодьтеся на передачу контактів партнеру');
+    await expect(submitBtn(page)).toHaveAttribute('aria-describedby', 'lead-submit-hint');
   });
 
   test('без згоди запит не йде, підказка біля чекбокса', async ({ page }) => {
@@ -390,5 +434,20 @@ test.describe('Партнер не налаштований', () => {
     await page.waitForTimeout(3500); // одноразове очікування мінімального часу заповнення капчі
     await expect(page.getByTestId('lead-form').getByLabel(/передачу моїх контактних даних партнеру|Згода на передачу/)).toBeDisabled();
     await expect(submitBtn(page)).toBeDisabled();
+  });
+});
+
+test.describe('Форма заявки на мобільному @mobile', () => {
+  test('10.12: шрифт полів не менший за 16px (без зуму iOS), autocomplete і inputmode', async ({ page }) => {
+    await calculate(page);
+    const form = page.getByTestId('lead-form');
+    await form.getByRole('button', { name: /Додати деталі/ }).click();
+    for (const label of ["Ім'я", 'Телефон', /^Email/, 'Місто', /Бюджет/, 'Коментар']) {
+      const size = await form.getByLabel(label).evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      expect(size).toBeGreaterThanOrEqual(16);
+    }
+    await expect(form.getByLabel('Телефон')).toHaveAttribute('autocomplete', 'tel');
+    await expect(form.getByLabel('Телефон')).toHaveAttribute('inputmode', 'tel');
+    await expect(form.getByLabel("Ім'я")).toHaveAttribute('autocomplete', 'name');
   });
 });

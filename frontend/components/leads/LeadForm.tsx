@@ -48,8 +48,10 @@ const FIELDS = [
   'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment',
   'budget_usd', 'needed_when', 'city', 'consent', 'partner_consent',
 ];
+/** Поля другого (необов'язкового) кроку: помилка в них розкриває блок. */
+const DETAIL_FIELDS = ['email', 'comment', 'budget_usd', 'needed_when', 'city'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500';
 const GENERAL_ERROR = 'Не вдалося надіслати заявку. Спробуйте ще раз пізніше.';
 
 /** UUID v4; crypto.randomUUID недоступний у незахищеному контексті (http), тоді - getRandomValues. */
@@ -118,6 +120,9 @@ export default function LeadForm({
   const [errors, setErrors] = useState<Errors>({});
   const [general, setGeneral] = useState('');
   const [publicId, setPublicId] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Лічильник «показати першу помилку»: змінюється при кожній невдалій відправці (клієнтській чи серверній).
+  const [focusTick, setFocusTick] = useState(0);
 
   // Завантаження налаштувань сайту; повтор не створює паралельних запитів.
   const loadSettings = useCallback(async (force = false) => {
@@ -159,10 +164,30 @@ export default function LeadForm({
     if (!touched.current.phone) setPhone(user.phone ?? '');
   }, [user]);
 
+  // Фокус і прокрутка до першого поля з помилкою (порядок у DOM) після того, як помилки відрисовані.
+  useEffect(() => {
+    if (!focusTick) return;
+    const el = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: 'center' });
+  }, [focusTick]);
+
   if (publicId) return <LeadSuccess publicId={publicId} onNew={onNew} newLabel={newLabel} settings={siteSettings} />;
 
   const partnerReady = !!consentText;
   const canSubmit = captcha.ready && partnerReady && partnerConsent && !submitting;
+  // Чому кнопка неактивна (видимий текст, пов'язаний через aria-describedby).
+  const blockedReason = submitting ? ''
+    : !partnerReady ? 'Надсилання поки недоступне: немає даних партнера. Скористайтеся контактами вище.'
+    : !partnerConsent ? 'Щоб надіслати, погодьтеся на передачу контактів партнеру.'
+    : !captcha.ready ? 'Триває перевірка безпеки, зачекайте кілька секунд.'
+    : '';
+  const showErrors = (fields: Errors) => {
+    if (DETAIL_FIELDS.some((f) => fields[f])) setMore(true);
+    setErrors(fields);
+    setFocusTick((t) => t + 1);
+  };
 
   const trackStart = () => {
     if (startedRef.current) return;
@@ -179,8 +204,8 @@ export default function LeadForm({
     if (email.trim() && !EMAIL_RE.test(email.trim())) local.email = 'Вкажіть коректний email.';
     if (!consent) local.consent = 'Потрібна згода на обробку персональних даних.';
     setGeneral('');
-    setErrors(local);
-    if (Object.keys(local).length) return;
+    if (Object.keys(local).length) { showErrors(local); return; }
+    setErrors({});
 
     const attribution = getAttribution();
     const payload: LeadCreate = {
@@ -221,7 +246,7 @@ export default function LeadForm({
           setGeneral('Не вдалося пройти перевірку. Спробуйте ще раз.');
         } else {
           const parsed = parseFieldErrors(err.data);
-          setErrors(parsed.fields);
+          showErrors(parsed.fields);
           setGeneral(parsed.general.join(' ') || (Object.keys(parsed.fields).length ? '' : GENERAL_ERROR));
         }
       } else if (err instanceof ApiError && err.status === 429) {
@@ -243,9 +268,10 @@ export default function LeadForm({
   };
 
   return (
-    <form onSubmit={submit} onInput={trackStart} noValidate data-testid="lead-form"
+    <form ref={formRef} onSubmit={submit} onInput={trackStart} noValidate data-testid="lead-form"
       className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
       <h3 className="font-bold text-slate-900 text-lg">Залишити заявку брокеру</h3>
+      <p className="text-sm text-slate-600">Достатньо імені, телефону та згод: решту можна додати пізніше.</p>
       {vehicleLabel && landingSlug && (
         <p data-testid="lead-vehicle" className="text-sm text-slate-700">
           Авто: <span className="font-semibold">{vehicleLabel}</span>
@@ -269,17 +295,6 @@ export default function LeadForm({
         <FieldError id="lead-phone-err" text={errors.phone} />
       </div>
 
-      <div>
-        <label htmlFor="lead-email" className="block text-xs font-semibold text-slate-600 mb-1">Email (необов&apos;язково)</label>
-        <input id="lead-email" name="email" type="email" maxLength={254} autoComplete="email" className={INPUT}
-          value={email} aria-invalid={!!errors.email} aria-describedby="lead-email-hint"
-          onChange={(e) => setEmail(e.target.value)} />
-        <p id="lead-email-hint" className="text-xs text-slate-500 mt-1">
-          На нього надійде копія розрахунку та статуси заявки.
-        </p>
-        <FieldError id="lead-email-err" text={errors.email} />
-      </div>
-
       <fieldset>
         <legend className="block text-xs font-semibold text-slate-600 mb-1">Зручний спосіб зв&apos;язку</legend>
         <div className="flex gap-4 flex-wrap">
@@ -300,34 +315,41 @@ export default function LeadForm({
             Нік або контакт у {method === 'telegram' ? 'Telegram' : 'Viber'} (необов&apos;язково)
           </label>
           <input id="lead-handle" name="contact_handle" maxLength={64} className={INPUT}
+            aria-invalid={!!errors.contact_handle} aria-describedby={errors.contact_handle ? 'lead-handle-err' : undefined}
             value={handle} onChange={(e) => setHandle(e.target.value)} />
           <FieldError id="lead-handle-err" text={errors.contact_handle} />
         </div>
       )}
 
       <div>
-        <label htmlFor="lead-comment" className="block text-xs font-semibold text-slate-600 mb-1">Коментар</label>
-        <textarea id="lead-comment" name="comment" rows={3} maxLength={1000} className={INPUT}
-          value={comment} onChange={(e) => setComment(e.target.value)} />
-        <FieldError id="lead-comment-err" text={errors.comment} />
-      </div>
-
-      <div>
-        <button type="button" aria-expanded={more} onClick={() => setMore((v) => !v)}
-          className="text-sm text-blue-700 hover:underline">
-          {more ? 'Менше' : 'Ще'}
+        <button type="button" aria-expanded={more} aria-controls="lead-details" onClick={() => setMore((v) => !v)}
+          className="text-sm text-blue-700 hover:underline py-2">
+          {more ? 'Сховати деталі' : "Додати деталі (необов'язково)"}
         </button>
-        {more && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div id="lead-details" hidden={!more} className="mt-3 space-y-3">
+          <div>
+            <label htmlFor="lead-email" className="block text-xs font-semibold text-slate-600 mb-1">Email (необов&apos;язково)</label>
+            <input id="lead-email" name="email" type="email" inputMode="email" maxLength={254} autoComplete="email" className={INPUT}
+              value={email} aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? 'lead-email-hint lead-email-err' : 'lead-email-hint'}
+              onChange={(e) => setEmail(e.target.value)} />
+            <p id="lead-email-hint" className="text-xs text-slate-500 mt-1">
+              На нього надійде копія розрахунку та статуси заявки.
+            </p>
+            <FieldError id="lead-email-err" text={errors.email} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label htmlFor="lead-budget" className="block text-xs font-semibold text-slate-600 mb-1">Бюджет під ключ ($)</label>
               <input id="lead-budget" name="budget_usd" inputMode="decimal" className={INPUT}
-                value={budget} onChange={(e) => setBudget(e.target.value)} />
+                value={budget} aria-invalid={!!errors.budget_usd} aria-describedby={errors.budget_usd ? 'lead-budget-err' : undefined}
+                onChange={(e) => setBudget(e.target.value)} />
               <FieldError id="lead-budget-err" text={errors.budget_usd} />
             </div>
             <div>
               <label htmlFor="lead-needed" className="block text-xs font-semibold text-slate-600 mb-1">Коли потрібне авто</label>
               <select id="lead-needed" name="needed_when" className={INPUT} value={needed}
+                aria-invalid={!!errors.needed_when} aria-describedby={errors.needed_when ? 'lead-needed-err' : undefined}
                 onChange={(e) => setNeeded(e.target.value as LeadNeededWhen | '')}>
                 <option value="">Не вказано</option>
                 {NEEDED.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
@@ -336,12 +358,20 @@ export default function LeadForm({
             </div>
             <div>
               <label htmlFor="lead-city" className="block text-xs font-semibold text-slate-600 mb-1">Місто</label>
-              <input id="lead-city" name="city" maxLength={100} className={INPUT}
-                value={city} onChange={(e) => setCity(e.target.value)} />
+              <input id="lead-city" name="city" maxLength={100} autoComplete="address-level2" className={INPUT}
+                value={city} aria-invalid={!!errors.city} aria-describedby={errors.city ? 'lead-city-err' : undefined}
+                onChange={(e) => setCity(e.target.value)} />
               <FieldError id="lead-city-err" text={errors.city} />
             </div>
           </div>
-        )}
+          <div>
+            <label htmlFor="lead-comment" className="block text-xs font-semibold text-slate-600 mb-1">Коментар</label>
+            <textarea id="lead-comment" name="comment" rows={3} maxLength={1000} className={INPUT}
+              value={comment} aria-invalid={!!errors.comment} aria-describedby={errors.comment ? 'lead-comment-err' : undefined}
+              onChange={(e) => setComment(e.target.value)} />
+            <FieldError id="lead-comment-err" text={errors.comment} />
+          </div>
+        </div>
       </div>
 
       <div>
@@ -361,7 +391,7 @@ export default function LeadForm({
         <label htmlFor="lead-partner-consent" className="flex items-start gap-2 text-sm text-slate-700">
           <input id="lead-partner-consent" name="partner_consent" type="checkbox" className="mt-1"
             checked={partnerConsent} disabled={!partnerReady}
-            aria-invalid={!!errors.partner_consent}
+            aria-invalid={!!errors.partner_consent} aria-describedby={errors.partner_consent ? 'lead-partner-err' : undefined}
             onChange={(e) => setPartnerConsent(e.target.checked)} />
           <span data-testid="partner-consent-text">{consentText || 'Згода на передачу контактів партнеру'}</span>
         </label>
@@ -396,10 +426,13 @@ export default function LeadForm({
         </div>
       )}
 
-      <button type="submit" disabled={!canSubmit}
+      <button type="submit" disabled={!canSubmit} aria-describedby={blockedReason ? 'lead-submit-hint' : undefined}
         className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors">
         {submitting ? 'Надсилаю…' : 'Надіслати'}
       </button>
+      {blockedReason && (
+        <p id="lead-submit-hint" data-testid="lead-submit-hint" className="text-sm text-slate-600 -mt-2">{blockedReason}</p>
+      )}
     </form>
   );
 }

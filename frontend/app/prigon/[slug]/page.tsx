@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import ErrorState from '@/components/ui/ErrorState';
 import LeadForm from '@/components/leads/LeadForm';
+import LeadCta from '@/components/leads/LeadCta';
 import LandingCalc from '@/components/landing/LandingCalc';
 import LandingMobileBar, { LANDING_FORM_ID } from '@/components/landing/LandingMobileBar';
 import LandingVisitTracker from '@/components/landing/LandingVisitTracker';
@@ -85,6 +86,9 @@ export default async function LandingPage({ params }: Params) {
       <ModelFacts page={p} />
 
       <LandingCalc calculation={p.calculation} termText={p.typical_term_text} includedText={p.included_text} />
+
+      {/* На мобільних є липка панель (LandingMobileBar), тут кнопка для десктопа. */}
+      <LeadCta className="hidden md:block" />
 
       {p.description && <p className="text-sm text-slate-700 whitespace-pre-line">{p.description}</p>}
 

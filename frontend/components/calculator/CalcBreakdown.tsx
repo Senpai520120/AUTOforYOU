@@ -1,6 +1,7 @@
 import { CalcResult } from '@/lib/types';
 import DemoBanner from '@/components/ui/DemoBanner';
 import LeadForm from '@/components/leads/LeadForm';
+import LeadCta from '@/components/leads/LeadCta';
 import { percentFromDecimal } from '@/lib/calc-errors';
 import { ExclusionsList, FeesFreshness } from '@/components/ui/CalcNotes';
 import { formatUah, formatUsd } from '@/lib/format';
@@ -86,6 +87,7 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
         </tfoot>
       </table>
       </div>
+      <LeadCta className="mt-4 w-full sm:w-auto" />
       <p className="text-xs text-amber-700 mt-4 bg-amber-50 rounded p-2">
         #{result.calculation_id} · {result.warning}
       </p>
