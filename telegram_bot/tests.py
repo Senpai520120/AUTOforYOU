@@ -1618,3 +1618,41 @@ class MigrationDefaultsFrozenTest(SimpleTestCase):
         mod = importlib.import_module('telegram_bot.migrations.0003_bottext_defaults')
         self.assertNotIn('REGISTRY', inspect.getsource(mod))
         self.assertIn('start', mod.DEFAULTS)
+
+
+class BotNoClosedSectionLinksTest(BotRuntimeTestCase):
+    """10.29: при выключенных флагах бот не ведёт на закрытые разделы сайта."""
+
+    CLOSED_PATHS = ('/ua', '/local', '/listings', '/b2b', '/dealers', '/vin-check')
+
+    def _all_urls(self) -> list[str]:
+        urls = []
+        for m in self.messages():
+            urls += [m.text or '']
+            markup = m.reply_markup
+            if markup:
+                urls += [b.url or '' for row in markup.inline_keyboard for b in row]
+        return urls
+
+    def test_commands_have_no_links_to_closed_sections(self):
+        seller = User.objects.create_user(email='closed@test.com', password='pass')
+        from listings.models import Listing
+        from vehicles.models import Vehicle
+        v = Vehicle.objects.create(
+            vin='1HGCM82633A000999', make='Honda', model='Civic', year=2019,
+            engine_cc=1500, fuel_type='petrol', mileage_km=30000,
+        )
+        Listing.objects.create(vehicle=v, seller=seller, price='12000.00', channel='retail', status='in_stock')
+        with self.settings(LOTS_ENABLED=False, C2C_ENABLED=False, B2B_ENABLED=False, DEALERS_ENABLED=False):
+            for i, cmd in enumerate(('/start', '/help', '/latest', '/unlink'), start=1):
+                self.send(cmd, update_id=i)
+        blob = '\n'.join(self._all_urls())
+        self.assertEqual(len(self.messages()), 4)
+        for path in self.CLOSED_PATHS:
+            self.assertNotIn(path, blob)
+
+    def test_default_texts_have_no_links_to_closed_sections(self):
+        from .texts import REGISTRY
+        for key, definition in REGISTRY.items():
+            for path in self.CLOSED_PATHS:
+                self.assertNotIn(path, definition.default, f'{key} ведёт на {path}')

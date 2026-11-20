@@ -16,6 +16,7 @@ import SellerBlock from '@/components/trust/SellerBlock';
 import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { PHONE_BLOCK_ID, usePhoneReveal } from '@/lib/usePhoneReveal';
 import { useC2C } from '@/components/c2c/C2CProvider';
+import ListingCheckTips from '@/components/local/ListingCheckTips';
 
 const WRITE_BLOCK_ID = 'write-seller-block';
 
@@ -242,6 +243,8 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
           </div>
         </div>
       )}
+
+      <ListingCheckTips />
 
       {listing.status === 'active' && !isOwner && (!user || ownerResolved) && (
         <MobileActionBar

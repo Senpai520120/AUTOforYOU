@@ -6,10 +6,13 @@ import { leadsApi } from '@/api/leads';
 import { leadStatusLabel } from '@/lib/labels';
 import { formatUah, formatUsd } from '@/lib/format';
 import type { Lead, PaginatedResponse } from '@/lib/types';
+import { useSiteConfig } from '@/lib/use-site-config';
 import Spinner from '@/components/ui/Spinner';
 
 export default function MyLeadsPage() {
   const { user, loading } = useRequireAuth();
+  // Каталог лотів закритий флагом LOTS_ENABLED: без нього посилання на /listings веде на 404 (задача 10.29).
+  const lotsOpen = useSiteConfig()?.lots_enabled === true;
   const [data, setData] = useState<PaginatedResponse<Lead> | null>(null);
   const [fetching, setFetching] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -65,7 +68,7 @@ export default function MyLeadsPage() {
                   {lead.total_uah ? formatUah(lead.total_uah) : ''}
                 </p>
               )}
-              {lead.listing_id != null && (
+              {lotsOpen && lead.listing_id != null && (
                 <Link href={`/listings/${lead.listing_id}`} className="text-sm text-blue-700 hover:underline mt-2 inline-block">
                   Переглянути лот →
                 </Link>

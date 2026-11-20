@@ -6,6 +6,12 @@
 
 ---
 
+## Задача 10.29 — советы «як перевірити авто», аудит ссылок на закрытые разделы (2026-11-20) ✓
+
+- `SiteSettings.listing_check_tips` (миграция 0005, AddField; админка «Довіра»; белый список API). Компонент `ListingCheckTips` на карточке C2C: блок только при непустом поле; под ним `PartnerVinLink` (виден лишь при заданном `CARVERTICAL_PARTNER_URL`), `/vin-check` не открывался. `[E2E]` советы в `e2e_seed`.
+- Аудит: шапка, бургер, подвал, sitemap, robots, JSON-LD и бот уже закрыты флагами; бот при `LOTS_ENABLED=false` не даёт ссылок. Исправлено: `/me/leads` «Переглянути лот» только при `lots_enabled`.
+- Тесты: Django (site_settings +4, бот +2, мутации проверены); `e2e/check-tips.spec.ts` не запускался. Схема API изменилась (новое поле) — **openapi.yaml перегенерирует оркестратор**.
+
 ## Задача 10.28 — axe на всех публичных страницах, ошибки регистрации у полей (2026-11-20) ✓
 
 - `e2e/a11y.spec.ts`: одна таблица `PUBLIC_PAGES` (17 страниц: главная, калькулятор, how-it-works, /prigon и лендинг `e2e-toyota-camry`, about, privacy/terms/rules/refund/cookies, /ua, карточка C2C, login, register, password-reset, 404), порог 0 serious/critical. Отдельной `/faq` нет (FAQ внутри how-it-works).

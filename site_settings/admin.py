@@ -21,7 +21,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             'description': 'Заповнити після підписання договору з партнером.',
         }),
         ('Довіра', {
-            'fields': ('about_text', 'lead_response_hours', 'lead_next_steps'),
+            'fields': ('about_text', 'lead_response_hours', 'lead_next_steps', 'listing_check_tips'),
             'description': 'Тексти вносить власник; порожнє поле означає, що відповідний блок не показується.',
         }),
         ('Юридичні документи', {

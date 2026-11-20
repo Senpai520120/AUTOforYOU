@@ -65,3 +65,23 @@ class TrustFieldsApiTests(CleanCacheTestCase):
 
     def test_response_hours_empty_allowed(self):
         SiteSettings(lead_response_hours=None).full_clean()
+
+
+class ListingCheckTipsApiTests(CleanCacheTestCase):
+    """10.29: советы «як перевірити авто» - текст владельца, публичное только чтение."""
+
+    def test_empty_by_default(self):
+        self.assertEqual(APIClient().get(URL).json()['listing_check_tips'], '')
+
+    def test_value_returned(self):
+        s = SiteSettings.load()
+        s.listing_check_tips = 'Порада один\nПорада два'
+        s.save()
+        self.assertEqual(APIClient().get(URL).json()['listing_check_tips'], 'Порада один\nПорада два')
+
+    def test_in_serializer_whitelist(self):
+        self.assertIn('listing_check_tips', PublicSiteSettingsSerializer.Meta.fields)
+
+    def test_anonymous_cannot_write(self):
+        self.assertEqual(APIClient().patch(URL, {'listing_check_tips': 'x'}, format='json').status_code, 405)
+        self.assertEqual(SiteSettings.load().listing_check_tips, '')
