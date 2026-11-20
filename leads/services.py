@@ -372,14 +372,17 @@ def qualify_lead(lead: Lead, answers: dict, *, by, is_admin: bool = False) -> Le
     return lead
 
 
-_PHONE_LIKE = re.compile(r'\d(?:[\s\-().]*\d){4,}')
+# Телефоноподобно: 7+ цифр, между которыми только пробел/дефис/скобки/точка, но не «Mazda 3 2019» (цифры в разных словах).
+_PHONE_LIKE = re.compile(r'\+?\d(?:[ \-().]?\d){6,}')
+_LINK_MARKERS = ('/', 'http', 't.me', 'www.')
 NOT_SET = 'не вказано'
 
 
 def _journal_safe(value: str) -> str:
-    """Свободный текст в группу: 5+ цифр подряд (с пробелами, дефисами, скобками), @ или e-mail -> «не вказано»."""
+    """Свободный текст в группу: 7+ цифр подряд (с разделителями), @, e-mail, ссылки и ники -> «не вказано»."""
     value = (value or '').strip()
-    if not value or '@' in value or _PHONE_LIKE.search(value):
+    low = value.lower()
+    if not value or '@' in value or any(m in low for m in _LINK_MARKERS) or _PHONE_LIKE.search(value):
         return NOT_SET
     return value[:100]
 
