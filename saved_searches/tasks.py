@@ -43,15 +43,43 @@ def check_saved_searches():
     return {'processed': processed}
 
 
+# Скільки оголошень показуємо окремими сповіщеннями за один запуск; решта - одним «і ще N» з посиланням на каталог.
+MAX_LISTINGS_PER_RUN = 10
+
+
+def _matching_listings(ss):
+    """Нові активні оголошення за збереженим пошуком, з датою публікації (модерації).
+
+    Дата публікації - moderated_at (коли схвалено), для оголошень без неї (автопублікація, старі) - created_at.
+    Битий filters у старому записі - ValidationError (викликач пропускає запис).
+    """
+    from django.db.models.functions import Coalesce
+
+    from local_listings.filters import apply_listing_filters, clean_filter_params
+    from local_listings.models import LocalListing
+
+    params = clean_filter_params(ss.filters or {})
+    since = ss.last_notified_at or ss.created_at
+    qs = LocalListing.objects.filter(status=LocalListing.Status.ACTIVE).annotate(
+        published_at=Coalesce('moderated_at', 'created_at'),
+    ).filter(published_at__gt=since)
+    return apply_listing_filters(qs, params), params
+
+
 def _process_search(ss_id, now) -> bool:
     """Один поиск в одной транзакции: уведомления и last_notified_at фиксируются вместе.
 
     При повторе задачи (acks_late) после успешного коммита last_notified_at уже сдвинут - дублей нет;
     после отката - не создано ни уведомлений, ни сдвига, повтор безопасен.
+    Без потерь: окремо сповіщаємо перші MAX_LISTINGS_PER_RUN (за зростанням дати публікації), решту - одним
+    сповіщенням «і ще N» з посиланням на каталог; курсор = дата публікації найновішого врахованого оголошення.
     """
-    from django.db import transaction
+    from urllib.parse import urlencode
 
-    from local_listings.models import LocalListing
+    from django.db import transaction
+    from django.db.models import Max
+    from rest_framework.exceptions import ValidationError
+
     from notifications.models import Notification as NotifModel
     from notifications.services import create_notification
 
@@ -62,15 +90,19 @@ def _process_search(ss_id, now) -> bool:
         ss = SavedSearch.objects.select_for_update().filter(pk=ss_id, notify=True).first()
         if ss is None:
             return False
-        since = ss.last_notified_at or ss.created_at
-        qs = _apply_filters(LocalListing.objects.filter(
-            status=LocalListing.Status.ACTIVE,
-            created_at__gt=since,
-        ), ss.filters)
-
-        listings = list(qs[:10])
-        if not listings:
+        try:
+            qs, params = _matching_listings(ss)
+        except ValidationError:
+            logger.warning('check_saved_searches: пропущено поиск id=%s - некорректные filters', ss_id)
             return False
+
+        latest = qs.aggregate(m=Max('published_at'))['m']
+        if latest is None:
+            return False
+        # Фиксируем верхнюю границу: объявления, опубликованные во время обработки, уйдут в следующий запуск.
+        qs = qs.filter(published_at__lte=latest).order_by('published_at', 'pk')
+        total = qs.count()
+        listings = list(qs[:MAX_LISTINGS_PER_RUN])
 
         for listing in listings:
             title = f'Нове авто за пошуком «{ss.name}»'
@@ -78,11 +110,19 @@ def _process_search(ss_id, now) -> bool:
             link = f'/local/{listing.pk}'
             create_notification(ss.user_id, NotifModel.Type.SAVED_SEARCH_MATCH, title, text, link)
 
-        ss.last_notified_at = now
+        rest = total - len(listings)
+        if rest > 0:
+            link = '/local' + (f'?{urlencode(params)}' if params else '')
+            create_notification(
+                ss.user_id, NotifModel.Type.SAVED_SEARCH_MATCH,
+                f'Нові авто за пошуком «{ss.name}»', f'і ще {rest} нових оголошень', link,
+            )
+
+        ss.last_notified_at = latest
         ss.save(update_fields=['last_notified_at'])
 
         # Внешняя отправка (Telegram) - только после коммита, чтобы откат не оставил «призрачное» сообщение.
-        summary = f'🔔 За пошуком «{ss.name}» знайдено {len(listings)} нових авто!'
+        summary = f'🔔 За пошуком «{ss.name}» знайдено {total} нових авто!'
         transaction.on_commit(lambda uid=ss.user_id, msg=summary: _send_summary(uid, msg))
     return True
 
@@ -93,34 +133,3 @@ def _send_summary(user_id, message):
         send_notification.delay(user_id, message)
     except Exception:
         logger.exception('check_saved_searches: не удалось поставить Telegram-сводку user=%s', user_id)
-
-
-def _apply_filters(qs, filters: dict):
-    """Apply saved filter dict to LocalListing queryset."""
-    if not filters:
-        return qs
-    if filters.get('make'):
-        qs = qs.filter(make__icontains=filters['make'])
-    if filters.get('model'):
-        qs = qs.filter(model__icontains=filters['model'])
-    if filters.get('year_min'):
-        qs = qs.filter(year__gte=int(filters['year_min']))
-    if filters.get('year_max'):
-        qs = qs.filter(year__lte=int(filters['year_max']))
-    if filters.get('price_min'):
-        qs = qs.filter(price__gte=filters['price_min'])
-    if filters.get('price_max'):
-        qs = qs.filter(price__lte=filters['price_max'])
-    if filters.get('fuel_type'):
-        qs = qs.filter(fuel_type=filters['fuel_type'])
-    if filters.get('transmission'):
-        qs = qs.filter(transmission=filters['transmission'])
-    if filters.get('body_type'):
-        qs = qs.filter(body_type=filters['body_type'])
-    if filters.get('region'):
-        qs = qs.filter(region_id=filters['region'])
-    if filters.get('city'):
-        qs = qs.filter(city_id=filters['city'])
-    if filters.get('mileage_max'):
-        qs = qs.filter(mileage_km__lte=int(filters['mileage_max']))
-    return qs
