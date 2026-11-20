@@ -6,6 +6,12 @@
 
 ---
 
+## Задача 10.21 — уборка (2026-11-20) ✓
+
+- Удалён `nginx/nginx.conf` (не подключён ни одним compose/CI/скриптом; решение владельца); комментарий в `core/uploads.py` указывает на `nginx/templates/locations.conf.template`. `nginx;C` в репозитории и рабочей папке не найден; `kompas.html` оставлен (личный файл, не в git: `.git/info/exclude`, `.dockerignore`) — решение за владельцем.
+- В `docs/archive/` (+ README) перенесены `00_AUDIT`, `AUDIT_SUMMARY`, `PRODUCTION_ROADMAP`, `EC2_CREDITS_ROADMAP`, `prompts/01`, `prompts/02`; ссылки в ARCHITECTURE, ROADMAP, audit/STATUS, DEPLOY_EC2_CHECKLIST поправлены. `docs/audit/*` не переносились: на них ссылаются ~90 задач.
+- `.env.example`: в начале блок «Мінімум для запуску» (имена из `REQUIRED_VARS`, без дублей).
+
 ## Задача 10.25 — подача объявления: вход, кнопка и срок, телефон, капча (2026-11-20) ✓
 
 - `/login` и `/register` с `next=/local/new`: пояснение «Щоб подати оголошення, увійдіть або зареєструйтесь. Реєстрація безкоштовна.» (`ListingSubmitNotice`), `next` сохраняется в ссылках вход↔регистрация.
