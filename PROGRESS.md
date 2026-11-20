@@ -1321,3 +1321,5 @@
 - Проверки: Django 433 теста OK (283 с); `npm run build` и `tsc --noEmit` без ошибок; `pip check` чисто; `git ls-files --eol '*.sh'` везде `i/lf w/lf`.
 - Docker на Windows: `down` + `up -d --build` → `backend` и `db` `(healthy)`, `http://localhost` и `/api/v1/listings/` отвечают 200.
 - **Первый локальный Playwright: 33 passed, 0 failed, 0 skipped (17,5 с).**
+
+- nginx: ловушка - upstream резолвился один раз при старте, после пересоздания backend/frontend (новый IP) /api/ отдавал 503 до рестарта nginx. Теперь `resolver 127.0.0.11 valid=10s` + `set $backend_upstream`/`$frontend_upstream` в locations и server-redirect (без URI-части, `$request_uri` не меняется), блоки `upstream` удалены. `check-infra.sh nginx` ок (4 режима TLS), живая проверка: recreate backend/frontend без рестарта nginx -> 200. Применение шаблона на dev: `docker compose restart nginx` (up -d не пересоздаёт).
