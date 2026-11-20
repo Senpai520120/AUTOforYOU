@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import EmptyState from '@/components/ui/EmptyState';
+import { countActiveFilters } from '@/lib/local-filters';
 import LocalListingCard from '@/components/local/LocalListingCard';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
 import { listingsCount } from '@/lib/plural';
@@ -35,12 +37,17 @@ export default function LocalCatalogGrid({
   }
 
   if (data.results.length === 0) {
+    const filtered = countActiveFilters((k) => params[k]) > 0;
     return (
-      <div className="text-center py-16 text-slate-400">
-        <p className="text-4xl mb-3" aria-hidden="true">🚗</p>
-        <p className="font-medium text-slate-600">Оголошень не знайдено</p>
-        <p className="text-sm mt-1">
-          Спробуйте змінити фільтри
+      <div data-testid="ua-empty">
+        <EmptyState
+          icon="🚗"
+          title="Оголошень не знайдено"
+          hint={filtered ? 'Спробуйте змінити фільтри або скинути їх.' : 'Поки що тут порожньо.'}
+          action={filtered ? { label: 'Скинути фільтри', href: '/ua' } : undefined}
+        />
+        <p className="mt-3 text-center text-sm text-slate-600">
+          <Link href="/calculator" className="text-blue-600 underline">Порахувати пригон з США</Link>
           {postingEnabled && (
             <>
               {' '}або{' '}

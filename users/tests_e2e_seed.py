@@ -79,7 +79,7 @@ class E2ESeedTests(CleanCacheTestCase):  # читает тарифы через 
         self.assertEqual(first, _counts())
 
         self.assertEqual(first['users'], 6)
-        self.assertEqual(first['local'], 3)  # 8.6: + объявление дилера
+        self.assertEqual(first['local'], 4)  # 8.6: + дилер; 10.24: + UAH-объявление
         self.assertEqual(first['listings'], 2)
         self.assertEqual(first['shipments'], 1)
         self.assertEqual(first['conversations'], 1)

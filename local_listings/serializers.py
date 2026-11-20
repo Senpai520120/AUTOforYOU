@@ -115,7 +115,7 @@ class LocalListingListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'make', 'model', 'year', 'mileage_km', 'engine_cc',
             'fuel_type', 'transmission', 'body_type', 'condition',
-            'price', 'currency', 'price_type',
+            'price', 'currency', 'price_usd', 'price_type',
             'region', 'region_name', 'city', 'city_name',
             'description', 'status', 'seller_type',
             'owner_name', 'images',
@@ -123,7 +123,7 @@ class LocalListingListSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
             'seller_has_badge', 'source_channel',
         ]
-        read_only_fields = ['source_channel']  # 9.57: ставит только staff в админке
+        read_only_fields = ['source_channel', 'price_usd']  # 9.57: ставит только staff в админке
         # contact_phone intentionally excluded from public list
 
     @extend_schema_field(serializers.CharField())

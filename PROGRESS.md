@@ -6,6 +6,11 @@
 
 ---
 
+## Задача 10.24 — каталог /ua на мобильном (2026-11-20) ✓
+
+- `LocalListingFilters`: до 768 px свёрнут за кнопкой «Фільтри (N)» (`aria-expanded`), счётчик — `countActiveFilters` (`lib/local-filters.ts`, без `page`/`ordering`). Карточка: «≈ $N» по `price_usd` (`formatUsd`, не для USD). Пустой результат — `EmptyState` + «Скинути фільтри» (только при фильтрах) + «Порахувати пригон з США».
+- API: `price_usd` в списке/детали/кабинете (только чтение); `openapi.yaml` правлен вручную (3 схемы) — перегенерировать против PostgreSQL. Сид: `[E2E] Renault Duster` в UAH с `price_usd`. Тест `local_listings/tests_price_usd.py`; e2e `catalog-mobile.spec.ts` написан, не запускался.
+
 ## Задача 10.23 — телефон объявления = подтверждённый номер, /unlink сбрасывает (2026-11-20) ✓
 
 - `local_listings/phone.py`: create/PATCH подставляют `verified_phone` владельца (клиентский игнорируется; модератор правит с номером владельца); без номера уход в `pending` -> 400 с подсказкой. Исключения: staff (засев) и `PHONE_VERIFICATION_REQUIRED=false`.

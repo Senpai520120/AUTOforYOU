@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { LocalListing } from '@/lib/types';
 import ChannelBadge from '@/components/local/ChannelBadge';
 import { VERIFIED_DEALER_LABEL } from '@/lib/labels';
+import { formatUsd } from '@/lib/format';
 
 const FUEL_LABELS: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид', gas: 'Газ',
@@ -79,6 +80,12 @@ export default function LocalListingCard({ listing, priority = false }: { listin
         <div className="mt-2 flex items-center justify-between">
           <span className="font-bold text-slate-900">
             {price} {listing.currency}
+            {/* 10.24: орієнтир у $ за курсом на момент збереження; для USD не дублюємо. */}
+            {listing.currency !== 'USD' && listing.price_usd && (
+              <span data-testid="price-usd" className="ml-1 text-xs font-normal text-slate-500">
+                ≈ {formatUsd(listing.price_usd, 0)}
+              </span>
+            )}
             {listing.price_type === 'negotiable' && (
               <span className="ml-1 text-xs font-normal text-slate-500">торг</span>
             )}

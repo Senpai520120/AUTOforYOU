@@ -296,6 +296,8 @@ export interface LocalListing {
   condition: LocalCondition;
   price: string;
   currency: LocalCurrency;
+  /** 10.24: сума в USD за курсом на момент збереження; null — курсу не було. */
+  price_usd?: string | null;
   price_type: LocalPriceType;
   region: number;
   region_name: string;

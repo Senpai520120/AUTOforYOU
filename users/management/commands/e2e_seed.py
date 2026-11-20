@@ -182,6 +182,27 @@ class Command(BaseCommand):
                     img.image.save(f'e2e-{photo}', ContentFile(data), save=True)
             self._note('local_listings', created)
 
+        # 10.24: активне оголошення в гривнях - картка показує «≈ $» (e2e/catalog-mobile.spec.ts).
+        # price_usd (editable=False) ставимо явно: курсу в e2e-стеку может не быть.
+        marker = f'{E2E_PREFIX} Renault Duster UAH (active)'
+        uah, created = LocalListing.objects.get_or_create(
+            owner=seller, description=marker,
+            defaults={
+                'seller_type': private, 'make': 'Renault', 'model': 'Duster', 'year': 2017,
+                'mileage_km': 90000, 'engine_cc': 1500, 'fuel_type': 'diesel', 'transmission': 'manual',
+                'body_type': 'suv', 'price': Decimal('400000'), 'currency': 'UAH',
+                'region': region, 'city': city, 'status': LocalListing.Status.ACTIVE,
+                'agreed_to_rules': True, 'contact_phone': '+380671112233',
+            },
+        )
+        LocalListing.objects.filter(pk=uah.pk).update(price_usd=Decimal('9500.00'))
+        if created:
+            data = self._photo_bytes(FIXTURE_PHOTOS[0])
+            if data:
+                img = LocalListingImage(listing=uah, is_primary=True)
+                img.image.save(f'e2e-{FIXTURE_PHOTOS[0]}', ContentFile(data), save=True)
+        self._note('local_listings', created)
+
     def _listings(self, seller):
         from listings.models import Listing
         from vehicles.models import Vehicle
