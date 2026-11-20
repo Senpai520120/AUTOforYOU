@@ -4,6 +4,7 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
+import { SEED_LISTING_PHONE, SELLER_VERIFIED_PHONE } from './helpers/listing-form';
 
 const GUEST = { cookies: [], origins: [] };
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
@@ -32,7 +33,8 @@ test.describe('Пояснення на вході при next=/local/new', () =>
 
   test('посилання між входом і реєстрацією зберігають next', async ({ page }) => {
     await page.goto('/login?next=/local/new');
-    await expect(page.getByRole('link', { name: 'Реєстрація' })).toHaveAttribute('href', /\/register\?next=%2Flocal%2Fnew/);
+    // У шапці теж є «Реєстрація» (без next) — перевіряємо посилання в основному блоці.
+    await expect(page.getByRole('main').getByRole('link', { name: 'Реєстрація' })).toHaveAttribute('href', /\/register\?next=%2Flocal%2Fnew/);
     await page.goto('/register?next=/local/new');
     await expect(page.getByRole('link', { name: 'Увійти' })).toHaveAttribute('href', /\/login\?next=%2Flocal%2Fnew/);
   });
@@ -110,7 +112,14 @@ test.describe('/sellers/[id]: без ПДн', () => {
     expect(res.status()).toBe(200);
     const html = await res.text();
     expect(html).toContain('data-testid="seller-profile"');
-    expect(html).not.toMatch(/\+380\d{9}/);
-    expect(html).not.toContain('seller@e2e.test');
+    // Підвал містить публічний телефон сайту (SiteSettings, e2e_seed: +380500000000) — це не ПДн продавця.
+    // Тому: у блоці <main> телефонів немає зовсім, а в усьому HTML немає номерів продавця і його email.
+    const main = html.match(/<main[\s\S]*?<\/main>/)?.[0] ?? '';
+    expect(main).toContain('data-testid="seller-profile"');
+    expect(main).not.toMatch(/\+380\d{9}/);
+    for (const secret of [SELLER_VERIFIED_PHONE, SELLER_VERIFIED_PHONE.slice(1), SEED_LISTING_PHONE,
+      SEED_LISTING_PHONE.slice(1), 'seller@e2e.test', 'seller@']) {
+      expect(html).not.toContain(secret);
+    }
   });
 });

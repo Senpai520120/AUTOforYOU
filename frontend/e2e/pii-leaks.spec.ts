@@ -5,11 +5,13 @@
  */
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
+import { SELLER_VERIFIED_PHONE } from './helpers/listing-form';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
 const SELLER_EMAIL = 'seller@e2e.test';
 const BUYER_EMAIL = 'buyer@e2e.test';
-const PHONE = '+380677001122';
+// 10.23: телефон оголошення = підтверджений номер власника (seller з e2e_seed)
+const PHONE = SELLER_VERIFIED_PHONE;
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(consentInit);
@@ -21,7 +23,7 @@ async function activeListingId(api: APIRequestContext) {
   const body = await resp.json();
   const rows = Array.isArray(body) ? body : body.results;
   const row = rows.find((l: { status: string; description: string }) =>
-    l.status === 'active' && l.description.startsWith('[E2E]'));
+    l.status === 'active' && l.description.startsWith('[E2E] Skoda Octavia')); // на ньому діалог buyer↔seller з e2e_seed
   expect(row).toBeTruthy();
   return row.id as number;
 }
@@ -54,7 +56,7 @@ test.describe('Власник і покупець C2C-оголошення', () 
     // SSR-HTML (гість): ні телефону, ні email, ні локальної частини email.
     const html = await (await request.get(`/local/${id}`)).text();
     expect(html).not.toContain(PHONE);
-    expect(html).not.toContain('380677001122');
+    expect(html).not.toContain(PHONE.slice(1));
     expect(html).not.toContain(SELLER_EMAIL);
     expect(html).not.toContain('seller@');
     expect(html).toContain('Користувач');

@@ -256,7 +256,7 @@ class Command(BaseCommand):
         from messaging.models import Conversation, Message
 
         listing = LocalListing.objects.filter(
-            owner=seller, description__startswith=E2E_PREFIX,
+            owner=seller, description__startswith=f'{E2E_PREFIX} Skoda Octavia',
             status=LocalListing.Status.ACTIVE,
         ).first()
         conv, created = Conversation.objects.get_or_create(initiator=buyer, local_listing=listing)

@@ -7,6 +7,7 @@
 import path from 'path';
 import type { Page } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
+import { fillContactPhone } from './helpers/listing-form';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
 
@@ -19,7 +20,7 @@ async function fillForm(page: Page, description = '[E2E] Ліміти подач
   await page.getByRole('combobox', { name: 'Населений пункт *' }).fill('Вінниц');
   await page.getByRole('option', { name: /^Вінниця/ }).click();
   await page.getByLabel('Опис').fill(description);
-  await page.getByLabel('Контактний телефон').fill('+380501112294');
+  await fillContactPhone(page, '+380501112294');
   await page.locator('input[type=file]').setInputFiles(path.join(__dirname, 'fixtures', 'car-1.jpg'));
 }
 
