@@ -118,6 +118,14 @@ def add_months(dt: datetime, months: int) -> datetime:
     return dt.replace(year=year, month=month, day=min(dt.day, calendar.monthrange(year, month)[1]))
 
 
+def lead_total_usd_full(lead) -> str | None:
+    """Полная сумма «з розмитненням» из снимка (10.1); для старых снимков — прежний total_usd."""
+    full = (lead.calculation_snapshot or {}).get('total_usd_full')
+    if full:
+        return str(full)
+    return str(lead.total_usd) if lead.total_usd is not None else None
+
+
 def build_calculation_snapshot(calculation) -> dict:
     if calculation is None:
         return {}

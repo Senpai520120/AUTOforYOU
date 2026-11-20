@@ -10,7 +10,7 @@ from listings.permissions import can_view_wholesale
 from pricing.models import Calculation
 
 from .models import ContactMethod, Lead, LeadSource, LeadStatus, LeadStatusChange, NeededWhen, PartnerStatus
-from .services import allowed_transitions
+from .services import allowed_transitions, lead_total_usd_full
 from .validators import clean_attribution, normalize_ua_phone
 
 # Чужой и несуществующий объект неразличимы: нет утечки существования.
@@ -190,6 +190,7 @@ class BrokerLeadListSerializer(_AssigneeMixin, serializers.ModelSerializer):
     qualification_display = serializers.CharField(source='get_qualification_display', read_only=True)
     utm_source = serializers.SerializerMethodField()
     car = serializers.SerializerMethodField()
+    total_usd_full = serializers.SerializerMethodField()
     assigned_to = serializers.SerializerMethodField()
     duplicate_of = serializers.SlugRelatedField(
         slug_field='public_id', read_only=True, allow_null=True, label='Повтор заявки',
@@ -199,10 +200,13 @@ class BrokerLeadListSerializer(_AssigneeMixin, serializers.ModelSerializer):
         model = Lead
         fields = [
             'id', 'public_id', 'duplicate_of', 'created_at', 'name', 'phone', 'contact_method', 'status', 'status_display',
-            'partner_status', 'partner_status_display', 'total_usd', 'total_uah', 'source', 'source_display',
+            'partner_status', 'partner_status_display', 'total_usd', 'total_usd_full', 'total_uah', 'source', 'source_display',
             'utm_source', 'first_response_at', 'assigned_to', 'car', 'qualification', 'qualification_display',
         ]
         read_only_fields = fields
+
+    def get_total_usd_full(self, obj) -> str | None:
+        return lead_total_usd_full(obj)
 
     def get_utm_source(self, obj) -> str:
         value = (obj.utm or {}).get('source')

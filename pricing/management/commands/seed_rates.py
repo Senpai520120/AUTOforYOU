@@ -157,7 +157,8 @@ class Command(BaseCommand):
         # Дизель ≤3500 см³ → base 75 EUR/л = 7.5 EUR/100cc
         # Дизель >3500 см³ → base 150 EUR/л = 15.0 EUR/100cc
         # Электро/PHEV → 1 EUR/кВт·ч, пошлина 0%
-        # Гибрид HEV → как бензин ≤3000 (гибриды — уточнить у брокера)
+        # Гибрид HEV (8703 40/50/60/70) → по той же формуле и типу ДВС, пп. 215.3.5-1 ПКУ:
+        #   бензиновый ≤3000 → 5.0 EUR/100cc, >3000 → 10.0 EUR/100cc (модель не различает дизельный гибрид)
         excise_rates = [
             # (fuel_type, engine_cc_min, engine_cc_max, eur_per_100cc, ev_kwh, duty, vat)
             ('petrol',   0,    3000, '5.0000',  None,     '0.1000', '0.2000'),
@@ -165,8 +166,9 @@ class Command(BaseCommand):
             ('diesel',   0,    3500, '7.5000',  None,     '0.1000', '0.2000'),
             ('diesel',   3501, None, '15.0000', None,     '0.1000', '0.2000'),
             ('electric', 0,    None, '0.0000',  '1.0000', '0.0000', '0.2000'),
-            ('phev',     0,    None, '0.0000',  '1.0000', '0.0000', '0.2000'),  # гибриды — уточнить у брокера
-            ('hybrid',   0,    None, '5.0000',  None,     '0.1000', '0.2000'),  # HEV как бензин; уточнить у брокера
+            ('phev',     0,    None, '0.0000',  '1.0000', '0.0000', '0.2000'),  # PHEV: батарея × EUR/кВт·ч (EV_FUEL_TYPES)
+            ('hybrid',   0,    3000, '5.0000',  None,     '0.1000', '0.2000'),  # пп. 215.3.5-1 ПКУ
+            ('hybrid',   3001, None, '10.0000', None,     '0.1000', '0.2000'),  # пп. 215.3.5-1 ПКУ
         ]
         if self._should_seed(CustomsExciseRate, force):
             for fuel, cc_min, cc_max, eur_per_100cc, ev_kwh, duty, vat in excise_rates:
