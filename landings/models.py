@@ -2,13 +2,16 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
-from content.models import DRAFT_MARKER_ERROR, has_draft_marker
+from content.models import DRAFT_MARKER_ERROR, _PublishableText, has_draft_marker
 from pricing.models import AuctionFeeTier
 
 SLUG_VALIDATOR = RegexValidator(
     r'^[a-z0-9]+(?:-[a-z0-9]+)*$', 'Лише малі латинські літери, цифри та дефіс.')
 NO_CALCULATION_ERROR = (
     'Не можна опублікувати без розрахунку: заповніть вхідні дані та переконайтеся, що діють усі ставки.')
+
+THIN_TEXT_ERROR = ('Текст замалий: {length} із {minimum} символів (вступ, опис, що входить у ціну). '
+                   'Допишіть унікальний текст про модель.')
 
 
 class LandingFuel(models.TextChoices):
@@ -48,6 +51,8 @@ class ModelLandingPage(models.Model):
     battery_capacity_kwh = models.DecimalField(
         'Ємність батареї, кВт·год', max_digits=5, decimal_places=1, null=True, blank=True,
         validators=[MinValueValidator(0), MaxValueValidator(300)], help_text='Лише для електро та PHEV.')
+    generation = models.CharField('Покоління / кузов', max_length=100, blank=True,
+                                  help_text='Вільний текст, наприклад «XV70». Порожньо - не показується.')
     auction = models.CharField('Аукціон', max_length=10, choices=AuctionFeeTier.Auction.choices,
                                default=AuctionFeeTier.Auction.COPART)
     auction_location = models.CharField('Локація майданчика', max_length=100, blank=True)
@@ -89,6 +94,18 @@ class ModelLandingPage(models.Model):
     def has_draft_marker(self) -> bool:
         return has_draft_marker(*(getattr(self, f) for f in self.TEXT_FIELDS))
 
+    def _was_published(self) -> bool:
+        return bool(self.pk) and ModelLandingPage.objects.filter(pk=self.pk, is_published=True).exists()
+
+    def publication_error(self, *, check_text: bool = True) -> str | None:
+        """Единственное место условий публикации: позначка, расчёт, порог текста (его - только при переходе)."""
+        from .services import can_publish, text_length_error
+        if self.has_draft_marker():
+            return DRAFT_MARKER_ERROR
+        if not can_publish(self):
+            return NO_CALCULATION_ERROR
+        return text_length_error(self) if check_text else None
+
     def clean(self):
         super().clean()
         errors = {}
@@ -98,11 +115,9 @@ class ModelLandingPage(models.Model):
             if (self.year_from and self.calc_year < self.year_from) or (self.year_to and self.calc_year > self.year_to):
                 errors['calc_year'] = 'Рік для розрахунку поза діапазоном років випуску.'
         if self.is_published:
-            from .services import can_publish
-            if self.has_draft_marker():
-                errors['is_published'] = DRAFT_MARKER_ERROR
-            elif not can_publish(self):
-                errors['is_published'] = NO_CALCULATION_ERROR
+            error = self.publication_error(check_text=not self._was_published())
+            if error:
+                errors['is_published'] = error
         if errors:
             raise ValidationError(errors)
 
@@ -114,6 +129,10 @@ class LandingSettings(models.Model):
         'Рекомендована максимальна кількість опублікованих сторінок', default=30,
         validators=[MinValueValidator(1)],
         help_text='Перевищення не блокує публікацію, лише показує попередження в адмінці.')
+    min_text_chars = models.PositiveSmallIntegerField(
+        'Мінімальна довжина унікального тексту', default=600, validators=[MinValueValidator(100)],
+        help_text='Сума символів «Вступ» + «Опис» + «Що входить у ціну». Перевіряється лише при публікації; '
+                  'уже опубліковані сторінки не знімаються.')
 
     class Meta:
         verbose_name = 'Налаштування сторінок моделей'
@@ -129,3 +148,21 @@ class LandingSettings(models.Model):
     @classmethod
     def get_solo(cls):
         return cls.objects.get_or_create(pk=1)[0]
+
+
+class LandingFaqItem(_PublishableText):
+    """Питання-відповідь про конкретну модель. Показується на сторінці, лише якщо активне й без чернеткової позначки."""
+
+    text_fields = ('question', 'answer')
+
+    page = models.ForeignKey(ModelLandingPage, on_delete=models.CASCADE, related_name='faq_items',
+                             verbose_name='Сторінка моделі')
+    question = models.CharField('Питання', max_length=300)
+    answer = models.TextField('Відповідь', help_text='Звичайний текст; HTML не підтримується.')
+
+    class Meta(_PublishableText.Meta):
+        verbose_name = 'Питання про модель'
+        verbose_name_plural = 'Питання про модель'
+
+    def __str__(self):
+        return self.question

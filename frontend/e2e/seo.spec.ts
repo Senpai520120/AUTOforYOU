@@ -75,6 +75,15 @@ test.describe('SEO: метадані сторінок', () => {
     });
   }
 
+  test('головна: title, h1 і description містять «пригон» (10.9) @smoke', async ({ page }) => {
+    await page.goto('/');
+    expect((await page.title()).toLowerCase()).toContain('пригон');
+    expect(((await page.locator('h1').first().textContent()) ?? '').toLowerCase()).toContain('пригон');
+    const desc = (await page.locator('meta[name="description"]').getAttribute('content')) ?? '';
+    expect(desc.toLowerCase()).toContain('пригон');
+    expect(desc.length).toBeLessThanOrEqual(160);
+  });
+
   test('/ua: canonical без query; з page - індексується, з фільтром - noindex', async ({ page }) => {
     test.skip(!c2c, 'C2C вимкнено: /ua віддає «Скоро»');
     await page.goto('/ua?page=2');

@@ -6,6 +6,7 @@
  *   cd frontend && npx playwright test
  */
 import { test, expect } from '@playwright/test';
+import { fillCalcForm } from './helpers/calc-form';
 
 // Текст заголовка демо-банера. Навмисно не збігається з текстом у футері
 // («Тестові тарифи — всі розрахунки є демонстраційними»), інакше перевірка
@@ -57,6 +58,7 @@ test.describe('Калькулятор вартості', () => {
     await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('5000');
     await page.getByLabel("Об'єм двигуна (см³)", { exact: true }).fill('2000');
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
 
     // Раніше тут стояв if (count > 0) навколо кліку і waitForTimeout(3000):

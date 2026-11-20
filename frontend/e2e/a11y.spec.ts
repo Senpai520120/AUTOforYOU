@@ -11,6 +11,7 @@ import { test, expect, storageStatePath } from './fixtures';
 type Flags = { c2c_enabled: boolean; c2c_public_posting_enabled: boolean };
 let flags: Flags;
 let listingId: number | null = null;
+let sellerId: number | null = null;
 
 test.beforeAll(async ({ playwright, baseURL }) => {
   const ctx = await playwright.request.newContext({ baseURL });
@@ -19,6 +20,10 @@ test.beforeAll(async ({ playwright, baseURL }) => {
   flags = await res.json();
   const list = await ctx.get('/api/v1/local/listings/');
   if (list.ok()) listingId = (await list.json()).results?.[0]?.id ?? null;
+  if (listingId !== null) {
+    const detail = await ctx.get(`/api/v1/local/listings/${listingId}/`);
+    if (detail.ok()) sellerId = (await detail.json()).seller_id ?? null;
+  }
   await ctx.dispose();
 });
 
@@ -50,16 +55,48 @@ async function openReady(page: Page, path: string, ready: () => Promise<void>) {
 
 const h1 = (page: Page) => page.getByRole('heading', { level: 1 }).first();
 
+// Одна таблиця публічних сторінок (10.28): sitemap + навігація + форми входу + 404.
+// Слаг лендингу — з e2e_seed. Сторінка з `needs` пропускається, якщо потрібних даних/прапорця немає.
+const PUBLIC_PAGES: { name: string; path: string | (() => string | null); needs?: () => string | null }[] = [
+  { name: '/', path: '/' },
+  { name: '/calculator', path: '/calculator' },
+  { name: '/how-it-works', path: '/how-it-works' },
+  { name: '/prigon', path: '/prigon' },
+  { name: '/prigon/e2e-toyota-camry', path: '/prigon/e2e-toyota-camry' },
+  { name: '/about', path: '/about' },
+  // Юридичні сторінки (контраст перевіряється тут же).
+  { name: '/privacy', path: '/privacy' },
+  { name: '/terms', path: '/terms' },
+  { name: '/rules', path: '/rules' },
+  { name: '/refund', path: '/refund' },
+  { name: '/cookies', path: '/cookies' },
+  { name: '/ua', path: '/ua' },
+  { name: 'картка C2C-оголошення', path: () => (listingId === null ? null : `/local/${listingId}`),
+    needs: () => (listingId === null ? 'у каталозі немає оголошень (запустіть e2e_seed)' : null) },
+  { name: 'сторінка продавця /sellers/[id]', path: () => (sellerId === null ? null : `/sellers/${sellerId}`),
+    needs: () => (sellerId === null ? 'немає продавця з оголошенням (запустіть e2e_seed)' : null) },
+  { name: '/login?next=/local/new (з поясненням)', path: '/login?next=/local/new' },
+  { name: '/register?next=/local/new (з поясненням)', path: '/register?next=/local/new' },
+  { name: '/login', path: '/login' },
+  { name: '/register', path: '/register' },
+  { name: '/password-reset', path: '/password-reset' },
+  { name: '/no-such-page-e2e', path: '/no-such-page-e2e' }, // 404
+];
+const resolvePath = (p: (typeof PUBLIC_PAGES)[number]) => (typeof p.path === 'function' ? p.path() : p.path);
+
 test.describe('23-P47: axe, гість', () => {
   test.use({ storageState: GUEST });
-  for (const path of ['/', '/login', '/register', '/calculator', '/ua']) {
-    test(`${path}: немає порушень serious/critical`, async ({ page }) => {
+  PUBLIC_PAGES.forEach(entry => {
+    test(`${entry.name}: немає порушень serious/critical`, async ({ page }) => {
+      const skip = entry.needs?.();
+      test.skip(!!skip, skip ?? '');
+      const path = resolvePath(entry)!;
       await openReady(page, path, () => expect(h1(page)).toBeVisible({ timeout: 3000 }));
-      expect(await serious(page)).toEqual([]);
+      expect(await serious(page), path).toEqual([]);
     });
-  }
-  test('мобільний: /login, /register, /calculator, /ua @mobile', async ({ page }) => {
-    for (const path of ['/login', '/register', '/calculator', '/ua']) {
+  });
+  test('мобільний: /login, /register, /calculator, /ua, /privacy @mobile', async ({ page }) => {
+    for (const path of ['/login', '/register', '/calculator', '/ua', '/privacy']) {
       await openReady(page, path, () => expect(h1(page)).toBeVisible({ timeout: 3000 }));
       expect(await serious(page), path).toEqual([]);
     }

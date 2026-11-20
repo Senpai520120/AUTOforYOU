@@ -36,7 +36,7 @@ GOOD_SETTINGS = dict(
     CSRF_TRUSTED_ORIGINS=['https://shop.example.test'], SITE_URL='https://shop.example.test',
     EMAIL_HOST='smtp.example.test', EMAIL_HOST_USER='mailer', EMAIL_HOST_PASSWORD='test-only-mail-password',
     DEFAULT_FROM_EMAIL='noreply@shop.example.test',
-    ANTISPAM_MODE='hard', C2C_ENABLED=False, C2C_PUBLIC_POSTING_ENABLED=False, PAYMENTS_ENABLED=False,
+    ANTISPAM_MODE='hard', PHONE_VERIFICATION_REQUIRED=True, C2C_ENABLED=False, C2C_PUBLIC_POSTING_ENABLED=False, PAYMENTS_ENABLED=False,
     LOTS_ENABLED=False, B2B_ENABLED=False, DEALERS_ENABLED=False, SHIPMENTS_ENABLED=False,
     VIN_REPORTS_ENABLED=False, LEGACY_CARS_API_ENABLED=False,
     CAPTCHA_PROVIDER='turnstile', TURNSTILE_SECRET_KEY='test-only-turnstile-secret',
@@ -48,6 +48,7 @@ GOOD_ENV = dict(
     POSTGRES_PASSWORD=PASSWORD, REDIS_URL='redis://:test-only-redis@redis:6379/0', REDIS_PASSWORD='test-only-redis',
     SENTRY_DSN='https://test-only-key@sentry.example.test/1',
     CELERY_HEARTBEAT_URL='https://hc.example.test/ping',
+    BACKUP_HEARTBEAT_URL='https://hc.example/ping/test',
     BACKUP_S3_BUCKET='test-only-backups', BACKUP_S3_ENDPOINT_URL='https://r2.example.test',
     BACKUP_S3_ACCESS_KEY_ID='test-only-access', BACKUP_S3_SECRET_ACCESS_KEY='test-only-s3-secret',
     BACKUP_ENCRYPTION_PASSPHRASE='test-only-passphrase', BACKUP_DIR='', C2C_SEED_THRESHOLD='',
@@ -184,6 +185,25 @@ class RequiredVarsTests(LaunchCheckTestCase):
         self.assertOk(code, out)
 
 
+class BackupHeartbeatTests(LaunchCheckTestCase):
+    URL = 'https://hc.example/ping/test'
+
+    def test_empty_is_error_with_hint(self):
+        code, out = self.run_check(env={'BACKUP_HEARTBEAT_URL': ''})
+        self.assertFails(code, out, 'BACKUP_HEARTBEAT_URL: не задано', '.env')
+
+    def test_http_is_error(self):
+        code, out = self.run_check(env={'BACKUP_HEARTBEAT_URL': 'http://hc.example/ping/test'})
+        self.assertFails(code, out, 'BACKUP_HEARTBEAT_URL: потрібна адреса https')
+
+    def test_https_is_ok_and_prints_host_only(self):
+        code, out = self.run_check(env={'BACKUP_HEARTBEAT_URL': self.URL})
+        self.assertOk(code, out)
+        self.assertIn('BACKUP_HEARTBEAT_URL: задано (хост hc.example)', out)
+        self.assertNotIn(self.URL, out)
+        self.assertNotIn('/ping/test', out)
+
+
 class FlagsTests(LaunchCheckTestCase):
     def test_payments_enabled_in_prod_is_error(self):
         code, out = self.run_check(PAYMENTS_ENABLED=True)
@@ -251,6 +271,20 @@ class FlagsTests(LaunchCheckTestCase):
         code, out = self.run_check(C2C_ENABLED=True, C2C_PUBLIC_POSTING_ENABLED=False)
         self.assertOk(code, out)
         self.assertIn('режим «засів»', out)
+
+    def test_c2c_without_phone_verification_in_prod_is_error(self):
+        code, out = self.run_check(C2C_ENABLED=True, PHONE_VERIFICATION_REQUIRED=False)
+        self.assertFails(code, out, 'PHONE_VERIFICATION_REQUIRED=false при C2C_ENABLED=true')
+
+    def test_c2c_without_phone_verification_in_debug_is_warning(self):
+        code, out = self.run_check(C2C_ENABLED=True, PHONE_VERIFICATION_REQUIRED=False, DEBUG=True)
+        self.assertOk(code, out)
+        self.assertIn('PHONE_VERIFICATION_REQUIRED=false при C2C_ENABLED=true', out)
+
+    def test_phone_verification_off_with_c2c_off_is_clean(self):
+        code, out = self.run_check(C2C_ENABLED=False, PHONE_VERIFICATION_REQUIRED=False)
+        self.assertOk(code, out)
+        self.assertNotIn('PHONE_VERIFICATION_REQUIRED', out)
 
     def test_frozen_modules_enabled_are_warnings(self):
         for name in launch.FROZEN_MODULE_FLAGS:
@@ -368,7 +402,8 @@ class SiteSettingsTests(LaunchCheckTestCase):
     def test_empty_partner_name_is_error_with_exact_text(self):
         SiteSettings.objects.filter(pk=1).update(partner_name='')
         code, out = self.run_check()
-        self.assertFails(code, out, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний')
+        self.assertFails(code, out, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний',
+                         'замість форми заявки відвідувач бачить запасний контакт')
 
     def test_empty_legal_version_is_error(self):
         SiteSettings.objects.filter(pk=1).update(legal_docs_version='')
@@ -383,7 +418,9 @@ class SiteSettingsTests(LaunchCheckTestCase):
         self.assertIn('строк зберігання платіжних документів не заданий', out)
 
     def test_filled_settings_give_no_site_settings_errors(self):
-        _code, out = self.run_check()
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('Назва партнера задана', out)
         self.assertIn('реквізити й контакти заповнені', out)
         self.assertNotIn('не відмічені як перевірені юристом', out)
 
@@ -584,3 +621,51 @@ class MetricsAndTasksTests(LaunchCheckTestCase):
         code, out = self.run_check()
         self.assertOk(code, out)
         self.assertIn('[ІНФО   ] Невдалі Celery-завдання (8.9) у журналі: 2', out)
+
+
+class LandingContentTests(LaunchCheckTestCase):
+    @staticmethod
+    def page(slug, *, published, text_len):
+        from landings.models import ModelLandingPage
+        return ModelLandingPage.objects.create(
+            slug=slug, make='A', model=slug, is_published=published, intro='x' * text_len)
+
+    def test_no_landings_is_silent(self):
+        _code, out = self.run_check()
+        self.assertNotIn('Тонкий контент', out)
+        self.assertNotIn('унікального тексту', out)
+
+    def test_thin_published_pages_listed_as_warning(self):
+        from landings.models import LandingSettings
+        minimum = LandingSettings.get_solo().min_text_chars
+        self.page('thin-one', published=True, text_len=minimum - 1)
+        self.page('thick-one', published=True, text_len=minimum)
+        self.page('thin-draft', published=False, text_len=1)
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('Тонкий контент на 1 опублікованих сторінках: thin-one', out)
+        self.assertNotIn('thick-one', out)
+        self.assertNotIn('thin-draft', out)
+
+    def test_all_thick_is_ok(self):
+        from landings.models import LandingSettings
+        self.page('thick-one', published=True, text_len=LandingSettings.get_solo().min_text_chars)
+        _code, out = self.run_check()
+        self.assertIn('Усі опубліковані сторінки моделей мають достатньо унікального тексту', out)
+        self.assertNotIn('Тонкий контент', out)
+
+
+class BackupRecipientCheckTests(LaunchCheckTestCase):
+    """10.19: запасной chat_id заявок - предупреждение, не ошибка."""
+
+    def test_backup_not_set_is_warning_not_error(self):
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('[УВАГА  ] Запасний Telegram chat_id не задано', out)
+
+    def test_backup_set_is_ok(self):
+        LeadNotificationSettings.objects.filter(pk=1).update(backup_telegram_chat_id='-1009998887776')
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('Запасний Telegram chat_id для заявок: задано', out)
+        self.assertNotIn('Запасний Telegram chat_id не задано', out)

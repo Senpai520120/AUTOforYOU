@@ -4,15 +4,18 @@
  * Гість не втрачає введене: 401 тут не веде на /login (api/client не редиректить).
  */
 import { trackEvent } from '@/lib/analytics';
-import { useEffect, useRef, useState } from 'react';
+import { sendMetric } from '@/lib/metrics';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { apiGet, ApiError } from '@/api/client';
+import { ApiError } from '@/api/client';
+import { fetchSiteSettings } from '@/lib/site-settings-client';
 import { leadsApi } from '@/api/leads';
 import { useAuth } from '@/lib/auth-context';
 import { getAttribution } from '@/lib/attribution';
 import { isCaptchaFailed, useAuthConfig, useCaptchaState } from '@/lib/captcha';
 import type { LeadContactMethod, LeadCreate, LeadNeededWhen, LeadSource, SiteSettings } from '@/lib/types';
 import Captcha from '@/components/ui/Captcha';
+import FallbackContact, { ContactList } from '@/components/ui/FallbackContact';
 import LeadSuccess from './LeadSuccess';
 
 interface Props {
@@ -45,9 +48,21 @@ const FIELDS = [
   'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment',
   'budget_usd', 'needed_when', 'city', 'consent', 'partner_consent',
 ];
+/** Поля другого (необов'язкового) кроку: помилка в них розкриває блок. */
+const DETAIL_FIELDS = ['email', 'comment', 'budget_usd', 'needed_when', 'city'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500';
 const GENERAL_ERROR = 'Не вдалося надіслати заявку. Спробуйте ще раз пізніше.';
+
+/** UUID v4; crypto.randomUUID недоступний у незахищеному контексті (http), тоді - getRandomValues. */
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 
 function FieldError({ id, text }: { id: string; text?: string }) {
   if (!text) return null;
@@ -78,6 +93,16 @@ export default function LeadForm({
   const touched = useRef({ name: false, phone: false });
 
   const [consentText, setConsentText] = useState<string | null>(null);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [serverDown, setServerDown] = useState(false);
+  const loadingRef = useRef(false);
+  // Ключ ідемпотентності однієї відправки (10.13): не змінюється при помилках, змінюється після успіху.
+  const keyRef = useRef<string | null>(null);
+  const inFlightRef = useRef(false);
+  // Старт форми рахуємо один раз на ключ відправки (лічильник без ПДн, 10.15).
+  const startedRef = useRef(false);
+  const aliveRef = useRef(true);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -95,14 +120,42 @@ export default function LeadForm({
   const [errors, setErrors] = useState<Errors>({});
   const [general, setGeneral] = useState('');
   const [publicId, setPublicId] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Лічильник «показати першу помилку»: змінюється при кожній невдалій відправці (клієнтській чи серверній).
+  const [focusTick, setFocusTick] = useState(0);
+
+  // Завантаження налаштувань сайту; повтор не створює паралельних запитів.
+  const loadSettings = useCallback(async (force = false) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setRetrying(true);
+    try {
+      const st = await fetchSiteSettings(force);
+      if (!aliveRef.current) return;
+      setSiteSettings(st);
+      setConsentText(st.partner_consent_text?.trim() ?? '');
+    } catch {
+      if (!aliveRef.current) return;
+      setSiteSettings(null);
+      setConsentText('');
+    } finally {
+      loadingRef.current = false;
+      if (aliveRef.current) setRetrying(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let alive = true;
-    apiGet<SiteSettings>('/api/v1/site-settings/')
-      .then((s) => { if (alive) setConsentText(s.partner_consent_text?.trim() ?? ''); })
-      .catch(() => { if (alive) setConsentText(''); });
-    return () => { alive = false; };
-  }, []);
+    aliveRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSettings();
+    return () => { aliveRef.current = false; };
+  }, [loadSettings]);
+
+  const retry = async () => {
+    setServerDown(false);
+    setGeneral('');
+    await loadSettings(true);
+  };
 
   // Передзаповнення з профілю: лише поки користувач сам не чіпав поле.
   useEffect(() => {
@@ -111,22 +164,48 @@ export default function LeadForm({
     if (!touched.current.phone) setPhone(user.phone ?? '');
   }, [user]);
 
-  if (publicId) return <LeadSuccess publicId={publicId} onNew={onNew} newLabel={newLabel} />;
+  // Фокус і прокрутка до першого поля з помилкою (порядок у DOM) після того, як помилки відрисовані.
+  useEffect(() => {
+    if (!focusTick) return;
+    const el = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: 'center' });
+  }, [focusTick]);
+
+  if (publicId) return <LeadSuccess publicId={publicId} onNew={onNew} newLabel={newLabel} settings={siteSettings} />;
 
   const partnerReady = !!consentText;
   const canSubmit = captcha.ready && partnerReady && partnerConsent && !submitting;
+  // Чому кнопка неактивна (видимий текст, пов'язаний через aria-describedby).
+  const blockedReason = submitting ? ''
+    : !partnerReady ? 'Надсилання поки недоступне: немає даних партнера. Скористайтеся контактами вище.'
+    : !partnerConsent ? 'Щоб надіслати, погодьтеся на передачу контактів партнеру.'
+    : !captcha.ready ? 'Триває перевірка безпеки, зачекайте кілька секунд.'
+    : '';
+  const showErrors = (fields: Errors) => {
+    if (DETAIL_FIELDS.some((f) => fields[f])) setMore(true);
+    setErrors(fields);
+    setFocusTick((t) => t + 1);
+  };
+
+  const trackStart = () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    sendMetric('lead_form_start');
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting || inFlightRef.current) return;
     const local: Errors = {};
     if (!name.trim()) local.name = "Вкажіть ім'я.";
     if (!phone.trim()) local.phone = 'Вкажіть телефон.';
     if (email.trim() && !EMAIL_RE.test(email.trim())) local.email = 'Вкажіть коректний email.';
     if (!consent) local.consent = 'Потрібна згода на обробку персональних даних.';
     setGeneral('');
-    setErrors(local);
-    if (Object.keys(local).length) return;
+    if (Object.keys(local).length) { showErrors(local); return; }
+    setErrors({});
 
     const attribution = getAttribution();
     const payload: LeadCreate = {
@@ -151,37 +230,48 @@ export default function LeadForm({
       ...captcha.payload(),
     };
 
+    inFlightRef.current = true;
+    keyRef.current ??= newIdempotencyKey();
     setSubmitting(true);
     try {
-      const created = await leadsApi.create(payload);
+      const created = await leadsApi.create(payload, keyRef.current);
+      keyRef.current = null; // наступна відправка («Надіслати ще») - нова заявка з новим ключем
+      startedRef.current = false;
       setPublicId(created.public_id);
       trackEvent('lead_submit', { source }); // лише категорія джерела, без ПДн
     } catch (err) {
+      sendMetric('lead_submit_error'); // лише ключ: без статусу, тексту й ПДн
       if (err instanceof ApiError && err.status === 400) {
         if (isCaptchaFailed(err)) {
           setGeneral('Не вдалося пройти перевірку. Спробуйте ще раз.');
         } else {
           const parsed = parseFieldErrors(err.data);
-          setErrors(parsed.fields);
+          showErrors(parsed.fields);
           setGeneral(parsed.general.join(' ') || (Object.keys(parsed.fields).length ? '' : GENERAL_ERROR));
         }
       } else if (err instanceof ApiError && err.status === 429) {
         setGeneral('Забагато заявок, спробуйте пізніше.');
+      } else if (err instanceof ApiError && err.status === 409) {
+        keyRef.current = null; // ключ зайнятий іншими даними: наступна спроба - з новим
+        setGeneral(err.message.startsWith('HTTP ') ? GENERAL_ERROR : err.message);
       } else if (err instanceof ApiError && err.status === 503) {
-        setGeneral('Прийом заявок тимчасово недоступний. Спробуйте пізніше.');
+        setServerDown(true);
+        setGeneral('');
       } else {
         setGeneral(GENERAL_ERROR);
       }
     } finally {
+      inFlightRef.current = false;
       setSubmitting(false);
       captcha.bump(); // токен одноразовий: новий після кожної відповіді сервера
     }
   };
 
   return (
-    <form onSubmit={submit} noValidate data-testid="lead-form"
+    <form ref={formRef} onSubmit={submit} onInput={trackStart} noValidate data-testid="lead-form"
       className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
       <h3 className="font-bold text-slate-900 text-lg">Залишити заявку брокеру</h3>
+      <p className="text-sm text-slate-600">Достатньо імені, телефону та згод: решту можна додати пізніше.</p>
       {vehicleLabel && landingSlug && (
         <p data-testid="lead-vehicle" className="text-sm text-slate-700">
           Авто: <span className="font-semibold">{vehicleLabel}</span>
@@ -205,17 +295,6 @@ export default function LeadForm({
         <FieldError id="lead-phone-err" text={errors.phone} />
       </div>
 
-      <div>
-        <label htmlFor="lead-email" className="block text-xs font-semibold text-slate-600 mb-1">Email (необов&apos;язково)</label>
-        <input id="lead-email" name="email" type="email" maxLength={254} autoComplete="email" className={INPUT}
-          value={email} aria-invalid={!!errors.email} aria-describedby="lead-email-hint"
-          onChange={(e) => setEmail(e.target.value)} />
-        <p id="lead-email-hint" className="text-xs text-slate-500 mt-1">
-          На нього надійде копія розрахунку та статуси заявки.
-        </p>
-        <FieldError id="lead-email-err" text={errors.email} />
-      </div>
-
       <fieldset>
         <legend className="block text-xs font-semibold text-slate-600 mb-1">Зручний спосіб зв&apos;язку</legend>
         <div className="flex gap-4 flex-wrap">
@@ -236,34 +315,41 @@ export default function LeadForm({
             Нік або контакт у {method === 'telegram' ? 'Telegram' : 'Viber'} (необов&apos;язково)
           </label>
           <input id="lead-handle" name="contact_handle" maxLength={64} className={INPUT}
+            aria-invalid={!!errors.contact_handle} aria-describedby={errors.contact_handle ? 'lead-handle-err' : undefined}
             value={handle} onChange={(e) => setHandle(e.target.value)} />
           <FieldError id="lead-handle-err" text={errors.contact_handle} />
         </div>
       )}
 
       <div>
-        <label htmlFor="lead-comment" className="block text-xs font-semibold text-slate-600 mb-1">Коментар</label>
-        <textarea id="lead-comment" name="comment" rows={3} maxLength={1000} className={INPUT}
-          value={comment} onChange={(e) => setComment(e.target.value)} />
-        <FieldError id="lead-comment-err" text={errors.comment} />
-      </div>
-
-      <div>
-        <button type="button" aria-expanded={more} onClick={() => setMore((v) => !v)}
-          className="text-sm text-blue-700 hover:underline">
-          {more ? 'Менше' : 'Ще'}
+        <button type="button" aria-expanded={more} aria-controls="lead-details" onClick={() => setMore((v) => !v)}
+          className="text-sm text-blue-700 hover:underline py-2">
+          {more ? 'Сховати деталі' : "Додати деталі (необов'язково)"}
         </button>
-        {more && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div id="lead-details" hidden={!more} className="mt-3 space-y-3">
+          <div>
+            <label htmlFor="lead-email" className="block text-xs font-semibold text-slate-600 mb-1">Email (необов&apos;язково)</label>
+            <input id="lead-email" name="email" type="email" inputMode="email" maxLength={254} autoComplete="email" className={INPUT}
+              value={email} aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? 'lead-email-hint lead-email-err' : 'lead-email-hint'}
+              onChange={(e) => setEmail(e.target.value)} />
+            <p id="lead-email-hint" className="text-xs text-slate-500 mt-1">
+              На нього надійде копія розрахунку та статуси заявки.
+            </p>
+            <FieldError id="lead-email-err" text={errors.email} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label htmlFor="lead-budget" className="block text-xs font-semibold text-slate-600 mb-1">Бюджет під ключ ($)</label>
               <input id="lead-budget" name="budget_usd" inputMode="decimal" className={INPUT}
-                value={budget} onChange={(e) => setBudget(e.target.value)} />
+                value={budget} aria-invalid={!!errors.budget_usd} aria-describedby={errors.budget_usd ? 'lead-budget-err' : undefined}
+                onChange={(e) => setBudget(e.target.value)} />
               <FieldError id="lead-budget-err" text={errors.budget_usd} />
             </div>
             <div>
               <label htmlFor="lead-needed" className="block text-xs font-semibold text-slate-600 mb-1">Коли потрібне авто</label>
               <select id="lead-needed" name="needed_when" className={INPUT} value={needed}
+                aria-invalid={!!errors.needed_when} aria-describedby={errors.needed_when ? 'lead-needed-err' : undefined}
                 onChange={(e) => setNeeded(e.target.value as LeadNeededWhen | '')}>
                 <option value="">Не вказано</option>
                 {NEEDED.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
@@ -272,12 +358,20 @@ export default function LeadForm({
             </div>
             <div>
               <label htmlFor="lead-city" className="block text-xs font-semibold text-slate-600 mb-1">Місто</label>
-              <input id="lead-city" name="city" maxLength={100} className={INPUT}
-                value={city} onChange={(e) => setCity(e.target.value)} />
+              <input id="lead-city" name="city" maxLength={100} autoComplete="address-level2" className={INPUT}
+                value={city} aria-invalid={!!errors.city} aria-describedby={errors.city ? 'lead-city-err' : undefined}
+                onChange={(e) => setCity(e.target.value)} />
               <FieldError id="lead-city-err" text={errors.city} />
             </div>
           </div>
-        )}
+          <div>
+            <label htmlFor="lead-comment" className="block text-xs font-semibold text-slate-600 mb-1">Коментар</label>
+            <textarea id="lead-comment" name="comment" rows={3} maxLength={1000} className={INPUT}
+              value={comment} aria-invalid={!!errors.comment} aria-describedby={errors.comment ? 'lead-comment-err' : undefined}
+              onChange={(e) => setComment(e.target.value)} />
+            <FieldError id="lead-comment-err" text={errors.comment} />
+          </div>
+        </div>
       </div>
 
       <div>
@@ -297,14 +391,16 @@ export default function LeadForm({
         <label htmlFor="lead-partner-consent" className="flex items-start gap-2 text-sm text-slate-700">
           <input id="lead-partner-consent" name="partner_consent" type="checkbox" className="mt-1"
             checked={partnerConsent} disabled={!partnerReady}
-            aria-invalid={!!errors.partner_consent}
+            aria-invalid={!!errors.partner_consent} aria-describedby={errors.partner_consent ? 'lead-partner-err' : undefined}
             onChange={(e) => setPartnerConsent(e.target.checked)} />
           <span data-testid="partner-consent-text">{consentText || 'Згода на передачу контактів партнеру'}</span>
         </label>
-        {consentText === '' && (
-          <p role="status" className="text-amber-700 text-xs mt-1">
-            Прийом заявок тимчасово недоступний: партнера ще не налаштовано.
-          </p>
+        {(consentText === '' || serverDown) && (
+          <div role="alert" data-testid="lead-unavailable"
+            className="mt-2 text-sm bg-amber-50 border border-amber-200 rounded p-3">
+            <p className="font-semibold text-amber-900">Заявки онлайн тимчасово недоступні</p>
+            <FallbackContact settings={siteSettings} onRetry={retry} retrying={retrying} />
+          </div>
         )}
         <FieldError id="lead-partner-err" text={errors.partner_consent} />
       </div>
@@ -323,10 +419,20 @@ export default function LeadForm({
         <p role="alert" className="text-red-600 text-sm bg-red-50 border border-red-200 rounded p-3">{general}</p>
       )}
 
-      <button type="submit" disabled={!canSubmit}
+      {siteSettings?.partner_name?.trim() && (
+        <div data-testid="lead-partner-info" className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-3">
+          <p>Заявку обробляє партнер: <span className="font-semibold">{siteSettings.partner_name.trim()}</span></p>
+          <ContactList settings={siteSettings} title="Контакти:" />
+        </div>
+      )}
+
+      <button type="submit" disabled={!canSubmit} aria-describedby={blockedReason ? 'lead-submit-hint' : undefined}
         className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors">
         {submitting ? 'Надсилаю…' : 'Надіслати'}
       </button>
+      {blockedReason && (
+        <p id="lead-submit-hint" data-testid="lead-submit-hint" className="text-sm text-slate-600 -mt-2">{blockedReason}</p>
+      )}
     </form>
   );
 }

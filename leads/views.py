@@ -1,10 +1,14 @@
 import logging
 import re
+import uuid
 from collections.abc import Mapping
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -12,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from core.throttles import FailOpenScopedRateThrottle, _alert_once, cache_errors
 from integrations.captcha import HONEYPOT_FIELD, require_captcha
 from site_settings.models import SiteSettings
 from users.permissions import IsBrokerOrAdmin
@@ -31,17 +36,42 @@ from .serializers import (
 from .services import (
     AlreadyTaken,
     InvalidTransition,
+    KeyConflict,
     PartnerNotConfigured,
     broker_change_status,
     create_lead,
+    find_replay,
     qualify_lead,
     set_partner_status,
     take_lead,
 )
+from .validators import normalize_ua_phone
 
 logger = logging.getLogger(__name__)
 
 PARTNER_NOT_CONFIGURED = {'detail': 'Партнер не налаштований'}
+CACHE_DOWN = {'detail': 'Тимчасово недоступно, спробуйте пізніше'}
+KEY_CONFLICT = {'detail': 'Ця заявка вже надіслана з іншими даними. Оновіть сторінку та спробуйте ще раз.'}
+IDEMPOTENCY_HEADER = 'Idempotency-Key'
+REPLAY_HEADER = 'Idempotent-Replay'
+
+
+def _idempotency_key(request):
+    """UUID из заголовка Idempotency-Key; отсутствует или невалиден - None (заявка создаётся как обычно)."""
+    raw = request.headers.get(IDEMPOTENCY_HEADER)
+    if not raw:
+        return None
+    try:
+        return uuid.UUID(raw.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _replay_response(lead):
+    response = Response(LeadCreatedSerializer(lead).data, status=status.HTTP_200_OK)
+    response[REPLAY_HEADER] = 'true'
+    logger.info('lead.dedup reason=key public_id=%s', lead.public_id)
+    return response
 
 
 def _fake_public_id():
@@ -55,11 +85,19 @@ def _fake_public_id():
     tags=['leads'],
     summary='Заявка брокеру',
     description='Гость или вошедший пользователь. Порядок: throttle, honeypot (заполнен: тихий 201 без записи), '
-                'капча (400 captcha_failed), поля. Пустой SiteSettings.partner_name даёт 503. '
+                '503 при пустом partner_name, поиск по Idempotency-Key (до капчи), капча (400 captcha_failed), поля. '
+                'Тот же ключ и телефон: 200 с первой заявкой и заголовком Idempotent-Replay, без новой записи. '
+                'Тот же ключ и другой телефон: 409 без данных. Тот же телефон в окне '
+                'LEAD_DUPLICATE_WINDOW_MINUTES: новая заявка с пометкой «повтор» (в ответе не видна). '
                 'ПДн в ответе не возвращаются.',
+    parameters=[OpenApiParameter(
+        name='Idempotency-Key', type=OpenApiTypes.UUID, location=OpenApiParameter.HEADER, required=False,
+        description='UUID одной отправки формы. Невалидный заголовок игнорируется.')],
     request=LeadCreateSerializer,
     responses={
+        200: OpenApiResponse(response=LeadCreatedSerializer, description='Повтор отправки: первая заявка'),
         201: LeadCreatedSerializer,
+        409: OpenApiResponse(description='Ключ уже использован с другими данными'),
         400: OpenApiResponse(description='Ошибка полей или captcha_failed'),
         429: OpenApiResponse(description='Лимит заявок'),
         503: OpenApiResponse(description='Партнер не налаштований'),
@@ -67,7 +105,7 @@ def _fake_public_id():
 )
 class LeadCreateView(APIView):
     permission_classes = [permissions.AllowAny]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [FailOpenScopedRateThrottle]
     throttle_scope = 'lead'
 
     def post(self, request):
@@ -83,7 +121,27 @@ class LeadCreateView(APIView):
             )
         if not SiteSettings.load().partner_name.strip():
             return Response(PARTNER_NOT_CONFIGURED, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        require_captcha(request, data, point='lead')
+        key = _idempotency_key(request)
+        if key is not None:
+            # До капчи: токен одноразовый, у повторной отправки он уже использован.
+            try:
+                phone = normalize_ua_phone(data.get('phone'))
+            except DjangoValidationError:
+                phone = None  # обычная валидация ниже вернёт 400
+            if phone:
+                try:
+                    replay = find_replay(key, phone)
+                except KeyConflict:
+                    return Response(KEY_CONFLICT, status=status.HTTP_409_CONFLICT)
+                if replay is not None:
+                    return _replay_response(replay)
+        try:
+            require_captcha(request, data, point='lead')
+        except cache_errors() as exc:
+            # Капча (одноразовый nonce в кэше) без Redis не проверяется; fail-open для неё НЕ делаем (10.16).
+            logger.warning('lead.captcha_cache_down (%s)', type(exc).__name__)
+            _alert_once()
+            return Response(CACHE_DOWN, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         serializer = LeadCreateSerializer(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         validated = dict(serializer.validated_data)
@@ -91,10 +149,21 @@ class LeadCreateView(APIView):
             lead = create_lead(
                 user=request.user, data=validated,
                 calculation=validated['calculation'], listing=validated['listing'],
-                landing=validated['landing'],
+                landing=validated['landing'], idempotency_key=key,
             )
         except PartnerNotConfigured:
             return Response(PARTNER_NOT_CONFIGURED, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except IntegrityError:
+            # Гонка: параллельный запрос с тем же ключом успел раньше (уникальный индекс). Не наш случай - 500.
+            if key is None:
+                raise
+            try:
+                replay = find_replay(key, validated['phone'])
+            except KeyConflict:
+                return Response(KEY_CONFLICT, status=status.HTTP_409_CONFLICT)
+            if replay is None:
+                raise
+            return _replay_response(replay)
         return Response(LeadCreatedSerializer(lead).data, status=status.HTTP_201_CREATED)
 
 
@@ -126,7 +195,7 @@ class BrokerLeadPagination(PageNumberPagination):
 
 
 def _broker_queryset():
-    return Lead.objects.select_related('assigned_to')
+    return Lead.objects.select_related('assigned_to', 'duplicate_of')
 
 
 _BROKER_ERRORS = {

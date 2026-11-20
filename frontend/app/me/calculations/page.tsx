@@ -7,6 +7,7 @@ import LoadingState from '@/components/ui/LoadingState';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
 import Link from 'next/link';
+import { formatUah, formatUsd } from '@/lib/format';
 
 export default function MyCalculationsPage() {
   const { user, loading } = useRequireAuth();
@@ -45,15 +46,15 @@ export default function MyCalculationsPage() {
                 <div>
                   <p className="text-xs text-slate-500">{new Date(c.created_at).toLocaleString('uk-UA')}</p>
                   <p className="font-bold text-blue-800 text-xl mt-1">
-                    ${Number(c.total_usd).toLocaleString()} / {Number(c.total_uah).toLocaleString()} грн
+                    {formatUsd(c.breakdown?.total_usd_full ?? c.total_usd)} / {formatUah(c.total_uah)}
                   </p>
                 </div>
                 <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold">⚠ Орієнтовно</span>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-600">
-                <span>Аукціон: ${Number(c.breakdown.auction_price_usd).toLocaleString()}</span>
-                <span>Фрахт: ${Number(c.breakdown.ocean_freight_usd).toLocaleString()}</span>
-                <span>Мито+ПДВ: {Number(c.breakdown.customs_total_uah).toLocaleString()} грн</span>
+                <span>Аукціон: {formatUsd(c.breakdown.auction_price_usd)}</span>
+                <span>Фрахт: {formatUsd(c.breakdown.ocean_freight_usd)}</span>
+                <span>Мито+ПДВ: {formatUah(c.breakdown.customs_total_uah)}</span>
               </div>
             </div>
           ))}

@@ -33,6 +33,11 @@ export const HOME_LABEL = 'Головна';
 export const CALCULATOR_LABEL = 'Калькулятор вартості';
 export const LANDING_INDEX_LABEL = 'Пригон авто з США';
 
+/** Єдині назви (задача 10.18): розділ каталогу, послуга, головна кнопка шапки. */
+export const CATALOG_LABEL = 'Каталог Україна';
+export const SERVICE_LABEL = LANDING_INDEX_LABEL;
+export const PRIMARY_CTA_LABEL = 'Порахувати';
+
 /** Підписи нижньої мобільної панелі картки (6.6): уточнюються при приймання в одному місці. */
 export const MOBILE_BAR_LABELS = {
   call: 'Подзвонити',
@@ -60,3 +65,4 @@ export function memberSinceLabel(value: string | null | undefined): string {
   const month = MONTHS_GENITIVE[Number(m[2]) - 1];
   return month ? `на сайті з ${month} ${m[1]}` : '';
 }
+export const ABOUT_LABEL = 'Про нас';

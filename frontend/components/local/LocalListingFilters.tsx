@@ -5,12 +5,17 @@ import { localApi } from '@/api/local';
 import { CityOption, LocalConfig, Region } from '@/lib/types';
 import CityAutocomplete from './CityAutocomplete';
 import ErrorState from '@/components/ui/ErrorState';
+import { countActiveFilters } from '@/lib/local-filters';
 
 export default function LocalListingFilters() {
   const router = useRouter();
   const sp = useSearchParams();
   const baseId = useId();
   const fid = (k: string) => `${baseId}-${k}`;
+  // 10.24: на вузькому екрані фільтри згорнуті; на ≥768px блок завжди видно (md:block).
+  const [open, setOpen] = useState(false);
+  const activeCount = countActiveFilters((k) => sp.get(k));
+  const panelId = `${baseId}-panel`;
 
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsError, setRegionsError] = useState<unknown>(null);
@@ -82,6 +87,7 @@ export default function LocalListingFilters() {
     if (mileageMax) p.set('mileage_max', mileageMax);
     if (search) p.set('search', search);
     if (ordering) p.set('ordering', ordering);
+    setOpen(false);
     router.push(`/ua?${p.toString()}`);
   }
 
@@ -90,6 +96,7 @@ export default function LocalListingFilters() {
     setPriceMin(''); setPriceMax(''); setFuel(''); setTransmission('');
     setBodyType(''); setRegion(''); setCity(''); setMileageMax('');
     setSearch(''); setOrdering('-created_at');
+    setOpen(false);
     router.push('/ua');
   }
 
@@ -97,7 +104,18 @@ export default function LocalListingFilters() {
   const labelCls = 'block text-xs font-medium text-slate-600 mb-1';
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4">
+    <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <button
+        type="button"
+        className="md:hidden w-full min-h-11 flex items-center justify-between text-sm font-semibold text-slate-800"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>Фільтри{activeCount > 0 ? ` (${activeCount})` : ''}</span>
+        <span aria-hidden="true">{open ? '▲' : '▼'}</span>
+      </button>
+      <div id={panelId} className={`${open ? 'block' : 'hidden'} md:block space-y-4 mt-4 md:mt-0`}>
       {regionsError ? <ErrorState error={regionsError} onRetry={loadRegions} /> : null}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div>
@@ -214,6 +232,7 @@ export default function LocalListingFilters() {
         >
           Скинути
         </button>
+      </div>
       </div>
     </div>
   );

@@ -27,6 +27,23 @@ def frozen_module_for(path: str):
     return None
 
 
+class NulByteQueryMiddleware:
+    """NUL-байт в query-параметре -> 400 (задача 10.16, E3).
+
+    PostgreSQL не принимает \\x00 в строках (ValueError/DataError -> 500) в любом фильтре публичного GET.
+    Одно общее место вместо проверки в каждом view; SQLite NUL не отвергает, поэтому проверка на уровне кода.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        raw = request.META.get('QUERY_STRING', '')
+        if '\x00' in raw or '%00' in raw.lower():
+            return JsonResponse({'detail': 'Недопустимий символ у параметрах запиту.'}, status=400)
+        return self.get_response(request)
+
+
 class ModuleFlagMiddleware:
     """Выключенный модуль отвечает 404 на любой метод и любому пользователю (включая staff).
 

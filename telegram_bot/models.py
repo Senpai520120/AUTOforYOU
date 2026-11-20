@@ -50,7 +50,9 @@ def unlink_telegram(user_id: int, only_telegram_id: int | None = None) -> bool:
     if only_telegram_id is not None:
         qs = qs.filter(telegram_id=only_telegram_id)
     with transaction.atomic():
-        changed = qs.update(telegram_id=None)
+        # 10.23: подтверждение телефона держится на привязанном чате - при отвязке сбрасывается
+        # (номера в объявлениях перестают показываться, пока владелец не подтвердит заново).
+        changed = qs.update(telegram_id=None, verified_phone=None, phone_verified_at=None)
         if changed or only_telegram_id is None:
             TelegramLinkToken.objects.filter(user_id=user_id, used=False).update(used=True)
     return bool(changed)

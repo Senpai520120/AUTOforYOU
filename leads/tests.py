@@ -127,6 +127,16 @@ class CreateLeadTests(TestCase):
         self.assertIsNotNone(lead.consent_at)
         self.assertIsNotNone(lead.partner_consent_at)
 
+    def test_snapshot_carries_total_usd_full_with_fallback(self):
+        calc = make_calc()
+        calc.breakdown = {'total_usd_full': '10500.25'}
+        calc.save()
+        snap = create_lead(user=None, data=data(), calculation=calc).calculation_snapshot
+        self.assertEqual(snap['total_usd_full'], '10500.25')
+        self.assertEqual(snap['total_usd'], '9000.50')
+        old = create_lead(user=None, data=data(), calculation=make_calc()).calculation_snapshot
+        self.assertIsNone(old['total_usd_full'])
+
     def test_user_attached(self):
         user = make_user()
         lead = create_lead(user=user, data=data())

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { CATALOG_LABEL } from '@/lib/labels';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import LocalListingFilters from '@/components/local/LocalListingFilters';
@@ -21,7 +22,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const params = await searchParams;
   return buildMetadata({
-    title: 'Каталог Україна',
+    title: CATALOG_LABEL,
     description:
       'Місцеві оголошення про продаж авто по всій Україні. Фільтри за маркою, регіоном, паливом, ціною.',
     // Рішення 6.3a: canonical каталогу завжди /ua (без query); сторінки пагінації індексуються, з фільтрами — noindex.
@@ -64,7 +65,7 @@ export default async function UaCatalogPage({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Каталог Україна</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{CATALOG_LABEL}</h1>
           <p className="text-sm text-slate-500 mt-1">Місцеві оголошення від власників</p>
         </div>
         <div className="flex items-center gap-2">

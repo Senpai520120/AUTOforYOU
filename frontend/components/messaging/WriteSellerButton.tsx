@@ -61,7 +61,7 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
     <>
       <button
         onClick={handleOpen}
-        className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
+        className="w-full bg-green-700 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
       >
         {btnLabel}
       </button>

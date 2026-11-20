@@ -7,6 +7,7 @@ import path from 'path';
 import type { Page, Request } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillContactPhone, openMobileFilters } from './helpers/listing-form';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
 const isSearch = (r: Request) => r.url().includes('/api/v1/local/cities/?');
@@ -36,7 +37,7 @@ test.describe('Пошук населеного пункту (8.2)', () => {
     await box.press('Enter');
     await expect(box).toHaveValue(/^Жмеринка/);
     await page.getByLabel('Опис').fill('[E2E] Пошук міста');
-    await page.getByLabel('Контактний телефон').fill('+380501112299');
+    await fillContactPhone(page, '+380501112299');
     // 8.5: дві відмітки — правила і «не в розшуку, не в заставі»
     await page.getByRole('checkbox', { name: /правилами/ }).check();
     await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
@@ -99,6 +100,7 @@ test.describe('Фільтр каталогу (8.2) @mobile', () => {
     test.fixme(testInfo.project.name === 'mobile-safari', '8.2-safari-tap → перевірити CityAutocomplete на реальному iOS');
     await page.addInitScript(consentInit);
     await page.goto('/ua');
+    await openMobileFilters(page);
     const filters = page.getByRole('combobox', { name: 'Населений пункт', exact: true });
     await filters.fill('Вінниц');
     await page.getByRole('option', { name: /^Вінниця/ }).tap();

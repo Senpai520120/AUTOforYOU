@@ -9,6 +9,7 @@ import AttributionCapture from '@/components/layout/AttributionCapture';
 import FlashMessage from '@/components/ui/FlashMessage';
 import { C2CProvider } from '@/components/c2c/C2CProvider';
 import { getC2CFlags } from '@/lib/c2c';
+import { hasLandings } from '@/lib/landings';
 import { SITE_URL } from '@/lib/config';
 
 // Шапка/меню залежать від прапорців C2C (задача 6.7): рендер на кожен запит,
@@ -37,14 +38,14 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const c2c = await getC2CFlags();
+  const [c2c, landings] = await Promise.all([getC2CFlags(), hasLandings()]);
   return (
     <html lang="uk" className="h-full">
       <body className="min-h-full flex flex-col bg-slate-50 antialiased">
         <AuthProvider>
           <C2CProvider flags={c2c}>
           <AttributionCapture />
-          <Header />
+          <Header hasLandings={landings} />
           <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
             <FlashMessage />
             {children}

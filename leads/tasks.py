@@ -1,8 +1,10 @@
+import hashlib
 import logging
 from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
@@ -38,13 +40,14 @@ def _in_app_once(lead: Lead, cfg: LeadNotificationSettings) -> None:
     # Флаг ставится атомарно, чтобы повтор задачи не задвоил уведомления.
     if Lead.objects.filter(pk=lead.pk, broker_in_app_sent=False).update(broker_in_app_sent=True):
         lead.broker_in_app_sent = True
-        notify.notify_brokers_in_app(f'Нова заявка {lead.public_id}', notify.cabinet_url(lead))
+        title = f'Повторна заявка {lead.public_id}' if lead.duplicate_of_id else f'Нова заявка {lead.public_id}'
+        notify.notify_brokers_in_app(title, notify.cabinet_url(lead))
 
 
 @shared_task(bind=True, name='leads.tasks.notify_broker_new_lead')
 def notify_broker_new_lead(self, lead_id: int, force: bool = False):
     """Личное уведомление брокеру: Telegram, затем (если Telegram не доставил) резервный email (2.12)."""
-    lead = Lead.objects.filter(pk=lead_id).first()
+    lead = Lead.objects.select_related('duplicate_of').filter(pk=lead_id).first()
     if lead is None:
         logger.warning('lead.notify lead_id=%s not found', lead_id)
         return {'status': 'not_found'}
@@ -65,7 +68,6 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
 
 
 def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool) -> dict:
-    from telegram_bot import sender
     from telegram_bot.provider import telegram_configured
 
     lead_id = lead.pk
@@ -73,7 +75,10 @@ def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool)
         return {'status': 'already_sent'}
 
     chat_id = notify.broker_chat_id()
-    if not cfg.telegram_enabled or not chat_id or not telegram_configured():
+    backup_id = notify.backup_chat_id()
+    if backup_id == chat_id:
+        backup_id = ''  # тот же получатель: второй отправки не будет
+    if not cfg.telegram_enabled or not (chat_id or backup_id) or not telegram_configured():
         logger.warning('lead.notify lead_id=%s telegram not configured', lead_id)
         _mark(lead, NotifyStatus.SKIPPED)
         return {'status': NotifyStatus.SKIPPED}
@@ -100,6 +105,28 @@ def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool)
         return {'status': 'in_progress'}
     # В eager-режиме (dev без Redis, тесты) self.retry не перезапускает задачу: повторяем в цикле.
     eager = bool(getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False))
+    if chat_id:
+        status, error = _send_one(self, lead, chat_id, text, buttons, eager, allow_retry=True)
+    else:
+        status, error = NotifyStatus.FAILED, 'no_primary'
+    if status == NotifyStatus.FAILED and backup_id:
+        # 10.19: основной не принял после всех попыток (или не задан) - запасной получатель. Только код в журнал.
+        backup_status, _ = _send_one(self, lead, backup_id, text, buttons, eager, allow_retry=False)
+        if backup_status == NotifyStatus.SENT:
+            logger.warning('lead.notify lead_id=%s delivered via backup (%s)', lead_id, error)
+            notify.alert_owner_backup_used(lead, error)
+            status, error = NotifyStatus.SENT, f'via_backup:{error}'
+        else:
+            error = f'backup_failed:{error}'
+    _mark(lead, status, '' if status == NotifyStatus.SKIPPED else error)
+    return {'status': status}
+
+
+def _send_one(self, lead: Lead, chat_id: str, text: str, buttons, eager: bool, allow_retry: bool) -> tuple[str, str]:
+    """Одна доставка в один chat_id: (статус, код ошибки). Повтор Celery (self.retry) - только у основного."""
+    from telegram_bot import sender
+
+    lead_id = lead.pk
     attempts = MAX_RETRIES + 1 if eager else 1
     try:
         for attempt in range(attempts):
@@ -110,29 +137,25 @@ def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool)
                 if attempt == attempts - 1:
                     raise
     except (OSError, ConnectionError) as exc:
-        if eager or self.request.retries >= MAX_RETRIES:
+        if eager or not allow_retry or self.request.retries >= MAX_RETRIES:
             logger.warning('lead.notify lead_id=%s failed after retries', lead_id)
-            _mark(lead, NotifyStatus.FAILED, type(exc).__name__)
-            return {'status': NotifyStatus.FAILED}
+            return NotifyStatus.FAILED, type(exc).__name__
         _release(lead)
         raise self.retry(exc=exc, countdown=30, max_retries=MAX_RETRIES)
     except Exception as exc:  # в т.ч. TelegramRetryAfter
         retry_after = getattr(exc, 'retry_after', None)
-        if retry_after is not None and self.request.retries < MAX_RETRIES:
+        if allow_retry and retry_after is not None and self.request.retries < MAX_RETRIES:
             # exc не передаём: в TelegramRetryAfter текст сообщения может содержать ПДн.
             _release(lead)
             raise self.retry(countdown=int(retry_after) + 1, max_retries=MAX_RETRIES)
         logger.warning('lead.notify lead_id=%s error=%s', lead_id, type(exc).__name__)
-        _mark(lead, NotifyStatus.FAILED, type(exc).__name__)
-        return {'status': NotifyStatus.FAILED}
+        return NotifyStatus.FAILED, type(exc).__name__
 
     if result.ok:
-        _mark(lead, NotifyStatus.SENT)
-        return {'status': NotifyStatus.SENT}
+        return NotifyStatus.SENT, ''
     status = NotifyStatus.SKIPPED if result.reason == 'not_configured' else NotifyStatus.FAILED
     logger.warning('lead.notify lead_id=%s reason=%s', lead_id, result.reason)
-    _mark(lead, status, '' if status == NotifyStatus.SKIPPED else result.reason)
-    return {'status': status}
+    return status, '' if status == NotifyStatus.SKIPPED else result.reason
 
 
 def _mark_email(lead: Lead, status: str, error: str = '') -> None:
@@ -167,7 +190,7 @@ def notify_broker_email(self, lead_id: int, force: bool = False):
     """
     from integrations.email import send_email
 
-    lead = Lead.objects.filter(pk=lead_id).first()
+    lead = Lead.objects.select_related('duplicate_of').filter(pk=lead_id).first()
     if lead is None:
         return {'status': 'not_found'}
     if lead.email_status == NotifyStatus.SENT and not force:
@@ -231,6 +254,24 @@ def _send_to_all(send_email, recipients, subject, body, lead_id):
 RESEND_NOTIFY_BATCH = 50
 
 
+OWNER_ALERT_WINDOW = timedelta(days=1)  # заявки, помеченные админам раньше суток назад, владельцу не шлём
+OWNER_ALERT_KEY = 'leads:owner_undelivered_alerted:{}'
+OWNER_ALERT_KEY_TTL = 7 * 24 * 3600
+
+
+def _alert_owner_pending(undelivered, max_attempts: int, now) -> None:
+    """Один сводный алерт владельцу по заявкам, о которых он ещё не знает (признак - ключ кэша).
+
+    Недоставка в оба канала ключ не ставит: следующий прогон повторит.
+    """
+    recent = undelivered.filter(notify_attempts__gte=max_attempts, undelivered_alerted_at__gte=now - OWNER_ALERT_WINDOW)
+    leads = list(recent.order_by('pk')[:RESEND_NOTIFY_BATCH])
+    known = cache.get_many([OWNER_ALERT_KEY.format(lead.pk) for lead in leads])
+    pending = [lead for lead in leads if OWNER_ALERT_KEY.format(lead.pk) not in known]
+    if pending and notify.alert_owner_undelivered(pending):
+        cache.set_many({OWNER_ALERT_KEY.format(lead.pk): 1 for lead in pending}, OWNER_ALERT_KEY_TTL)
+
+
 # Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
 @shared_task(base=ResilientTask, name='leads.tasks.resend_undelivered_leads', soft_time_limit=900, time_limit=960)
 def resend_undelivered_leads():
@@ -268,13 +309,53 @@ def resend_undelivered_leads():
     for lead in exhausted[:RESEND_NOTIFY_BATCH]:
         # Метка ставится атомарно: второй запуск не пришлёт то же предупреждение.
         if Lead.objects.filter(pk=lead.pk, undelivered_alerted_at__isnull=True).update(undelivered_alerted_at=now):
-            notify.alert_admins_undelivered(lead)
+            try:
+                notify.alert_admins_undelivered(lead)
+            except Exception as exc:  # сбой in-app не должен глушить владельца, остальные заявки и досыл
+                logger.warning('lead.undelivered lead_id=%s: in-app алерт не створено (%s)', lead.pk, type(exc).__name__)
             logger.warning('lead.undelivered lead_id=%s attempts=%s', lead.pk, lead.notify_attempts)
             alerted += 1
+    try:
+        _alert_owner_pending(undelivered, max_attempts, now)
+    except Exception as exc:
+        logger.warning('lead.undelivered: алерт владельцу упал (%s)', type(exc).__name__)
 
     for lead_id in ids:
         notify_broker_new_lead.delay(lead_id)  # повторяет Telegram и, если он не доставил, email
     return {'resent': len(ids), 'alerted': alerted}
+
+
+@shared_task(base=ResilientTask, name='leads.tasks.alert_unanswered_leads', ignore_result=True)
+def alert_unanswered_leads():
+    """Раз в час: алерт владельцу о заявках без ответа брокера дольше порогов (10.6).
+
+    Определение «без ответа» - metrics.reports.unanswered_leads. Тот же набор не шлётся чаще, чем раз в
+    LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES (кэш); рост набора даёт новый алерт; при недоставке ключ откатывается.
+    """
+    from metrics.reports import unanswered_leads
+
+    warn_ids, critical_ids = unanswered_leads()
+    if not warn_ids:
+        return
+    if not notify.owner_channel_configured():
+        # До cache.add: иначе пауза включилась бы без отправки.
+        logger.warning('lead.unanswered: заявок без ответа %s, но канал алерта владельцу не настроен', len(warn_ids))
+        return
+    digest = hashlib.sha256(f'{warn_ids}|{critical_ids}'.encode()).hexdigest()[:16]
+    cache_key = f'leads:unanswered_alert:{digest}'
+    cooldown = int(settings.LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES) * 60
+    try:
+        if not cache.add(cache_key, 1, timeout=cooldown):
+            return
+    except Exception:  # Redis недоступен: лучше повторить алерт, чем промолчать
+        logger.warning('lead.unanswered: кэш недоступен, дедупликации нет')
+    from core.tasks import _send_failed_task_alert
+    text = notify.build_owner_unanswered_text(len(warn_ids), len(critical_ids))
+    if not _send_failed_task_alert(text, notify.OWNER_UNANSWERED_SUBJECT):
+        try:
+            cache.delete(cache_key)
+        except Exception:
+            logger.warning('lead.unanswered: кэш недоступен')
 
 
 @shared_task(bind=True, name='leads.tasks.send_journal')

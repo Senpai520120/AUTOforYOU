@@ -1,16 +1,13 @@
 import type { LandingCalculation } from '@/lib/types';
 import { percentFromDecimal } from '@/lib/calc-errors';
 import { ExclusionsList, FeesFreshness } from '@/components/ui/CalcNotes';
+import { formatUah, formatUsd } from '@/lib/format';
 
 const PENDING = 'уточнюється менеджером';
 
-function usd(value: string): string {
-  return `$${Number(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 })}`;
-}
-
-function uah(value: string): string {
-  return `${Number(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 })} грн`;
-}
+// Лендінг показує цілі суми (як і раніше), формат — спільний з калькулятором (lib/format.ts).
+const usd = (value: string) => formatUsd(value, 0);
+const uah = (value: string) => formatUah(value, 0);
 
 function formatDate(iso: string | null): string {
   if (!iso) return '';
@@ -59,7 +56,7 @@ export default function LandingCalc({ calculation: c, termText, includedText }: 
           </span>
         )}
       </div>
-      <p className="text-3xl font-extrabold text-blue-900 font-mono" data-testid="landing-total-usd">{usd(c.total_usd)}</p>
+      <p className="text-3xl font-extrabold text-blue-900 font-mono" data-testid="landing-total-usd">{usd(c.total_usd_full ?? c.total_usd)}</p>
       <p className="text-sm text-slate-500 font-mono" data-testid="landing-total-uah">{uah(c.total_uah)}</p>
 
       {c.is_demo && (

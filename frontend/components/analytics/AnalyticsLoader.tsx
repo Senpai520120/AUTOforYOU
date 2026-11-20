@@ -1,10 +1,9 @@
 'use client';
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { apiGet } from '@/api/client';
+import { fetchSiteSettings } from '@/lib/site-settings-client';
 import { registerLegalVersion, subscribeConsent } from '@/lib/consent';
 import { syncProviders, trackPageView, type PublicAnalytics } from '@/lib/analytics';
-import type { SiteSettings } from '@/lib/types';
 
 /**
  * Завантажувач аналітики (задача 3.5). Нічого не рендерить.
@@ -23,7 +22,7 @@ export default function AnalyticsLoader() {
     let alive = true;
     let analytics: PublicAnalytics | null = null;
     const unsubscribe = subscribeConsent(() => syncProviders(analytics));
-    apiGet<SiteSettings>('/api/v1/site-settings/')
+    fetchSiteSettings()
       .then((s) => {
         if (!alive) return;
         // Версія документів потрібна гейту згоди: старе «Прийняти всі» при новій версії не діє.

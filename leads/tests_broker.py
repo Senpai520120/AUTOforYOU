@@ -388,6 +388,16 @@ class OwnershipTests(BrokerBase):
         lead.refresh_from_db()
         self.assertEqual((lead.status, lead.partner_status, lead.assigned_to), ('in_progress', '', self.broker))
 
+    def test_other_broker_gets_409_on_qualification(self):
+        lead = self.lead()
+        self.bc.post(take_url(lead.pk))
+        url = f'{LIST}{lead.pk}/qualification/'
+        r = self.oc.post(url, {'q_term_ok': True, 'q_knows_repair': True, 'q_ready_deposit': True}, format='json')
+        self.assertEqual(r.status_code, 409)
+        lead.refresh_from_db()
+        self.assertEqual((lead.q_term_ok, lead.q_knows_repair, lead.q_ready_deposit), (None, None, None))
+        self.assertEqual(lead.assigned_to, self.broker)
+
     def test_admin_can_change_foreign_lead(self):
         lead = self.lead()
         self.bc.post(take_url(lead.pk))

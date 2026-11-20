@@ -15,7 +15,7 @@ from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.throttling import SimpleRateThrottle
@@ -370,6 +370,35 @@ class BotAccountLinkTest(BotRuntimeTestCase):
         reply, ask = self.replies()  # 4.10: после привязки бот просит поделиться контактом
         self.assertIn('успішно', reply)
         self.assertIn('Поділитися контактом', ask)
+
+    def test_relink_to_other_telegram_resets_phone_and_hides_listing_phone(self):
+        # 10.23: подтверждение телефона относилось к чату A; после перепривязки на B оно недействительно
+        from local_listings.models import LocalListing
+        from tests.factories import auth_client, make_local_listing
+        User.objects.filter(pk=self.user.pk).update(
+            telegram_id=TG_USER_ID + 500, verified_phone='+380671234567', phone_verified_at=timezone.now())
+        listing = make_local_listing(self.user, contact_phone='+380671234567')
+        token = self._token()
+        self.send(f'/start link_{token.token}')
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.telegram_id, TG_USER_ID)
+        self.assertIsNone(self.user.verified_phone)
+        self.assertIsNone(self.user.phone_verified_at)
+        with override_settings(PHONE_VERIFICATION_REQUIRED=True):
+            resp = auth_client(User.objects.create_user(email='viewer@test.com', password='pass')).get(
+                f'/api/v1/local/listings/{listing.pk}/contact/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {'contact_phone': None})
+        self.assertEqual(LocalListing.objects.get(pk=listing.pk).contact_phone, '+380671234567')
+
+    def test_first_link_keeps_existing_verified_phone_untouched(self):
+        # первая привязка (telegram_id был пуст): ничего не сбрасываем
+        User.objects.filter(pk=self.user.pk).update(verified_phone='+380671234567', phone_verified_at=timezone.now())
+        token = self._token()
+        self.send(f'/start link_{token.token}')
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.verified_phone, '+380671234567')
 
     def test_token_cannot_be_reused(self):
         token = self._token()
@@ -1618,3 +1647,41 @@ class MigrationDefaultsFrozenTest(SimpleTestCase):
         mod = importlib.import_module('telegram_bot.migrations.0003_bottext_defaults')
         self.assertNotIn('REGISTRY', inspect.getsource(mod))
         self.assertIn('start', mod.DEFAULTS)
+
+
+class BotNoClosedSectionLinksTest(BotRuntimeTestCase):
+    """10.29: при выключенных флагах бот не ведёт на закрытые разделы сайта."""
+
+    CLOSED_PATHS = ('/ua', '/local', '/listings', '/b2b', '/dealers', '/vin-check')
+
+    def _all_urls(self) -> list[str]:
+        urls = []
+        for m in self.messages():
+            urls += [m.text or '']
+            markup = m.reply_markup
+            if markup:
+                urls += [b.url or '' for row in markup.inline_keyboard for b in row]
+        return urls
+
+    def test_commands_have_no_links_to_closed_sections(self):
+        seller = User.objects.create_user(email='closed@test.com', password='pass')
+        from listings.models import Listing
+        from vehicles.models import Vehicle
+        v = Vehicle.objects.create(
+            vin='1HGCM82633A000999', make='Honda', model='Civic', year=2019,
+            engine_cc=1500, fuel_type='petrol', mileage_km=30000,
+        )
+        Listing.objects.create(vehicle=v, seller=seller, price='12000.00', channel='retail', status='in_stock')
+        with self.settings(LOTS_ENABLED=False, C2C_ENABLED=False, B2B_ENABLED=False, DEALERS_ENABLED=False):
+            for i, cmd in enumerate(('/start', '/help', '/latest', '/unlink'), start=1):
+                self.send(cmd, update_id=i)
+        blob = '\n'.join(self._all_urls())
+        self.assertEqual(len(self.messages()), 4)
+        for path in self.CLOSED_PATHS:
+            self.assertNotIn(path, blob)
+
+    def test_default_texts_have_no_links_to_closed_sections(self):
+        from .texts import REGISTRY
+        for key, definition in REGISTRY.items():
+            for path in self.CLOSED_PATHS:
+                self.assertNotIn(path, definition.default, f'{key} ведёт на {path}')

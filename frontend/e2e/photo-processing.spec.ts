@@ -9,6 +9,7 @@ import path from 'path';
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillContactPhone } from './helpers/listing-form';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
 const LARGE = path.join(__dirname, 'fixtures', 'large-dimensions.jpg');
@@ -75,13 +76,13 @@ test.describe('Фото: ресайз і мініатюри (8.4)', () => {
     await page.getByRole('combobox', { name: 'Населений пункт *' }).fill('Вінниц');
     await page.getByRole('option', { name: /^Вінниця/ }).click();
     await page.getByLabel('Опис').fill('[E2E] без фото');
-    await page.getByLabel('Контактний телефон').fill('+380501112297');
+    await fillContactPhone(page, '+380501112297');
     // 8.5: дві відмітки — правила і «не в розшуку, не в заставі»
     await page.getByRole('checkbox', { name: /правилами/ }).check();
     await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     await expectNoRequest(
       page, (r) => r.url().endsWith('/api/v1/local/listings/') && r.method() === 'POST',
-      async () => { await page.getByRole('button', { name: 'Опублікувати оголошення' }).click(); },
+      async () => { await page.getByRole('button', { name: 'Надіслати на модерацію' }).click(); },
     );
     await expect(page.getByText('Додайте щонайменше 1 фото').first()).toBeVisible();
   });

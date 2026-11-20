@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ApiError } from '@/api/client';
 import { brokerLeadsApi } from '@/api/leads';
 import { leadStatusLabel } from '@/lib/labels';
+import { formatUah, formatUsd } from '@/lib/format';
 import type { BrokerLeadDetail, LeadPartnerStatus, LeadQuestionKey, LeadStatus } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
 import AccessDenied from './AccessDenied';
@@ -105,8 +106,8 @@ function Snapshot({ lead }: { lead: BrokerLeadDetail }) {
         </dl>
       )}
       {snap.total_usd && (
-        <p className="mt-2 font-bold">Разом: ${Number(snap.total_usd).toLocaleString('uk-UA')}
-          {snap.total_uah ? ` (≈ ${Number(snap.total_uah).toLocaleString('uk-UA')} грн)` : ''}
+        <p className="mt-2 font-bold">Разом: {formatUsd(snap.total_usd_full ?? snap.total_usd)}
+          {snap.total_uah ? ` (≈ ${formatUah(snap.total_uah)})` : ''}
           {snap.is_estimate ? ' — орієнтовно' : ''}</p>
       )}
     </div>
@@ -171,6 +172,12 @@ export default function BrokerLeadCard({ id }: { id: number }) {
         <Link href="/broker/leads" className="text-blue-600 hover:underline text-sm">← Заявки</Link>
         <h1 className="text-xl font-bold text-slate-900 font-mono">{lead.public_id}</h1>
         <LeadStatusBadge status={lead.status} label={lead.status_display} />
+        {lead.duplicate_of && (
+          <span data-testid="lead-duplicate-badge"
+            className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+            Повтор заявки {lead.duplicate_of}
+          </span>
+        )}
       </div>
 
       <Section title="Клієнт">
@@ -179,7 +186,7 @@ export default function BrokerLeadCard({ id }: { id: number }) {
         {lead.comment && <p className="mt-3 text-sm text-slate-700 whitespace-pre-wrap break-words">Коментар: {lead.comment}</p>}
         <dl className="mt-3 text-sm text-slate-600 space-y-1">
           {lead.city && <div>Місто: {lead.city}</div>}
-          {lead.budget_usd && <div>Бюджет: ${Number(lead.budget_usd).toLocaleString('uk-UA')}</div>}
+          {lead.budget_usd && <div>Бюджет: {formatUsd(lead.budget_usd)}</div>}
           {lead.needed_when_display && <div>Коли потрібне авто: {lead.needed_when_display}</div>}
           <div>Партнер: {lead.partner_name}</div>
         </dl>

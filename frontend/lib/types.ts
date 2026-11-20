@@ -87,6 +87,8 @@ export interface CalcBreakdown {
   customs_total_uah: string;
   total_usd: string;
   total_uah: string;
+  // 10.1: повна сума з акцизом, ПДВ і пенсійним збором; у старих розрахунків немає
+  total_usd_full?: string;
   is_estimate: boolean;
   // 2.7: після розмитнення; null / pending — «уточнюється менеджером»
   ua_delivery_usd: string | null;
@@ -294,6 +296,8 @@ export interface LocalListing {
   condition: LocalCondition;
   price: string;
   currency: LocalCurrency;
+  /** 10.24: сума в USD за курсом на момент збереження; null — курсу не було. */
+  price_usd?: string | null;
   price_type: LocalPriceType;
   region: number;
   region_name: string;
@@ -544,6 +548,13 @@ export interface SiteSettings {
   telegram_channel_url: string;
   partner_name: string;
   partner_legal_name: string;
+  /** Довіра (задача 10.8): порожньо = не показувати. */
+  about_text: string;
+  lead_response_hours: number | null;
+  lead_next_steps: string;
+  /** Поради «Як перевірити авто» (задача 10.29): по одній у рядку; порожньо = блок прихований. */
+  listing_check_tips: string;
+  listing_moderation_hours: number | null;
   /** Готовий текст згоди партнеру (єдине джерело — бекенд; порожній, якщо партнера немає). */
   partner_consent_text: string;
   data_retention_years: number | null;
@@ -679,6 +690,8 @@ export interface BrokerLeadRow {
   partner_status_display: string;
   qualification: LeadQualification;
   qualification_display: string;
+  /** public_id першої заявки, якщо це повтор (10.13); інакше null. */
+  duplicate_of: string | null;
   total_usd: string | null;
   total_uah: string | null;
   source: LeadSource;
@@ -720,6 +733,7 @@ export interface BrokerLeadDetail extends BrokerLeadRow {
     rates_snapshot?: Record<string, unknown>;
     breakdown?: Record<string, unknown>;
     total_usd?: string;
+    total_usd_full?: string | null;
     total_uah?: string;
   };
   listing: { id: number; url: string } | null;
@@ -762,6 +776,7 @@ export interface LandingListItem {
   make: string;
   model: string;
   total_usd: string;
+  total_usd_full?: string;
   total_uah: string;
   updated_at: string;
 }
@@ -780,6 +795,7 @@ export interface LandingCalculation {
   usd_to_uah: string;
   exchange_rate_date: string;
   total_usd: string;
+  total_usd_full?: string;
   total_uah: string;
   breakdown: CalcBreakdown;
   applied_rates: CalcResult['applied_rates'];
@@ -799,6 +815,11 @@ export interface LandingDetail {
   model: string;
   year_from: number | null;
   year_to: number | null;
+  generation?: string;
+  fuel_type?: string;
+  engine_cc?: number;
+  battery_capacity_kwh?: string;
+  faq?: { question: string; answer: string }[];
   h1: string;
   intro: string;
   description: string;

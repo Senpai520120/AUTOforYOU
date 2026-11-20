@@ -47,7 +47,7 @@ export default function PasswordResetRequestPage() {
             <form onSubmit={submit} className="space-y-4">
               <div>
                 <label htmlFor="reset-email" className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
-                <input id="reset-email" type="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
+                <input id="reset-email" type="email" autoComplete="email" inputMode="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base"
                   value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}

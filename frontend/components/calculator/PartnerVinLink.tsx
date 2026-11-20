@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { apiGet } from '@/api/client';
-import type { SiteSettings } from '@/lib/types';
+import { fetchSiteSettings } from '@/lib/site-settings-client';
 
 /**
  * Партнерське посилання carVertical (задача 3.2a). Адресу віддає публічний /api/v1/site-settings/
@@ -13,7 +12,7 @@ export default function PartnerVinLink() {
 
   useEffect(() => {
     let alive = true;
-    apiGet<SiteSettings>('/api/v1/site-settings/')
+    fetchSiteSettings()
       .then((s) => {
         const value = typeof s?.carvertical_partner_url === 'string' ? s.carvertical_partner_url : '';
         if (alive && value.startsWith('https://')) setUrl(value);

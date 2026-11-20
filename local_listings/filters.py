@@ -32,63 +32,118 @@ def _decimal(name, raw):
     return value
 
 
+def apply_listing_filters(queryset, p):
+    """Фільтри каталогу за словником параметрів (query_params або збережений пошук)."""
+    make = p.get('make')
+    model = p.get('model')
+    fuel_type = p.get('fuel_type')
+    transmission = p.get('transmission')
+    body_type = p.get('body_type')
+    region = p.get('region')
+    city = p.get('city')
+    mileage_max = p.get('mileage_max')
+    search = p.get('search')
+
+    if make:
+        queryset = queryset.filter(make__icontains=make)
+    if model:
+        queryset = queryset.filter(model__icontains=model)
+    # 05-Q4: нечисловое значение - 400, а не молчаливый пропуск или 500.
+    # Цена (05-Q3) - всегда в USD: price_min/price_max и сортировка идут по price_usd (курс на момент сохранения).
+    for name, field, lookup, parse in (
+        ('year_min', 'year', 'gte', _int),
+        ('year_max', 'year', 'lte', _int),
+        ('price_min', 'price_usd', 'gte', _decimal),
+        ('price_max', 'price_usd', 'lte', _decimal),
+    ):
+        raw = p.get(name)
+        if raw:
+            queryset = queryset.filter(**{f'{field}__{lookup}': parse(name, raw)})
+    if fuel_type:
+        queryset = queryset.filter(fuel_type=fuel_type)
+    if transmission:
+        queryset = queryset.filter(transmission=transmission)
+    if body_type:
+        queryset = queryset.filter(body_type=body_type)
+    if region:
+        try:
+            queryset = queryset.filter(region_id=int(region))
+        except (ValueError, TypeError):
+            pass
+    if city:
+        try:
+            queryset = queryset.filter(city_id=int(city))
+        except (ValueError, TypeError):
+            pass
+    if mileage_max:
+        try:
+            queryset = queryset.filter(mileage_km__lte=int(mileage_max))
+        except (ValueError, TypeError):
+            pass
+    if search:
+        queryset = queryset.filter(
+            Q(make__icontains=search) | Q(model__icontains=search) | Q(description__icontains=search)
+        )
+    return queryset
+
+
+# 10.22: збережений пошук приймає тільки ці ключі (ті самі, що читає публічний фільтр каталогу).
+SAVED_FILTER_TEXT_KEYS = ('make', 'model', 'search')
+SAVED_FILTER_INT_KEYS = ('year_min', 'year_max', 'region', 'city', 'mileage_max')
+SAVED_FILTER_DECIMAL_KEYS = ('price_min', 'price_max')
+_TEXT_MAX_LEN = 100
+
+
+def clean_filter_params(filters):
+    """Перевірка словника фільтрів збереженого пошуку; повертає нормалізований dict рядків.
+
+    Невідомий ключ, не-скаляр, NUL, завеликий/нечисловий/недопустимий варіант - ValidationError (400).
+    Числові перевірки - ті самі _int/_decimal, що в каталозі.
+    """
+    from .models import LocalListing
+
+    if not isinstance(filters, dict):
+        raise ValidationError({'filters': 'Потрібен об’єкт з параметрами пошуку.'})
+    choices = {
+        'fuel_type': set(LocalListing.FuelType.values),
+        'transmission': set(LocalListing.Transmission.values),
+        'body_type': set(LocalListing.BodyType.values),
+    }
+    allowed = (
+        set(SAVED_FILTER_TEXT_KEYS) | set(SAVED_FILTER_INT_KEYS)
+        | set(SAVED_FILTER_DECIMAL_KEYS) | set(choices)
+    )
+    unknown = sorted(str(k) for k in filters if k not in allowed)
+    if unknown:
+        raise ValidationError({'filters': f'Невідомі параметри пошуку: {", ".join(unknown)}.'})
+    cleaned = {}
+    for name, raw in filters.items():
+        if raw is None or raw == '':
+            continue
+        if isinstance(raw, bool) or not isinstance(raw, (str, int, float)):
+            raise ValidationError({name: 'Потрібне просте значення (рядок або число).'})
+        value = str(raw).strip()
+        if '\x00' in value:
+            raise ValidationError({name: 'Недопустимі символи.'})
+        if len(value) > _TEXT_MAX_LEN:
+            raise ValidationError({name: 'Занадто довге значення.'})
+        if name in SAVED_FILTER_INT_KEYS:
+            _int(name, value)
+        elif name in SAVED_FILTER_DECIMAL_KEYS:
+            _decimal(name, value)
+        elif name in choices and value not in choices[name]:
+            raise ValidationError({name: 'Недопустиме значення.'})
+        cleaned[name] = value
+    return cleaned
+
+
 class LocalListingFilter(BaseFilterBackend):
     """Фільтри для місцевих оголошень (django-filter не потрібен — ручна реалізація)."""
 
     def filter_queryset(self, request, queryset, view):
         p = request.query_params
-
-        make = p.get('make')
-        model = p.get('model')
-        fuel_type = p.get('fuel_type')
-        transmission = p.get('transmission')
-        body_type = p.get('body_type')
-        region = p.get('region')
-        city = p.get('city')
-        mileage_max = p.get('mileage_max')
-        search = p.get('search')
         ordering = p.get('ordering', '-created_at')
-
-        if make:
-            queryset = queryset.filter(make__icontains=make)
-        if model:
-            queryset = queryset.filter(model__icontains=model)
-        # 05-Q4: нечисловое значение - 400, а не молчаливый пропуск или 500.
-        # Цена (05-Q3) - всегда в USD: price_min/price_max и сортировка идут по price_usd (курс на момент сохранения).
-        for name, field, lookup, parse in (
-            ('year_min', 'year', 'gte', _int),
-            ('year_max', 'year', 'lte', _int),
-            ('price_min', 'price_usd', 'gte', _decimal),
-            ('price_max', 'price_usd', 'lte', _decimal),
-        ):
-            raw = p.get(name)
-            if raw:
-                queryset = queryset.filter(**{f'{field}__{lookup}': parse(name, raw)})
-        if fuel_type:
-            queryset = queryset.filter(fuel_type=fuel_type)
-        if transmission:
-            queryset = queryset.filter(transmission=transmission)
-        if body_type:
-            queryset = queryset.filter(body_type=body_type)
-        if region:
-            try:
-                queryset = queryset.filter(region_id=int(region))
-            except (ValueError, TypeError):
-                pass
-        if city:
-            try:
-                queryset = queryset.filter(city_id=int(city))
-            except (ValueError, TypeError):
-                pass
-        if mileage_max:
-            try:
-                queryset = queryset.filter(mileage_km__lte=int(mileage_max))
-            except (ValueError, TypeError):
-                pass
-        if search:
-            queryset = queryset.filter(
-                Q(make__icontains=search) | Q(model__icontains=search) | Q(description__icontains=search)
-            )
+        queryset = apply_listing_filters(queryset, p)
 
         # Annotate is_top: 1 if promoted_until is in the future, else 0
         now = timezone.now()

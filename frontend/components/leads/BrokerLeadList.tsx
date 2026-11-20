@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ApiError } from '@/api/client';
 import { brokerLeadsApi } from '@/api/leads';
 import { LEAD_STATUS_LABELS } from '@/lib/labels';
+import { formatUsd } from '@/lib/format';
 import type { BrokerLeadList as BrokerLeadListData, LeadStatus } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
 import AccessDenied from './AccessDenied';
@@ -130,7 +131,15 @@ export default function BrokerLeadList() {
                 className="block min-w-0 break-words bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-sm">
                 <div className="flex flex-wrap justify-between items-start gap-2">
                   <div className="min-w-0">
-                    <p className="font-mono font-bold text-slate-900">{lead.public_id}</p>
+                    <p className="font-mono font-bold text-slate-900">
+                      {lead.public_id}
+                      {lead.duplicate_of && (
+                        <span data-testid="lead-duplicate-badge"
+                          className="ml-2 align-middle rounded bg-amber-100 px-1.5 py-0.5 font-sans text-xs font-semibold text-amber-800">
+                          Повтор {lead.duplicate_of}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-slate-500">{fmt(lead.created_at)}</p>
                   </div>
                   <LeadStatusBadge status={lead.status} label={lead.status_display} />
@@ -142,7 +151,7 @@ export default function BrokerLeadList() {
                   <div><dt className="inline text-slate-400">Джерело: </dt><dd data-testid="lead-utm-source" className="inline break-all">{lead.utm_source || 'пряме'}</dd></div>
                   <div><dt className="inline text-slate-400">Перша реакція: </dt><dd className="inline">{lead.first_response_at ? fmt(lead.first_response_at) : 'ще немає'}</dd></div>
                   <div><dt className="inline text-slate-400">Відповідальний: </dt><dd className="inline break-all">{lead.assigned_to ? lead.assigned_to.name : '—'}</dd></div>
-                  {lead.total_usd && <div><dt className="inline text-slate-400">Сума: </dt><dd className="inline break-all">${Number(lead.total_usd).toLocaleString('uk-UA')}</dd></div>}
+                  {lead.total_usd && <div><dt className="inline text-slate-400">Сума: </dt><dd className="inline break-all">{formatUsd(lead.total_usd)}</dd></div>}
                 </dl>
               </Link>
             </li>

@@ -6,6 +6,7 @@
 import path from 'path';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
+import { fillContactPhone, SELLER_VERIFIED_PHONE } from './helpers/listing-form';
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
@@ -32,7 +33,8 @@ async function fillRequired(page: Page, make: string) {
   await page.getByRole('combobox', { name: 'Населений пункт *' }).fill('Вінниц');
   await page.getByRole('option', { name: /^Вінниця/ }).click();
   await page.getByLabel('Опис').fill('[E2E] Звичайний опис без контактів');
-  await page.getByLabel('Контактний телефон').fill('+380501112233');
+  // 10.23: у підтвердженого власника поле лише для читання (номер підставляє сервер)
+  await fillContactPhone(page, '+380501112233');
   // 8.5: дві відмітки — правила і «не в розшуку, не в заставі»
   await page.getByRole('checkbox', { name: /правилами/ }).check();
   await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
@@ -50,7 +52,7 @@ test.describe('Форма оголошення (4.2): продавець', () =>
       path.join(FIXTURES, 'car-1.jpg'), path.join(FIXTURES, 'car-2.jpg'),
     ]);
     await expect(page.getByText(/^2\/\d+ ·/)).toBeVisible();
-    await page.getByRole('button', { name: 'Опублікувати оголошення' }).click();
+    await page.getByRole('button', { name: 'Надіслати на модерацію' }).click();
     await expect(page.getByRole('heading', { name: 'Оголошення надіслано на модерацію' })).toBeVisible();
     await page.goto('/me/local-listings');
     await expect(page.getByText(make).first()).toBeVisible();
@@ -76,34 +78,30 @@ test.describe('Форма оголошення (4.2): продавець', () =>
     await expect(page.getByRole('alert').filter({ hasText: `більший за ${config.photo_max_size_mb} МБ` })).toBeVisible();
   });
 
-  test('успіх: зміна лише телефону лишає «Активне», телефон бачить покупець', async ({ page, browser }) => {
+  test('10.23: телефон лише для читання — підтверджений номер і підказка про /unlink', async ({ page }) => {
     const listing = await sellerActiveListing(page.request);
     await page.goto(`/local/${listing.id}/edit`);
     const phone = page.getByLabel('Контактний телефон');
-    await expect(phone).toHaveValue(/.*/);
-    await phone.fill('+380671234567');
-    await page.getByRole('button', { name: 'Зберегти зміни' }).click();
-    await expect(page).toHaveURL(new RegExp(`/local/${listing.id}$`));
-    const after = await (await page.request.get(`/api/v1/local/my-listings/${listing.id}/`)).json();
+    await expect(phone).toHaveValue(SELLER_VERIFIED_PHONE);
+    await expect(phone).not.toBeEditable();
+    await expect(page.getByTestId('phone-hint')).toContainText('/unlink');
+  });
+
+  test('обхід: PATCH з чужим номером ігнорується — у відповіді і для покупця підтверджений номер, статус «active»', async ({ page, api, browser }) => {
+    const seller = await api('seller');
+    const listing = await sellerActiveListing(seller);
+    const patched = await seller.patch(`/api/v1/local/listings/${listing.id}/`, { data: { contact_phone: '+380671234567' } });
+    expect(patched.status()).toBe(200);
+    expect((await patched.json()).contact_phone).toBe(SELLER_VERIFIED_PHONE);
+    const after = await (await seller.get(`/api/v1/local/my-listings/${listing.id}/`)).json();
     expect(after.status).toBe('active');
-    expect(after.contact_phone).toBe('+380671234567');
+    expect(after.contact_phone).toBe(SELLER_VERIFIED_PHONE);
 
     const buyer = await browser.newContext({ storageState: storageStatePath('buyer') });
     const contact = await buyer.request.get(`/api/v1/local/listings/${listing.id}/contact/`);
     expect(contact.status()).toBe(200);
-    expect((await contact.json()).contact_phone).toBe('+380671234567');
+    expect((await contact.json()).contact_phone).toBe(SELLER_VERIFIED_PHONE);
     await buyer.close();
-  });
-
-  test('обхід: порожній телефон при редагуванні → помилка під полем, телефон не стерто', async ({ page }) => {
-    const listing = await sellerActiveListing(page.request);
-    await page.goto(`/local/${listing.id}/edit`);
-    await page.getByLabel('Контактний телефон').fill('');
-    await page.getByRole('button', { name: 'Зберегти зміни' }).click();
-    await expect(page.getByRole('alert').filter({ hasText: 'Вкажіть телефон' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Зберегти зміни' })).toBeEnabled();
-    const after = await (await page.request.get(`/api/v1/local/my-listings/${listing.id}/`)).json();
-    expect(after.contact_phone).not.toBe('');
   });
 
   test.fixme('4.2 → окремий e2e-стек з ANTISPAM_MODE=hard: телефон в описі → помилка під «Опис», екрану успіху немає', async () => {});

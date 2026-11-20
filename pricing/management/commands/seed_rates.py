@@ -19,6 +19,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from pricing import cache as pricing_cache
 from pricing.models import (
     CustomsCalcRule,
     CustomsExciseRate,
@@ -33,6 +34,35 @@ from pricing.rates_provider import DemoRateProvider
 # ПРОВЕРИТЬ — прожиточный минимум 2026 (Украина, грн/месяц)
 # https://minfin.com.ua/ua/economy/budget/subsistence/
 LIVING_WAGE_UAH = Decimal('3028')
+
+# 10.17: українські назви, які однозначні й загальновживані. Решта (напр. 'general') лишається без перекладу:
+# форма покаже назву з коду, переклад власник вносить в адмінці.
+PORT_NAMES_UK = {
+    'houston': "Х'юстон",
+    'baltimore': 'Балтімор',
+    'new_jersey': 'Нью-Джерсі',
+    'savannah': 'Саванна',
+    'klaipeda': 'Клайпеда',
+    'gdansk': 'Гданськ',
+    'odessa': 'Одеса',
+}
+LOCATION_NAMES_UK = {'california': 'Каліфорнія', 'texas': 'Техас', 'georgia': 'Джорджія', 'new_jersey': 'Нью-Джерсі'}
+
+
+def fill_uk_names() -> int:
+    """Заповнює ТІЛЬКИ порожні *_uk у наявних тарифах (ручні правки не чіпає). Ідемпотентна."""
+    changed = 0
+    for model, pairs in (
+        (UsLandRoute, (('auction_location', 'auction_location_uk', LOCATION_NAMES_UK),
+                       ('us_port', 'us_port_uk', PORT_NAMES_UK))),
+        (OceanFreightRate, (('us_port', 'us_port_uk', PORT_NAMES_UK), ('eu_port', 'eu_port_uk', PORT_NAMES_UK))),
+    ):
+        for src, dst, names in pairs:
+            for code, name in names.items():
+                changed += model.objects.filter(**{f'{src}__iexact': code, dst: ''}).update(**{dst: name})
+    if changed:
+        pricing_cache.invalidate_all()  # update() не шле post_save
+    return changed
 
 
 class Command(BaseCommand):
@@ -98,6 +128,8 @@ class Command(BaseCommand):
             for eu_port, cost in [('klaipeda', Decimal('350')), ('gdansk', Decimal('300'))]:
                 self._ensure(EuToUaDeliveryRate, dict(eu_port=eu_port),
                              dict(cost_usd=cost, valid_from=today))
+
+        fill_uk_names()  # 10.17: українські назви портів/локацій, лише порожні поля
 
         # --- Курсы валют: демо-курсы из DemoRateProvider с source='demo' (02-C8) ---
         # E1: демо-курс не подменяет настоящий при рестарте контейнера. Только при пустой таблице,

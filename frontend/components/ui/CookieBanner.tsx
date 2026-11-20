@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { apiGet } from '@/api/client';
+import { fetchSiteSettings } from '@/lib/site-settings-client';
 import {
   getRawConsent,
   parseConsent,
@@ -11,7 +11,6 @@ import {
   subscribeConsent,
   subscribeConsentOpen,
 } from '@/lib/consent';
-import type { SiteSettings } from '@/lib/types';
 
 // 'unknown' — на сервері та під час гідратації вибір ще не прочитано.
 // Банер не рендериться, доки стан невідомий: інакше він блимав би у тих,
@@ -33,7 +32,7 @@ export default function CookieBanner() {
   // (або помилка) -> без версії, банер поводиться як раніше.
   useEffect(() => {
     let alive = true;
-    apiGet<SiteSettings>('/api/v1/site-settings/')
+    fetchSiteSettings()
       .then((s) => {
         if (!alive) return;
         const version = typeof s?.legal_docs_version === 'string' ? s.legal_docs_version : '';

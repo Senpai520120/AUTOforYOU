@@ -3,6 +3,7 @@
  * Сторінка статусу інтеграцій у Django Admin: /admin/integrations/status/.
  */
 import { test, expect, storageStatePath } from './fixtures';
+import { fillCalcForm } from './helpers/calc-form';
 
 const STATUS_URL = '/admin/integrations/status/';
 const BUTTON_URLS = [
@@ -82,6 +83,7 @@ test.describe('Калькулятор: демо-курс (3.4a, 02-C8)', () => {
     await page.goto('/calculator');
     const answered = page.waitForResponse((r) =>
       r.url().includes('/api/v1/pricing/calculate/') && r.request().method() === 'POST');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     const resp = await answered;
     expect(resp.status()).toBe(201);

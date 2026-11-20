@@ -146,6 +146,19 @@ class MetricEventApiTests(APITestCase):
         self.assertEqual(resp.status_code, 204)
         self.assertEqual(value('mobile_bar_click'), 1)
 
+    def test_funnel_keys_204_and_plus_one(self):
+        for key in ('lead_form_start', 'lead_submit_error'):
+            with self.subTest(key=key), self.captureOnCommitCallbacks(execute=True):
+                resp = self.post({'key': key})
+                self.assertEqual(resp.status_code, 204)
+            self.assertEqual(value(key), 1)
+
+    def test_unknown_funnel_key_400(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.post({'key': 'lead_form_finish'})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(DailyMetric.objects.count(), 0)
+
     def test_rejected_payloads_400_and_no_change(self):
         bad = [
             {'key': 'registration'}, {'key': 'lead'}, {'key': ''}, {}, {'key': ['calculator_visit']},

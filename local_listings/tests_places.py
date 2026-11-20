@@ -108,6 +108,29 @@ class TestImport(APITestCase):
         with self.assertRaisesMessage(CommandError, 'Файл не знайдено'):
             call_command('import_katottg', '--file', 'nope.csv', stdout=StringIO())
 
+    def _csv(self, content, encoding):
+        import tempfile
+        fh = tempfile.NamedTemporaryFile(suffix='.csv', delete=False)
+        fh.write(content.encode(encoding))
+        fh.close()
+        self.addCleanup(Path(fh.name).unlink)
+        return fh.name
+
+    def test_cp1251_file_is_clear_error(self):
+        from django.core.management.base import CommandError
+        header = 'katottg,name,category,region_katottg,region_name\n'
+        path = self._csv(header + 'UA01,Вінниця,M,UA00,Вінницька область\n', 'cp1251')
+        with self.assertRaisesMessage(CommandError, 'не в кодуванні UTF-8'):
+            call_command('import_katottg', '--file', path, stdout=StringIO())
+
+    def test_too_long_region_name_is_error_with_line(self):
+        from django.core.management.base import CommandError
+        header = 'katottg,name,category,region_katottg,region_name\n'
+        path = self._csv(header + f'UA01,Вінниця,M,UA00,{"О" * 101}\n', 'utf-8')
+        with self.assertRaisesMessage(CommandError, 'Рядок 2: region_name довший за 100'):
+            call_command('import_katottg', '--file', path, stdout=StringIO())
+        self.assertFalse(Region.objects.filter(katottg='UA00').exists())
+
     def test_entrypoint_runs_import_only_with_file(self):
         script = (settings.BASE_DIR / 'docker' / 'entrypoint.sh').read_text(encoding='utf-8')
         self.assertIn('if [ -n "${KATOTTG_FILE:-}" ]; then', script)

@@ -10,6 +10,7 @@
 import type { Page, Request } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillCalcForm } from './helpers/calc-form';
 
 test.use({ storageState: { cookies: [], origins: [] }, bypassCSP: true });
 
@@ -49,6 +50,7 @@ const gaScripts = (page: Page) => page.locator('script[src*="googletagmanager.co
 
 async function calculate(page: Page) {
   await page.goto('/calculator');
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   await expect(page.getByRole('heading', { name: 'Залишити заявку брокеру' })).toBeVisible();
 }
@@ -81,6 +83,7 @@ test.describe('GA4: тільки після згоди', () => {
     const form = page.getByTestId('lead-form');
     await form.getByLabel("Ім'я").fill('[E2E] Аналітика');
     await form.getByLabel('Телефон').fill('067 765 43 21');
+    await form.getByRole('button', { name: /Додати деталі/ }).click();
     await form.getByLabel('Email').fill('analytics@e2e.test');
     await form.getByLabel(/обробку персональних даних/).check();
     await form.getByLabel(/передачу моїх контактних даних партнеру/).check();
@@ -136,6 +139,7 @@ test.describe('GA4: тільки після згоди', () => {
     await expect(gaScripts(page)).toHaveCount(1);
     await page.goto('/calculator?conv=SECRETQ&q=SECRETSEARCH');
     await expect(page.getByRole('button', { name: 'Розрахувати' })).toBeVisible();
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await expect(page.getByRole('heading', { name: 'Залишити заявку брокеру' })).toBeVisible();
     const layer = await dataLayer(page);

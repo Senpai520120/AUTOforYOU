@@ -92,6 +92,14 @@ class LeadNotificationSettings(models.Model):
         validators=[RegexValidator(r'^-?\d+$', 'Лише числовий chat_id (наприклад -1001234567890).')],
         help_text='Числовий ID приватного чату або групи брокера. Не вказуйте публічний канал чи @username: '
                   'заявки містять персональні дані. Порожньо → TELEGRAM_BROKER_CHAT_ID з .env')
+    backup_telegram_chat_id = models.CharField(
+        'Запасний Telegram chat_id', max_length=64, blank=True,
+        validators=[RegexValidator(r'^-?\d+$', 'Лише числовий chat_id (наприклад -1001234567890).')],
+        help_text='Другий отримувач заявок (приватний чат або група). Повідомлення йде сюди, якщо основний chat_id '
+                  'не прийняв його після всіх спроб, або якщо основний не задано. У заявці це видно: '
+                  'у «Код помилки Telegram» буде via_backup:... Якщо основний відповів із '
+                  'таймаутом уже після фактичної доставки, у запасний чат можливий дубль. '
+                  'Порожньо → запасного отримувача немає')
     new_lead_template = models.TextField(
         'Шаблон повідомлення', blank=True, validators=[validate_template],
         help_text='HTML Telegram (<b>, <i>). Плейсхолдери: {id} {name} {phone} {email} {contact_method} '
@@ -256,6 +264,13 @@ class Lead(models.Model):
     last_notify_attempt_at = models.DateTimeField('Остання спроба сповіщення', null=True, blank=True)
     undelivered_alerted_at = models.DateTimeField('Адмінів попереджено', null=True, blank=True, editable=False)
 
+    # 10.13: защита от дубля. Ключ от клиента (одна отправка формы); повтор того же телефона в окне ссылается на первую заявку.
+    idempotency_key = models.UUIDField('Ключ ідемпотентності', null=True, blank=True, unique=True, editable=False)
+    duplicate_of = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL, related_name='duplicates',
+        editable=False, verbose_name='Повтор заявки',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -266,6 +281,7 @@ class Lead(models.Model):
         permissions = [('view_funnel', 'Може переглядати «Воронку за місяць»')]
         indexes = [
             models.Index(fields=['status', '-created_at'], name='lead_status_created_idx'),
+            models.Index(fields=['phone', '-created_at'], name='lead_phone_created_idx'),
         ]
         constraints = [
             models.CheckConstraint(

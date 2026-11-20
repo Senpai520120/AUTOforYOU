@@ -6,7 +6,9 @@ import type {
 import { API_URL } from '@/lib/config';
 
 export const leadsApi = {
-  create: (payload: LeadCreate) => apiPost<LeadCreated>('/api/v1/leads/', payload),
+  /** idempotencyKey: UUID однієї відправки форми; повтор з тим самим ключем не створює другу заявку (10.13). */
+  create: (payload: LeadCreate, idempotencyKey?: string) =>
+    apiPost<LeadCreated>('/api/v1/leads/', payload, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined),
   mine: () => apiGet<PaginatedResponse<Lead>>('/api/v1/leads/mine/'),
 };
 

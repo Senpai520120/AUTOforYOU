@@ -92,3 +92,23 @@ export function buildBreadcrumbLd(siteUrl: string, crumbs: Crumb[]): JsonLd {
     })),
   };
 }
+
+export interface FaqEntry {
+  question: string;
+  answer: string;
+}
+
+/** FAQPage: лише записи з непорожніми питанням і відповіддю; без записів — null (розмітку не виводимо). */
+export function buildFaqLd(items: FaqEntry[]): JsonLd | null {
+  const valid = items.filter((i) => clean(i.question) && clean(i.answer));
+  if (!valid.length) return null;
+  return {
+    '@context': CONTEXT,
+    '@type': 'FAQPage',
+    mainEntity: valid.map((i) => ({
+      '@type': 'Question',
+      name: clean(i.question),
+      acceptedAnswer: { '@type': 'Answer', text: clean(i.answer) },
+    })),
+  };
+}

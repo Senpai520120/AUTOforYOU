@@ -3,11 +3,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import type { C2CFlags } from '@/lib/c2c-flags';
+import { CATALOG_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 
 export interface NavLink {
   href: string;
   label: string;
-  /** Додатковий клас (акцент для «Каталог Україна»). */
+  /** Додатковий клас (акцент для розділу каталогу). */
   className?: string;
 }
 
@@ -20,9 +21,11 @@ interface NavUser {
  * Єдиний список посилань навігації: ним користуються і десктопна nav, і бургер-панель.
  * Умови (прапорець C2C, роль) — в одному місці.
  */
-export function getNavLinks(user: NavUser | null, c2c: Pick<C2CFlags, 'enabled'>): NavLink[] {
+export function getNavLinks(user: NavUser | null, c2c: Pick<C2CFlags, 'enabled'>, hasLandings = false): NavLink[] {
   const links: NavLink[] = [];
-  if (c2c.enabled) links.push({ href: '/ua', label: 'Каталог Україна', className: 'text-amber-300' });
+  if (c2c.enabled) links.push({ href: '/ua', label: CATALOG_LABEL, className: 'text-amber-300' });
+  // /prigon — лише коли є опубліковані сторінки: без 404 і порожнього індексу.
+  if (hasLandings) links.push({ href: '/prigon', label: LANDING_INDEX_LABEL });
   links.push({ href: '/calculator', label: 'Калькулятор' });
   // role приходить із сервера й клієнтом не змінюється; реальний доступ перевіряє API (403).
   if (user && (user.role === 'broker' || user.is_admin_role)) links.push({ href: '/broker/leads', label: 'Заявки' });
@@ -51,7 +54,7 @@ export default function MobileNav({ links, loggedIn, onLogout }: Props) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const item = 'block px-4 py-3 text-sm font-medium hover:bg-blue-800 transition-colors';
+  const item = 'flex items-center min-h-11 px-4 py-3 text-sm font-medium hover:bg-blue-800 transition-colors';
 
   return (
     <>
@@ -61,7 +64,7 @@ export default function MobileNav({ links, loggedIn, onLogout }: Props) {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpenPath(open ? null : pathname)}
-        className="md:hidden shrink-0 w-9 h-9 -mr-1 flex items-center justify-center rounded hover:bg-blue-800"
+        className="md:hidden shrink-0 w-11 h-11 flex items-center justify-center rounded hover:bg-blue-800"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           {open

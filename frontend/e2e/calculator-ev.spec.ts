@@ -4,6 +4,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillCalcForm } from './helpers/calc-form';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -13,6 +14,7 @@ const isCalc = (r: { url(): string; method(): string }) =>
 async function submitAndGetBody(page: Page) {
   const reqPromise = page.waitForRequest(isCalc);
   const respPromise = page.waitForResponse((r) => isCalc(r.request()));
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   const req = await reqPromise;
   const resp = await respPromise;

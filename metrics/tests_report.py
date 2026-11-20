@@ -137,11 +137,36 @@ class RenderReportTests(TestCase):
         self.assertIn('розрахунок → заявка: 10.0%', text)
         self.assertIn('заявка → гаряча: 50.0%', text)
 
+    def test_form_start_and_error_lines_and_conversion(self):
+        DailyMetric.objects.create(date=START, key=MetricKey.LEAD_FORM_START, value=8)
+        DailyMetric.objects.create(date=START, key=MetricKey.LEAD_SUBMIT_ERROR, value=3)
+        DailyMetric.objects.create(date=date(2026, 3, 1), key=MetricKey.LEAD_FORM_START, value=100)
+        lead_at(INSIDE)
+        lead_at(INSIDE)
+        text = self.render()
+        self.assertIn('Початок заповнення форми: 8', text)
+        self.assertIn('Помилки відправки заявки: 3', text)
+        self.assertIn('старт форми → заявка: 25.0%', text)
+
     def test_empty_period_has_no_division_error(self):
         text = self.render()
+        self.assertIn('старт форми → заявка: —', text)
         self.assertIn('візит → заявка: —', text)
         self.assertIn('депозит → викуп: —', text)
         self.assertIn('Медіана першої відповіді: немає даних', text)
+
+    @override_settings(LEAD_UNANSWERED_WARN_HOURS=2, LEAD_UNANSWERED_CRITICAL_HOURS=24)
+    def test_unanswered_counts_are_in_report(self):
+        now = datetime(2026, 3, 10, 12, 0, tzinfo=KYIV)
+        lead_at(now - timedelta(hours=3))
+        lead_at(now - timedelta(hours=30))
+        answered = lead_at(now - timedelta(hours=30))
+        Lead.objects.filter(pk=answered.pk).update(first_response_at=now)
+        with mock.patch('django.utils.timezone.now', return_value=now):
+            text = self.render()
+        self.assertIn('Без відповіді зараз > 2 год: 2', text)
+        self.assertIn('Без відповіді зараз > 24 год: 1', text)
+        self.assertIn('Медіана першої відповіді:', text)
 
     def test_duration_format(self):
         lead = lead_at(INSIDE)

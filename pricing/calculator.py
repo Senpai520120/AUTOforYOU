@@ -162,6 +162,8 @@ class LandedCostBreakdown:
     broker_services_pending: bool = True
     # 9.51: у старых расчётов поля нет - читается как 0
     auction_fee_title_handling_usd: Decimal = ZERO
+    # 10.1: полная сумма в USD (с акцизом, ПДВ и пенсионным сбором) = total_uah / usd_to_uah, курс из снимка
+    total_usd_full: Decimal = ZERO
 
     def to_dict(self) -> dict:
         def conv(v):
@@ -203,8 +205,11 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
       4. Пошлина (USD) = customs_value_usd × duty_rate
       5. НДС (UAH) = (customs_value_uah + duty_uah + excise_uah) × vat_rate
       6. Пенсионный сбор = итоговая_стоимость_uah × pension_rate
-      7. Итого USD = auction_price + auction_fee + us_land + ocean + eu_to_ua + duty_usd
+      7. Итого USD (total_usd, без акциза, ПДВ и пенсионного сбора) =
+         auction_price + auction_fee + us_land + ocean + eu_to_ua + duty_usd
       8. Итого UAH = итого_USD × usd_to_uah + excise_uah + vat_uah + pension_uah
+      9. Полный итог USD (total_usd_full, 10.1) = итого_UAH / usd_to_uah - с акцизом, ПДВ и пенсионным
+         сбором, по курсу из того же снимка. Пошлина учтена один раз (внутри customs_total_uah).
 
     pension_brackets и rule (2.5, Q5): брекет пенсионного сбора выбирается здесь по базе из правила
     (rule.pension_bracket_base), ставка применяется к rule.pension_rate_base. Без брекетов -
@@ -280,6 +285,7 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
     customs_total_uah = excise_uah + duty_uah + vat_uah + pension_fund_uah
     total_uah = ((total_logistic_usd + after_customs_usd) * _d(rates.usd_to_uah)
                  + customs_total_uah).quantize(TWO_PLACES, ROUND_HALF_UP)
+    total_usd_full = (total_uah / _d(rates.usd_to_uah)).quantize(TWO_PLACES, ROUND_HALF_UP)
 
     return LandedCostBreakdown(
         auction_price_usd=price,
@@ -303,6 +309,7 @@ def calculate_landed_cost(inputs: LandedCostInputs, rates: RateSnapshot, pension
         customs_total_uah=customs_total_uah,
         total_usd=total_usd,
         total_uah=total_uah,
+        total_usd_full=total_usd_full,
         is_estimate=True,
         ua_delivery_usd=ua_delivery_usd,
         ua_delivery_pending=ua_delivery_usd is None,
@@ -702,6 +709,22 @@ def _uniq(values) -> list:
     return sorted(set(values))
 
 
+def _uk_names(*pairs) -> dict:
+    """{код в нижнем регистре: украинское название} из (код, name_uk); первое непустое побеждает."""
+    names = {}
+    for code, name in pairs:
+        if code and name and code.lower() not in names:
+            names[code.lower()] = name
+    return names
+
+
+def _opt_uk(value, names: dict) -> dict:
+    """Опция с украинским названием из справочника; нет перевода - прежнее имя из кода."""
+    option = _opt(value)
+    option['label'] = names.get(value.lower()) or option['label']
+    return option
+
+
 def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: dict = None) -> dict:
     """Справочники формы калькулятора без сумм (Q11): только значения из активных тарифов.
 
@@ -724,6 +747,9 @@ def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: di
         if r.us_port.lower() in eu_by_us:
             us_by_loc.setdefault(r.auction_location.lower(), set()).add(r.us_port.lower())
     us_ports = _uniq(p for ports in us_by_loc.values() for p in ports)
+    loc_names = _uk_names(*((r.auction_location, r.auction_location_uk) for r in land))
+    us_names = _uk_names(*((r.us_port, r.us_port_uk) for r in [*land, *ocean]))
+    eu_names = _uk_names(*((r.eu_port, r.eu_port_uk) for r in ocean))
 
     def choice(field_name):
         values = _uniq(getattr(t, field_name) for t in tiers)
@@ -737,9 +763,9 @@ def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: di
     title_types, title_default = choice('title_type')
     options = {
         'auctions': [_opt(v, labels.get('auction')) for v in _uniq(t.auction for t in tiers)],
-        'auction_locations': [{**_opt(loc), 'us_ports': sorted(ports)} for loc, ports in sorted(us_by_loc.items())],
-        'us_ports': [{**_opt(p), 'eu_ports': sorted(eu_by_us[p])} for p in us_ports],
-        'eu_ports': [_opt(p) for p in _uniq(e for p in us_ports for e in eu_by_us[p])],
+        'auction_locations': [{**_opt_uk(loc, loc_names), 'us_ports': sorted(ports)} for loc, ports in sorted(us_by_loc.items())],
+        'us_ports': [{**_opt_uk(p, us_names), 'eu_ports': sorted(eu_by_us[p])} for p in us_ports],
+        'eu_ports': [_opt_uk(p, eu_names) for p in _uniq(e for p in us_ports for e in eu_by_us[p])],
         'fuel_types': [{**_opt(v, labels.get('fuel_type')), 'requires_battery': v in EV_FUEL_TYPES}
                        for v in _uniq(r.fuel_type for r in excise)],
         'member_types': member_types,

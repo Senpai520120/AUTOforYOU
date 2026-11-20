@@ -76,9 +76,14 @@ class Command(BaseCommand):
                     row = {k: (v or '').strip() for k, v in row.items() if k}
                     if not row['katottg'] or not row['name'] or not row['region_name']:
                         raise CommandError(f'Рядок {n}: порожні katottg, name або region_name')
+                    limit = Region._meta.get_field('name').max_length
+                    if len(row['region_name']) > limit:
+                        raise CommandError(f'Рядок {n}: region_name довший за {limit} символів')
                     rows.append(row)
         except FileNotFoundError as exc:
             raise CommandError(f'Файл не знайдено: {path}') from exc
+        except UnicodeDecodeError as exc:
+            raise CommandError(f'Файл {path} не в кодуванні UTF-8 (збережіть CSV як UTF-8): {exc.reason}') from exc
         codes = Counter(r['katottg'] for r in rows)
         dup = [c for c, k in codes.items() if k > 1]
         if dup:

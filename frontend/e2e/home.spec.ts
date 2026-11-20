@@ -14,11 +14,23 @@ test.describe('Головна сторінка @smoke', () => {
   });
 
   test('hero веде в калькулятор', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Авто з США під ключ в Україну' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Пригон авто з США під ключ в Україну' })).toBeVisible();
 
     const calc = page.getByRole('link', { name: 'Порахувати вартість' });
     await expect(calc).toBeVisible();
     await calc.click();
+    await expect(page).toHaveURL(/\/calculator$/);
+  });
+
+  test('10.18: головна кнопка шапки — «Порахувати» → /calculator, «Реєстрація» — звичайне посилання', async ({ page }) => {
+    const header = page.getByRole('banner');
+    const cta = header.getByTestId('header-primary-cta');
+    await expect(cta).toHaveText('Порахувати');
+    await expect(cta).toHaveAttribute('href', '/calculator');
+    const register = header.getByRole('link', { name: 'Реєстрація' });
+    await expect(register).toHaveAttribute('href', '/register');
+    await expect(register).not.toHaveClass(/bg-amber/);
+    await cta.click();
     await expect(page).toHaveURL(/\/calculator$/);
   });
 
@@ -60,7 +72,7 @@ test.describe('Головна сторінка @smoke', () => {
 
   test('футер описує обидва напрямки, а не тільки США', async ({ page }) => {
     const footer = page.getByRole('contentinfo');
-    await expect(footer).toContainText('Оголошення по Україні');
+    await expect(footer).toContainText('Каталог Україна');
     // Раніше тут стояло «маркетплейс авто з США» — і на сторінці локальних
     // оголошень це виглядало як чужий футер.
     await expect(footer).not.toContainText('маркетплейс авто з США');

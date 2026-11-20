@@ -38,7 +38,7 @@ test.describe('Серверний рендер каталогів @smoke', () =>
   test('головна віддає блоки без JavaScript', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'Авто з США під ключ в Україну' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Пригон авто з США під ключ в Україну' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Як це працює' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Що входить у розрахунок' })).toBeVisible();
   });

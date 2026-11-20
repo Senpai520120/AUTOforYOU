@@ -11,6 +11,8 @@ class MetricKey(models.TextChoices):
     LISTING_SUBMITTED = 'listing_submitted', 'Подано оголошення'
     PHONE_VIEW = 'phone_view', 'Показ телефону'
     MOBILE_BAR_CLICK = 'mobile_bar_click', 'Клік по мобільній панелі'
+    LEAD_FORM_START = 'lead_form_start', 'Початок заповнення форми заявки'
+    LEAD_SUBMIT_ERROR = 'lead_submit_error', 'Помилка відправки заявки'
 
 
 class DailyMetric(models.Model):

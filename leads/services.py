@@ -6,6 +6,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -64,6 +65,10 @@ class PartnerNotConfigured(Exception):
     """SiteSettings.partner_name пуст: заявки не принимаются (API отвечает 503)."""
 
 
+class KeyConflict(Exception):
+    """Ключ идемпотентности уже занят заявкой с другим телефоном (API отвечает 409, без данных чужой заявки)."""
+
+
 def notify_new_lead(lead_id: int) -> None:
     """Личное уведомление брокеру (2.2). Без ПДн в логе."""
     from .tasks import notify_broker_new_lead
@@ -84,9 +89,14 @@ def record_metric(event: str) -> None:
         logger.info('metric event=%s', event)
 
 
-def _after_commit(lead_id: int) -> None:
+def _after_commit(lead_id: int, is_duplicate: bool = False) -> None:
     # Сбой уведомления не должен ронять создание заявки; в лог только lead_id.
-    for hook, args in ((notify_new_lead, (lead_id,)), (notify_journal, (lead_id,)), (record_metric, ('lead_created',))):
+    # Повтор (10.13): брокеру уведомление с пометкой и партнёру запись журнала с пометкой (это передача ПДн,
+    # согласие записано как у обычной заявки), но воронку (метрику lead_created) он не раздувает.
+    hooks = [(notify_new_lead, (lead_id,)), (notify_journal, (lead_id,))]
+    if not is_duplicate:
+        hooks.append((record_metric, ('lead_created',)))
+    for hook, args in hooks:
         try:
             hook(*args)
         except Exception:
@@ -119,13 +129,41 @@ def build_calculation_snapshot(calculation) -> dict:
         'rates_snapshot': calculation.rates_snapshot,
         'breakdown': calculation.breakdown,
         'total_usd': str(calculation.total_usd),
+        'total_usd_full': (calculation.breakdown or {}).get('total_usd_full'),
         'total_uah': str(calculation.total_uah),
     }
 
 
-def create_lead(*, user, data: dict, calculation=None, listing=None, landing=None) -> Lead:
+def find_replay(key, phone: str) -> Lead | None:
+    """Заявка с этим ключом идемпотентности (точный повтор отправки) или None.
+    Ключ занят другим телефоном: KeyConflict (данные найденной заявки не раскрываются)."""
+    lead = Lead.objects.filter(idempotency_key=key).first()
+    if lead is None:
+        return None
+    if lead.phone != phone:
+        raise KeyConflict()
+    return lead
+
+
+def find_phone_duplicate(phone: str, now=None) -> Lead | None:
+    """Корневая заявка окна LEAD_DUPLICATE_WINDOW_MINUTES с тем же нормализованным телефоном или None.
+    Окно 0 выключает проверку. Граница: заявка ровно N минут назад уже вне окна. Если самая ранняя заявка
+    окна сама повтор, берётся её корень (цепочка не растёт)."""
+    window = int(getattr(settings, 'LEAD_DUPLICATE_WINDOW_MINUTES', 0) or 0)
+    if window <= 0 or not phone:
+        return None
+    now = now or timezone.now()
+    first = Lead.objects.filter(phone=phone, created_at__gt=now - timedelta(minutes=window))         .select_related('duplicate_of').order_by('created_at', 'pk').first()
+    if first is None:
+        return None
+    return first.duplicate_of or first
+
+
+def create_lead(*, user, data: dict, calculation=None, listing=None, landing=None, idempotency_key=None) -> Lead:
     """Создаёт заявку. data уже провалидирован сериализатором; телефон и атрибуция
-    нормализуются повторно (идемпотентно). Бросает PartnerNotConfigured при пустом partner_name."""
+    нормализуются повторно (идемпотентно). Бросает PartnerNotConfigured при пустом partner_name.
+    idempotency_key (UUID) сохраняется; тот же телефон в окне даёт заявку-повтор (duplicate_of).
+    Гонку по ключу ловит вызывающий (IntegrityError на уникальном индексе)."""
     if calculation is not None and calculation.user_id is not None and (
             user is None or not getattr(user, 'is_authenticated', False) or calculation.user_id != user.pk):
         raise ValueError('Розрахунок належить іншому користувачу')
@@ -169,12 +207,16 @@ def create_lead(*, user, data: dict, calculation=None, listing=None, landing=Non
     if budget is not None:
         # Автоматический ответ на вопрос о бюджете; брокер может поправить вручную.
         fields['q_budget_ok'] = Decimal(str(budget)) >= journal_cfg.hot_budget_usd
+    phone = normalize_ua_phone(data.get('phone'))
     with transaction.atomic():
+        original = find_phone_duplicate(phone, now)
         lead = Lead.objects.create(
+            idempotency_key=idempotency_key,
+            duplicate_of=original,
             attribution_until=add_months(now, journal_cfg.attribution_window_months),
             public_id=_next_public_id(now.year),
             user=user,
-            phone=normalize_ua_phone(data.get('phone')),
+            phone=phone,
             source=source,
             calculation=calculation,
             listing=listing,
@@ -195,7 +237,10 @@ def create_lead(*, user, data: dict, calculation=None, listing=None, landing=Non
             ConsentMethod.LEAD_FORM, lead=lead, partner_name=partner_name,
         )
         lead_id = lead.pk
-        transaction.on_commit(lambda: _after_commit(lead_id))
+        is_duplicate = original is not None
+        transaction.on_commit(lambda: _after_commit(lead_id, is_duplicate))
+    if is_duplicate:
+        logger.info('lead.dedup reason=phone_window public_id=%s original=%s', lead.public_id, original.public_id)
     return lead
 
 
@@ -327,14 +372,17 @@ def qualify_lead(lead: Lead, answers: dict, *, by, is_admin: bool = False) -> Le
     return lead
 
 
-_PHONE_LIKE = re.compile(r'\d(?:[\s\-().]*\d){4,}')
+# Телефоноподобно: 7+ цифр, между которыми только пробел/дефис/скобки/точка, но не «Mazda 3 2019» (цифры в разных словах).
+_PHONE_LIKE = re.compile(r'\+?\d(?:[ \-().]?\d){6,}')
+_LINK_MARKERS = ('/', 'http', 't.me', 'www.')
 NOT_SET = 'не вказано'
 
 
 def _journal_safe(value: str) -> str:
-    """Свободный текст в группу: 5+ цифр подряд (с пробелами, дефисами, скобками), @ или e-mail -> «не вказано»."""
+    """Свободный текст в группу: 7+ цифр подряд (с разделителями), @, e-mail, ссылки и ники -> «не вказано»."""
     value = (value or '').strip()
-    if not value or '@' in value or _PHONE_LIKE.search(value):
+    low = value.lower()
+    if not value or '@' in value or any(m in low for m in _LINK_MARKERS) or _PHONE_LIKE.search(value):
         return NOT_SET
     return value[:100]
 
@@ -355,8 +403,10 @@ def journal_text(lead: Lead) -> str:
     from . import notify
     budget = f'${notify._money(lead.budget_usd)}' if lead.budget_usd is not None else NOT_SET
     when = lead.created_at.astimezone(UTC).strftime('%Y-%m-%d %H:%M')
-    lines = [
-        f'🧾 <b>Заявка {html.escape(lead.public_id)}</b>',
+    lines = [f'🧾 <b>Заявка {html.escape(lead.public_id)}</b>']
+    if lead.duplicate_of_id:
+        lines.append(f'🔁 Повтор заявки {html.escape(lead.duplicate_of.public_id)}')
+    lines += [
         f'🚗 {html.escape(_journal_car(lead))}',
         f'💵 Бюджет: {html.escape(budget)}',
         f'📍 Місто: {html.escape(_journal_safe(lead.city))}',
@@ -373,8 +423,6 @@ def send_journal_message(lead_id: int) -> str:
     Возврат: sent / already_sent / in_progress / disabled / not_found / failed (failed - повторить).
     Отправка идёт вне транзакции: перед ней атомарно ставится метка journal_sending_at.
     Исключения не пробрасываются, в лог идут только lead_id и класс ошибки."""
-    from django.conf import settings
-
     from telegram_bot import sender
     from telegram_bot.provider import telegram_configured
 
@@ -391,7 +439,7 @@ def send_journal_message(lead_id: int) -> str:
             return 'not_found'
         return 'already_sent' if lead['journal_message_id'] is not None else 'in_progress'
     try:
-        lead = Lead.objects.select_related('listing__vehicle').get(pk=lead_id)
+        lead = Lead.objects.select_related('listing__vehicle', 'duplicate_of').get(pk=lead_id)
         result = sender.send_message(chat_id, journal_text(lead), demo_body=f'lead #{lead_id}')
         if not result.ok or result.message_id is None:
             logger.warning('lead.journal lead_id=%s reason=%s', lead_id, result.reason or 'no_message_id')

@@ -1,5 +1,6 @@
 """Сборка текста уведомления брокеру и in-app рассылка. Все значения от гостя экранируются."""
 import html
+import logging
 import re
 from collections import defaultdict
 from decimal import Decimal
@@ -16,6 +17,8 @@ from notifications.models import Notification
 from notifications.services import create_notification
 
 from .models import ContactMethod, Lead, LeadNotificationSettings
+
+logger = logging.getLogger(__name__)
 
 TELEGRAM_LIMIT = 4096
 DIRECT = 'пряме'
@@ -40,6 +43,11 @@ def tg_len(text: str) -> int:
 def broker_chat_id() -> str:
     return (LeadNotificationSettings.get_solo().telegram_chat_id.strip()
             or getattr(settings, 'TELEGRAM_BROKER_CHAT_ID', '').strip())
+
+
+def backup_chat_id() -> str:
+    """Запасной получатель (10.19): только из админки, в .env его нет."""
+    return LeadNotificationSettings.get_solo().backup_telegram_chat_id.strip()
 
 
 def admin_url(lead: Lead) -> str:
@@ -95,14 +103,23 @@ def _render(template: str, raw: dict[str, str], caps: dict[str, int]) -> str:
     return template.format_map(safe)
 
 
+def duplicate_note(lead: Lead) -> str:
+    """Пометка для повтора заявки (10.13): только номер первой заявки, без ПДн. Для обычной заявки пусто."""
+    if not lead.duplicate_of_id:
+        return ''
+    return f'🔁 Повтор заявки {lead.duplicate_of.public_id}'
+
+
 def render_new_lead_text(lead: Lead, template: str) -> str:
     """Подставляет экранированные значения. Поля обрезаются ДО escape, пока текст не влезет в лимит.
     Неизвестный плейсхолдер даёт пустую строку. MessageTooLong, если не влезает и без полей гостя."""
     template = template if template.strip() else FALLBACK_TEMPLATE
     raw = raw_context(lead)
+    note = duplicate_note(lead)
+    prefix = html.escape(note) + chr(10) if note else ''
     caps = {k: 10 ** 6 for k in _GUEST_FIELDS}
     while True:
-        text = _render(template, raw, caps)
+        text = prefix + _render(template, raw, caps)
         if tg_len(text) <= TELEGRAM_LIMIT:
             return text
         # Режем поля по очереди: сначала комментарий и источник.
@@ -190,8 +207,13 @@ def render_new_lead_email(lead: Lead, cfg: LeadNotificationSettings) -> tuple[st
     raw = defaultdict(str, email_context(lead))
     subject_tpl = cfg.email_subject_template if cfg.email_subject_template.strip() else FALLBACK_EMAIL_SUBJECT
     body_tpl = cfg.email_body_template if cfg.email_body_template.strip() else FALLBACK_EMAIL_BODY
-    subject = _LINE_BREAKS.sub(' ', subject_tpl.format_map(raw)).strip()[:SUBJECT_MAX]
-    return subject, body_tpl.format_map(raw)
+    subject = _LINE_BREAKS.sub(' ', subject_tpl.format_map(raw)).strip()
+    body = body_tpl.format_map(raw)
+    note = duplicate_note(lead)
+    if note:
+        subject = f'{note}: {subject}'
+        body = note + chr(10) + chr(10) + body
+    return subject[:SUBJECT_MAX], body
 
 
 def email_channel_configured() -> bool:
@@ -222,3 +244,79 @@ def alert_admins_undelivered(lead: Lead) -> int:
             link=admin_url(lead))
         count += 1
     return count
+
+
+OWNER_UNDELIVERED_SUBJECT = 'AUTOforYOU: заявку не доставлено брокеру'
+OWNER_UNANSWERED_SUBJECT = 'AUTOforYOU: заявки без відповіді брокера'
+
+
+def owner_channel_configured() -> bool:
+    return bool(settings.FAILED_TASK_ALERT_CHAT_ID or settings.FAILED_TASK_ALERT_EMAIL)
+
+
+def build_owner_undelivered_text(leads: list[Lead]) -> str:
+    """Один сводный текст владельцу: номера заявок и ссылка на список. Имя, телефон, email, комментарий - никогда."""
+    ids = ', '.join(lead.public_id for lead in leads)
+    return (f'⚠ AUTOforYOU: не доставлено брокеру заявок: {len(leads)} ({ids}). Telegram і email не спрацювали '
+            f'після всіх спроб.\nСписок в адмінці: {unanswered_list_url()}')
+
+
+def alert_owner_undelivered(leads: list[Lead]) -> bool:
+    """Один сводный алерт владельцу в FAILED_TASK_ALERT_CHAT_ID / _EMAIL. Не бросает исключений, False - не дошло."""
+    ids = [lead.pk for lead in leads]
+    if not owner_channel_configured():
+        logger.warning('lead.undelivered lead_ids=%s: канал алерта владельцу не налаштовано', ids)
+        return False
+    from core.tasks import _send_failed_task_alert  # импорт внутри: без циклов
+    try:
+        delivered = _send_failed_task_alert(build_owner_undelivered_text(leads), OWNER_UNDELIVERED_SUBJECT)
+    except Exception as exc:
+        logger.warning('lead.undelivered lead_ids=%s: алерт владельцу не відправлено (%s)', ids, type(exc).__name__)
+        return False
+    if not delivered:
+        logger.warning('lead.undelivered lead_ids=%s: алерт владельцу не дійшов, буде повтор', ids)
+    return delivered
+
+
+OWNER_BACKUP_SUBJECT = 'AUTOforYOU: заявка пішла в запасний чат'
+BACKUP_ALERT_KEY = 'leads:backup_used_alert'
+
+
+def alert_owner_backup_used(lead: Lead, reason: str) -> bool:
+    """10.19: основной чат не принял заявку, она ушла в запасной - владельцу один алерт на окно (не на каждую заявку).
+    Текст без ПДн: только public_id и код ошибки. Не бросает исключений."""
+    if not owner_channel_configured():
+        return False
+    from django.core.cache import cache
+
+    from core.tasks import _send_failed_task_alert  # импорт внутри: без циклов
+    cooldown = int(settings.LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES) * 60
+    try:
+        if not cache.add(BACKUP_ALERT_KEY, 1, timeout=cooldown):
+            return False
+    except Exception:  # Redis недоступен: лучше повторить алерт, чем промолчать
+        logger.warning('lead.backup: кэш недоступен, дедупликации нет')
+    text = (f'⚠ AUTOforYOU: основний Telegram-чат брокера не прийняв заявку {lead.public_id} ({reason}), '
+            f'вона пішла в запасний чат. Перевірте основний chat_id.\nСписок в адмінці: {unanswered_list_url()}')
+    try:
+        delivered = _send_failed_task_alert(text, OWNER_BACKUP_SUBJECT)
+    except Exception as exc:
+        logger.warning('lead.backup lead_id=%s: алерт владельцу не відправлено (%s)', lead.pk, type(exc).__name__)
+        delivered = False
+    if not delivered:
+        try:
+            cache.delete(BACKUP_ALERT_KEY)
+        except Exception:
+            logger.warning('lead.backup: кэш недоступен')
+    return delivered
+
+
+def unanswered_list_url() -> str:
+    return settings.SITE_URL.rstrip('/') + reverse('admin:leads_lead_changelist')
+
+
+def build_owner_unanswered_text(warn_count: int, critical_count: int) -> str:
+    """Текст владельцу: два числа и ссылка на список заявок. Без id заявок и ПДн."""
+    return (f'⚠ AUTOforYOU: заявок без відповіді брокера понад {settings.LEAD_UNANSWERED_WARN_HOURS} год: '
+            f'{warn_count}, понад {settings.LEAD_UNANSWERED_CRITICAL_HOURS} год: {critical_count}.\n'
+            f'Список в адмінці: {unanswered_list_url()}')

@@ -12,6 +12,7 @@ import CalculatorFaq from '@/components/content/CalculatorFaq';
 import CalculatorHowWeCount from '@/components/calculator/CalculatorHowWeCount';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
+import FallbackContact, { useFallbackSettings } from '@/components/ui/FallbackContact';
 
 // Числові поля в стані форми — рядки: порожнє поле лишається порожнім (не 0), спрацьовує required.
 type CalcForm = Omit<CalcInputs, 'engine_cc' | 'vehicle_year' | 'battery_capacity_kwh' | 'ua_delivery_rate'> & {
@@ -27,8 +28,8 @@ function pick(options: CalcOption[], wanted: string | null | undefined): string 
   return options[0]?.value ?? '';
 }
 
-// Приклад для прямого входу. Зі сторінки лота (є ?listing) ціна порожня: ціни аукціону в лота немає (09-Q3).
-const EXAMPLE = { auction_price_usd: '10000', engine_cc: '2000', vehicle_year: '2020' };
+// 10.17: без query числові поля порожні (підказка — у placeholder), щоб не підсовувати чужі значення.
+// Зі сторінки лота (?listing) ціна теж порожня: ціни аукціону в лота немає (09-Q3).
 
 /** Ціна з query: число > 0 і не більше 1 000 000, інакше ігнорується (порожньо = типове значення). */
 function priceFromQuery(raw: string | null): string | null {
@@ -39,14 +40,13 @@ function priceFromQuery(raw: string | null): string | null {
 
 function initialForm(data: CalcRatesResponse, params: URLSearchParams): CalcForm {
   const o = data.options;
-  const fromListing = params.has('listing');
   const usPort = pick(o.us_ports, params.get('us_port'));
   const euChoices = o.eu_ports.filter(p => o.us_ports.find(u => u.value === usPort)?.eu_ports.includes(p.value));
   return {
-    auction_price_usd: priceFromQuery(params.get('auction_price_usd')) ?? (fromListing ? '' : EXAMPLE.auction_price_usd),
-    engine_cc: params.get('engine_cc') ?? (fromListing ? '' : EXAMPLE.engine_cc),
+    auction_price_usd: priceFromQuery(params.get('auction_price_usd')) ?? '',
+    engine_cc: params.get('engine_cc') ?? '',
     fuel_type: pick(o.fuel_types, params.get('fuel_type')),
-    vehicle_year: params.get('year') ?? (fromListing ? '' : EXAMPLE.vehicle_year),
+    vehicle_year: params.get('year') ?? '',
     battery_capacity_kwh: '',
     auction: pick(o.auctions, params.get('auction')),
     auction_location: pick(o.auction_locations.filter(l => l.us_ports.includes(usPort)), null),
@@ -64,10 +64,43 @@ function toInputs(form: CalcForm, requiresBattery: boolean): CalcInputs {
   return {
     ...rest,
     ...(ua_delivery_rate ? { ua_delivery_rate: Number(ua_delivery_rate) } : {}),
-    engine_cc: Number(engine_cc),
+    engine_cc: engine_cc === '' ? 0 : Number(engine_cc),  // порожній об'єм допустимий лише для електро/PHEV
     vehicle_year: Number(vehicle_year),
     ...(requiresBattery ? { battery_capacity_kwh } : {}),
   };
+}
+
+const FIELD_ORDER = ['auction_price_usd', 'engine_cc', 'battery_capacity_kwh', 'vehicle_year'];
+
+/** Клієнтська перевірка обов'язкових полів: ті самі межі й тексти, що на сервері (CalculateInputSerializer). */
+function validateForm(form: CalcForm, requiresBattery: boolean): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const price = form.auction_price_usd.trim();
+  if (price === '' || Number.isNaN(Number(price))) errors.auction_price_usd = 'Вкажіть ціну аукціону ($).';
+  else if (Number(price) < 0) errors.auction_price_usd = "Ціна аукціону не може бути від'ємною.";
+  else if (Number(price) > 99_999_999) errors.auction_price_usd = 'Ціна аукціону завелика.';
+
+  const cc = form.engine_cc.trim();
+  if (requiresBattery) {
+    if (cc !== '' && (Number(cc) < 0 || Number(cc) > 10000)) errors.engine_cc = "Об'єм двигуна має бути від 0 до 10000 см³.";
+    const kwh = form.battery_capacity_kwh.trim();
+    if (kwh === '' || !(Number(kwh) > 0)) errors.battery_capacity_kwh = 'Вкажіть ємність батареї (кВт·год).';
+    else if (Number(kwh) > 300) errors.battery_capacity_kwh = 'Ємність батареї не може перевищувати 300 кВт·год.';
+  } else if (cc === '' || !(Number(cc) >= 1)) {
+    errors.engine_cc = "Вкажіть об'єм двигуна (см³).";
+  } else if (Number(cc) > 10000) {
+    errors.engine_cc = "Об'єм двигуна не може перевищувати 10000 см³.";
+  }
+
+  const year = form.vehicle_year.trim();
+  if (year === '') errors.vehicle_year = 'Вкажіть рік випуску.';
+  else if (!(Number(year) >= 1990 && Number(year) <= 2030)) errors.vehicle_year = 'Рік випуску має бути від 1990 до 2030.';
+  return errors;
+}
+
+function focusFirstInvalid(errors: Record<string, string>) {
+  const first = FIELD_ORDER.find(name => errors[name]) ?? Object.keys(errors)[0];
+  if (first) document.getElementById(first)?.focus();
 }
 
 const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm';
@@ -102,14 +135,24 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
   const [result, setResult] = useState<CalcResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<CalcErrorView | null>(null);
+  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+  const showContact = !!error?.showContact;
+  const contactSettings = useFallbackSettings(showContact);
   const listingParam = Number(params.get('listing'));
   const listingId = Number.isInteger(listingParam) && listingParam > 0 ? listingParam : undefined;
 
-  const set = (key: keyof CalcForm, val: string) => setForm(f => ({ ...f, [key]: val }));
+  const set = (key: keyof CalcForm, val: string) => {
+    setForm(f => ({ ...f, [key]: val }));
+    setClientErrors(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
   const requiresBattery = !!o.fuel_types.find(f => f.value === form.fuel_type)?.requires_battery;
   const reachableEu = o.us_ports.find(p => p.value === form.us_port)?.eu_ports ?? [];
   const reachableUs = o.auction_locations.find(l => l.value === form.auction_location)?.us_ports ?? [];
-  const fieldErrors = error?.fieldErrors ?? {};
+  const fieldErrors = Object.keys(clientErrors).length ? clientErrors : (error?.fieldErrors ?? {});
 
   // Місто доступне, якщо ставка з будь-якого порту ЄС або саме з обраного.
   const cities = data.ua_delivery_rates.filter(c => !c.eu_port || c.eu_port === form.eu_port);
@@ -126,14 +169,22 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
 
   const calculate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
     setResult(null);
+    const problems = validateForm(form, requiresBattery);
+    setClientErrors(problems);
+    if (Object.keys(problems).length) {
+      focusFirstInvalid(problems);
+      return;
+    }
+    setLoading(true);
     try {
       setResult(await pricingApi.calculate(toInputs({ ...form, ua_delivery_rate: cityValue }, requiresBattery)));
       trackEvent('calculator_calculate', { source: 'calculator' });
     } catch (err: unknown) {
-      setError(describeCalcError(err));
+      const view = describeCalcError(err);
+      setError(view);
+      if (Object.keys(view.fieldErrors).length) setTimeout(() => focusFirstInvalid(view.fieldErrors), 0);
     } finally {
       setLoading(false);
     }
@@ -142,7 +193,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
   return (
     <>
       <DemoBanner show={data.is_demo} title={data.demo_banner.title} text={data.demo_banner.text} />
-      <form onSubmit={calculate} className="bg-white border border-slate-200 rounded-xl p-6 mt-4 space-y-5">
+      <form onSubmit={calculate} noValidate className="bg-white border border-slate-200 rounded-xl p-6 mt-4 space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="auction_price_usd" className={labelCls}>Ціна аукціону ($)</label>
@@ -154,7 +205,8 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
           </div>
           <div>
             <label htmlFor="engine_cc" className={labelCls}>Об&apos;єм двигуна (см³)</label>
-            <input id="engine_cc" name="engine_cc" aria-invalid={!!fieldErrors.engine_cc} aria-describedby={fieldErrors.engine_cc ? "err-engine_cc" : undefined} type="number" required min={0} max={10000} className={inputCls}
+            <input id="engine_cc" name="engine_cc" aria-invalid={!!fieldErrors.engine_cc} aria-describedby={fieldErrors.engine_cc ? "err-engine_cc" : undefined} type="number" required={!requiresBattery} min={0} max={10000} className={inputCls}
+              placeholder="Наприклад, 2000"
               value={form.engine_cc} onChange={e => set('engine_cc', e.target.value)} />
             <FieldError name="engine_cc" errors={fieldErrors} />
           </div>
@@ -173,6 +225,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
           <div>
             <label htmlFor="vehicle_year" className={labelCls}>Рік випуску</label>
             <input id="vehicle_year" name="vehicle_year" aria-invalid={!!fieldErrors.vehicle_year} aria-describedby={fieldErrors.vehicle_year ? "err-vehicle_year" : undefined} type="number" required min={1990} max={2030} className={inputCls}
+              placeholder="Наприклад, 2019"
               value={form.vehicle_year} onChange={e => set('vehicle_year', e.target.value)} />
             <FieldError name="vehicle_year" errors={fieldErrors} />
           </div>
@@ -212,6 +265,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
             {error.details.length > 0 && (
               <ul className="list-disc ml-5 mt-1 text-xs">{error.details.map(d => <li key={d}>{d}</li>)}</ul>
             )}
+            {showContact && <FallbackContact settings={contactSettings} />}
           </div>
         )}
       </form>
@@ -236,20 +290,41 @@ function FormSkeleton() {
 function CalculatorLoader() {
   const [data, setData] = useState<CalcRatesResponse | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
-    pricingApi.options().then(setData).catch(() => setFailed(true));
-  }, []);
+    let alive = true;
+    pricingApi.options()
+      .then((d) => { if (alive) { setData(d); setFailed(false); } })
+      .catch(() => { if (alive) setFailed(true); })
+      .finally(() => { if (alive) setRetrying(false); });
+    return () => { alive = false; };
+  }, [attempt]);
+
+  const notConfigured = !!data && !data.options.is_configured;
+  const settings = useFallbackSettings(failed || notConfigured);
+  const retry = () => {
+    if (retrying) return;
+    setRetrying(true);
+    setAttempt((n) => n + 1);
+  };
 
   if (failed) {
-    return <p role="alert" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">Не вдалося завантажити калькулятор. Спробуйте пізніше.</p>;
+    return (
+      <div role="alert" data-testid="calc-load-failed" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-4">
+        <p>Не вдалося завантажити калькулятор.</p>
+        <FallbackContact settings={settings} onRetry={retry} retrying={retrying} />
+      </div>
+    );
   }
   if (!data) return <FormSkeleton />;
   if (!data.options.is_configured) {
     return (
-      <p data-testid="calc-not-configured" className="mt-4 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-4">
-        Калькулятор ще не налаштовано. Залиште заявку — брокер порахує вартість вручну.
-      </p>
+      <div data-testid="calc-not-configured" className="mt-4 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-4">
+        <p>Калькулятор ще не налаштовано. Розрахунок можна отримати в менеджера.</p>
+        <FallbackContact settings={settings} onRetry={retry} retrying={retrying} />
+      </div>
     );
   }
   return <CalculatorForm data={data} />;

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CATALOG_LABEL } from '@/lib/labels';
 
 /** Заглушка закритого розділу. section — C2C вимкнено; posting — «засів», подача ще закрита. */
 export default function ComingSoon({ variant = 'section' }: { variant?: 'section' | 'posting' }) {
@@ -7,7 +8,7 @@ export default function ComingSoon({ variant = 'section' }: { variant?: 'section
     <div className="max-w-xl mx-auto text-center py-16" data-testid="c2c-coming-soon">
       <div className="text-5xl mb-4" aria-hidden="true">🚧</div>
       <h1 className="text-2xl font-bold text-slate-900 mb-2">
-        {posting ? 'Подача оголошень скоро відкриється' : 'Оголошення по Україні — незабаром'}
+        {posting ? 'Подача оголошень скоро відкриється' : `${CATALOG_LABEL} — незабаром`}
       </h1>
       <p className="text-slate-500 mb-6">
         {posting

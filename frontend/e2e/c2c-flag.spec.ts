@@ -15,7 +15,7 @@ type Mode = 'off' | 'seeding' | 'full';
 type Flags = { c2c_enabled: boolean; c2c_public_posting_enabled: boolean; payments_enabled: boolean };
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
-const SOON = 'Оголошення по Україні — незабаром';
+const SOON = 'Каталог Україна — незабаром';
 const POSTING_SOON = 'Подача оголошень скоро відкриється';
 const GUEST = { cookies: [], origins: [] };
 

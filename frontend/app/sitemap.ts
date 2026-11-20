@@ -5,6 +5,7 @@ import { isC2CEnabled } from '@/lib/c2c';
 import { isModuleEnabled } from '@/lib/site-settings';
 import { isHowItWorksPublished } from '@/lib/content';
 import { getLandingList } from '@/lib/landings';
+import { getAbout } from '@/lib/about';
 import { absoluteUrl } from '@/lib/site';
 import { listingSlug } from '@/lib/utils';
 
@@ -39,8 +40,8 @@ async function fetchAll<T>(path: string, limit: number): Promise<T[]> {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const limit = maxUrls();
-  const [c2c, lotsOn, howItWorksOn, landings] = await Promise.all([
-    isC2CEnabled(), isModuleEnabled('lots'), isHowItWorksPublished(600), getLandingList(600),
+  const [c2c, lotsOn, howItWorksOn, landings, about] = await Promise.all([
+    isC2CEnabled(), isModuleEnabled('lots'), isHowItWorksPublished(600), getLandingList(600), getAbout(600),
   ]);
 
   // Статичні сторінки. /calculator навмисно немає: він noindex (11-Q5).
@@ -54,6 +55,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteUrl('/privacy'), changeFrequency: 'yearly', priority: 0.3 },
     { url: absoluteUrl('/cookies'), changeFrequency: 'yearly', priority: 0.3 },
     ...(howItWorksOn ? [{ url: absoluteUrl('/how-it-works'), changeFrequency: 'monthly' as const, priority: 0.6 }] : []),
+    ...(about ? [{ url: absoluteUrl('/about'), changeFrequency: 'monthly' as const, priority: 0.5 }] : []),
     // Сторінки моделей (2.16): лише опубліковані з розрахунком; збій API = порожній список, sitemap не падає.
     ...(landings && landings.length ? [{ url: absoluteUrl('/prigon'), changeFrequency: 'weekly' as const, priority: 0.6 }] : []),
     ...(lotsOn ? [{ url: absoluteUrl('/listings'), changeFrequency: 'daily' as const, priority: 0.9 }] : []),

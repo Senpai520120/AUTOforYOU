@@ -4,6 +4,7 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
+import { fillCalcForm } from './helpers/calc-form';
 
 type Flags = { c2c_enabled: boolean; c2c_public_posting_enabled: boolean };
 let flags: Flags;
@@ -59,7 +60,7 @@ test.describe('Мобільний smoke @mobile', () => {
   });
 
   for (const [path, heading] of [
-    ['/', 'Авто з США під ключ в Україну'],
+    ['/', 'Пригон авто з США під ключ в Україну'],
     ['/ua', 'Каталог Україна'],
     ['/calculator', 'Калькулятор вартості «під ключ»'],
   ] as const) {
@@ -75,6 +76,7 @@ test.describe('Мобільний smoke @mobile', () => {
     await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('5000');
     await page.getByLabel("Об'єм двигуна (см³)", { exact: true }).fill('2000');
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
 
     await expect(page.getByRole('heading', { name: 'Деталізація вартості «під ключ»' })).toBeVisible();
@@ -120,6 +122,34 @@ test.describe('Мобільний smoke @mobile', () => {
     await expect(menu.getByRole('link', { name: 'Реєстрація' })).toBeVisible();
   });
 
+  test('10.18: бургер і пункти меню не менші за 44×44 px', async ({ page }) => {
+    await page.goto('/');
+    const burger = page.getByRole('button', { name: 'Меню' });
+    const bb = await burger.boundingBox();
+    expect(bb!.width).toBeGreaterThanOrEqual(44);
+    expect(bb!.height).toBeGreaterThanOrEqual(44);
+    const menu = await openMenu(page);
+    const items = menu.getByRole('link');
+    const n = await items.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) {
+      const box = await items.nth(i).boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test('10.18: головна кнопка шапки «Порахувати» поміщається на 375px і веде на /calculator', async ({ page }) => {
+    await page.goto('/');
+    const cta = page.getByTestId('header-primary-cta');
+    await expect(cta).toBeVisible();
+    const box = await cta.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    await noHorizontalScroll(page);
+    await cta.click();
+    await expect(page).toHaveURL(/\/calculator$/);
+  });
+
   test('08-Q4: Esc закриває меню, повторне натискання теж', async ({ page }) => {
     await page.goto('/');
     await openMenu(page);
@@ -154,6 +184,7 @@ test.describe('Мобільний smoke @mobile', () => {
     await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('5000');
     await page.getByLabel("Об'єм двигуна (см³)", { exact: true }).fill('2000');
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await expect(page.getByRole('row').filter({ hasText: 'РАЗОМ' })).toBeVisible();
     await expect(page.getByTestId('calc-breakdown-scroll')).toBeVisible();

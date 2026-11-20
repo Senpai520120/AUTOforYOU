@@ -8,7 +8,7 @@ export default function CookieSettingsLink() {
     <button
       type="button"
       onClick={openConsentSettings}
-      className="hover:text-slate-300 transition-colors"
+      className="inline-flex items-center min-h-11 hover:text-slate-300 transition-colors"
     >
       {COOKIE_SETTINGS_LABEL}
     </button>

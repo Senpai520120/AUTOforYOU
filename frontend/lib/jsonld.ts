@@ -4,14 +4,16 @@ import { SITE_NAME, SITE_URL } from '@/lib/site';
 import { ownerTitle, supportContact } from '@/lib/site-settings';
 import {
   buildBreadcrumbLd,
+  buildFaqLd,
   buildOrganizationLd,
   buildWebsiteLd,
   type Crumb,
+  type FaqEntry,
   type JsonLd,
 } from '@/lib/jsonld-core';
 
 export { jsonLdString } from '@/lib/jsonld-core';
-export type { Crumb, JsonLd };
+export type { Crumb, FaqEntry, JsonLd };
 
 const SITE = { name: SITE_NAME, url: SITE_URL };
 
@@ -32,3 +34,6 @@ export function organizationLd(s: SiteSettings | null): JsonLd {
 export const websiteLd = (): JsonLd => buildWebsiteLd(SITE);
 
 export const breadcrumbLd = (crumbs: Crumb[]): JsonLd => buildBreadcrumbLd(SITE_URL, crumbs);
+
+/** FAQPage для питань про модель; null — питань немає. */
+export const faqLd = (items: FaqEntry[]): JsonLd | null => buildFaqLd(items);

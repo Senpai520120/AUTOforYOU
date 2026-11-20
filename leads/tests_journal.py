@@ -74,14 +74,14 @@ class Base(CleanCacheTestCase):
 @override_settings(LEAD_JOURNAL_CHAT_ID='-777', TELEGRAM_BOT_TOKEN='123:abc')
 class JournalMessageTests(Base):
     def test_text_has_whitelist_only(self):
-        lead = make_lead(name='<script>alert(1)</script>', city='<b>Київ</b>')
+        lead = make_lead(name='<script>alert(1)</script>', city='<b>Київ')
         text = journal_text(lead)
         for expected in (lead.public_id, 'Toyota Camry', '$9 000', 'UTC'):
             self.assertIn(expected, text)
         for forbidden in ('script', 'secret@example.com', '0671234567', '671234567', 'коментар-секрет',
                           'Секретний', 'https://', 'telegram'):
             self.assertNotIn(forbidden, text)
-        self.assertIn('&lt;b&gt;Київ&lt;/b&gt;', text)
+        self.assertIn('&lt;b&gt;Київ', text)
 
     def test_text_has_no_name_or_phone(self):
         lead = make_lead()
@@ -168,13 +168,19 @@ class JournalMessageTests(Base):
         self.assertIn('leads.tasks.resend_journal', tasks)
 
     def test_free_text_with_contacts_replaced(self):
-        for city in ('+380671234567', '067 123 45 67', '(067)-123-45-67', '@nick', 'a@b.ua', '1 2 3 4 5'):
+        for city in ('+380671234567', '067 123 45 67', '(067)-123-45-67', '067-123-45-67', '+380 67 123 45 67',
+                     '@nick', 'a@b.ua', '1 2 3 4 5 6 7', 't.me/ivan', 'https://x.ua', 'www.site.ua', 'a/b'):
             with self.subTest(city=city):
                 text = journal_text(make_lead(city=city))
                 self.assertIn('Місто: не вказано', text)
                 self.assertNotIn('nick', text)
                 self.assertNotIn('b.ua', text)
                 self.assertNotIn('6712', text)
+                self.assertNotIn('ivan', text)
+
+    def test_model_and_year_not_glued_into_phone(self):
+        text = journal_text(make_lead(city='Mazda 3 2019'))
+        self.assertIn('Місто: Mazda 3 2019', text)
 
     def test_client_vehicle_label_never_used(self):
         lead = make_lead(vehicle_label='Camry +380671234567')

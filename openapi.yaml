@@ -1169,9 +1169,19 @@ paths:
     post:
       operationId: v1_leads_create
       description: 'Гость или вошедший пользователь. Порядок: throttle, honeypot (заполнен:
-        тихий 201 без записи), капча (400 captcha_failed), поля. Пустой SiteSettings.partner_name
-        даёт 503. ПДн в ответе не возвращаются.'
+        тихий 201 без записи), 503 при пустом partner_name, поиск по Idempotency-Key
+        (до капчи), капча (400 captcha_failed), поля. Тот же ключ и телефон: 200 с
+        первой заявкой и заголовком Idempotent-Replay, без новой записи. Тот же ключ
+        и другой телефон: 409 без данных. Тот же телефон в окне LEAD_DUPLICATE_WINDOW_MINUTES:
+        новая заявка с пометкой «повтор» (в ответе не видна). ПДн в ответе не возвращаются.'
       summary: Заявка брокеру
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: UUID одной отправки формы. Невалидный заголовок игнорируется.
       tags:
       - leads
       requestBody:
@@ -1191,12 +1201,20 @@ paths:
       - cookieAuth: []
       - {}
       responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadCreated'
+          description: 'Повтор отправки: первая заявка'
         '201':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LeadCreated'
           description: ''
+        '409':
+          description: Ключ уже использован с другими данными
         '400':
           description: Ошибка полей или captcha_failed
         '429':
@@ -2713,6 +2731,12 @@ components:
           type: string
           readOnly: true
           title: Номер
+        duplicate_of:
+          type: string
+          title: Повтор заявки
+          readOnly: true
+          nullable: true
+          description: Номер першої заявки, якщо це повтор; лише в кабінеті брокера.
         created_at:
           type: string
           format: date-time
@@ -2901,6 +2925,7 @@ components:
       - contact_method
       - contact_method_display
       - created_at
+      - duplicate_of
       - email
       - entry_page_url
       - first_response_at
@@ -2942,6 +2967,12 @@ components:
           type: string
           readOnly: true
           title: Номер
+        duplicate_of:
+          type: string
+          title: Повтор заявки
+          readOnly: true
+          nullable: true
+          description: Номер першої заявки, якщо це повтор; лише в кабінеті брокера.
         created_at:
           type: string
           format: date-time
@@ -3025,6 +3056,7 @@ components:
       - car
       - contact_method
       - created_at
+      - duplicate_of
       - first_response_at
       - id
       - name
@@ -3091,6 +3123,7 @@ components:
           type: integer
           maximum: 10000
           minimum: 0
+          nullable: true
         fuel_type:
           $ref: '#/components/schemas/CustomsExciseFuelTypeEnum'
         vehicle_year:
@@ -3137,7 +3170,6 @@ components:
           nullable: true
       required:
       - auction_price_usd
-      - engine_cc
       - fuel_type
       - vehicle_year
     Calculation:
@@ -3463,6 +3495,8 @@ components:
       - calculator_visit
       - landing_visit
       - mobile_bar_click
+      - lead_form_start
+      - lead_submit_error
       type: string
     LandingListResponse:
       type: object
@@ -4085,6 +4119,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/ListingCurrencyEnum'
           title: Валюта
+        price_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          title: Ціна, USD (за курсом на момент збереження)
         price_type:
           allOf:
           - $ref: '#/components/schemas/PriceTypeEnum'
@@ -4193,6 +4234,7 @@ components:
       - model
       - owner_name
       - price
+      - price_usd
       - region
       - region_name
       - seller_active_listings_count
@@ -4307,6 +4349,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/ListingCurrencyEnum'
           title: Валюта
+        price_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          title: Ціна, USD (за курсом на момент збереження)
         price_type:
           allOf:
           - $ref: '#/components/schemas/PriceTypeEnum'
@@ -4387,6 +4436,7 @@ components:
       - model
       - owner_name
       - price
+      - price_usd
       - region
       - region_name
       - seller_has_badge
@@ -4452,6 +4502,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/ListingCurrencyEnum'
           title: Валюта
+        price_usd:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          title: Ціна, USD (за курсом на момент збереження)
         price_type:
           allOf:
           - $ref: '#/components/schemas/PriceTypeEnum'
@@ -4563,6 +4620,7 @@ components:
       - model
       - owner_name
       - price
+      - price_usd
       - region
       - region_name
       - seller_active_listings_count

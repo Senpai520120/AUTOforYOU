@@ -6,6 +6,7 @@ import { useAuthConfig, useCaptchaState } from '@/lib/captcha';
 import { safeNext } from '@/lib/safe-next';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import ListingSubmitNotice, { isListingSubmitNext } from '@/components/ui/ListingSubmitNotice';
 
 export default function LoginPage() {
   // useSearchParams без Suspense ламає пререндер сторінки під час build.
@@ -64,16 +65,17 @@ function LoginForm() {
     <div className="max-w-md mx-auto mt-10">
       <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900 mb-6">Вхід</h1>
+        {isListingSubmitNext(next) && <ListingSubmitNotice />}
         {ssoError && <p role="alert" className="mb-4 text-red-600 text-sm">{ssoError}</p>}
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label htmlFor={emailId} className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
-            <input id={emailId} type="email" autoComplete="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
+            <input id={emailId} type="email" autoComplete="email" inputMode="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base"
               value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <div>
             <label htmlFor={passwordId} className="block text-sm font-semibold text-slate-700 mb-1">Пароль</label>
-            <input id={passwordId} type="password" autoComplete="current-password" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
+            <input id={passwordId} type="password" autoComplete="current-password" required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base"
               value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           {showCaptcha && (
@@ -97,7 +99,7 @@ function LoginForm() {
           <Link href="/password-reset" className="text-blue-600 hover:underline">Забули пароль?</Link>
         </p>
         <p className="mt-2 text-sm text-center text-slate-500">
-          Немає акаунту? <Link href="/register" className="text-blue-600 underline">Реєстрація</Link>
+          Немає акаунту? <Link href={next === '/me' ? '/register' : `/register?${new URLSearchParams({ next })}`} className="text-blue-600 underline">Реєстрація</Link>
         </p>
       </div>
     </div>

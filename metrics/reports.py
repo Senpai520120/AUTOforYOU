@@ -14,7 +14,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from leads.funnel import source_counts
-from leads.models import Lead, LeadPartnerStatusChange, NotifyStatus, PartnerStatus, Qualification
+from leads.models import Lead, LeadPartnerStatusChange, LeadStatus, NotifyStatus, PartnerStatus, Qualification
 from task_ledger.models import FailedTask
 
 from .models import DailyMetric, MetricKey
@@ -39,6 +39,22 @@ def _metric_total(key: str, start: date, end: date) -> int:
     return rows.aggregate(total=Sum('value'))['total'] or 0
 
 
+def unanswered_leads(now=None):
+    """Заявки без ответа брокера: first_response_at пусто, статус «нова» (10.6). Одно определение для алерта и отчёта.
+
+    Возвращает (warn_ids, critical_ids): id заявок старше LEAD_UNANSWERED_WARN_HOURS (включая границу) и старше
+    LEAD_UNANSWERED_CRITICAL_HOURS. Вторые входят в первые.
+    """
+    now = now or timezone.now()
+    # Повторы заявки (10.13) не считаются: брокер отвечает на первую.
+    base = Lead.objects.filter(first_response_at__isnull=True, status=LeadStatus.NEW, duplicate_of__isnull=True)
+    warn_at = now - timedelta(hours=int(settings.LEAD_UNANSWERED_WARN_HOURS))
+    critical_at = now - timedelta(hours=int(settings.LEAD_UNANSWERED_CRITICAL_HOURS))
+    warn_ids = list(base.filter(created_at__lte=warn_at).order_by('pk').values_list('pk', flat=True))
+    critical_ids = list(base.filter(created_at__lte=critical_at).order_by('pk').values_list('pk', flat=True))
+    return warn_ids, critical_ids
+
+
 def collect_funnel(start: date, end: date) -> dict:
     tz = timezone.get_current_timezone()
     since = timezone.make_aware(datetime.combine(start, time.min), tz)
@@ -56,6 +72,7 @@ def collect_funnel(start: date, end: date) -> dict:
         for answered_at, created_at in answered.values_list('first_response_at', 'created_at')
     ]
     undelivered = leads.exclude(telegram_status=NotifyStatus.SENT).exclude(email_status=NotifyStatus.SENT)
+    unanswered_warn, unanswered_critical = unanswered_leads()
 
     return {
         'start': start,
@@ -63,6 +80,8 @@ def collect_funnel(start: date, end: date) -> dict:
         'landing_visits': _metric_total(MetricKey.LANDING_VISIT, start, end),
         'calculator_visits': _metric_total(MetricKey.CALCULATOR_VISIT, start, end),
         'calculations': _metric_total(MetricKey.CALCULATION, start, end),
+        'form_starts': _metric_total(MetricKey.LEAD_FORM_START, start, end),
+        'submit_errors': _metric_total(MetricKey.LEAD_SUBMIT_ERROR, start, end),
         'leads': leads.count(),
         'hot': leads.filter(qualification=Qualification.HOT).count(),
         'no_answer': status_leads(PartnerStatus.NO_ANSWER),
@@ -72,6 +91,8 @@ def collect_funnel(start: date, end: date) -> dict:
         'sources': source_counts(leads)[:TOP_SOURCES],
         'failed_tasks': FailedTask.objects.filter(failed_at__gte=since, failed_at__lt=until).count(),
         'undelivered': undelivered.count(),
+        'unanswered_warn': len(unanswered_warn),
+        'unanswered_critical': len(unanswered_critical),
     }
 
 
@@ -102,6 +123,8 @@ def render_report(data: dict) -> str:
         f"Візити лендингів: {data['landing_visits']}",
         f"Візити калькулятора: {data['calculator_visits']}",
         f"Розрахунки: {data['calculations']}",
+        f"Початок заповнення форми: {data['form_starts']}",
+        f"Помилки відправки заявки: {data['submit_errors']}",
         f"Заявки: {data['leads']}",
         f"Гарячі заявки: {data['hot']}",
         f"Депозити: {data['deposits']}",
@@ -110,6 +133,7 @@ def render_report(data: dict) -> str:
         '',
         'Конверсії:',
         f"візит → заявка: {_percent(data['leads'], visits)}",
+        f"старт форми → заявка: {_percent(data['leads'], data['form_starts'])}",
         f"розрахунок → заявка: {_percent(data['leads'], data['calculations'])}",
         f"заявка → гаряча: {_percent(data['hot'], data['leads'])}",
         f"гаряча → депозит: {_percent(data['deposits'], data['hot'])}",
@@ -118,6 +142,8 @@ def render_report(data: dict) -> str:
         '',
         f"Медіана першої відповіді: {_duration(data['median_response_seconds'])}",
         f"Недоставлені заявки: {data['undelivered']}",
+        f"Без відповіді зараз > {settings.LEAD_UNANSWERED_WARN_HOURS} год: {data['unanswered_warn']}",
+        f"Без відповіді зараз > {settings.LEAD_UNANSWERED_CRITICAL_HOURS} год: {data['unanswered_critical']}",
         f"Невдалі завдання: {data['failed_tasks']}",
     ]
     if data['sources']:

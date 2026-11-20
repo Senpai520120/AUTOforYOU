@@ -9,6 +9,7 @@
  *
  * INTERNAL_API_URL задається в Docker (http://backend:8000).
  */
+import { cache } from 'react';
 import { INTERNAL_API_URL as apiUrl } from '@/lib/config.server';
 import { API_URL } from '@/lib/config';
 
@@ -48,15 +49,33 @@ export function buildQuery(params: SearchParams, allowed: readonly string[]): st
   return query ? `?${query}` : '';
 }
 
+/**
+ * Таймаут серверного запиту до API (задача 10.16). Єдине місце: повільний бекенд не повинен
+ * вішати рендер сторінки. Таймаут = збій мережі: serverGet повертає null, сторінка показує ErrorState/фолбек.
+ */
+export const SERVER_FETCH_TIMEOUT_MS = 5000;
+
+/**
+ * Один запит на (path, revalidate) у межах рендера. Вручну, бо fetch із `signal` (а він потрібен для
+ * таймауту) Next не мемоїзує: без React.cache layout і сторінка робили б два однакові запити.
+ */
+const fetchJson = cache(async (path: string, revalidate: number): Promise<unknown> => {
+  try {
+    const res = await fetch(`${apiUrl}${path}`, {
+      next: { revalidate },
+      signal: AbortSignal.timeout(SERVER_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null; // мережа, таймаут (TimeoutError), не-JSON
+  }
+});
+
 /** Повертає null замість винятку: сторінка має відрендеритись і без API. */
 export async function serverGet<T>(path: string, revalidate = 60): Promise<T | null> {
-  try {
-    const res = await fetch(`${apiUrl}${path}`, { next: { revalidate } });
-    if (!res.ok) return null;
-    return publicMedia((await res.json()) as T);
-  } catch {
-    return null;
-  }
+  const data = await fetchJson(path, revalidate);
+  return data == null ? null : publicMedia(data as T);
 }
 
 const ACCESS_COOKIE = 'access';
@@ -83,6 +102,7 @@ export async function serverGetAuthed<T>(path: string): Promise<T | null> {
     const res = await fetch(`${apiUrl}${path}`, {
       headers: { Cookie: `${ACCESS_COOKIE}=${access}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(SERVER_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     return publicMedia((await res.json()) as T);

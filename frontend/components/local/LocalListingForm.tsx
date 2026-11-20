@@ -16,6 +16,16 @@ import LoadingState from '@/components/ui/LoadingState';
 import PhotoUploadBlock from './PhotoUploadBlock';
 import { POSTING_AS_DEALER } from '@/lib/labels';
 import { checkPhotos, minPhotosError, photoHint } from './photo-limits';
+import { useSiteConfig } from '@/lib/use-site-config';
+import { focusFirstInvalid } from '@/lib/form-errors';
+import Link from 'next/link';
+
+export const SUBMIT_LABEL = 'Надіслати на модерацію';
+
+/** Строк модерації з налаштувань сайту (годин); порожньо — рядок не показується, чисел у коді немає. */
+export function moderationTermText(hours: number | null | undefined): string {
+  return hours && hours > 0 ? `Орієнтовний строк модерації — до ${hours} год.` : '';
+}
 
 /** Поля з місцем для помилки у формі; решта ключів відповіді — у загальному блоці з назвою поля. */
 const FIELD_LABELS: Record<string, string> = {
@@ -207,7 +217,16 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const descriptionMax = config?.description_max ?? 0;
   const descriptionTooLong = descriptionMax > 0 && description.length > descriptionMax;
   const [needPhone, setNeedPhone] = useState(false);
+  const phoneLocked = !!(authUser?.phone_verified && authUser?.verified_phone);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const siteConfig = useSiteConfig();
+  const moderationTerm = moderationTermText(siteConfig?.listing_moderation_hours);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [focusTick, setFocusTick] = useState(0);
+  // Після відповіді сервера з помилками фокус іде на перше помилкове поле (як у LeadForm, 10.12).
+  useEffect(() => {
+    if (focusTick) focusFirstInvalid(formRef.current);
+  }, [focusTick]);
   const [notVerified, setNotVerified] = useState(false);
 
   // photo upload: in edit mode listingId is known upfront; in create mode we get it after creation
@@ -251,6 +270,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
     e.preventDefault();
     if (!cityOption) {
       setErrors({ city: 'Оберіть населений пункт зі списку' });
+      setFocusTick(t => t + 1);
       return;
     }
     // 8.4: нове оголошення без мінімуму фото не відправляється (на модерації його не схвалять).
@@ -268,8 +288,10 @@ export default function LocalListingForm({ initial, listingId }: Props) {
       fuel_type: fuelType, transmission, body_type: bodyType, condition,
       price, currency, price_type: priceType,
       region: Number(region), city: Number(city),
-      description, contact_phone: contactPhone,
+      description,
     };
+    // 10.23: телефон підставляє сервер (підтверджений номер) — поле лише для читання, у запит не йде
+    if (!authUser?.phone_verified) payload.contact_phone = contactPhone;
     try {
       if (isEdit) {
         // 10-Q3: лише змінені поля — незмінене не відправляє оголошення на повторну модерацію.
@@ -311,6 +333,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         return;
       }
       setErrors(mapFormErrors(err));
+      setFocusTick(t => t + 1);
     } finally {
       setSubmitting(false);
     }
@@ -328,6 +351,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         <p className="text-sm text-blue-700 mb-4">
           Ми перевіримо оголошення і опублікуємо його незабаром. Ви отримаєте сповіщення.
         </p>
+        {moderationTerm && <p data-testid="moderation-term" className="text-sm text-blue-700 mb-4">{moderationTerm}</p>}
         {photoError && (
           <div role="alert" className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-3 text-sm mb-4 text-left">
             <p>{photoError}</p>
@@ -361,7 +385,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
       {/* VIN prefill */}
       {!isEdit && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -555,14 +579,28 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         <input id={fid('contact_phone')}
           className={inputCls}
           type="tel"
-          value={contactPhone}
+          value={phoneLocked ? (authUser?.verified_phone ?? '') : contactPhone}
           onChange={e => setContactPhone(e.target.value)}
+          readOnly={phoneLocked}
           aria-invalid={!!errors.contact_phone}
           aria-describedby={errors.contact_phone ? fid('err-contact_phone') : undefined}
           placeholder="+380501234567"
         />
         {errors.contact_phone && <p id={fid('err-contact_phone')} role="alert" className={errCls}>{errors.contact_phone}</p>}
-        <p className="text-xs text-slate-600 mt-1">Показується тільки авторизованим покупцям</p>
+        <p data-testid="phone-hint" className="text-xs text-slate-600 mt-1">
+          {phoneLocked ? (
+            <>
+              Номер з вашого підтвердженого Telegram. Щоб змінити його, надішліть боту команду /unlink і підтвердіть
+              новий номер у розділі <Link href="/me/telegram" className="text-blue-700 underline">«Telegram»</Link> кабінету.
+            </>
+          ) : (
+            <>
+              Номер не підтверджено. Підтвердіть його через Telegram у розділі{' '}
+              <Link href="/me/telegram" className="text-blue-700 underline">«Telegram»</Link> кабінету —
+              тоді він підставиться автоматично.
+            </>
+          )}
+        </p>
       </div>
 
       {!isEdit && (
@@ -612,13 +650,16 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         </p>
       )}
 
+      {!isEdit && moderationTerm && (
+        <p data-testid="moderation-term" className="text-sm text-slate-600">{moderationTerm}</p>
+      )}
       <div className="flex gap-3 pt-2">
         <button
           type="submit"
           disabled={submitting || descriptionTooLong || (!isEdit && !(agreedToRules && legalConfirmed))}
           className="bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold px-8 py-3 rounded-lg transition-colors"
         >
-          {submitting ? 'Збереження...' : isEdit ? 'Зберегти зміни' : 'Опублікувати оголошення'}
+          {submitting ? 'Збереження...' : isEdit ? 'Зберегти зміни' : SUBMIT_LABEL}
         </button>
         <button
           type="button"

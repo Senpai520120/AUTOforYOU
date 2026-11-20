@@ -5,6 +5,7 @@
  */
 import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillCalcForm } from './helpers/calc-form';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -50,6 +51,7 @@ test('збій сервера лічильників не ламає кальк�
   await page.goto('/calculator');
   await expect(page.getByRole('button', { name: 'Розрахувати' })).toBeVisible();
   const resp = page.waitForResponse((r) => r.url().includes('/api/v1/pricing/calculate/') && r.request().method() === 'POST');
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   expect((await resp).status()).toBe(201);
   await expect(page.getByTestId('calc-result')).toBeVisible();

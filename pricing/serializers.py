@@ -8,10 +8,30 @@ from .models import Calculation
 
 
 class CalculateInputSerializer(serializers.Serializer):
-    auction_price_usd = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'))
-    engine_cc = serializers.IntegerField(min_value=0, max_value=10000)
-    fuel_type = serializers.ChoiceField(choices=['petrol', 'diesel', 'electric', 'hybrid', 'phev'])
-    vehicle_year = serializers.IntegerField(min_value=1900, max_value=2100)
+    # 10.17: понятные сообщения по-украински; ценa и год обязательны, пустое поле - не 0
+    auction_price_usd = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal('0'),
+        error_messages={'required': 'Вкажіть ціну аукціону ($).', 'null': 'Вкажіть ціну аукціону ($).',
+                        'invalid': 'Ціна аукціону має бути числом.',
+                        'min_value': "Ціна аукціону не може бути від'ємною."},
+    )
+    # Для ЭВ/PHEV объём не нужен (пусто = 0); для ДВС/hybrid проверяет validate()
+    engine_cc = serializers.IntegerField(
+        min_value=0, max_value=10000, required=False, allow_null=True,
+        error_messages={'invalid': "Об'єм двигуна має бути цілим числом (см³).",
+                        'min_value': "Об'єм двигуна не може бути від'ємним.",
+                        'max_value': "Об'єм двигуна не може перевищувати 10000 см³."},
+    )
+    fuel_type = serializers.ChoiceField(
+        choices=['petrol', 'diesel', 'electric', 'hybrid', 'phev'],
+        error_messages={'required': 'Оберіть тип палива.', 'invalid_choice': 'Оберіть тип палива зі списку.'},
+    )
+    vehicle_year = serializers.IntegerField(
+        min_value=1900, max_value=2100,
+        error_messages={'required': 'Вкажіть рік випуску.', 'null': 'Вкажіть рік випуску.',
+                        'invalid': 'Рік випуску має бути числом.', 'min_value': 'Вкажіть коректний рік випуску.',
+                        'max_value': 'Вкажіть коректний рік випуску.'},
+    )
     # Ёмкость батареи в кВт·ч (2.5, 02-Q3): обязательна и > 0 для electric/phev, для ДВС не нужна
     battery_capacity_kwh = serializers.DecimalField(
         max_digits=5, decimal_places=1, min_value=Decimal('0'), max_value=Decimal('300'),
@@ -41,6 +61,7 @@ class CalculateInputSerializer(serializers.Serializer):
     def validate(self, attrs):
         # Акциз EV/PHEV считается по батарее (calculator.EV_FUEL_TYPES), объём двигателя нужен только ДВС/hybrid.
         is_ev = attrs['fuel_type'] in EV_FUEL_TYPES
+        attrs['engine_cc'] = attrs.get('engine_cc') or 0
         if not is_ev and attrs['engine_cc'] < 1:
             raise serializers.ValidationError({'engine_cc': "Вкажіть об'єм двигуна (см³)."})
         if is_ev:

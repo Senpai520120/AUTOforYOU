@@ -11,11 +11,12 @@ import ReportButton from '@/components/reports/ReportButton';
 import ChannelBadge from '@/components/local/ChannelBadge';
 import GuestPhoneReveal from '@/components/local/GuestPhoneReveal';
 import MobileActionBar, { countBarClick, mobileBarButtonClass } from '@/components/ui/MobileActionBar';
-import { MOBILE_BAR_LABELS, VERIFIED_DEALER_LABEL } from '@/lib/labels';
+import { CATALOG_LABEL, MOBILE_BAR_LABELS, VERIFIED_DEALER_LABEL } from '@/lib/labels';
 import SellerBlock from '@/components/trust/SellerBlock';
 import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { PHONE_BLOCK_ID, usePhoneReveal } from '@/lib/usePhoneReveal';
 import { useC2C } from '@/components/c2c/C2CProvider';
+import ListingCheckTips from '@/components/local/ListingCheckTips';
 
 const WRITE_BLOCK_ID = 'write-seller-block';
 
@@ -84,7 +85,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/ua" className="hover:text-blue-700">Каталог Україна</Link>
+        <Link href="/ua" className="hover:text-blue-700">{CATALOG_LABEL}</Link>
         <span>/</span>
         <span>{listing.make} {listing.model}</span>
       </div>
@@ -185,7 +186,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               {phone ? (
                 <a
                   href={`tel:${phone}`}
-                  className="block bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
+                  className="block bg-green-700 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
                 >
                   {phone}
                 </a>
@@ -243,6 +244,8 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
         </div>
       )}
 
+      <ListingCheckTips />
+
       {listing.status === 'active' && !isOwner && (!user || ownerResolved) && (
         <MobileActionBar
           actions={[
@@ -250,7 +253,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               key: 'call',
               node: phone ? (
                 <a href={`tel:${phone}`} onClick={countBarClick}
-                  className={`${mobileBarButtonClass} bg-green-600 text-white hover:bg-green-500`}>
+                  className={`${mobileBarButtonClass} bg-green-700 text-white hover:bg-green-600`}>
                   {MOBILE_BAR_LABELS.call}
                 </a>
               ) : (
@@ -275,7 +278,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                       countBarClick();
                       document.querySelector<HTMLButtonElement>(`#${WRITE_BLOCK_ID} button`)?.click();
                     }}
-                    className={`${mobileBarButtonClass} bg-green-600 text-white hover:bg-green-500`}
+                    className={`${mobileBarButtonClass} bg-green-700 text-white hover:bg-green-600`}
                   >
                     {MOBILE_BAR_LABELS.write}
                   </button>

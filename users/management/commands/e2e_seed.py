@@ -33,6 +33,11 @@ E2E_SITE_SETTINGS = {
     'phone': '+380500000000',
     'telegram_channel_url': 'https://t.me/e2e_channel',
     'partner_name': f'{E2E_PREFIX} Партнер',
+    'about_text': f'{E2E_PREFIX} Ми допомагаємо підібрати та привезти авто зі США.\n\n{E2E_PREFIX} Другий абзац.',
+    'lead_response_hours': 4,
+    'lead_next_steps': f"{E2E_PREFIX} Менеджер зв'яжеться з вами\n{E2E_PREFIX} Уточнимо бюджет і побажання",
+    'listing_check_tips': f"{E2E_PREFIX} Перевірте VIN за базою\n{E2E_PREFIX} Огляньте авто на СТО",
+    'listing_moderation_hours': 24,
     'legal_docs_approved': True,
     'legal_docs_updated_at': date(2026, 10, 1),
     'legal_docs_version': '2026-10-01',
@@ -65,6 +70,8 @@ class Command(BaseCommand):
         with open(os.devnull, 'w') as sink:
             for name in ('seed_regions', 'seed_rates', 'seed_auction_fees'):
                 call_command(name, stdout=sink)
+            # 2.18: на стенде со старыми тирами (без clean) привести сетки к CSV; на свежем стенде - no-op.
+            call_command('seed_auction_fees', '--update', stdout=sink)
 
         with transaction.atomic():
             users = self._users(password)
@@ -176,6 +183,27 @@ class Command(BaseCommand):
                     img.image.save(f'e2e-{photo}', ContentFile(data), save=True)
             self._note('local_listings', created)
 
+        # 10.24: активне оголошення в гривнях - картка показує «≈ $» (e2e/catalog-mobile.spec.ts).
+        # price_usd (editable=False) ставимо явно: курсу в e2e-стеку может не быть.
+        marker = f'{E2E_PREFIX} Renault Duster UAH (active)'
+        uah, created = LocalListing.objects.get_or_create(
+            owner=seller, description=marker,
+            defaults={
+                'seller_type': private, 'make': 'Renault', 'model': 'Duster', 'year': 2017,
+                'mileage_km': 90000, 'engine_cc': 1500, 'fuel_type': 'diesel', 'transmission': 'manual',
+                'body_type': 'suv', 'price': Decimal('400000'), 'currency': 'UAH',
+                'region': region, 'city': city, 'status': LocalListing.Status.ACTIVE,
+                'agreed_to_rules': True, 'contact_phone': '+380671112233',
+            },
+        )
+        LocalListing.objects.filter(pk=uah.pk).update(price_usd=Decimal('9500.00'))
+        if created:
+            data = self._photo_bytes(FIXTURE_PHOTOS[0])
+            if data:
+                img = LocalListingImage(listing=uah, is_primary=True)
+                img.image.save(f'e2e-{FIXTURE_PHOTOS[0]}', ContentFile(data), save=True)
+        self._note('local_listings', created)
+
     def _listings(self, seller):
         from listings.models import Listing
         from vehicles.models import Vehicle
@@ -228,7 +256,7 @@ class Command(BaseCommand):
         from messaging.models import Conversation, Message
 
         listing = LocalListing.objects.filter(
-            owner=seller, description__startswith=E2E_PREFIX,
+            owner=seller, description__startswith=f'{E2E_PREFIX} Skoda Octavia',
             status=LocalListing.Status.ACTIVE,
         ).first()
         conv, created = Conversation.objects.get_or_create(initiator=buyer, local_listing=listing)
@@ -307,7 +335,7 @@ class Command(BaseCommand):
 
         from django.core.cache import cache
 
-        from landings.models import ModelLandingPage
+        from landings.models import LandingFaqItem, ModelLandingPage
         from landings.services import can_publish
         from pricing import cache as pricing_cache
 
@@ -321,7 +349,8 @@ class Command(BaseCommand):
             'us_port': 'houston', 'eu_port': 'klaipeda',
         }
         texts = {
-            'intro': f'{E2E_PREFIX} Вступ сторінки моделі.',
+            # Достатньо для порога LandingSettings.min_text_chars (10.10): повтор тестової фрази, не контент.
+            'intro': f'{E2E_PREFIX} Вступ сторінки моделі. ' + 'Тестовий текст для перевірки порога. ' * 20,
             'included_text': f'{E2E_PREFIX} Аукціонний збір, доставка, розмитнення.',
             'typical_term_text': f'{E2E_PREFIX} 2-3 місяці',
         }
@@ -331,7 +360,25 @@ class Command(BaseCommand):
         self._note('landing_page', created)
         if created and can_publish(page):
             page.is_published = True
+            page.generation = f'{E2E_PREFIX} XV70'
             page.save()
+        # FAQ только у Camry: у Accord блока нет (проверка «пусто не рендерится»), неактивный вопрос не показывается.
+        for order, (question, answer, active) in enumerate((
+            (f'{E2E_PREFIX} Перше питання?', f'{E2E_PREFIX} Перша відповідь.', True),
+            (f'{E2E_PREFIX} Друге питання?', f'{E2E_PREFIX} Друга відповідь.', True),
+            (f'{E2E_PREFIX} Неактивне питання?', f'{E2E_PREFIX} Неактивна відповідь.', False),
+        ), start=1):
+            _, faq_created = LandingFaqItem.objects.get_or_create(
+                page=page, question=question, defaults={'answer': answer, 'order': order, 'is_active': active})
+            self._note('landing_faq', faq_created)
+        # Второй опубликованный лендинг той же марки: нужен для блока «Схожі моделі» (задача 10.9).
+        similar, created = ModelLandingPage.objects.get_or_create(
+            slug='e2e-honda-accord',
+            defaults={'make': E2E_PREFIX, 'model': 'Honda Accord', 'sort_order': 9992, **inputs, **texts})
+        self._note('landing_page', created)
+        if created and can_publish(similar):
+            similar.is_published = True
+            similar.save()
         draft, created = ModelLandingPage.objects.get_or_create(
             slug='e2e-draft', defaults={'make': E2E_PREFIX, 'model': 'Чернетка', 'sort_order': 9991})
         self._note('landing_page', created)

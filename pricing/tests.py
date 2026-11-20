@@ -6,7 +6,7 @@
 Источник: ставки растаможки Украины; финал подтверждает таможенный брокер.
 Сетки аукционных сборов — baseline (сверить с тарифом брокера).
 """
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from types import SimpleNamespace
 
 from django.core.management import call_command
@@ -288,6 +288,24 @@ class TestCalculateLandedCostPetrol(SimpleTestCase):
     def test_total_uah_greater_than_total_usd_times_rate(self):
         result = calculate_landed_cost(self.inputs, self.rates)
         self.assertGreater(result.total_uah, result.total_usd * D('41'))
+
+    def test_total_usd_full_is_total_uah_over_rate_snapshot(self):
+        result = calculate_landed_cost(self.inputs, self.rates)
+        self.assertLessEqual(abs(result.total_usd_full * D('41') - result.total_uah), D('0.01') * D('41'))
+        self.assertEqual(result.total_usd_full, (result.total_uah / D('41')).quantize(D('0.01'), ROUND_HALF_UP))
+
+    def test_total_usd_full_adds_excise_vat_pension_once(self):
+        result = calculate_landed_cost(self.inputs, self.rates)
+        taxes_uah = result.excise_uah + result.vat_uah + result.pension_fund_uah
+        self.assertGreater(taxes_uah, D('0'))
+        self.assertLessEqual(abs((result.total_usd_full - result.total_usd) - taxes_uah / D('41')), D('0.02'))
+        self.assertEqual(result.total_usd, D('10000') + D('1000') + D('600') + D('1300') + D('300') + D('1190'))
+
+    def test_total_usd_full_is_string_decimal_in_dict(self):
+        d = calculate_landed_cost(self.inputs, self.rates).to_dict()
+        self.assertIsInstance(d['total_usd_full'], str)
+        Decimal(d['total_usd_full'])
+        self.assertIsInstance(d['total_usd'], str)
 
     def test_to_dict_serializable(self):
         result = calculate_landed_cost(self.inputs, self.rates)
@@ -789,6 +807,13 @@ class TestLandedCostE2ECopartBroker(CleanCacheTestCase):
         breakdown, _ = self._build()
         # $5000 + $535 + $500 + $1300 + $350 + $680 = $8365
         self.assertEqual(breakdown.total_usd, D('8365.00'))
+
+    def test_total_usd_full_matches_uah_and_keeps_old_total(self):
+        breakdown, rates = self._build()
+        self.assertEqual(breakdown.total_usd, D('8365.00'))
+        self.assertLessEqual(abs(breakdown.total_usd_full * rates.usd_to_uah - breakdown.total_uah),
+                             D('0.01') * rates.usd_to_uah)
+        self.assertGreater(breakdown.total_usd_full, breakdown.total_usd)
 
     def test_total_uah_positive_and_above_usd_equivalent(self):
         breakdown, rates = self._build()

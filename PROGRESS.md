@@ -1,8 +1,110 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, 7.6 ✓, 8.9 ✓, 2.14 ✓, 2.5 ✓, 2.6 ✓, 2.7 ✓, 8.7 ✓, 2.8 ✓, 3.1 ✓, 3.2a ✓, 3.4a ✓, 2.12 ✓, 3.4b ✓, 5.1 ✓, 5.4 ✓, 6.7 ✓, 6.1 ✓, 6.2 ✓, 6.3 ✓ (6.3a, 6.3b), 6.4 ✓, 2.13 ✓, 2.16a ✓ (◐, нужна 2.16b), 3.5 ✓, 7.3 ✓, 7.4 ✓, 7.1 ✓ (2026-11-03), 7.7a ✓ (2026-11-03) — ВОЛНА-1 по коду закрыта, дальше 2.16b → … (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, 7.6 ✓, 8.9 ✓, 2.14 ✓, 2.5 ✓, 2.6 ✓, 2.7 ✓, 8.7 ✓, 2.8 ✓, 3.1 ✓, 3.2a ✓, 3.4a ✓, 2.12 ✓, 3.4b ✓, 5.1 ✓, 5.4 ✓, 6.7 ✓, 6.1 ✓, 6.2 ✓, 6.3 ✓ (6.3a, 6.3b), 6.4 ✓, 2.13 ✓, 2.16 ✓ (2.16a и 2.16b, 2026-10-28), 3.5 ✓, 7.3 ✓, 7.4 ✓, 7.1 ✓ (2026-11-03), 7.7a ✓ (2026-11-03), 2.18 ✓ (2026-11-19) — ВОЛНА-1 по коду закрыта, дальше 2.19 (ждёт решения брокера), 2.20 (ждёт прайса экспедитора), затем этап 10 P0 с 10.1 (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
+
+---
+
+## Задача 10.25 — подача объявления: вход, кнопка и срок, телефон, капча (2026-11-20) ✓
+
+- `/login` и `/register` с `next=/local/new`: пояснение «Щоб подати оголошення, увійдіть або зареєструйтесь. Реєстрація безкоштовна.» (`ListingSubmitNotice`), `next` сохраняется в ссылках вход↔регистрация.
+- Форма: кнопка «Надіслати на модерацію», срок из `SiteSettings.listing_moderation_hours` (миграция 0006, AddField; пусто — срока нет), подсказка телефона про подтверждённый Telegram и `/unlink`, фокус на первую ошибку.
+- Нижняя панель карточки: «Подзвонити» у гостя ставит фокус на блок капчи. `/sellers/[id]` проверена: ПДн нет, 404 API; добавлена в axe (`a11y.spec.ts`).
+- Схема API: `site-settings` + `listing_moderation_hours` (`openapi.yaml` не регенерирован, нужен PostgreSQL). Playwright не запускался.
+
+## Задача 10.24 — каталог /ua на мобильном (2026-11-20) ✓
+
+- `LocalListingFilters`: до 768 px свёрнут за кнопкой «Фільтри (N)» (`aria-expanded`), счётчик — `countActiveFilters` (`lib/local-filters.ts`, без `page`/`ordering`). Карточка: «≈ $N» по `price_usd` (`formatUsd`, не для USD). Пустой результат — `EmptyState` + «Скинути фільтри» (только при фильтрах) + «Порахувати пригон з США».
+- API: `price_usd` в списке/детали/кабинете (только чтение); `openapi.yaml` правлен вручную (3 схемы) — перегенерировать против PostgreSQL. Сид: `[E2E] Renault Duster` в UAH с `price_usd`. Тест `local_listings/tests_price_usd.py`; e2e `catalog-mobile.spec.ts` написан, не запускался.
+
+## Задача 10.23 — телефон объявления = подтверждённый номер, /unlink сбрасывает (2026-11-20) ✓
+
+- `local_listings/phone.py`: create/PATCH подставляют `verified_phone` владельца (клиентский игнорируется; модератор правит с номером владельца); без номера уход в `pending` -> 400 с подсказкой. Исключения: staff (засев) и `PHONE_VERIFICATION_REQUIRED=false`.
+- Показ (`/contact/`, кабинет): только подтверждённый номер, иначе `null`; журнал показов и троттлинг не менялись. `unlink_telegram` (сайт, `/unlink`, блокировка бота) сбрасывает `verified_phone`/`phone_verified_at`; данные объявлений остаются.
+- Ревью: `launch_check` ERROR при `C2C_ENABLED=true` и `PHONE_VERIFICATION_REQUIRED=false` (пункт 18a чек-листа); перепривязка Telegram A->B сбрасывает подтверждение телефона; исключение из требования - только admin/суперпользователь (модератор и брокер с `is_staff` не исключены; e2e-сид пишет объявления в БД напрямую, API подачи не использует). В e2e-сиде у объявлений seller теперь показывается его подтверждённый номер, комментарий в `mobile-action-bar.spec.ts` про +380671112233 устарел.
+- Форма `LocalListingForm`: поле только для чтения при подтверждённом номере. Миграций нет; схема API по полям не менялась. Тесты `local_listings/tests_verified_phone.py`.
+
+## Задача 10.22 — сохранённые поиски: filters, устойчивая рассылка, без потерь (2026-11-20) ✓
+
+- `local_listings/filters.py`: `apply_listing_filters` (тело фильтра каталога, поведение прежнее) и `clean_filter_params` (белый список ключей, `_int`/`_decimal`, choices, NUL); сериализатор использует его для POST/PATCH (400). Старые битые записи не удаляются: рассылка пропускает их с WARNING (id).
+- `saved_searches/tasks.py`: отбор по `Coalesce(moderated_at, created_at)`; 10 отдельных уведомлений + одно «і ще N» со ссылкой `/local?<filters>`; курсор `last_notified_at` = дата публикации самого нового учтённого (потерь между запусками нет); сбой одной записи не обрывает цикл. Миграций нет, схема API не менялась.
+- `saved_searches/tests.py` (17 тестов), мутации проверены. Ограничение: повторное одобрение после правки обновляет `moderated_at`, поиск может прислать объявление ещё раз.
+
+## Задача 10.20 (часть) — launch_check требует BACKUP_HEARTBEAT_URL (2026-11-20) ◐
+
+- `core/launch.py`: `BACKUP_HEARTBEAT_URL` (источник env, как у соседей) в `REQUIRED_VARS`; пусто/заглушка = ERROR с подсказкой, `http://` = ERROR, `https://` = OK. В вывод идёт только хост, не путь (там может быть токен). Settings не менялись: переменную читает только `backup.sh`.
+- Тесты `BackupHeartbeatTests` (пусто, http, https без полного URL); три мутации дают красные тесты. Осталось по 10.20: алерт на срок TLS после домена.
+
+## Задача 10.30 — ревью безопасности, исправления «желательно» (2026-11-20) ✓
+
+- Аудит `security-reviewer`: критичного и важного нет; IDOR заявок/брокера, `/media/`+`private_media`, импорт КАТОТТГ, Telegram-группа, XSS `/sellers/[id]`, `safeNext` — все «ок».
+- Тест 409 для чужого брокера на `/qualification/`; `import_katottg`: не-UTF-8 и длинный `region_name` -> `CommandError` (со строкой); `_journal_safe`: ссылки/ники -> «не вказано», телефон = 7+ цифр с разделителями («Mazda 3 2019» проходит; старый тест `1 2 3 4 5` заменён на 7 цифр, `</b>` в городе теперь тоже «не вказано» из-за `/`).
+- `e2e/safe-next.spec.ts` (4 вредных `next`) не запускался. Решения владельца (удалить `nginx/nginx.conf`; фото при `rejected`/`archived`) — в LAUNCH_CHECKLIST. Мутации проверены, ruff/tsc/lint чисто.
+
+## Задача 10.29 — советы «як перевірити авто», аудит ссылок на закрытые разделы (2026-11-20) ✓
+
+- `SiteSettings.listing_check_tips` (миграция 0005, AddField; админка «Довіра»; белый список API). Компонент `ListingCheckTips` на карточке C2C: блок только при непустом поле; под ним `PartnerVinLink` (виден лишь при заданном `CARVERTICAL_PARTNER_URL`), `/vin-check` не открывался. `[E2E]` советы в `e2e_seed`.
+- Аудит: шапка, бургер, подвал, sitemap, robots, JSON-LD и бот уже закрыты флагами; бот при `LOTS_ENABLED=false` не даёт ссылок. Исправлено: `/me/leads` «Переглянути лот» только при `lots_enabled`.
+- Тесты: Django (site_settings +4, бот +2, мутации проверены); `e2e/check-tips.spec.ts` не запускался. Схема API изменилась (новое поле) — **openapi.yaml перегенерирует оркестратор**.
+
+## Задача 10.28 — axe на всех публичных страницах, ошибки регистрации у полей (2026-11-20) ✓
+
+- `e2e/a11y.spec.ts`: одна таблица `PUBLIC_PAGES` (17 страниц: главная, калькулятор, how-it-works, /prigon и лендинг `e2e-toyota-camry`, about, privacy/terms/rules/refund/cookies, /ua, карточка C2C, login, register, password-reset, 404), порог 0 serious/critical. Отдельной `/faq` нет (FAQ внутри how-it-works).
+- Контраст: подпись «Останнє оновлення» на юр. страницах `slate-400` -> `slate-500` (`LegalPage.tsx`); остальные цвета юр. страниц (`slate-500+`, `blue-600`) проходят 4.5:1.
+- Регистрация: `lib/form-errors.ts` (`splitFieldErrors`, `focusFirstInvalid`); 400 по `first_name/email/phone/password/password2` -> текст у поля, `aria-invalid`, `aria-describedby`, фокус на первом; остальное (капча, detail) — общий alert, тексты прежние. `autocomplete` given-name/email/tel/new-password, `inputmode`, `text-base`. Login и password-reset: `autocomplete`/`inputmode`/16px.
+- e2e (не запускались): 2 теста в `register.spec.ts` (email занят -> фокус/aria; атрибуты и 16px); axe-таблица. Backend не менялся. tsc и lint чисто (0 errors).
+
+## Задача 10.12 — LeadForm: два шага, фокус на ошибке (2026-11-20) ✓
+
+- Шаг 1: имя, телефон, способ связи (+ник), согласия, кнопка «Надіслати». Шаг 2 — блок «Додати деталі (необов'язково)» (`aria-expanded`, `hidden`): email, бюджет, «коли», місто, коментар. Одна заявка, один `Idempotency-Key`, события 10.15 без изменений. Серверные поля уже необязательны, backend не менялся.
+- `components/leads/LeadCta.tsx`: кнопка «Залишити заявку» у итога `CalcBreakdown` и (десктоп) на лендинге: скролл + фокус на `#lead-name`, ничего не отправляет.
+- Кнопка отправки остаётся неактивной только по техническим причинам (нет согласия партнёру, нет данных партнёра, капча не готова); причина — видимый `lead-submit-hint`, связан `aria-describedby`. Ошибки имени/телефона/согласия показываются по клику.
+- Первая ошибка (клиентская и серверная 400): `aria-invalid` на всех полях, фокус + `scrollIntoView`; ошибка в шаге 2 раскрывает блок. Поля 16px (`text-base`), `autocomplete` name/tel/email/address-level2, `inputmode` tel/email/decimal.
+- e2e (не запускались): `lead.spec.ts` (+4 теста и `@mobile` font-size), правки `lead.spec`/`analytics.spec`. Проверки: tsc, lint (0 errors, 33 прежних warnings), ruff.
+
+## Задача 10.17 — удобство калькулятора (2026-11-20) ✓
+
+- Форма `/calculator`: цена, объём и год пустые с `placeholder` («Наприклад, …»), без `EXAMPLE`; `noValidate` + `validateForm` (украинские тексты как на сервере, фокус на первом ошибочном поле). Для электро/PHEV объём не обязателен, нужна батарея.
+- Сервер: `engine_cc` необязателен в сериализаторе (для ДВС/hybrid без него или 0 — 400 «Вкажіть об'єм двигуна (см³).»), украинские `error_messages` цены, года, топлива. Схема API изменилась (`engine_cc` не required) — **openapi.yaml перегенерирует оркестратор**.
+- Названия: `auction_location_uk`, `us_port_uk` (`UsLandRoute`), `us_port_uk`, `eu_port_uk` (`OceanFreightRate`), миграция 0012 (AddField). `seed_rates` заполняет только пустые и только однозначные (Х'юстон, Балтімор, Нью-Джерсі, Клайпеда, Гданськ, Каліфорнія…); `general` остаётся «General».
+- Деньги: `lib/format.ts` (`formatNumber/formatUsd/formatUah`, `uk-UA`) в `CalcBreakdown`, `LandingCalc` (0 знаков, как раньше), карточках брокера, `/me/calculations`, `/me/leads`.
+- Гибрид: сид HEV — одна строка 5 €/100 см³ на любой объём (у бензина порог 3000); вопрос владельцу в LAUNCH_CHECKLIST. Задача 9.51 про сборы аукционов, не про акциз.
+- e2e: хелпер `e2e/helpers/calc-form.ts`, вставлен в 15 спеков; новый блок в `calculator-config.spec.ts`; `landing.spec.ts` ждёт пустое поле. Не запускались.
+- Проверки: `test pricing landings` 398 OK, `makemigrations --check`, ruff, tsc, lint (0 errors) чисто.
+
+## Задача 10.18 — шапка и мобильные мелочи (2026-11-20) ✓
+
+- Шапка: primary-кнопка «Порахувати» (`data-testid="header-primary-cta"`) -> `/calculator`; «Реєстрація» — обычная ссылка рядом с «Увійти» (в бургере и так была ссылкой).
+- Зоны нажатия `min-h-11` (44 px): шапка, бургер (`w-11 h-11`), пункты меню, ссылки подвала и кнопка cookie, пагинация `/ua`.
+- `lib/plural.ts`: `pluralUk` (`Intl.PluralRules('uk')`) и `listingsCount`; применено в `LocalCatalogGrid`. Остальные места («Активних оголошень: N») — родительный после двоеточия, склонение не нужно. Unit-тестов фронта в проекте нет; helper проверен в node (1 one, 2 few, 5 many, 21 one).
+- Названия: «Каталог Україна» (`CATALOG_LABEL`) вместо «Оголошення по Україні» в подвале, заглушке, главной, OG-карточке; услуга — `LANDING_INDEX_LABEL`/`SERVICE_LABEL` в заголовках `/prigon`. e2e-строки обновлены.
+- Подвал: реквизиты — `<ul>` с разделителем только между существующими пунктами.
+- Демо-баннеры НЕ убраны (решение владельца, после 2.19): места — LAUNCH_CHECKLIST 34a. Playwright написан, не запускался.
+
+## Задача 10.16 — устойчивость API (2026-11-20) ✓
+
+- `core.middleware.NulByteQueryMiddleware`: NUL (`%00`/` `) в query любого запроса -> 400 (PG такое роняет в 500; SQLite нет, тест на уровне кода).
+- `core/throttles.py` `FailOpenScopedRateThrottle` на заявке и калькуляторе: кэш недоступен -> запрос пропущен, `warning` без ПДн, алерт владельцу раз в час на контейнер (файл-маркер в tmp, не Redis). Решение оркестратора, допущение в LAUNCH_CHECKLIST «Redis».
+- Ревью: `cache_errors()` ловит и `django_redis.ConnectionInterrupted` (в проде DefaultClient кидает его, а не redis-ошибку); капча без Redis -> 503 вместо 500 (не fail-open, фронт показывает запасной контакт). Осталось: NUL в пути URL и теле запроса не обрабатывается (только query); алертов до числа контейнеров в час.
+- Фронт: `serverGet` с `AbortSignal.timeout(5 с)`; fetch с `signal` Next не мемоизует, поэтому дедуп через `React.cache`; `getSiteSettings` с единым revalidate. Клиент: `lib/site-settings-client.ts` (один запрос, TTL 60 с, `force` для повтора).
+- Тесты: `core/tests_api_resilience.py`, `leads/tests_resilience.py`, `pricing/tests_resilience.py`; мутации красные. Playwright (один запрос на /calculator) написан, не запускался. openapi.yaml не менялся.
+
+## Задача 10.19 — запасной получатель заявок (2026-11-20) ✓
+
+- `LeadNotificationSettings.backup_telegram_chat_id` (тот же валидатор, миграция `leads/0013` — только AddField), `notify.backup_chat_id()`.
+- `leads/tasks.py`: отправка вынесена в `_send_one`; основной не принял после всех попыток или не задан → то же сообщение в запасной (одна попытка, без `self.retry`). Видно в заявке: `sent` + `telegram_error=via_backup:<код>` / `via_backup:no_primary`; оба упали → `failed`, `backup_failed:<код>`. Запасной = основной → одна отправка; нет токена/Telegram выключен → `skipped`, запасной не пробуем.
+- Журнал партнёра (2.15) — отдельная группа `LEAD_JOURNAL_CHAT_ID`, не затронут: записи по заявке одна. Логи: только `lead_id` и код ошибки.
+- Ревью: тесты не-eager (запасной только после последнего Celery-повтора основного; RetryAfter на запасном не повторяется); `LeadNotificationSettingsAdmin` — правка только superuser (тест 403 для staff с правом change); при `via_backup:` владельцу один алерт на окно `LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES` через `_send_failed_task_alert` (только `public_id` и код, при недоставке ключ откатывается); help_text про возможный дубль при таймауте после доставки.
+- Осталось: запасной без основного в `launch_check` по-прежнему ERROR (основной обязателен по замыслу).
+- `launch_check`: запасной не задан → WARNING. Тесты: `leads/tests_backup_recipient.py`, `core/tests_launch_check.py`.
+
+## Задача 10.15 — события воронки lead_form_start и lead_submit_error (2026-11-20) ✓
+
+- `MetricKey` + `PUBLIC_KEYS` (белый список, неизвестный ключ — 400), миграция `metrics/0003_funnel_event_keys`. Только ключ-счётчик, без класса ошибки и ПДн; серверный `DailyMetric`, согласие на аналитику не нужно (как `mobile_bar_click`).
+- `LeadForm`: `lead_form_start` — один раз на первый ввод (`onInput` формы, флаг сбрасывается вместе с ключом идемпотентности после успеха); `lead_submit_error` — в каждом `catch` отправки (4xx/5xx/сеть).
+- Недельный отчёт: «Початок заповнення форми», «Помилки відправки заявки», конверсия «старт форми → заявка» (`—` без стартов). Конверсия считает все заявки периода, включая пришедшие не через форму.
+- Тесты: `manage.py test metrics leads` 454 OK; мутации (ключ из белого списка, формула конверсии) — красные. ruff, tsc, lint без ошибок. Playwright `frontend/e2e/lead-funnel-events.spec.ts` написан, не запускался.
 
 ---
 
@@ -47,6 +149,79 @@
 - **Блок 7, HTTPS без домена:** `DOMAIN=63-180-126-91.sslip.io`, `TLS_MODE=letsencrypt`, `AUTH_COOKIE_SECURE=true`, `HSTS_MAX_AGE=3600` (временный стенд; на боевом домене — значение из шаблона), `./deploy.sh --build` → `3de025a`. `init-letsencrypt.sh` сначала упал: `lib-image-tag.sh` с `[[ =~ ]]` подключался из `/bin/sh` (dash) — регрессия `8ab3624`, исправлено `65d4ff0` (POSIX + тест из dash, мутация в ubuntu ловится). Staging-сертификат выдан, затем боевой: Let's Encrypt YE1 до 2027-02-14. Проверено: `http://` → 301 на `https://`, HSTS, CSP, X-Frame-Options, Permissions-Policy, HTTP/2 (с сервера), cookie `Secure`, смоук 200, `/api/v1/local/listings/` 404, sitemap на `https://`. Lighthouse по HTTPS: `/` LCP 1068/1653/1367 мс, `/calculator` ~1060 мс, perf 99–100. Сайт: `https://63-180-126-91.sslip.io`. SSH в SG переведён на новый IP владельца (старый удалён).
 - Полный бэкенд: 3204 теста, падают только 2 известных Windows-only (`test_entrypoint_refuses_debug_*`).
 - Заметки: кэш сборки Docker на сервере 3,4 ГБ, `deploy.sh` его не чистит (`docker builder prune` вручную или задача). Сервер после сессии — остановить (`aws ec2 stop-instances --instance-ids i-017e7dfd9fced32f5`), по слову владельца. Ключ `claude-deploy` с `IAMFullAccess` — деактивировать после работ.
+
+## Задача 10.13: дубли заявок (2026-11-20) — ЗАВЕРШЕНО (e2e написаны, не запускались; security-reviewer — за оркестратором)
+
+- `Idempotency-Key` (UUID, невалидный игнорируется): тот же ключ и телефон → `200` + `Idempotent-Replay: true`, без записи, уведомления, журнала и метрики; тот же ключ с другим телефоном → `409` без `public_id` и ПДн. Поиск по ключу стоит до капчи (токен одноразовый). Гонка: уникальный индекс + `IntegrityError` → первая заявка.
+- Тот же телефон в окне `LEAD_DUPLICATE_WINDOW_MINUTES` (`.env`, 60; 0 — выкл.; ровно N минут назад уже вне окна) → новая заявка с `duplicate_of` на корневую (цепочка не растёт). Брокеру уведомление с пометкой «🔁 Повтор заявки AFY-…» (Telegram, письмо без ПДн, in-app), в журнал партнёра запись с той же пометкой (это передача ПДн, согласие `partner_transfer` пишется как у обычной заявки), метрика `lead_created` не растёт, `metrics.reports.unanswered_leads` повторы не считает. Публичный ответ повтора прежний, без данных первой.
+- Миграция `leads/0012` — только AddField (`idempotency_key` unique nullable, `duplicate_of` FK SET_NULL) и индекс `lead_phone_created_idx`. `CORS_ALLOW_HEADERS` + `idempotency-key`. Логи — только `public_id`.
+- Клиент: ключ в `useRef` (создаётся при первой валидной отправке, не меняется при ошибках, сбрасывается после успеха и 409), `inFlightRef` от двойного вызова в один тик. Бейдж «Повтор AFY-…» в списке и карточке брокера, колонка и фильтр «Повтор» в админке.
+- Тесты: `leads/tests_duplicates.py` (37), мутации (метрика, 409, «без ответа», пометка журнала, граница окна, пометка письма) ловятся. Playwright `frontend/e2e/lead-duplicates.spec.ts` (5), не запускался.
+- Осталось (из ревью): тест гонки мокает `IntegrityError`, без реального уникального индекса (нужен `TransactionTestCase`); `find_phone_duplicate` без блокировки (две параллельные заявки с одним телефоном и разными ключами оба могут стать «корнем»); при повторе с тем же ключом правки полей формы теряются (возвращается первая заявка как есть).
+- E2E: `broker.spec.ts` «мобильный список» искал сидовую заявку на первой странице; после появления заявок из других спек её вытесняла пагинация, теперь поиск по имени, как в соседних тестах (проверка ширины не ослаблена).
+- Для владельца: окно 60 мин стартовое, подтвердить после пилота; `openapi.yaml` перегенерировать против PostgreSQL (не сделано здесь).
+
+## Задача 10.10: лендинги без «тонкого контента» (2026-11-20) — ЗАВЕРШЕНО (e2e написаны, не запускались)
+
+- Порог: `LandingSettings.min_text_chars` (умолчание 600, min 100, допущение — ждёт владельца, 600-1000). Длина = `intro + description + included_text` после `strip` (`services.unique_text_length`). Условия публикации в одном месте — `ModelLandingPage.publication_error()` (позначка, расчёт, текст); `clean()` проверяет текст только при переходе в «опубликовано» (сверка с БД), `publish_selected` вызывает тот же метод. Опубликованные короткие не трогаются.
+- `launch_check`: `check_landing_content` — WARNING «Тонкий контент на N …: slug…», OK, молчит без лендингов.
+- API: `fuel_type` (название), `engine_cc`, `battery_capacity_kwh`, новое `generation`, `faq` (активные, без позначки, по `order`) — пустое не отдаётся. Модель `LandingFaqItem` (inline в админке). Миграция `landings/0002_thin_content_faq.py` (только добавление). Кэш расчёта не менялся, версия `v2` прежняя.
+- Фронт: `ModelFacts`, `ModelFaq` (`<details>`), `faqLd` (`buildFaqLd` в `jsonld-core.ts`); e2e в `landing.spec.ts` (Camry с FAQ, Accord без), сид обновлён.
+- Тесты: landings/core/users зелёные; мутации (снять порог, отдавать пустое) ловятся. `openapi.yaml` не менялся: деталь лендинга в схеме без полей.
+
+## Задача 10.8: доверие (2026-11-20) — ЗАВЕРШЕНО (10.8a + 10.8b; e2e написаны, не запускались)
+
+- Бэкенд: `SiteSettings.about_text`, `lead_response_hours` (null, min 1), `lead_next_steps`; миграция `site_settings/0004_trust_fields.py` (3 AddField); публичный API, админка «Довіра»; тесты `site_settings/tests_trust.py` (мутация: поле убрано из `fields` — 4 теста красные). Сид e2e: `partner_name`, `about_text`, `lead_response_hours=4`, `lead_next_steps` с `[E2E]`.
+- Фронт: `ContactList` в `FallbackContact.tsx` (контакты без кнопки), блок `lead-partner-info` в `LeadForm`, срок и `lead-next-steps` в `LeadSuccess` (до 6 шагов, текст без HTML), `partnerPhrase()` в подвале и `/how-it-works`, `/about` (`force-dynamic`, `notFound()` при пустом), ссылка «Про нас» в подвале и sitemap только при тексте. Ссылка на `/how-it-works` скрыта в `CalculatorHowWeCount` (клиентский запрос), `/prigon`, `/prigon/[slug]`; ссылка на `/prigon` в `how-it-works` — только при непустом списке.
+- e2e: `frontend/e2e/trust.spec.ts`; пустые состояния — `test.fixme('TRUST-1 → 10.8')`. Открыто: `openapi.yaml` не регенерирован (только против PostgreSQL), фразы про партнёра на `/prigon*` остались безымянными.
+
+## Задача 10.5: «Мінімум до запуску» в LAUNCH_CHECKLIST (2026-11-20) — ЗАВЕРШЕНО (только документация)
+
+- `docs/LAUNCH_CHECKLIST.md`: в начале раздел «Мінімум до запуску» — 38 пунктов (сервер/домен/HTTPS, `.env`, деплой, админка, тарифы, `launch_check`, смоук), каждый со ссылкой на раздел; задача — `docs/tasks/10.5-launch-checklist-minimum.md`.
+- Закрыто: отзыв и перевыпуск токена бота (разделы 0, «Секреты», 8), вопрос Q1, `NEXT_PUBLIC_DEMO_MODE`. Объединены дубли: pre-commit и gitleaks, `PHONE_LOG_IP_SALT`, `TELEGRAM_UPDATES_MODE`, `NEXT_PUBLIC_*`, проверка `E2E_SEED_ALLOWED` и ролей. Пункты, которые ловит `launch_check`, помечены «(launch_check)».
+- Под «Після запуску» перенесены регулярные обязанности (7.12) и открытые решения (8); пункт про `access_log` nginx (ПДн) оставлен до запуска (7.1). Помечено «перевірити»: токен на сервере, `next` после аудита 2026-10-25, `OPENDATABOT_API_KEY`.
+
+## Задача 10.9: ссылки на лендинги (2026-11-20) — ЗАВЕРШЕНО (e2e написаны, не запускались)
+
+- Новое: `components/landing/PopularModels.tsx` (общий для `/how-it-works` и главной, `limit`, `showAll`), `SimilarModels.tsx`, `components/ui/Breadcrumbs.tsx` (`<nav aria-label>` + `<ol>`, последняя крошка `span aria-current="page"`, те же `crumbs`, что в `breadcrumbLd`). В `lib/landings.ts`: `POPULAR_LANDINGS_LIMIT`/`SIMILAR_LANDINGS_LIMIT` (6/6, допущение), `hasLandings()`, `similarLandings()` (та же марка без учёта регистра, затем порядок API, без текущей).
+- `layout.tsx` считает `hasLandings` и передаёт в `Header` -> `getNavLinks(user, c2c, hasLandings)`; подвал показывает `/how-it-works`, `/prigon`, FAQ каждый по своему условию. При `getLandingList() === null` или `[]` блоков и пунктов нет, страницы не падают (build без backend).
+- Главная: title «AUTOforYOU — пригон авто з США під ключ», h1 «Пригон авто з США під ключ в Україну», новое description (<=160). Блок «Популярні моделі» + «Усі моделі» под «Як це працює». Крошки на `/prigon` и `/prigon/[slug]`, «Схожі моделі» на лендинге.
+- Проверки: `npx tsc --noEmit` чисто, `npm run lint` 0 ошибок. e2e: `landing.spec.ts` (шапка, подвал, бургер, главная, крошки vs JSON-LD, схожі), `seo.spec.ts` (пригон в SEO главной), обновлён h1 в `home/ssr/mobile.spec.ts`; `test.fixme('LAND-2 …')` для пустого справочника. Ручная проверка пустого справочника и `npm run build` не выполнялись.
+- Открыто: в e2e-сиде один опубликованный лендинг, поэтому «Схожі моделі» проверяются условно (блока нет); кеш SSR 60 с — после публикации пункт появляется не сразу.
+
+## Задача 10.7: тупики перед заявкой (2026-11-20) — ЗАВЕРШЕНО (e2e не запускался)
+
+- Новый `frontend/components/ui/FallbackContact.tsx`: контакты из `SiteSettings` (телефон `tel:`, `manager_contact`, email `mailto:`, бот/канал t.me), без контактов — честный текст `fallback-no-contact`; кнопка «Спробувати ще раз» (disabled + `aria-busy` при повторе). Хук `useFallbackSettings` грузит настройки только при входе в тупик.
+- `LeadForm`: настройки грузятся функцией с защитой от параллельных запросов; при пустом партнёре/сбое — «Заявки онлайн тимчасово недоступні» + контакт + повтор без перезагрузки; 503 при отправке показывает тот же блок.
+- `calculator/page.tsx`: «не завантажився» и «не налаштовано» (`calc-not-configured` сохранён) — контакт + повтор `pricingApi.options()` (счётчик попыток); `calc-errors.ts`: `showContact` только для 422 и 5xx/сети (не для 400/429), контакт под текстом ошибки.
+- `launch_check`: текст ошибки партнёра дополнен; тест проверяет код выхода и OK-ветку; мутация (убрать проверку `partner_name`) — тест красный. `LandingCalc` тупика не имеет (расчёт обязателен).
+- Проверки: `tsc` чисто, `npm run lint` 0 ошибок, `manage.py test core` 280 OK, `ruff` чисто. Playwright: `e2e/dead-ends.spec.ts` (новый), правки `lead.spec.ts`, `calculator-config.spec.ts` — не запускались; мутации e2e не прогонялись.
+- Осталось владельцу: заполнить контакты и партнёра в «Налаштування сайту» (LAUNCH_CHECKLIST).
+
+## Задача 10.6: заявка не теряется молча (2026-11-19) — ЗАВЕРШЕНО (кроме пункта «осталось»)
+
+- Недоставленная заявка (после исчерпания попыток) дублируется владельцу в `FAILED_TASK_ALERT_CHAT_ID` / `_EMAIL` через `core.tasks._send_failed_task_alert` (`leads/notify.py`: `alert_owner_undelivered`, текст — только `public_id` и ссылка в админку). Сбой канала не роняет `resend_undelivered_leads` и не снимает `undelivered_alerted_at`; канал не настроен — `logger.warning`.
+- `metrics.reports.unanswered_leads()` — единое определение «без ответа» (`first_response_at` пусто, статус `new`; порог включительно). Задача `leads.tasks.alert_unanswered_leads` (`ResilientTask`, beat `_crontab(minute=5)`, `expire_seconds=3300`): алерт с двумя числами и ссылкой на список, без id и ПДн; дедуп `cache.add` по хэшу (счётчики + набор id), откат ключа при недоставке. Строки «Без відповіді > N год» в `render_report`.
+- `.env`: `LEAD_UNANSWERED_WARN_HOURS` (2), `LEAD_UNANSWERED_CRITICAL_HOURS` (24), `LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES` (360). Миграций нет.
+- Тесты: `leads/tests_alerts.py` (17), `metrics/tests_report.py` (+1). Мутации проверены: снятие вызова владельцу, ПДн в тексте, границы `<=`, статус spam, снятие дедупа, откат ключа, хэш набора id, порог в отчёте.
+- Правки по ревью безопасности: (1) недоставка алерта владельцу больше не теряется: признак «владелец знает» — ключ кэша на заявку, при неудаче в оба канала ключа нет, следующий прогон (10 мин) повторяет, в лог — предупреждение с pk; (2) `alert_admins_undelivered` изолирован try/except, досыл `notify_broker_new_lead.delay` ставится всегда; (3) один сводный алерт владельцу на прогон (список `public_id`, ссылка на список), не более 50 заявок и только метки за последние сутки; (4) строки отчёта подписаны «Без відповіді зараз > N год» (срез на момент отчёта).
+- Осталось (из ревью): ключ дедупа `alert_unanswered_leads` включает набор id, поэтому при уменьшении набора (часть заявок отвечена) придёт повторный алерт с меньшими числами — оставлено как есть.
+- Серверная защита от двойного клика закрыта задачей 10.13 (см. раздел ниже). Для владельца: задать `FAILED_TASK_ALERT_*` на проде, подтвердить пороги 2/24 ч после пилота (`docs/LAUNCH_CHECKLIST.md`).
+
+## Задача 2.18: «Clean» в калькуляторе и таблицы buyer fee (2026-11-19) — ЗАВЕРШЕНО
+
+- Причина — данные dev-БД, не код: до засева `check_fee_tables` давал 461 расхождение (код 1); после `seed_auction_fees --update` код 0, `title_types` = any/clean/salvage. Дыры в `build_form_options` нет.
+- `pricing/tests_fee_options.py` (11 тестов): `clean` в `title_types` при тире и без, 400 на неизвестный тип, buyer fee Copart public/secured/clean на $1400, $5840, стыке диапазонов и $20000 из CSV, gate $79/$95 из CSV. `e2e_seed` вызывает `seed_auction_fees --update`. e2e в `calculator-config.spec.ts`: выбор «Чистий», справочник без clean.
+- Проверки: backend полный 3265 тестов, упали только 2 известных Windows-флейка entrypoint; `tsc` чисто; e2e `calculator-config.spec.ts` 27 passed (после правки: «Тип титулу» в свёрнутом `<details>` «Параметри збору аукціону»). Мутации: фильтр clean, gate по титулу, 6% вместо таблицы (последняя ловится только тестом $20000).
+- Открыто: default `title_type` = salvage (`FORM_DEFAULTS` в `pricing/views.py`, вне файлов задачи); `member_type=broker` по умолчанию — таблицы broker в CSV нет, считается baseline ($100 до $1666, затем 6%, титул any), поэтому в форме buyer fee clean и salvage одинаков; IAAI broker/clean в CSV нет. Вопросы владельцу — в `docs/LAUNCH_CHECKLIST.md`.
+- `npm run build` локально падает: Next 16.4.4 блокирует сборку как уязвимую (SecurityFatalError); чинят dependabot PR #70/#67 (next 16.4.6) — решение владельца.
+- Заметки: Playwright не читает `.env.e2e` — `E2E_PASSWORD` надо передавать в окружение; `scripts/e2e-run.sh` поднимает dev обратно с `--scale bot=0`.
+
+## Задача 10.1: полная сумма «РАЗОМ» в USD (2026-11-19) — ЗАВЕРШЕНО (кроме пунктов «осталось»)
+
+- Новое поле `total_usd_full = total_uah / usd_to_uah` (Decimal, 2 знака, курс из того же RateSnapshot) в `LandedCostBreakdown`/`breakdown`; `total_usd` и колонки не менялись, миграций нет. Лендинг: `total_usd_full` в `calculation`, списке и `lead_calculation_snapshot`; `build_calculation_snapshot` несёт его из `breakdown` (None у старых). UI: `total_usd_full ?? total_usd` в `CalcBreakdown`, `LandingCalc`, бюджет `/prigon/[slug]`, `BrokerLeadCard`, `/me/calculations`, админки лендингов и заявок.
+- Проверки: `manage.py test pricing landings leads` 686 OK; `tsc --noEmit` чисто; мутация `total_usd_full = total_usd` — 3 новых теста красные. e2e дописаны (`landing`, `calculator-config`, `calculator-ua-delivery`), не запускались.
+- Осталось: `security-reviewer` (денежная задача); `openapi.yaml` не регенерирован (контейнер backend на старом образе, нужен rebuild + spectacular против PostgreSQL); прогон e2e; Telegram/email брокеру (`leads/notify.py`) всё ещё показывает старую сумму `Lead.total_usd` — вопрос владельцу.
 
 ## Задача 8.6 (часть 2 из 2): доверие к продавцу — фронт (2026-11-09)
 

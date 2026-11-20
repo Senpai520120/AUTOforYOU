@@ -61,7 +61,7 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
         <div className="flex gap-2">
           <button
             onClick={() => onConfirm(deal.id)}
-            className="flex-1 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+            className="flex-1 bg-green-700 hover:bg-green-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
           >
             Підтвердити угоду
           </button>

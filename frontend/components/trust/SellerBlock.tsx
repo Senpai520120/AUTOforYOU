@@ -8,7 +8,7 @@ export default function SellerBlock({ listing }: { listing: LocalListing }) {
   const since = memberSinceLabel(listing.seller_member_since);
   const count = listing.seller_active_listings_count ?? 0;
   return (
-    <div data-testid="seller-block" className="mt-1 text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+    <div data-testid="seller-block" className="mt-1 text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-1">
       {since && <span>{since}</span>}
       {count > 0 && <span>· активних оголошень: {count}</span>}
       <Link href={`/sellers/${listing.seller_id}`} className="text-blue-700 hover:underline font-medium">

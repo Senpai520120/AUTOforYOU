@@ -44,6 +44,21 @@ class UtmSourceFilter(admin.SimpleListFilter):
         return queryset
 
 
+class DuplicateFilter(admin.SimpleListFilter):
+    title = 'Повтор'
+    parameter_name = 'duplicate'
+
+    def lookups(self, request, model_admin):
+        return [('yes', 'Повтор'), ('no', 'Не повтор')]
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(duplicate_of__isnull=False)
+        if self.value() == 'no':
+            return queryset.filter(duplicate_of__isnull=True)
+        return queryset
+
+
 class LeadStatusChangeInline(admin.TabularInline):
     model = LeadStatusChange
     extra = 0
@@ -107,9 +122,9 @@ class LeadAdminForm(forms.ModelForm):
 @admin.register(Lead)
 class LeadAdmin(admin.ModelAdmin):
     list_display = ('public_id', 'created_at', 'name', 'phone', 'contact_method', 'source_display',
-                    'status', 'partner_status', 'qualification', 'total_uah', 'telegram_status', 'email_status', 'telegram_sent_at')
+                    'status', 'is_duplicate', 'partner_status', 'qualification', 'total_uah', 'telegram_status', 'email_status', 'telegram_sent_at')
     list_filter = ('status', 'partner_status', 'qualification', 'source', 'telegram_status', 'email_status',
-                   UtmSourceFilter)
+                   DuplicateFilter, UtmSourceFilter)
     actions = ['resend_to_broker', 'export_csv']
     search_fields = ('public_id', 'name', 'phone')
     date_hierarchy = 'created_at'
@@ -117,7 +132,7 @@ class LeadAdmin(admin.ModelAdmin):
     form = LeadAdminForm
     # Редактируются только status, partner_status, assigned_to, internal-поля брокера.
     readonly_fields = (
-        'public_id', 'user', 'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment',
+        'public_id', 'duplicate_of', 'idempotency_key', 'user', 'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment',
         'source', 'landing_slug', 'budget_usd', 'needed_when', 'city', 'vehicle_label',
         'utm', 'referrer', 'entry_page_url', 'page_url', 'first_response_at',
         'qualification', 'attribution_until', 'journal_message_id', 'journal_sent_at',
@@ -129,7 +144,7 @@ class LeadAdmin(admin.ModelAdmin):
         'created_at', 'updated_at',
     )
     fields = (
-        'public_id', 'status', 'reopen', 'partner_status', 'assigned_to', 'first_response_at',
+        'public_id', 'duplicate_of', 'idempotency_key', 'status', 'reopen', 'partner_status', 'assigned_to', 'first_response_at',
         'qualification', *Q_FIELDS, 'attribution_until', 'journal_message_id', 'journal_sent_at',
         'name', 'phone', 'email', 'contact_method', 'contact_handle', 'comment', 'user',
         'source', 'landing_slug', 'vehicle_label', 'budget_usd', 'needed_when', 'city',
@@ -199,6 +214,10 @@ class LeadAdmin(admin.ModelAdmin):
             messages.warning(request, 'Жоден канал сповіщення брокера не налаштовано')
         return super().changelist_view(request, extra_context)
 
+    @admin.display(description='Повтор', boolean=True)
+    def is_duplicate(self, obj):
+        return obj.duplicate_of_id is not None
+
     @admin.display(description='Джерело')
     def source_display(self, obj):
         return (obj.utm or {}).get('source') or DIRECT
@@ -210,7 +229,7 @@ class LeadAdmin(admin.ModelAdmin):
             return '—'
         inputs = snap.get('inputs_snapshot') or {}
         parts = [f'{k}: {inputs[k]}' for k in ('make', 'year', 'fuel_type', 'auction_price') if k in inputs]
-        return format_html('Разом: ${} / {} грн. {}', snap.get('total_usd'), snap.get('total_uah'),
+        return format_html('Разом: ${} / {} грн. {}', snap.get('total_usd_full') or snap.get('total_usd'), snap.get('total_uah'),
                            '; '.join(parts))
 
     def has_add_permission(self, request):
@@ -249,8 +268,12 @@ class LeadAdmin(admin.ModelAdmin):
 
 @admin.register(LeadNotificationSettings)
 class LeadNotificationSettingsAdmin(admin.ModelAdmin):
+    # Сюда задаются получатели ПДн заявок (chat_id, email): только superuser.
     def has_add_permission(self, request):
-        return not LeadNotificationSettings.objects.exists()
+        return request.user.is_superuser and not LeadNotificationSettings.objects.exists()
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
 
     def has_delete_permission(self, request, obj=None):
         return False

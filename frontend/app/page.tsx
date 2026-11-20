@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { CATALOG_LABEL } from '@/lib/labels';
 import { getC2CFlags } from '@/lib/c2c';
 import { getDemoStatus } from '@/lib/site-config';
 import { getSiteSettings } from '@/lib/site-settings';
@@ -7,6 +8,8 @@ import { organizationLd, websiteLd } from '@/lib/jsonld';
 import JsonLd from '@/components/seo/JsonLd';
 import { buildMetadata } from '@/lib/seo';
 import { serverGet } from '@/lib/server-api';
+import { getLandingList, POPULAR_LANDINGS_LIMIT } from '@/lib/landings';
+import PopularModels from '@/components/landing/PopularModels';
 
 /**
  * Рендер на кожен запит, а не на етапі збірки.
@@ -19,10 +22,10 @@ import { serverGet } from '@/lib/server-api';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = buildMetadata({
-  title: 'AUTOforYOU — авто з США під ключ',
+  title: 'AUTOforYOU — пригон авто з США під ключ',
   absoluteTitle: true,
   description:
-    'Маркетплейс автомобілів з аукціонів США Copart та IAAI. Калькулятор вартості під ключ з розмитненням, доставка в Україну, каталог місцевих оголошень.',
+    'Пригон авто з аукціонів США Copart та IAAI під ключ: калькулятор вартості з розмитненням, доставка в Україну, каталог місцевих оголошень.',
   path: '/',
   ownImage: true,
 });
@@ -70,8 +73,8 @@ const COST_ITEMS = [
 ];
 
 export default async function Home() {
-  const [usdRate, c2c, isDemo, settings] = await Promise.all([
-    fetchUsdRate(), getC2CFlags(), getDemoStatus(), getSiteSettings(),
+  const [usdRate, c2c, isDemo, settings, landings] = await Promise.all([
+    fetchUsdRate(), getC2CFlags(), getDemoStatus(), getSiteSettings(), getLandingList(),
   ]);
 
   return (
@@ -79,7 +82,7 @@ export default async function Home() {
       <JsonLd data={[organizationLd(settings), websiteLd()]} />
       {/* Hero */}
       <section className="bg-gradient-to-br from-blue-900 to-blue-700 text-white rounded-2xl p-12 text-center">
-        <h1 className="text-4xl font-extrabold mb-3">Авто з США під ключ в Україну</h1>
+        <h1 className="text-4xl font-extrabold mb-3">Пригон авто з США під ключ в Україну</h1>
         <p className="text-blue-200 text-lg mb-8 max-w-xl mx-auto">
           Copart · IAAI · доставка · розмитнення · калькулятор вартості
         </p>
@@ -123,7 +126,7 @@ export default async function Home() {
             >
               <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
               <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
-                Каталог Україна
+                {CATALOG_LABEL}
               </h3>
               <p className="text-sm text-slate-500">
                 Оголошення від власників і дилерів по всій Україні.
@@ -133,7 +136,7 @@ export default async function Home() {
           ) : (
             <div className="bg-white border border-slate-200 rounded-xl p-6" data-testid="home-ua-soon">
               <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
-              <h3 className="font-bold text-lg text-slate-900 mb-1">Оголошення по Україні — незабаром</h3>
+              <h3 className="font-bold text-lg text-slate-900 mb-1">{CATALOG_LABEL} — незабаром</h3>
               <p className="text-sm text-slate-500">Каталог авто від власників і дилерів готується до запуску.</p>
             </div>
           )}
@@ -157,6 +160,9 @@ export default async function Home() {
           ))}
         </ol>
       </section>
+
+      {/* Окрема секція зі своїм заголовком, поза «Як це працює». null/порожній список — блоку немає */}
+      <PopularModels models={landings} limit={POPULAR_LANDINGS_LIMIT} showAll />
 
       {/* Що входить у розрахунок */}
       <section aria-labelledby="cost-heading" className="bg-white border border-slate-200 rounded-xl p-6 md:p-8">

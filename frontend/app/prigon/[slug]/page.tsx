@@ -3,14 +3,20 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import ErrorState from '@/components/ui/ErrorState';
 import LeadForm from '@/components/leads/LeadForm';
+import LeadCta from '@/components/leads/LeadCta';
 import LandingCalc from '@/components/landing/LandingCalc';
 import LandingMobileBar, { LANDING_FORM_ID } from '@/components/landing/LandingMobileBar';
 import LandingVisitTracker from '@/components/landing/LandingVisitTracker';
-import { calculatorHref, getLanding } from '@/lib/landings';
+import { isHowItWorksPublished } from '@/lib/content';
+import { calculatorHref, getLanding, getLandingList, similarLandings } from '@/lib/landings';
 import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
-import { breadcrumbLd } from '@/lib/jsonld';
+import { breadcrumbLd, faqLd } from '@/lib/jsonld';
 import JsonLd from '@/components/seo/JsonLd';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import SimilarModels from '@/components/landing/SimilarModels';
+import ModelFacts from '@/components/landing/ModelFacts';
+import ModelFaq from '@/components/landing/ModelFaq';
 
 // Дані з API: без force-dynamic Next пререндерить сторінку під час build, коли backend недоступний.
 // Кеш запиту — LANDING_REVALIDATE_SECONDS (lib/landings.ts).
@@ -25,7 +31,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   // Немає сторінки або збій API: метадані без даних і noindex (сама сторінка — 404 або помилка).
   if (result.status !== 'ok') {
     return buildMetadata({
-      title: 'Пригон авто з США',
+      title: LANDING_INDEX_LABEL,
       description: 'Пригон авто з США під ключ: орієнтовний розрахунок вартості.',
       path,
       noindex: true,
@@ -52,7 +58,7 @@ export default async function LandingPage({ params }: Params) {
   if (result.status === 'error') {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10" data-testid="landing-error">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6">Пригон авто з США</h1>
+        <h1 className="text-2xl font-bold text-slate-900 mb-6">{LANDING_INDEX_LABEL}</h1>
         <ErrorState error={null} />
       </div>
     );
@@ -60,32 +66,47 @@ export default async function LandingPage({ params }: Params) {
 
   const p = result.data;
   const label = `${p.make} ${p.model}`.trim();
+  const crumbs = [
+    { name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' },
+    { name: label, path: `/prigon/${p.slug}` },
+  ];
+  // null (API недоступне) — просто без блоку.
+  const [landingList, howItWorksOn] = await Promise.all([getLandingList(), isHowItWorksPublished()]);
+  const faq = p.faq ?? [];
+  const similar = similarLandings(landingList, p.slug, p.make);
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 pb-28 md:pb-10 space-y-6">
-      <JsonLd data={breadcrumbLd([
-        { name: HOME_LABEL, path: '/' }, { name: LANDING_INDEX_LABEL, path: '/prigon' },
-        { name: label, path: `/prigon/${p.slug}` },
-      ])} />
+      <JsonLd data={[breadcrumbLd(crumbs), faqLd(faq)].filter((d) => d !== null)} />
+      <Breadcrumbs crumbs={crumbs} />
       <header>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900" data-testid="landing-h1">{p.h1}</h1>
         {p.intro && <p className="mt-3 text-slate-700 whitespace-pre-line">{p.intro}</p>}
       </header>
 
+      <ModelFacts page={p} />
+
       <LandingCalc calculation={p.calculation} termText={p.typical_term_text} includedText={p.included_text} />
 
+      {/* На мобільних є липка панель (LandingMobileBar), тут кнопка для десктопа. */}
+      <LeadCta className="hidden md:block" />
+
       {p.description && <p className="text-sm text-slate-700 whitespace-pre-line">{p.description}</p>}
+
+      <ModelFaq items={faq} />
 
       <nav className="flex flex-wrap gap-4 text-sm" aria-label="Корисні посилання">
         <Link href={calculatorHref(p.calculation.inputs)} className="text-blue-700 underline" data-testid="landing-calc-link">
           {CALC_COST_LABEL} під ваші параметри
         </Link>
-        <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>
+        {howItWorksOn && <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>}
         <Link href="/prigon" className="text-blue-700 underline">Інші моделі</Link>
       </nav>
 
+      <SimilarModels models={similar} />
+
       <section id={LANDING_FORM_ID} className="scroll-mt-4">
         <LeadForm source="landing" landingSlug={p.slug} vehicleLabel={label}
-          defaultBudgetUsd={budgetFrom(p.calculation.total_usd)} />
+          defaultBudgetUsd={budgetFrom(p.calculation.total_usd_full ?? p.calculation.total_usd)} />
       </section>
 
       <p className="text-xs text-slate-500" data-testid="landing-disclaimer">

@@ -12,6 +12,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.utils import timezone
@@ -57,6 +58,8 @@ REQUIRED_VARS = {
     'Моніторинг': [
         ('SENTRY_DSN', ENV, 'Sentry/GlitchTip DSN'),
         ('CELERY_HEARTBEAT_URL', ENV, 'адреса сервісу-сторожа для Celery (Healthchecks.io тощо)'),
+        ('BACKUP_HEARTBEAT_URL', ENV, 'https-адреса сервісу-сторожа для бекапу (Healthchecks.io тощо; задається в .env, '
+                                      'її пінгує docker/backup/backup.sh після успішного бекапу)'),
     ],
     'Резервні копії поза сервером': [
         ('BACKUP_S3_BUCKET', ENV, 'bucket R2/S3 для бекапів'),
@@ -134,6 +137,14 @@ def check_required_vars() -> list:
                 if hosts and all(h.lstrip('.') in ('localhost', '127.0.0.1', '0.0.0.0', 'backend') for h in hosts):
                     findings.append(Finding(ERROR, f'{name}: лише localhost-хости, потрібен домен сайту ({group})'))
                     continue
+            if name == 'BACKUP_HEARTBEAT_URL' and _is_filled(name, value):
+                # Адреса може містити секретний токен у шляху: у вивід - лише хост.
+                parsed = urlparse(value)
+                if parsed.scheme != 'https' or not parsed.hostname:
+                    findings.append(Finding(ERROR, f'{name}: потрібна адреса https://... ({group})'))
+                else:
+                    findings.append(Finding(OK, f'{name}: задано (хост {parsed.hostname})'))
+                continue
             if _is_filled(name, value):
                 findings.append(Finding(OK, f'{name}: задано'))
             elif value:
@@ -157,6 +168,11 @@ def check_flags() -> list:
         findings.append(Finding(OK, f'C2C_PUBLIC_POSTING_ENABLED={str(posting).lower()}'))
     if c2c_enabled():
         findings.append(Finding(INFO, 'C2C_ENABLED=true: розділ видно (режим «засів»)'))
+        if not getattr(settings, 'PHONE_VERIFICATION_REQUIRED', True):
+            # 10.23 (F1): без подтверждения телефона в объявление можно записать чужой номер
+            level = ERROR if prod else WARNING
+            findings.append(Finding(level, 'PHONE_VERIFICATION_REQUIRED=false при C2C_ENABLED=true: у оголошенні можна '
+                                           'вказати чужий номер (знахідка F1, задача 10.23); верніть true'))
     else:
         findings.append(Finding(OK, 'C2C_ENABLED=false: розділ «Оголошення по Україні» вимкнено'))
     if payments_enabled() and prod:
@@ -280,7 +296,7 @@ def check_site_settings() -> list:
     else:
         findings.append(Finding(OK, 'Налаштування сайту: реквізити й контакти заповнені'))
     if not (obj.partner_name or '').strip():
-        findings.append(Finding(ERROR, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний'))
+        findings.append(Finding(ERROR, 'назва партнера не заповнена: чекбокс згоди на передачу контактів неактивний, замість форми заявки відвідувач бачить запасний контакт'))
     else:
         findings.append(Finding(OK, 'Назва партнера задана'))
     if not (obj.legal_docs_version or '').strip():
@@ -381,6 +397,11 @@ def check_lead_notifications() -> list:
     else:
         findings.append(Finding(ERROR, 'TELEGRAM_BROKER_CHAT_ID не задано (і порожньо в «Налаштування сповіщень про '
                                        'заявки»): заявки нікуди не прийдуть'))
+    if row and row.backup_telegram_chat_id.strip():
+        findings.append(Finding(OK, 'Запасний Telegram chat_id для заявок: задано'))
+    else:
+        findings.append(Finding(WARNING, 'Запасний Telegram chat_id не задано («Налаштування сповіщень про заявки»): '
+                                         'якщо чат брокера недоступний, заявка піде лише листом'))
     if str(emails).strip():
         findings.append(Finding(OK, 'Резервний email брокера: задано'))
     else:
@@ -444,6 +465,19 @@ def check_seeding(threshold: int | None) -> list:
     return [Finding(OK, f'Активних оголошень {count} (поріг засіву {threshold})')]
 
 
+def check_landing_content() -> list:
+    from landings.models import ModelLandingPage
+    from landings.services import thin_published_pages
+
+    if not ModelLandingPage.objects.filter(is_published=True).exists():
+        return []
+    thin = thin_published_pages()
+    if thin:
+        return [Finding(WARNING, f'Тонкий контент на {len(thin)} опублікованих сторінках: '
+                                 f'{", ".join(p.slug for p in thin)}')]
+    return [Finding(OK, 'Усі опубліковані сторінки моделей мають достатньо унікального тексту')]
+
+
 def run_checks(wave: int = 1, seed_threshold: int | None = None) -> list:
     """Все проверки режима ВОЛНЫ-1. Только чтение."""
     if wave != 1:
@@ -452,7 +486,7 @@ def run_checks(wave: int = 1, seed_threshold: int | None = None) -> list:
     for check in (
         check_required_vars, check_flags, check_captcha, check_phone_log_salt, check_integrations, check_carvertical_url,
         check_site_settings, check_tariffs, check_roles, check_lead_notifications, check_photo_mode,
-        check_backup_mark, check_metrics_and_tasks,
+        check_backup_mark, check_metrics_and_tasks, check_landing_content,
     ):
         findings.extend(check())
     findings.extend(check_seeding(seed_threshold))
