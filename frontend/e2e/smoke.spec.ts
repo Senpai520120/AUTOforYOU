@@ -11,7 +11,7 @@
 import { test, expect } from './fixtures';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
-const SOON = 'Оголошення по Україні — незабаром';
+const SOON = 'Каталог Україна — незабаром';
 const BACKEND_STOPPED = process.env.E2E_BACKEND_STOPPED === '1';
 
 test.use({ storageState: { cookies: [], origins: [] } });

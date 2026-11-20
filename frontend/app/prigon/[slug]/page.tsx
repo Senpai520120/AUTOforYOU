@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   // Немає сторінки або збій API: метадані без даних і noindex (сама сторінка — 404 або помилка).
   if (result.status !== 'ok') {
     return buildMetadata({
-      title: 'Пригон авто з США',
+      title: LANDING_INDEX_LABEL,
       description: 'Пригон авто з США під ключ: орієнтовний розрахунок вартості.',
       path,
       noindex: true,
@@ -57,7 +57,7 @@ export default async function LandingPage({ params }: Params) {
   if (result.status === 'error') {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10" data-testid="landing-error">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6">Пригон авто з США</h1>
+        <h1 className="text-2xl font-bold text-slate-900 mb-6">{LANDING_INDEX_LABEL}</h1>
         <ErrorState error={null} />
       </div>
     );

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import LocalListingCard from '@/components/local/LocalListingCard';
 import type { LocalListing, PaginatedResponse } from '@/lib/types';
+import { listingsCount } from '@/lib/plural';
 import { pageHref, pageWindow, type SearchParams } from '@/lib/server-api';
 
 const PAGE_SIZE = 20;
@@ -58,7 +59,7 @@ export default function LocalCatalogGrid({
 
   return (
     <div>
-      <p className="text-sm text-slate-500 mb-4">Знайдено: {data.count} оголошень</p>
+      <p className="text-sm text-slate-500 mb-4">Знайдено: {listingsCount(data.count)}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {data.results.map((l, i) => (
           <LocalListingCard key={l.id} listing={l} priority={i === 0} />
@@ -68,13 +69,13 @@ export default function LocalCatalogGrid({
       {totalPages > 1 && (
         <nav aria-label="Пагінація" className="mt-8 flex justify-center gap-2 flex-wrap">
           {pageWindow(currentPage, totalPages).map((p, i) => p === null ? (
-            <span key={`gap-${i}`} aria-hidden="true" className="px-1 py-1.5 text-sm text-slate-400">…</span>
+            <span key={`gap-${i}`} aria-hidden="true" className="inline-flex items-center px-1 text-sm text-slate-400">…</span>
           ) : (
             <Link
               key={p}
               href={pageHref('/ua', params, p)}
               aria-current={p === currentPage ? 'page' : undefined}
-              className={`px-3 py-1.5 rounded text-sm border transition-colors ${
+              className={`inline-flex items-center justify-center min-w-11 min-h-11 px-3 rounded text-sm border transition-colors ${
                 p === currentPage
                   ? 'bg-blue-700 text-white border-blue-700'
                   : 'border-slate-200 hover:bg-slate-50 text-slate-700'

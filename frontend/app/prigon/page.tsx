@@ -32,7 +32,7 @@ export default async function LandingIndexPage() {
     <div className="max-w-3xl mx-auto px-4 py-10">
       <JsonLd data={breadcrumbLd(crumbs)} />
       <Breadcrumbs crumbs={crumbs} />
-      <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-6">Пригон авто з США</h1>
+      <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-6">{LANDING_INDEX_LABEL}</h1>
 
       {list === null && <ErrorState error={null} />}
       {list !== null && list.length === 0 && (

@@ -1,10 +1,11 @@
 import { isC2CEnabled } from '@/lib/c2c';
+import { CATALOG_LABEL } from '@/lib/labels';
 import {
   brandCard, ITEM_CACHE, fetchPublicJson, itemCard, loadMediaPhoto, notFoundResponse, OG_CONTENT_TYPE, OG_SIZE,
 } from '@/lib/og-card';
 import type { LocalListing } from '@/lib/types';
 
-export const alt = 'Оголошення по Україні - AUTOforYOU';
+export const alt = `${CATALOG_LABEL} - AUTOforYOU`;
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 // Не довше, ніж сама сторінка оголошення.
@@ -30,7 +31,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     return await itemCard({
       title: `${l.make} ${l.model} ${l.year}`,
       price: `${Number(l.price).toLocaleString('uk-UA')} ${l.currency}`,
-      label: `Оголошення по Україні · ${l.city_name}`,
+      label: `${CATALOG_LABEL} · ${l.city_name}`,
       photo,
     });
   } catch {

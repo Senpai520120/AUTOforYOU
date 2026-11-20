@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { CATALOG_LABEL } from '@/lib/labels';
 import { getC2CFlags } from '@/lib/c2c';
 import { getDemoStatus } from '@/lib/site-config';
 import { getSiteSettings } from '@/lib/site-settings';
@@ -125,7 +126,7 @@ export default async function Home() {
             >
               <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
               <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
-                Каталог Україна
+                {CATALOG_LABEL}
               </h3>
               <p className="text-sm text-slate-500">
                 Оголошення від власників і дилерів по всій Україні.
@@ -135,7 +136,7 @@ export default async function Home() {
           ) : (
             <div className="bg-white border border-slate-200 rounded-xl p-6" data-testid="home-ua-soon">
               <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
-              <h3 className="font-bold text-lg text-slate-900 mb-1">Оголошення по Україні — незабаром</h3>
+              <h3 className="font-bold text-lg text-slate-900 mb-1">{CATALOG_LABEL} — незабаром</h3>
               <p className="text-sm text-slate-500">Каталог авто від власників і дилерів готується до запуску.</p>
             </div>
           )}

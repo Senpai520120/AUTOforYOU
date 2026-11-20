@@ -1,4 +1,5 @@
 'use client';
+import { CATALOG_LABEL } from '@/lib/labels';
 import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
@@ -64,7 +65,7 @@ export default function FavoritesPage() {
           icon="♡"
           title="Тут будуть збережені оголошення."
           action={c2c.enabled
-            ? { label: 'Переглянути Каталог Україна →', href: '/ua' }
+            ? { label: `Переглянути ${CATALOG_LABEL} →`, href: '/ua' }
             : { label: 'Перейти до калькулятора →', href: '/calculator' }}
         />
       ) : (

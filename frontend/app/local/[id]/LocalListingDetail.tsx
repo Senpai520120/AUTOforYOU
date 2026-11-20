@@ -11,7 +11,7 @@ import ReportButton from '@/components/reports/ReportButton';
 import ChannelBadge from '@/components/local/ChannelBadge';
 import GuestPhoneReveal from '@/components/local/GuestPhoneReveal';
 import MobileActionBar, { countBarClick, mobileBarButtonClass } from '@/components/ui/MobileActionBar';
-import { MOBILE_BAR_LABELS, VERIFIED_DEALER_LABEL } from '@/lib/labels';
+import { CATALOG_LABEL, MOBILE_BAR_LABELS, VERIFIED_DEALER_LABEL } from '@/lib/labels';
 import SellerBlock from '@/components/trust/SellerBlock';
 import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { PHONE_BLOCK_ID, usePhoneReveal } from '@/lib/usePhoneReveal';
@@ -84,7 +84,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/ua" className="hover:text-blue-700">Каталог Україна</Link>
+        <Link href="/ua" className="hover:text-blue-700">{CATALOG_LABEL}</Link>
         <span>/</span>
         <span>{listing.make} {listing.model}</span>
       </div>
