@@ -104,6 +104,17 @@ test.describe('Форма заявки без партнера', () => {
   });
 });
 
+test.describe('Один запит налаштувань (10.16)', () => {
+  test('/calculator: за завантаження рівно один запит site-settings', async ({ page }) => {
+    const hits: string[] = [];
+    page.on('request', (r) => { if (isSettings(r)) hits.push(r.url()); });
+    await page.goto('/calculator');
+    await expect(page.getByRole('button', { name: 'Розрахувати' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    expect(hits).toHaveLength(1);
+  });
+});
+
 test.describe('Калькулятор', () => {
   test('довідник не завантажився: контакт, повтор показує форму', async ({ page }) => {
     let broken = true;

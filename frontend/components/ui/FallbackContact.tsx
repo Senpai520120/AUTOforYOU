@@ -5,7 +5,7 @@
  * Без контактів — чесний текст без вигаданих номерів і обіцянок передзвону.
  */
 import { useEffect, useState } from 'react';
-import { apiGet } from '@/api/client';
+import { fetchSiteSettings } from '@/lib/site-settings-client';
 import type { SiteSettings } from '@/lib/types';
 
 export const NO_CONTACT_TEXT = 'Зараз ми не можемо прийняти заявку онлайн. Спробуйте ще раз трохи пізніше.';
@@ -39,7 +39,7 @@ export function useFallbackSettings(active: boolean): SiteSettings | null {
   useEffect(() => {
     if (!active) return;
     let alive = true;
-    apiGet<SiteSettings>('/api/v1/site-settings/')
+    fetchSiteSettings()
       .then((s) => { if (alive) setSettings(s); })
       .catch(() => { if (alive) setSettings(null); });
     return () => { alive = false; };

@@ -10,8 +10,9 @@ from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+
+from core.throttles import FailOpenScopedRateThrottle
 
 from . import cache as pricing_cache
 from .calculator import (
@@ -134,7 +135,7 @@ def _sees_full_grid(user) -> bool:
 )
 class CalculateView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [FailOpenScopedRateThrottle]
     throttle_scope = 'calculator'
 
     def post(self, request):

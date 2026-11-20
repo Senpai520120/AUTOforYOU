@@ -2,9 +2,17 @@ import { notFound } from 'next/navigation';
 import { serverGet } from '@/lib/server-api';
 import type { SiteSettings } from '@/lib/types';
 
-/** Публічні налаштування сайту. null — API недоступне (сторінка показує «не заповнено»). */
-export async function getSiteSettings(revalidate = 300): Promise<SiteSettings | null> {
-  return serverGet<SiteSettings>('/api/v1/site-settings/', revalidate);
+/** Єдиний revalidate для налаштувань: різні значення давали б різні ключі й кілька запитів за рендер. */
+const SETTINGS_REVALIDATE = 60;
+
+/**
+ * Публічні налаштування сайту. null — API недоступне (сторінка показує «не заповнено»).
+ * Параметр лишився для сумісності викликів і ігнорується (задача 10.16: один запит на сторінку,
+ * дедуплікація в serverGet через React.cache).
+ */
+export async function getSiteSettings(revalidate?: number): Promise<SiteSettings | null> {
+  void revalidate;
+  return serverGet<SiteSettings>('/api/v1/site-settings/', SETTINGS_REVALIDATE);
 }
 
 export type ModuleName = 'lots' | 'b2b' | 'dealers' | 'shipments';

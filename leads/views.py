@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from core.throttles import FailOpenScopedRateThrottle, _alert_once, cache_errors
 from integrations.captcha import HONEYPOT_FIELD, require_captcha
 from site_settings.models import SiteSettings
 from users.permissions import IsBrokerOrAdmin
@@ -49,6 +50,7 @@ from .validators import normalize_ua_phone
 logger = logging.getLogger(__name__)
 
 PARTNER_NOT_CONFIGURED = {'detail': 'Партнер не налаштований'}
+CACHE_DOWN = {'detail': 'Тимчасово недоступно, спробуйте пізніше'}
 KEY_CONFLICT = {'detail': 'Ця заявка вже надіслана з іншими даними. Оновіть сторінку та спробуйте ще раз.'}
 IDEMPOTENCY_HEADER = 'Idempotency-Key'
 REPLAY_HEADER = 'Idempotent-Replay'
@@ -103,7 +105,7 @@ def _fake_public_id():
 )
 class LeadCreateView(APIView):
     permission_classes = [permissions.AllowAny]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [FailOpenScopedRateThrottle]
     throttle_scope = 'lead'
 
     def post(self, request):
@@ -133,7 +135,13 @@ class LeadCreateView(APIView):
                     return Response(KEY_CONFLICT, status=status.HTTP_409_CONFLICT)
                 if replay is not None:
                     return _replay_response(replay)
-        require_captcha(request, data, point='lead')
+        try:
+            require_captcha(request, data, point='lead')
+        except cache_errors() as exc:
+            # Капча (одноразовый nonce в кэше) без Redis не проверяется; fail-open для неё НЕ делаем (10.16).
+            logger.warning('lead.captcha_cache_down (%s)', type(exc).__name__)
+            _alert_once()
+            return Response(CACHE_DOWN, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         serializer = LeadCreateSerializer(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         validated = dict(serializer.validated_data)

@@ -7,7 +7,8 @@ import { trackEvent } from '@/lib/analytics';
 import { sendMetric } from '@/lib/metrics';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { apiGet, ApiError } from '@/api/client';
+import { ApiError } from '@/api/client';
+import { fetchSiteSettings } from '@/lib/site-settings-client';
 import { leadsApi } from '@/api/leads';
 import { useAuth } from '@/lib/auth-context';
 import { getAttribution } from '@/lib/attribution';
@@ -119,12 +120,12 @@ export default function LeadForm({
   const [publicId, setPublicId] = useState<string | null>(null);
 
   // Завантаження налаштувань сайту; повтор не створює паралельних запитів.
-  const loadSettings = useCallback(async () => {
+  const loadSettings = useCallback(async (force = false) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setRetrying(true);
     try {
-      const st = await apiGet<SiteSettings>('/api/v1/site-settings/');
+      const st = await fetchSiteSettings(force);
       if (!aliveRef.current) return;
       setSiteSettings(st);
       setConsentText(st.partner_consent_text?.trim() ?? '');
@@ -148,7 +149,7 @@ export default function LeadForm({
   const retry = async () => {
     setServerDown(false);
     setGeneral('');
-    await loadSettings();
+    await loadSettings(true);
   };
 
   // Передзаповнення з профілю: лише поки користувач сам не чіпав поле.
