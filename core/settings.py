@@ -512,6 +512,8 @@ LOCAL_LISTING_EXPIRY_DAYS = int(os.environ.get('LOCAL_LISTING_EXPIRY_DAYS', '30'
 # 8.5 (B5.1): длина описания; пост в канале (5.2) - до 4096 символов вместе с заголовком и ссылкой.
 LOCAL_LISTING_DESCRIPTION_MAX = int(os.environ.get('LOCAL_LISTING_DESCRIPTION_MAX', '3000'))  # ПРОВЕРИТЬ
 # 8.4: минимум фото для одобрения (0 - без минимума), максимальная сторона фото и миниатюры, px.
+# 10.30: через сколько дней удалять фото у отклонённых (rejected) и проданных (sold) объявлений
+LOCAL_LISTING_PHOTO_PURGE_DAYS = int(os.environ.get('LOCAL_LISTING_PHOTO_PURGE_DAYS', '30'))
 LOCAL_LISTING_MIN_PHOTOS = int(os.environ.get('LOCAL_LISTING_MIN_PHOTOS', '1'))
 LOCAL_LISTING_PHOTO_MAX_SIDE = int(os.environ.get('LOCAL_LISTING_PHOTO_MAX_SIDE', '1920'))
 LOCAL_LISTING_THUMB_MAX_SIDE = int(os.environ.get('LOCAL_LISTING_THUMB_MAX_SIDE', '480'))
@@ -729,6 +731,11 @@ CELERY_BEAT_SCHEDULE = {
     'expire-listings-daily': {
         'task': 'local_listings.tasks.expire_listings',
         'schedule': _crontab(hour=9, minute=20),
+    },
+    # Удаление фото у rejected/sold старше N дней (10.30)
+    'purge-closed-listing-photos-daily': {
+        'task': 'local_listings.tasks.purge_closed_listing_photos',
+        'schedule': _crontab(hour=3, minute=50),
     },
     # Чистка просроченных JWT в blacklist и сессий Django (01-Q1)
     'flush-expired-tokens-daily': {
