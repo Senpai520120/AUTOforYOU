@@ -185,7 +185,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               {phone ? (
                 <a
                   href={`tel:${phone}`}
-                  className="block bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
+                  className="block bg-green-700 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
                 >
                   {phone}
                 </a>
@@ -250,7 +250,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               key: 'call',
               node: phone ? (
                 <a href={`tel:${phone}`} onClick={countBarClick}
-                  className={`${mobileBarButtonClass} bg-green-600 text-white hover:bg-green-500`}>
+                  className={`${mobileBarButtonClass} bg-green-700 text-white hover:bg-green-600`}>
                   {MOBILE_BAR_LABELS.call}
                 </a>
               ) : (
@@ -275,7 +275,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                       countBarClick();
                       document.querySelector<HTMLButtonElement>(`#${WRITE_BLOCK_ID} button`)?.click();
                     }}
-                    className={`${mobileBarButtonClass} bg-green-600 text-white hover:bg-green-500`}
+                    className={`${mobileBarButtonClass} bg-green-700 text-white hover:bg-green-600`}
                   >
                     {MOBILE_BAR_LABELS.write}
                   </button>

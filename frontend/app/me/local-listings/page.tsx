@@ -275,7 +275,7 @@ export default function MyLocalListingsPage() {
                   {payments && l.status === 'expired' && (
                     <button
                       onClick={() => openPromote(l, 'renew')}
-                      className="text-sm bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded-lg transition-colors"
+                      className="text-sm bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors"
                     >
                       🔄 Продовжити
                     </button>

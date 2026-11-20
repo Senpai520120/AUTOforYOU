@@ -1,12 +1,15 @@
 'use client';
 import { trackEvent } from '@/lib/analytics';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/api/client';
 import Captcha from '@/components/ui/Captcha';
 import { AGE_18_LABEL, AGE_18_REQUIRED } from '@/lib/labels';
-import { apiErrorText, useAuthConfig, useCaptchaState } from '@/lib/captcha';
+import { useAuthConfig, useCaptchaState } from '@/lib/captcha';
 import { getAttribution } from '@/lib/attribution';
+import { focusFirstInvalid, splitFieldErrors } from '@/lib/form-errors';
+
+const FIELD_KEYS = ['first_name', 'email', 'phone', 'password', 'password2'] as const;
 
 export default function RegisterPage() {
   const { config } = useAuthConfig();
@@ -18,7 +21,15 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ email: '', password: '', password2: '', first_name: '', phone: '' });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [focusTick, setFocusTick] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
+
+  // Після відповіді сервера з помилками полів фокус іде на перше помилкове (як у LeadForm, 10.12).
+  useEffect(() => {
+    if (focusTick) focusFirstInvalid(formRef.current);
+  }, [focusTick]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -32,7 +43,7 @@ export default function RegisterPage() {
       setError(AGE_18_REQUIRED);
       return;
     }
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setFieldErrors({});
     try {
       // Джерело візиту (2.14) — лише з sessionStorage; порожнє не надсилається.
       const attribution = getAttribution();
@@ -47,7 +58,10 @@ export default function RegisterPage() {
       setRegisteredEmail(form.email);
       trackEvent('sign_up', { source: 'register' });
     } catch (err: unknown) {
-      setError(apiErrorText(err, 'Помилка реєстрації'));
+      const { fieldErrors: fe, general } = splitFieldErrors(err, FIELD_KEYS, 'Помилка реєстрації');
+      setFieldErrors(fe);
+      setError(general);
+      if (Object.keys(fe).length) setFocusTick(t => t + 1);
     } finally {
       setLoading(false);
       captcha.bump(); // токен одноразовий: новий після кожної відповіді сервера
@@ -82,22 +96,29 @@ export default function RegisterPage() {
     <div className="max-w-md mx-auto mt-10">
       <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900 mb-6">Реєстрація</h1>
-        <form onSubmit={submit} className="space-y-4">
+        <form ref={formRef} onSubmit={submit} className="space-y-4">
           {[
-            { label: "Ім'я", key: 'first_name', type: 'text' },
-            { label: 'Email', key: 'email', type: 'email' },
-            { label: 'Телефон', key: 'phone', type: 'tel', placeholder: '+380XXXXXXXXX' },
-            { label: 'Пароль', key: 'password', type: 'password' },
-            { label: 'Підтвердити пароль', key: 'password2', type: 'password' },
-          ].map(f => (
-            <div key={f.key}>
-              <label htmlFor={`${idPrefix}-${f.key}`} className="block text-sm font-semibold text-slate-700 mb-1">{f.label}</label>
-              <input id={`${idPrefix}-${f.key}`} type={f.type} className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder={'placeholder' in f ? f.placeholder : undefined}
-                value={form[f.key as keyof typeof form]} onChange={e => set(f.key, e.target.value)}
-                required={f.key !== 'first_name' && f.key !== 'phone'} />
-            </div>
-          ))}
+            { label: "Ім'я", key: 'first_name', type: 'text', autoComplete: 'given-name' },
+            { label: 'Email', key: 'email', type: 'email', autoComplete: 'email', inputMode: 'email' as const },
+            { label: 'Телефон', key: 'phone', type: 'tel', placeholder: '+380XXXXXXXXX', autoComplete: 'tel', inputMode: 'tel' as const },
+            { label: 'Пароль', key: 'password', type: 'password', autoComplete: 'new-password' },
+            { label: 'Підтвердити пароль', key: 'password2', type: 'password', autoComplete: 'new-password' },
+          ].map(f => {
+            const id = `${idPrefix}-${f.key}`;
+            const err = fieldErrors[f.key];
+            return (
+              <div key={f.key}>
+                <label htmlFor={id} className="block text-sm font-semibold text-slate-700 mb-1">{f.label}</label>
+                <input id={id} type={f.type} autoComplete={f.autoComplete} inputMode={f.inputMode}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-amber-400 aria-[invalid=true]:border-red-600"
+                  placeholder={'placeholder' in f ? f.placeholder : undefined}
+                  value={form[f.key as keyof typeof form]} onChange={e => set(f.key, e.target.value)}
+                  aria-invalid={err ? true : undefined} aria-describedby={err ? `${id}-err` : undefined}
+                  required={f.key !== 'first_name' && f.key !== 'phone'} />
+                {err && <p id={`${id}-err`} className="mt-1 text-sm text-red-700">{err}</p>}
+              </div>
+            );
+          })}
           <div className="flex items-start gap-3 pt-1">
             <input
               id="agreed_to_terms"

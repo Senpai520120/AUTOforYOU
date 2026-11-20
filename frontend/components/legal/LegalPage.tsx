@@ -54,9 +54,9 @@ export default function LegalPage({ title, settings, showOwner = true, children 
         </div>
       )}
 
-      <div className="prose prose-slate max-w-none space-y-6 text-slate-700">
+      <div className="prose prose-slate max-w-none space-y-6 text-slate-700 [&_a]:underline">
         {children}
-        <p className="text-xs text-slate-400 mt-10 border-t pt-4">
+        <p className="text-xs text-slate-500 mt-10 border-t pt-4">
           Останнє оновлення: {date || NOT_FILLED}
         </p>
       </div>

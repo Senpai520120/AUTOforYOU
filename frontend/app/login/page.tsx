@@ -68,12 +68,12 @@ function LoginForm() {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label htmlFor={emailId} className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
-            <input id={emailId} type="email" autoComplete="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
+            <input id={emailId} type="email" autoComplete="email" inputMode="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base"
               value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <div>
             <label htmlFor={passwordId} className="block text-sm font-semibold text-slate-700 mb-1">Пароль</label>
-            <input id={passwordId} type="password" autoComplete="current-password" required className="w-full border border-slate-300 rounded-lg px-3 py-2"
+            <input id={passwordId} type="password" autoComplete="current-password" required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base"
               value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           {showCaptcha && (

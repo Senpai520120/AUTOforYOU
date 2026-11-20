@@ -1,7 +1,7 @@
 /**
  * E2E: реєстрація — обов'язкова згода з Умовами та Політикою конфіденційності.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
 
 test.describe("Реєстрація — згода з умовами", () => {
@@ -90,5 +90,45 @@ test.describe("Реєстрація — згода з умовами", () => {
     await expect(footer.getByRole('link', { name: 'Правила розміщення' })).toBeVisible();
     await expect(footer.getByRole('link', { name: 'Конфіденційність' })).toBeVisible();
     await expect(footer.getByRole('link', { name: 'Cookie' })).toBeVisible();
+  });
+});
+
+test.describe('Реєстрація: помилки сервера біля полів (10.28)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem('cookie_consent', 'necessary'));
+  });
+
+  test('email зайнятий (400 по полю) → текст біля email, aria-invalid, фокус на полі', async ({ page, uniqueEmail }) => {
+    const message = 'Користувач з таким email вже існує.';
+    await page.route('**/api/v1/auth/register/', route =>
+      route.fulfill({ status: 400, json: { email: [message] } }));
+
+    await page.goto('/register');
+    const email = page.getByLabel('Email');
+    await email.fill(uniqueEmail);
+    await page.locator('input[type="password"]').first().fill('StrongPass123!');
+    await page.locator('input[type="password"]').nth(1).fill('StrongPass123!');
+    await page.getByLabel(/Погоджуюсь з/).check();
+    await page.getByLabel(/18 років/).check();
+    await page.getByRole('button', { name: 'Зареєструватися' }).click();
+
+    await expect(page.getByText(message)).toBeVisible();
+    await expect(email).toHaveAttribute('aria-invalid', 'true');
+    await expect(email).toHaveAccessibleDescription(message);
+    await expect(email).toBeFocused();
+  });
+
+  test('autocomplete, inputmode і шрифт 16px у полях реєстрації та входу', async ({ page }) => {
+    await page.goto('/register');
+    await expect(page.getByLabel("Ім'я")).toHaveAttribute('autocomplete', 'given-name');
+    await expect(page.getByLabel('Email')).toHaveAttribute('autocomplete', 'email');
+    await expect(page.getByLabel('Телефон')).toHaveAttribute('autocomplete', 'tel');
+    await expect(page.getByLabel('Телефон')).toHaveAttribute('inputmode', 'tel');
+    await expect(page.getByLabel('Пароль', { exact: true })).toHaveAttribute('autocomplete', 'new-password');
+    const size = await page.getByLabel('Email').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+    expect(size).toBeGreaterThanOrEqual(16);
+
+    await page.goto('/login');
+    await expect(page.getByLabel('Пароль', { exact: true })).toHaveAttribute('autocomplete', 'current-password');
   });
 });
