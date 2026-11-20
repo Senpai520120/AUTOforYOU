@@ -36,7 +36,7 @@ test.describe('Пояснення на вході при next=/local/new', () =>
     // У шапці теж є «Реєстрація» (без next) — перевіряємо посилання в основному блоці.
     await expect(page.getByRole('main').getByRole('link', { name: 'Реєстрація' })).toHaveAttribute('href', /\/register\?next=%2Flocal%2Fnew/);
     await page.goto('/register?next=/local/new');
-    await expect(page.getByRole('link', { name: 'Увійти' })).toHaveAttribute('href', /\/login\?next=%2Flocal%2Fnew/);
+    await expect(page.getByRole('main').getByRole('link', { name: 'Увійти' })).toHaveAttribute('href', /\/login\?next=%2Flocal%2Fnew/);
   });
 });
 
@@ -113,10 +113,12 @@ test.describe('/sellers/[id]: без ПДн', () => {
     const html = await res.text();
     expect(html).toContain('data-testid="seller-profile"');
     // Підвал містить публічний телефон сайту (SiteSettings, e2e_seed: +380500000000) — це не ПДн продавця.
-    // Тому: у блоці <main> телефонів немає зовсім, а в усьому HTML немає номерів продавця і його email.
-    const main = html.match(/<main[\s\S]*?<\/main>/)?.[0] ?? '';
-    expect(main).toContain('data-testid="seller-profile"');
-    expect(main).not.toMatch(/\+380\d{9}/);
+    // Тому: у відрендереному <main> телефонів немає зовсім, а в усьому HTML немає номерів продавця і його email.
+    // (SSR-<main> містить лише заглушку завантаження — контент Next доставляє потоком після нього.)
+    await page.goto(`/sellers/${detail.seller_id}`);
+    const main = page.getByRole('main');
+    await expect(main.getByTestId('seller-profile')).toBeVisible();
+    expect(await main.innerText()).not.toMatch(/\+?380\d{9}/);
     for (const secret of [SELLER_VERIFIED_PHONE, SELLER_VERIFIED_PHONE.slice(1), SEED_LISTING_PHONE,
       SEED_LISTING_PHONE.slice(1), 'seller@e2e.test', 'seller@']) {
       expect(html).not.toContain(secret);
