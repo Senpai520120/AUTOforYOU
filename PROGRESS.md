@@ -6,6 +6,11 @@
 
 ---
 
+## Задача 10.20 (часть) — launch_check требует BACKUP_HEARTBEAT_URL (2026-11-20) ◐
+
+- `core/launch.py`: `BACKUP_HEARTBEAT_URL` (источник env, как у соседей) в `REQUIRED_VARS`; пусто/заглушка = ERROR с подсказкой, `http://` = ERROR, `https://` = OK. В вывод идёт только хост, не путь (там может быть токен). Settings не менялись: переменную читает только `backup.sh`.
+- Тесты `BackupHeartbeatTests` (пусто, http, https без полного URL); три мутации дают красные тесты. Осталось по 10.20: алерт на срок TLS после домена.
+
 ## Задача 10.30 — ревью безопасности, исправления «желательно» (2026-11-20) ✓
 
 - Аудит `security-reviewer`: критичного и важного нет; IDOR заявок/брокера, `/media/`+`private_media`, импорт КАТОТТГ, Telegram-группа, XSS `/sellers/[id]`, `safeNext` — все «ок».

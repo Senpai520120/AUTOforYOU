@@ -48,6 +48,7 @@ GOOD_ENV = dict(
     POSTGRES_PASSWORD=PASSWORD, REDIS_URL='redis://:test-only-redis@redis:6379/0', REDIS_PASSWORD='test-only-redis',
     SENTRY_DSN='https://test-only-key@sentry.example.test/1',
     CELERY_HEARTBEAT_URL='https://hc.example.test/ping',
+    BACKUP_HEARTBEAT_URL='https://hc.example/ping/test',
     BACKUP_S3_BUCKET='test-only-backups', BACKUP_S3_ENDPOINT_URL='https://r2.example.test',
     BACKUP_S3_ACCESS_KEY_ID='test-only-access', BACKUP_S3_SECRET_ACCESS_KEY='test-only-s3-secret',
     BACKUP_ENCRYPTION_PASSPHRASE='test-only-passphrase', BACKUP_DIR='', C2C_SEED_THRESHOLD='',
@@ -182,6 +183,25 @@ class RequiredVarsTests(LaunchCheckTestCase):
         self.assertFails(code, out, 'ALLOWED_HOSTS: лише localhost-хости')
         code, out = self.run_check(ALLOWED_HOSTS=['localhost'], DEBUG=True)
         self.assertOk(code, out)
+
+
+class BackupHeartbeatTests(LaunchCheckTestCase):
+    URL = 'https://hc.example/ping/test'
+
+    def test_empty_is_error_with_hint(self):
+        code, out = self.run_check(env={'BACKUP_HEARTBEAT_URL': ''})
+        self.assertFails(code, out, 'BACKUP_HEARTBEAT_URL: не задано', '.env')
+
+    def test_http_is_error(self):
+        code, out = self.run_check(env={'BACKUP_HEARTBEAT_URL': 'http://hc.example/ping/test'})
+        self.assertFails(code, out, 'BACKUP_HEARTBEAT_URL: потрібна адреса https')
+
+    def test_https_is_ok_and_prints_host_only(self):
+        code, out = self.run_check(env={'BACKUP_HEARTBEAT_URL': self.URL})
+        self.assertOk(code, out)
+        self.assertIn('BACKUP_HEARTBEAT_URL: задано (хост hc.example)', out)
+        self.assertNotIn(self.URL, out)
+        self.assertNotIn('/ping/test', out)
 
 
 class FlagsTests(LaunchCheckTestCase):

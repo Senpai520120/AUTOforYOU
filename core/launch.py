@@ -12,6 +12,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.utils import timezone
@@ -57,6 +58,8 @@ REQUIRED_VARS = {
     'Моніторинг': [
         ('SENTRY_DSN', ENV, 'Sentry/GlitchTip DSN'),
         ('CELERY_HEARTBEAT_URL', ENV, 'адреса сервісу-сторожа для Celery (Healthchecks.io тощо)'),
+        ('BACKUP_HEARTBEAT_URL', ENV, 'https-адреса сервісу-сторожа для бекапу (Healthchecks.io тощо; задається в .env, '
+                                      'її пінгує docker/backup/backup.sh після успішного бекапу)'),
     ],
     'Резервні копії поза сервером': [
         ('BACKUP_S3_BUCKET', ENV, 'bucket R2/S3 для бекапів'),
@@ -134,6 +137,14 @@ def check_required_vars() -> list:
                 if hosts and all(h.lstrip('.') in ('localhost', '127.0.0.1', '0.0.0.0', 'backend') for h in hosts):
                     findings.append(Finding(ERROR, f'{name}: лише localhost-хости, потрібен домен сайту ({group})'))
                     continue
+            if name == 'BACKUP_HEARTBEAT_URL' and _is_filled(name, value):
+                # Адреса може містити секретний токен у шляху: у вивід - лише хост.
+                parsed = urlparse(value)
+                if parsed.scheme != 'https' or not parsed.hostname:
+                    findings.append(Finding(ERROR, f'{name}: потрібна адреса https://... ({group})'))
+                else:
+                    findings.append(Finding(OK, f'{name}: задано (хост {parsed.hostname})'))
+                continue
             if _is_filled(name, value):
                 findings.append(Finding(OK, f'{name}: задано'))
             elif value:
