@@ -554,6 +554,7 @@ export interface SiteSettings {
   lead_next_steps: string;
   /** Поради «Як перевірити авто» (задача 10.29): по одній у рядку; порожньо = блок прихований. */
   listing_check_tips: string;
+  listing_moderation_hours: number | null;
   /** Готовий текст згоди партнеру (єдине джерело — бекенд; порожній, якщо партнера немає). */
   partner_consent_text: string;
   data_retention_years: number | null;

@@ -11,6 +11,7 @@ import { test, expect, storageStatePath } from './fixtures';
 type Flags = { c2c_enabled: boolean; c2c_public_posting_enabled: boolean };
 let flags: Flags;
 let listingId: number | null = null;
+let sellerId: number | null = null;
 
 test.beforeAll(async ({ playwright, baseURL }) => {
   const ctx = await playwright.request.newContext({ baseURL });
@@ -19,6 +20,10 @@ test.beforeAll(async ({ playwright, baseURL }) => {
   flags = await res.json();
   const list = await ctx.get('/api/v1/local/listings/');
   if (list.ok()) listingId = (await list.json()).results?.[0]?.id ?? null;
+  if (listingId !== null) {
+    const detail = await ctx.get(`/api/v1/local/listings/${listingId}/`);
+    if (detail.ok()) sellerId = (await detail.json()).seller_id ?? null;
+  }
   await ctx.dispose();
 });
 
@@ -68,6 +73,10 @@ const PUBLIC_PAGES: { name: string; path: string | (() => string | null); needs?
   { name: '/ua', path: '/ua' },
   { name: 'картка C2C-оголошення', path: () => (listingId === null ? null : `/local/${listingId}`),
     needs: () => (listingId === null ? 'у каталозі немає оголошень (запустіть e2e_seed)' : null) },
+  { name: 'сторінка продавця /sellers/[id]', path: () => (sellerId === null ? null : `/sellers/${sellerId}`),
+    needs: () => (sellerId === null ? 'немає продавця з оголошенням (запустіть e2e_seed)' : null) },
+  { name: '/login?next=/local/new (з поясненням)', path: '/login?next=/local/new' },
+  { name: '/register?next=/local/new (з поясненням)', path: '/register?next=/local/new' },
   { name: '/login', path: '/login' },
   { name: '/register', path: '/register' },
   { name: '/password-reset', path: '/password-reset' },

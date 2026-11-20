@@ -7,7 +7,7 @@
  * показ гостям вимкнено (503), оголошення недоступне (404). Номер у DOM з'являється лише після 200.
  * Стан «розгорнуто» керується ззовні (usePhoneReveal, 6.6): нижня панель відкриває цю ж капчу.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Captcha from '@/components/ui/Captcha';
 import { localApi } from '@/api/local';
@@ -42,6 +42,14 @@ function GuestCaptchaForm({ listingId, onPhone }: { listingId: number; onPhone: 
   const [error, setError] = useState('');
   const { config, error: configError } = useAuthConfig();
   const captcha = useCaptchaState();
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // 10.25: нижня панель відкрила капчу — прокручуємо і ставимо фокус на блок (клавіатура і скрінрідер).
+  useEffect(() => {
+    const el = boxRef.current;
+    el?.scrollIntoView({ block: 'center' });
+    el?.focus({ preventScroll: true });
+  }, []);
 
   const submit = async () => {
     setLoading(true);
@@ -58,7 +66,8 @@ function GuestCaptchaForm({ listingId, onPhone }: { listingId: number; onPhone: 
   };
 
   return (
-    <div className="space-y-2" data-testid="guest-phone">
+    <div ref={boxRef} tabIndex={-1} role="group" aria-label="Перевірка перед показом номера"
+      className="space-y-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg" data-testid="guest-phone">
       <p className="text-xs text-slate-500">Підтвердіть, що ви не робот, щоб побачити номер.</p>
       {config?.captcha.provider !== 'honeypot' && (
         <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>

@@ -142,6 +142,6 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'c2c_enabled', 'c2c_public_posting_enabled', 'payments_enabled',
             'carvertical_partner_url', 'analytics', 'prepayment_warning_text',
             'about_text', 'lead_response_hours', 'lead_next_steps', 'listing_check_tips',
-            *PUBLIC_CONFIG_FIELDS,
+            'listing_moderation_hours', *PUBLIC_CONFIG_FIELDS,
         ]
         read_only_fields = [f for f in fields if f != 'partner_consent_text' and not f.endswith('_enabled')]

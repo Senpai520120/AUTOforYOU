@@ -81,7 +81,7 @@ test.describe('Фото: ресайз і мініатюри (8.4)', () => {
     await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     await expectNoRequest(
       page, (r) => r.url().endsWith('/api/v1/local/listings/') && r.method() === 'POST',
-      async () => { await page.getByRole('button', { name: 'Опублікувати оголошення' }).click(); },
+      async () => { await page.getByRole('button', { name: 'Надіслати на модерацію' }).click(); },
     );
     await expect(page.getByText('Додайте щонайменше 1 фото').first()).toBeVisible();
   });

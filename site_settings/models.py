@@ -114,6 +114,13 @@ class SiteSettings(models.Model):
         help_text='Показуються на картці оголошення в розділі «Оголошення по Україні» (до 10 порад). '
                   'Порожньо - блок прихований. Тексти вносить власник.',
     )
+    # 10.25: строк модерації оголошення C2C. Порожньо - строк не показується.
+    listing_moderation_hours = models.PositiveSmallIntegerField(
+        'Орієнтовний строк модерації оголошення, годин', null=True, blank=True,
+        validators=[MinValueValidator(1)],
+        help_text='Показується біля кнопки «Надіслати на модерацію». Не обіцяйте те, чого не можете '
+                  'виконати; порожньо - строк не показується.',
+    )
 
     updated_at = models.DateTimeField('Оновлено', auto_now=True)
 

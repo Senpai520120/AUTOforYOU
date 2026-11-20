@@ -32,7 +32,9 @@ async function fillRequired(page: Page, make: string) {
   await page.getByRole('combobox', { name: 'Населений пункт *' }).fill('Вінниц');
   await page.getByRole('option', { name: /^Вінниця/ }).click();
   await page.getByLabel('Опис').fill('[E2E] Звичайний опис без контактів');
-  await page.getByLabel('Контактний телефон').fill('+380501112233');
+  // 10.23: у підтвердженого власника поле лише для читання (номер підставляє сервер)
+  const phone = page.getByLabel('Контактний телефон');
+  if (await phone.isEditable()) await phone.fill('+380501112233');
   // 8.5: дві відмітки — правила і «не в розшуку, не в заставі»
   await page.getByRole('checkbox', { name: /правилами/ }).check();
   await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
@@ -50,7 +52,7 @@ test.describe('Форма оголошення (4.2): продавець', () =>
       path.join(FIXTURES, 'car-1.jpg'), path.join(FIXTURES, 'car-2.jpg'),
     ]);
     await expect(page.getByText(/^2\/\d+ ·/)).toBeVisible();
-    await page.getByRole('button', { name: 'Опублікувати оголошення' }).click();
+    await page.getByRole('button', { name: 'Надіслати на модерацію' }).click();
     await expect(page.getByRole('heading', { name: 'Оголошення надіслано на модерацію' })).toBeVisible();
     await page.goto('/me/local-listings');
     await expect(page.getByText(make).first()).toBeVisible();

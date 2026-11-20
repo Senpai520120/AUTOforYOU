@@ -1,6 +1,9 @@
 'use client';
 import { trackEvent } from '@/lib/analytics';
-import { useEffect, useId, useRef, useState } from 'react';
+import { Suspense, useEffect, useId, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { safeNext } from '@/lib/safe-next';
+import ListingSubmitNotice, { isListingSubmitNext } from '@/components/ui/ListingSubmitNotice';
 import Link from 'next/link';
 import { apiFetch } from '@/api/client';
 import Captcha from '@/components/ui/Captcha';
@@ -12,6 +15,17 @@ import { focusFirstInvalid, splitFieldErrors } from '@/lib/form-errors';
 const FIELD_KEYS = ['first_name', 'email', 'phone', 'password', 'password2'] as const;
 
 export default function RegisterPage() {
+  // useSearchParams без Suspense ламає пререндер сторінки під час build.
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
+  const next = safeNext(useSearchParams().get('next'));
+  const loginHref = next === '/me' ? '/login' : `/login?${new URLSearchParams({ next })}`;
   const { config } = useAuthConfig();
   const idPrefix = useId();
   const captcha = useCaptchaState();
@@ -85,7 +99,7 @@ export default function RegisterPage() {
             </p>
           )}
           <p className="mt-4 text-sm text-slate-500">
-            <Link href="/login" className="text-blue-600 hover:underline">Перейти до входу</Link>
+            <Link href={loginHref} className="text-blue-600 hover:underline">Перейти до входу</Link>
           </p>
         </div>
       </div>
@@ -96,6 +110,7 @@ export default function RegisterPage() {
     <div className="max-w-md mx-auto mt-10">
       <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900 mb-6">Реєстрація</h1>
+        {isListingSubmitNext(next) && <ListingSubmitNotice />}
         <form ref={formRef} onSubmit={submit} className="space-y-4">
           {[
             { label: "Ім'я", key: 'first_name', type: 'text', autoComplete: 'given-name' },
@@ -164,7 +179,7 @@ export default function RegisterPage() {
           </button>
         </form>
         <p className="mt-4 text-sm text-center text-slate-500">
-          Вже є акаунт? <Link href="/login" className="text-blue-600 underline">Увійти</Link>
+          Вже є акаунт? <Link href={loginHref} className="text-blue-600 underline">Увійти</Link>
         </p>
       </div>
     </div>

@@ -85,3 +85,25 @@ class ListingCheckTipsApiTests(CleanCacheTestCase):
     def test_anonymous_cannot_write(self):
         self.assertEqual(APIClient().patch(URL, {'listing_check_tips': 'x'}, format='json').status_code, 405)
         self.assertEqual(SiteSettings.load().listing_check_tips, '')
+
+
+class ListingModerationHoursApiTests(CleanCacheTestCase):
+    """10.25: срок модерации - необязательное поле владельца; пусто = срок не показывается."""
+
+    def test_empty_by_default(self):
+        self.assertIsNone(APIClient().get(URL).json()['listing_moderation_hours'])
+
+    def test_value_returned(self):
+        s = SiteSettings.load()
+        s.listing_moderation_hours = 24
+        s.save()
+        self.assertEqual(APIClient().get(URL).json()['listing_moderation_hours'], 24)
+
+    def test_zero_rejected(self):
+        with self.assertRaises(ValidationError) as ctx:
+            SiteSettings(listing_moderation_hours=0).full_clean()
+        self.assertIn('listing_moderation_hours', ctx.exception.message_dict)
+
+    def test_anonymous_cannot_write(self):
+        self.assertEqual(APIClient().patch(URL, {'listing_moderation_hours': 1}, format='json').status_code, 405)
+        self.assertIsNone(SiteSettings.load().listing_moderation_hours)

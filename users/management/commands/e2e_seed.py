@@ -37,6 +37,7 @@ E2E_SITE_SETTINGS = {
     'lead_response_hours': 4,
     'lead_next_steps': f"{E2E_PREFIX} Менеджер зв'яжеться з вами\n{E2E_PREFIX} Уточнимо бюджет і побажання",
     'listing_check_tips': f"{E2E_PREFIX} Перевірте VIN за базою\n{E2E_PREFIX} Огляньте авто на СТО",
+    'listing_moderation_hours': 24,
     'legal_docs_approved': True,
     'legal_docs_updated_at': date(2026, 10, 1),
     'legal_docs_version': '2026-10-01',

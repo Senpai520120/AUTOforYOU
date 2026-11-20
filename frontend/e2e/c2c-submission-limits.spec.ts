@@ -32,7 +32,7 @@ test.describe('Подача: ліміти і підтвердження (8.5)', 
     await fillForm(page);
     await page.getByRole('checkbox', { name: /правилами/ }).check();
     await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
-    await page.getByRole('button', { name: 'Опублікувати оголошення' }).click();
+    await page.getByRole('button', { name: 'Надіслати на модерацію' }).click();
     await expect(page.getByRole('heading', { name: 'Оголошення надіслано на модерацію' })).toBeVisible();
   });
 
@@ -40,7 +40,7 @@ test.describe('Подача: ліміти і підтвердження (8.5)', 
     await page.goto('/local/new');
     await fillForm(page);
     await page.getByRole('checkbox', { name: /правилами/ }).check();
-    await expect(page.getByRole('button', { name: 'Опублікувати оголошення' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Надіслати на модерацію' })).toBeDisabled();
 
     const seller = await api('seller');
     const cities = await (await seller.get('/api/v1/local/cities/?q=вінниц')).json();
@@ -65,7 +65,7 @@ test.describe('Подача: ліміти і підтвердження (8.5)', 
     await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     await expect(page.getByTestId('description-counter')).toHaveText(`${config.description_max + 1} / ${config.description_max}`);
     await expect(page.getByTestId('description-counter')).toHaveClass(/text-red-600/);
-    await expect(page.getByRole('button', { name: 'Опублікувати оголошення' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Надіслати на модерацію' })).toBeDisabled();
   });
 
   test('ліміт: 429 від сервера — текст «Забагато нових оголошень»', async ({ page }) => {
@@ -79,7 +79,7 @@ test.describe('Подача: ліміти і підтвердження (8.5)', 
     await fillForm(page);
     await page.getByRole('checkbox', { name: /правилами/ }).check();
     await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
-    await page.getByRole('button', { name: 'Опублікувати оголошення' }).click();
+    await page.getByRole('button', { name: 'Надіслати на модерацію' }).click();
     await expect(page.getByText('Забагато нових оголошень. Спробуйте пізніше')).toBeVisible();
   });
 });
