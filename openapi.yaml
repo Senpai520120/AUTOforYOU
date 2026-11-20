@@ -3495,6 +3495,8 @@ components:
       - calculator_visit
       - landing_visit
       - mobile_bar_click
+      - lead_form_start
+      - lead_submit_error
       type: string
     LandingListResponse:
       type: object
