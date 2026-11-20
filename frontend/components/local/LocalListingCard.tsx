@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import { LocalListing } from '@/lib/types';
 import ChannelBadge from '@/components/local/ChannelBadge';
 import { VERIFIED_DEALER_LABEL } from '@/lib/labels';
@@ -41,6 +42,7 @@ export default function LocalListingCard({ listing, priority = false }: { listin
           {...(priority ? { loading: 'eager', fetchPriority: 'high' } as const : {})}
           className="object-cover"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          unoptimized={isLocalMediaUrl(imgSrc)}
           onError={() => setFailedSrc(original)}
         />
         {isTop && (

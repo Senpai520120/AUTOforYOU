@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import { getFavorites, removeFavorite } from '@/api/favorites';
 import type { FavoriteItem } from '@/lib/types';
 import LoadingState from '@/components/ui/LoadingState';
@@ -79,6 +80,7 @@ export default function FavoritesPage() {
                   fill
                   className="object-cover"
                   sizes="128px"
+                  unoptimized={isLocalMediaUrl(item.image_url)}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER; }}
                 />
               </Link>

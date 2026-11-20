@@ -14,6 +14,10 @@
 - Удаление фото `rejected`/`sold` через `LOCAL_LISTING_PHOTO_PURGE_DAYS` (30): ежедневная задача `purge_closed_listing_photos`, команда `purge_listing_photos` (dry-run, `--apply`); правка отклонённого объявления без фото даёт 400 «Завантажте фото заново». Правки не закоммичены на момент записи.
 - Открытые вопросы брокеру: дизельный гибрид (модель не различает тип ДВС), PHEV считается как электромобиль, а по закону, вероятно, по формуле ДВС (LAUNCH_CHECKLIST 4.1).
 
+## Демо-объявления C2C (2026-11-20) ✓
+
+- `python manage.py seed_demo_listings --photos-dir PATH [--clear]`: 10 объявлений `[DEMO]` от `demo-seller@demo.test` (подтверждённый телефон, случайный пароль), по 2 фото через `sanitize_image`/`make_thumbnail`. Только при `DEMO_SEED_ALLOWED=true`; повтор не плодит дубли; `--clear` удаляет только `[DEMO]`. Фото (Wikimedia Commons, CC BY-SA) в репо не лежат. Тесты: `local_listings/tests_demo_seed.py`.
+
 ## Задача 10.21 — уборка (2026-11-20) ✓
 
 - Удалён `nginx/nginx.conf` (не подключён ни одним compose/CI/скриптом; решение владельца); комментарий в `core/uploads.py` указывает на `nginx/templates/locations.conf.template`. `nginx;C` в репозитории и рабочей папке не найден; `kompas.html` оставлен (личный файл, не в git: `.git/info/exclude`, `.dockerignore`) — решение за владельцем.
