@@ -227,6 +227,9 @@ class AuctionFixedFee(AuctionSourceModel, DateRangeModel):
 class UsLandRoute(DateRangeModel):
     auction_location = models.CharField(max_length=100, verbose_name='Локация аукциона')
     us_port = models.CharField(max_length=50, verbose_name='Порт США')
+    # 10.17: українські назви для форми калькулятора; порожньо - показується назва з коду.
+    auction_location_uk = models.CharField('Локація аукціону (укр.)', max_length=100, blank=True, default='')
+    us_port_uk = models.CharField('Порт США (укр.)', max_length=100, blank=True, default='')
     cost_usd = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Стоимость ($)')
 
     overlap_key_fields = ('auction_location', 'us_port')
@@ -243,6 +246,9 @@ class OceanFreightRate(DateRangeModel):
     # Порт ЕС - данные (02-C4): новый порт добавляется маршрутом в админке, без правки кода.
     us_port = models.CharField(max_length=50, verbose_name='Порт США')
     eu_port = models.CharField(max_length=20, verbose_name='Порт ЕС', help_text='Наприклад: klaipeda, gdansk')
+    # 10.17: українські назви портів для форми калькулятора; порожньо - назва з коду.
+    us_port_uk = models.CharField('Порт США (укр.)', max_length=100, blank=True, default='')
+    eu_port_uk = models.CharField('Порт ЄС (укр.)', max_length=100, blank=True, default='')
     cost_usd = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Стоимость ($)')
 
     overlap_key_fields = ('us_port', 'eu_port')

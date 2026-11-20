@@ -1,16 +1,13 @@
 import type { LandingCalculation } from '@/lib/types';
 import { percentFromDecimal } from '@/lib/calc-errors';
 import { ExclusionsList, FeesFreshness } from '@/components/ui/CalcNotes';
+import { formatUah, formatUsd } from '@/lib/format';
 
 const PENDING = 'уточнюється менеджером';
 
-function usd(value: string): string {
-  return `$${Number(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 })}`;
-}
-
-function uah(value: string): string {
-  return `${Number(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 })} грн`;
-}
+// Лендінг показує цілі суми (як і раніше), формат — спільний з калькулятором (lib/format.ts).
+const usd = (value: string) => formatUsd(value, 0);
+const uah = (value: string) => formatUah(value, 0);
 
 function formatDate(iso: string | null): string {
   if (!iso) return '';

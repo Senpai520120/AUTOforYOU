@@ -3123,6 +3123,7 @@ components:
           type: integer
           maximum: 10000
           minimum: 0
+          nullable: true
         fuel_type:
           $ref: '#/components/schemas/CustomsExciseFuelTypeEnum'
         vehicle_year:
@@ -3169,7 +3170,6 @@ components:
           nullable: true
       required:
       - auction_price_usd
-      - engine_cc
       - fuel_type
       - vehicle_year
     Calculation:

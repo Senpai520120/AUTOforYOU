@@ -7,6 +7,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillCalcForm } from './helpers/calc-form';
 
 const GUEST = { cookies: [], origins: [] };
 const REFRESH_PATH = '/api/v1/auth/token/refresh/';
@@ -223,6 +224,7 @@ test.describe('09-Q7 / 08-Q2: протухла cookie не заважає гос
     await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('5000');
     await page.getByLabel("Об'єм двигуна (см³)", { exact: true }).fill('2000');
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
 
     await expect(page.getByRole('heading', { name: 'Деталізація вартості «під ключ»' })).toBeVisible();

@@ -73,12 +73,12 @@ class AuctionFixedFeeAdmin(TariffAdmin):
 
 @admin.register(UsLandRoute)
 class UsLandRouteAdmin(TariffAdmin):
-    list_display = ('auction_location', 'us_port', 'cost_usd', 'valid_from', 'valid_to', 'is_verified')
+    list_display = ('auction_location', 'auction_location_uk', 'us_port', 'us_port_uk', 'cost_usd', 'valid_from', 'valid_to', 'is_verified')
 
 
 @admin.register(OceanFreightRate)
 class OceanFreightRateAdmin(TariffAdmin):
-    list_display = ('us_port', 'eu_port', 'cost_usd', 'valid_from', 'valid_to', 'is_verified')
+    list_display = ('us_port', 'us_port_uk', 'eu_port', 'eu_port_uk', 'cost_usd', 'valid_from', 'valid_to', 'is_verified')
 
 
 @admin.register(EuToUaDeliveryRate)

@@ -166,7 +166,7 @@ test.describe('Сторінка моделі', () => {
     for (const junk of ['abc', '-5', '0', '99999999999', '<script>']) {
       const res = await page.goto(`/calculator?auction_price_usd=${encodeURIComponent(junk)}`);
       expect(res?.status()).toBe(200);
-      await expect(page.locator('#auction_price_usd')).toHaveValue('10000');
+      await expect(page.locator('#auction_price_usd')).toHaveValue('');  // 10.17: порожнє поле, а не чуже значення
     }
   });
 

@@ -8,6 +8,7 @@
  */
 import type { Page, Request } from '@playwright/test';
 import { test, expect } from './fixtures';
+import { fillCalcForm } from './helpers/calc-form';
 
 const API = process.env.E2E_API_URL ?? 'http://localhost';
 const LEADS_URL = (r: Request) => r.url().endsWith('/api/v1/leads/') && r.method() === 'POST';
@@ -29,6 +30,7 @@ async function patchSettings(page: Page, patch: Patch) {
 
 async function calculate(page: Page) {
   await page.goto('/calculator');
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   await expect(page.getByRole('heading', { name: 'Залишити заявку брокеру' })).toBeVisible();
 }

@@ -5,6 +5,7 @@
 import type { Page, Request } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillCalcForm } from './helpers/calc-form';
 
 const SETTINGS = '**/api/v1/site-settings/';
 const RATES = '**/api/v1/pricing/rates/';
@@ -34,6 +35,7 @@ async function unconfigured(page: Page) {
 
 async function openLeadForm(page: Page) {
   await page.goto('/calculator');
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   await expect(page.getByRole('heading', { name: 'Залишити заявку брокеру' })).toBeVisible();
 }
@@ -151,6 +153,7 @@ test.describe('Калькулятор', () => {
       r.fulfill({ status: 400, json: { auction_price_usd: ['Некоректна ціна.'] } }));
     await patchSettings(page, { phone: PHONE });
     await page.goto('/calculator');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await expect(page.getByTestId('calc-error')).toBeVisible();
     await expect(page.getByTestId('fallback-contact')).toHaveCount(0);
@@ -160,6 +163,7 @@ test.describe('Калькулятор', () => {
     await page.route('**/api/v1/pricing/calculate/', (r) => r.fulfill({ status: 503, json: {} }));
     await patchSettings(page, { phone: PHONE });
     await page.goto('/calculator');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await expect(page.getByTestId('calc-error').getByTestId('fallback-contact')).toContainText(PHONE);
   });

@@ -5,6 +5,7 @@
 import type { Page, Request } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillCalcForm } from './helpers/calc-form';
 
 const LEADS_URL = (r: Request) => r.url().endsWith('/api/v1/leads/') && r.method() === 'POST';
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
@@ -15,6 +16,7 @@ test.beforeEach(async ({ page }) => {
 
 async function calculate(page: Page) {
   await page.goto('/calculator');
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   await expect(page.getByRole('heading', { name: 'Залишити заявку брокеру' })).toBeVisible();
 }

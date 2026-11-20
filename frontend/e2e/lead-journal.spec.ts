@@ -5,6 +5,7 @@
 import fs from 'fs';
 import type { Page } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
+import { fillCalcForm } from './helpers/calc-form';
 
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
 const PHONE_DIGITS = '671234567';
@@ -16,6 +17,7 @@ test.beforeEach(async ({ page }) => {
 
 async function startForm(page: Page) {
   await page.goto('/calculator');
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   await expect(page.getByRole('heading', { name: 'Залишити заявку брокеру' })).toBeVisible();
   return page.getByTestId('lead-form');

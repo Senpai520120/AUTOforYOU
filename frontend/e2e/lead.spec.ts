@@ -5,6 +5,7 @@
 import type { Page, Request } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
 import { expectNoRequest } from './helpers/network';
+import { fillCalcForm } from './helpers/calc-form';
 
 const LEADS_URL = (r: Request) => r.url().endsWith('/api/v1/leads/') && r.method() === 'POST';
 const consentInit = () => window.localStorage.setItem('cookie_consent', 'necessary');
@@ -15,6 +16,7 @@ test.beforeEach(async ({ page }) => {
 
 async function calculate(page: Page, path = '/calculator') {
   await page.goto(path);
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   await expect(page.getByRole('heading', { name: 'Залишити заявку брокеру' })).toBeVisible();
 }
@@ -251,6 +253,7 @@ test.describe('Джерело заявки (Н-26)', () => {
 
   test('UTM з недопустимими символами відкидаються, кирилиця проходить', async ({ page }) => {
     await page.goto('/calculator?utm_source=%3Cscript%3E&utm_campaign=%D0%B2%D0%B5%D1%81%D0%BD%D0%B0_1');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await fillLead(page, { name: '[E2E] UTM3', phone: '0671234567' });
     const { body } = await submitAndWait(page);
@@ -259,6 +262,7 @@ test.describe('Джерело заявки (Н-26)', () => {
 
   test('page_url без query, реферер власного сайту ігнорується, зовнішній зберігається як origin', async ({ page, baseURL }) => {
     await page.goto('/calculator?utm_source=x&token=secret', { referer: `${baseURL}/ua` });
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await fillLead(page, { name: '[E2E] URL', phone: '0671234567' });
     const { body } = await submitAndWait(page);
@@ -269,6 +273,7 @@ test.describe('Джерело заявки (Н-26)', () => {
 
   test('зовнішній реферер потрапляє в тіло як origin', async ({ page }) => {
     await page.goto('/calculator', { referer: 'https://www.google.com/search?q=secret' });
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await fillLead(page, { name: '[E2E] Ref', phone: '0671234567' });
     const { body } = await submitAndWait(page);
@@ -284,6 +289,7 @@ test.describe('Джерело заявки (Н-26)', () => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/calculator?utm_source=tiktok');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await fillLead(page, { name: '[E2E] NoStorage', phone: '0671234567' });
     const { resp, body } = await submitAndWait(page);

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ApiError } from '@/api/client';
 import { brokerLeadsApi } from '@/api/leads';
 import { LEAD_STATUS_LABELS } from '@/lib/labels';
+import { formatUsd } from '@/lib/format';
 import type { BrokerLeadList as BrokerLeadListData, LeadStatus } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
 import AccessDenied from './AccessDenied';
@@ -150,7 +151,7 @@ export default function BrokerLeadList() {
                   <div><dt className="inline text-slate-400">Джерело: </dt><dd data-testid="lead-utm-source" className="inline break-all">{lead.utm_source || 'пряме'}</dd></div>
                   <div><dt className="inline text-slate-400">Перша реакція: </dt><dd className="inline">{lead.first_response_at ? fmt(lead.first_response_at) : 'ще немає'}</dd></div>
                   <div><dt className="inline text-slate-400">Відповідальний: </dt><dd className="inline break-all">{lead.assigned_to ? lead.assigned_to.name : '—'}</dd></div>
-                  {lead.total_usd && <div><dt className="inline text-slate-400">Сума: </dt><dd className="inline break-all">${Number(lead.total_usd).toLocaleString('uk-UA')}</dd></div>}
+                  {lead.total_usd && <div><dt className="inline text-slate-400">Сума: </dt><dd className="inline break-all">{formatUsd(lead.total_usd)}</dd></div>}
                 </dl>
               </Link>
             </li>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { leadsApi } from '@/api/leads';
 import { leadStatusLabel } from '@/lib/labels';
+import { formatUah, formatUsd } from '@/lib/format';
 import type { Lead, PaginatedResponse } from '@/lib/types';
 import Spinner from '@/components/ui/Spinner';
 
@@ -59,9 +60,9 @@ export default function MyLeadsPage() {
               </div>
               {(lead.total_usd || lead.total_uah) && (
                 <p className="font-bold text-blue-800 mt-2">
-                  {lead.total_usd ? `$${Number(lead.total_usd).toLocaleString('uk-UA')}` : ''}
+                  {lead.total_usd ? formatUsd(lead.total_usd) : ''}
                   {lead.total_usd && lead.total_uah ? ' / ' : ''}
-                  {lead.total_uah ? `${Number(lead.total_uah).toLocaleString('uk-UA')} грн` : ''}
+                  {lead.total_uah ? formatUah(lead.total_uah) : ''}
                 </p>
               )}
               {lead.listing_id != null && (

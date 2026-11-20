@@ -3,6 +3,7 @@ import DemoBanner from '@/components/ui/DemoBanner';
 import LeadForm from '@/components/leads/LeadForm';
 import { percentFromDecimal } from '@/lib/calc-errors';
 import { ExclusionsList, FeesFreshness } from '@/components/ui/CalcNotes';
+import { formatUah, formatUsd } from '@/lib/format';
 
 const PENDING = 'уточнюється менеджером';
 
@@ -19,8 +20,8 @@ function Row({ label, usd, uah }: { label: string; usd?: string; uah?: string })
   return (
     <tr className="border-b border-slate-100">
       <td className="py-2 text-slate-700 text-sm">{label}</td>
-      <td className="py-2 text-right font-mono text-sm">{usd ? `$${Number(usd).toLocaleString()}` : '—'}</td>
-      <td className="py-2 text-right font-mono text-sm text-slate-500">{uah ? `${Number(uah).toLocaleString()} грн` : '—'}</td>
+      <td className="py-2 text-right font-mono text-sm">{usd ? formatUsd(usd) : '—'}</td>
+      <td className="py-2 text-right font-mono text-sm text-slate-500">{uah ? formatUah(uah) : '—'}</td>
     </tr>
   );
 }
@@ -76,10 +77,10 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
               </span>
             </td>
             <td className="pt-3 text-right font-extrabold text-blue-900 text-lg font-mono" data-testid="calc-total-usd">
-              ${Number(b.total_usd_full ?? b.total_usd).toLocaleString()}
+              {formatUsd(b.total_usd_full ?? b.total_usd)}
             </td>
             <td className="pt-3 text-right font-extrabold text-slate-600 text-base font-mono">
-              {Number(b.total_uah).toLocaleString()} грн
+              {formatUah(b.total_uah)}
             </td>
           </tr>
         </tfoot>

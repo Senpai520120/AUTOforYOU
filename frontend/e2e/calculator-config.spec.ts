@@ -6,6 +6,7 @@ import type { Page, Route } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { expectNoRequest } from './helpers/network';
 import type { CalcRatesResponse, CalcResult } from '../lib/types';
+import { fillCalcForm } from './helpers/calc-form';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -30,6 +31,7 @@ async function patchCalc(page: Page, patch: (body: CalcResult) => CalcResult) {
 
 async function calculate(page: Page) {
   const resp = page.waitForResponse((r) => isCalc(r.request()));
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   return resp;
 }
@@ -179,6 +181,7 @@ test.describe('Калькулятор: помилки без сирого JSON',
     test(`${c.status} — «${c.text}»`, async ({ page }) => {
       await page.route('**/api/v1/pricing/calculate/', (r) => r.fulfill({ status: c.status, json: c.body }));
       await page.goto('/calculator');
+      await fillCalcForm(page);
       await page.getByRole('button', { name: 'Розрахувати' }).click();
       const alert = page.getByTestId('calc-error');
       await expect(alert).toContainText(c.text);
@@ -192,6 +195,7 @@ test.describe('Калькулятор: помилки без сирого JSON',
     await page.route('**/api/v1/pricing/calculate/', (r) =>
       r.fulfill({ status: 400, json: { engine_cc: ['Значення завелике.'] } }));
     await page.goto('/calculator');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await expect(page.getByTestId('error-engine_cc')).toHaveText('Значення завелике.');
   });
@@ -223,4 +227,55 @@ test('@mobile форма калькулятора без горизонталь�
   await expect(page.getByLabel('Тип палива')).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflow).toBe(false);
+});
+
+// 10.17: порожня форма з підказками, клієнтська валідація, українські назви, формат грошей uk-UA.
+test.describe('Калькулятор: зручність (10.17)', () => {
+  test('порожня форма: поля порожні з placeholder-підказками', async ({ page }) => {
+    await page.goto('/calculator');
+    const price = page.getByLabel('Ціна аукціону ($)', { exact: true });
+    await expect(price).toHaveValue('');
+    await expect(price).toHaveAttribute('placeholder', /Наприклад/);
+    const cc = page.getByLabel("Об'єм двигуна (см³)", { exact: true });
+    await expect(cc).toHaveValue('');
+    await expect(cc).toHaveAttribute('placeholder', /Наприклад/);
+    const year = page.getByLabel('Рік випуску', { exact: true });
+    await expect(year).toHaveValue('');
+    await expect(year).toHaveAttribute('placeholder', /Наприклад/);
+  });
+
+  test('без обов\'язкових полів запиту немає, під полями зрозумілі повідомлення', async ({ page }) => {
+    await page.goto('/calculator');
+    await expectNoRequest(page, isCalc, () => page.getByRole('button', { name: 'Розрахувати' }).click());
+    await expect(page.getByTestId('error-auction_price_usd')).toHaveText('Вкажіть ціну аукціону ($).');
+    await expect(page.getByTestId('error-engine_cc')).toHaveText("Вкажіть об'єм двигуна (см³).");
+    await expect(page.getByTestId('error-vehicle_year')).toHaveText('Вкажіть рік випуску.');
+    await expect(page.getByLabel('Ціна аукціону ($)', { exact: true })).toBeFocused();
+  });
+
+  test('електро: об\'єм двигуна не обов\'язковий, потрібна батарея', async ({ page }) => {
+    await page.goto('/calculator');
+    await page.getByLabel('Тип палива').selectOption('electric');
+    await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('10000');
+    await page.getByLabel('Рік випуску', { exact: true }).fill('2020');
+    await expectNoRequest(page, isCalc, () => page.getByRole('button', { name: 'Розрахувати' }).click());
+    await expect(page.getByTestId('error-engine_cc')).toHaveCount(0);
+    await expect(page.getByTestId('error-battery_capacity_kwh')).toHaveText('Вкажіть ємність батареї (кВт·год).');
+  });
+
+  test('назви портів у списках українською (seed: Нью-Джерсі, Клайпеда)', async ({ page }) => {
+    await page.goto('/calculator');
+    await expect(page.getByLabel('Порт США').locator('option', { hasText: 'Нью-Джерсі' })).toHaveCount(1);
+    await expect(page.getByLabel('Порт ЄС').locator('option', { hasText: 'Клайпеда' })).toHaveCount(1);
+  });
+
+  test('суми у форматі uk-UA: пробіл-роздільник тисяч, без коми-тисяч', async ({ page }) => {
+    await page.goto('/calculator');
+    await fillCalcForm(page, { price: '12345' });
+    await page.getByRole('button', { name: 'Розрахувати' }).click();
+    const price = page.getByRole('row').filter({ hasText: 'Ціна аукціону' }).getByRole('cell').nth(1);
+    await expect(price).toHaveText(/^\$12[   ]345$/);
+    const total = page.getByTestId('calc-total-usd');
+    await expect(total).toHaveText(/^\$\d{1,3}([   ]\d{3})+(,\d{1,2})?$/);
+  });
 });

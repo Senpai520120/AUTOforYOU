@@ -709,6 +709,22 @@ def _uniq(values) -> list:
     return sorted(set(values))
 
 
+def _uk_names(*pairs) -> dict:
+    """{код в нижнем регистре: украинское название} из (код, name_uk); первое непустое побеждает."""
+    names = {}
+    for code, name in pairs:
+        if code and name and code.lower() not in names:
+            names[code.lower()] = name
+    return names
+
+
+def _opt_uk(value, names: dict) -> dict:
+    """Опция с украинским названием из справочника; нет перевода - прежнее имя из кода."""
+    option = _opt(value)
+    option['label'] = names.get(value.lower()) or option['label']
+    return option
+
+
 def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: dict = None) -> dict:
     """Справочники формы калькулятора без сумм (Q11): только значения из активных тарифов.
 
@@ -731,6 +747,9 @@ def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: di
         if r.us_port.lower() in eu_by_us:
             us_by_loc.setdefault(r.auction_location.lower(), set()).add(r.us_port.lower())
     us_ports = _uniq(p for ports in us_by_loc.values() for p in ports)
+    loc_names = _uk_names(*((r.auction_location, r.auction_location_uk) for r in land))
+    us_names = _uk_names(*((r.us_port, r.us_port_uk) for r in [*land, *ocean]))
+    eu_names = _uk_names(*((r.eu_port, r.eu_port_uk) for r in ocean))
 
     def choice(field_name):
         values = _uniq(getattr(t, field_name) for t in tiers)
@@ -744,9 +763,9 @@ def build_form_options(catalog: RateCatalog, on_date, defaults: dict, labels: di
     title_types, title_default = choice('title_type')
     options = {
         'auctions': [_opt(v, labels.get('auction')) for v in _uniq(t.auction for t in tiers)],
-        'auction_locations': [{**_opt(loc), 'us_ports': sorted(ports)} for loc, ports in sorted(us_by_loc.items())],
-        'us_ports': [{**_opt(p), 'eu_ports': sorted(eu_by_us[p])} for p in us_ports],
-        'eu_ports': [_opt(p) for p in _uniq(e for p in us_ports for e in eu_by_us[p])],
+        'auction_locations': [{**_opt_uk(loc, loc_names), 'us_ports': sorted(ports)} for loc, ports in sorted(us_by_loc.items())],
+        'us_ports': [{**_opt_uk(p, us_names), 'eu_ports': sorted(eu_by_us[p])} for p in us_ports],
+        'eu_ports': [_opt_uk(p, eu_names) for p in _uniq(e for p in us_ports for e in eu_by_us[p])],
         'fuel_types': [{**_opt(v, labels.get('fuel_type')), 'requires_battery': v in EV_FUEL_TYPES}
                        for v in _uniq(r.fuel_type for r in excise)],
         'member_types': member_types,

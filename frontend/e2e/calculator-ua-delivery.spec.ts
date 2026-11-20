@@ -4,6 +4,7 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
+import { fillCalcForm } from './helpers/calc-form';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -12,11 +13,13 @@ const isCalc = (r: { url(): string; method(): string }) =>
 
 async function calculate(page: Page) {
   const resp = page.waitForResponse((r) => isCalc(r.request()));
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   return resp;
 }
 
 // 10.1: «РАЗОМ» тепер з копійками, роздільник залежить від локалі (крапка чи кома) — розбираємо обидва.
+// 10.17: формат uk-UA — тисячі розділені U+00A0 (або U+202F), десяткова кома; усе, крім цифр і .,, знімається нижче.
 const money = (text: string) => {
   const t = text.replace(/[^\d.,]/g, '');
   const m = t.match(/^(.*?)[.,](\d{1,2})$/);
@@ -78,6 +81,7 @@ test('підмінений id (400) — повідомлення під поле
   await page.route('**/api/v1/pricing/calculate/', (r) =>
     r.fulfill({ status: 400, json: { ua_delivery_rate: ['Доставка до цього міста зараз недоступна. Оберіть інше.'] } }));
   await page.goto('/calculator');
+  await fillCalcForm(page);
   await page.getByRole('button', { name: 'Розрахувати' }).click();
   await expect(page.getByTestId('error-ua_delivery_rate')).toHaveText('Доставка до цього міста зараз недоступна. Оберіть інше.');
   await expect(page.getByTestId('calc-error')).not.toContainText('{');

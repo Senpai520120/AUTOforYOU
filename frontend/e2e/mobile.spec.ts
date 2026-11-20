@@ -4,6 +4,7 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect, storageStatePath } from './fixtures';
+import { fillCalcForm } from './helpers/calc-form';
 
 type Flags = { c2c_enabled: boolean; c2c_public_posting_enabled: boolean };
 let flags: Flags;
@@ -75,6 +76,7 @@ test.describe('Мобільний smoke @mobile', () => {
     await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('5000');
     await page.getByLabel("Об'єм двигуна (см³)", { exact: true }).fill('2000');
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
 
     await expect(page.getByRole('heading', { name: 'Деталізація вартості «під ключ»' })).toBeVisible();
@@ -182,6 +184,7 @@ test.describe('Мобільний smoke @mobile', () => {
     await page.getByLabel('Ціна аукціону ($)', { exact: true }).fill('5000');
     await page.getByLabel("Об'єм двигуна (см³)", { exact: true }).fill('2000');
     await page.getByLabel('Рік випуску', { exact: true }).fill('2018');
+    await fillCalcForm(page);
     await page.getByRole('button', { name: 'Розрахувати' }).click();
     await expect(page.getByRole('row').filter({ hasText: 'РАЗОМ' })).toBeVisible();
     await expect(page.getByTestId('calc-breakdown-scroll')).toBeVisible();
