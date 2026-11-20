@@ -137,8 +137,20 @@ class RenderReportTests(TestCase):
         self.assertIn('розрахунок → заявка: 10.0%', text)
         self.assertIn('заявка → гаряча: 50.0%', text)
 
+    def test_form_start_and_error_lines_and_conversion(self):
+        DailyMetric.objects.create(date=START, key=MetricKey.LEAD_FORM_START, value=8)
+        DailyMetric.objects.create(date=START, key=MetricKey.LEAD_SUBMIT_ERROR, value=3)
+        DailyMetric.objects.create(date=date(2026, 3, 1), key=MetricKey.LEAD_FORM_START, value=100)
+        lead_at(INSIDE)
+        lead_at(INSIDE)
+        text = self.render()
+        self.assertIn('Початок заповнення форми: 8', text)
+        self.assertIn('Помилки відправки заявки: 3', text)
+        self.assertIn('старт форми → заявка: 25.0%', text)
+
     def test_empty_period_has_no_division_error(self):
         text = self.render()
+        self.assertIn('старт форми → заявка: —', text)
         self.assertIn('візит → заявка: —', text)
         self.assertIn('депозит → викуп: —', text)
         self.assertIn('Медіана першої відповіді: немає даних', text)

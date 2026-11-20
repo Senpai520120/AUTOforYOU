@@ -5,7 +5,8 @@ import { API_URL } from '@/lib/config';
  */
 const ENDPOINT = '/api/v1/metrics/event/';
 
-export type ClientMetricKey = 'calculator_visit' | 'landing_visit' | 'mobile_bar_click';
+export type ClientMetricKey =
+  | 'calculator_visit' | 'landing_visit' | 'mobile_bar_click' | 'lead_form_start' | 'lead_submit_error';
 
 export function sendMetric(key: ClientMetricKey): void {
   if (typeof window === 'undefined') return;

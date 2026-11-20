@@ -4,7 +4,10 @@ from rest_framework import serializers
 
 from .models import MetricKey
 
-PUBLIC_KEYS = (MetricKey.CALCULATOR_VISIT, MetricKey.LANDING_VISIT, MetricKey.MOBILE_BAR_CLICK)
+PUBLIC_KEYS = (
+    MetricKey.CALCULATOR_VISIT, MetricKey.LANDING_VISIT, MetricKey.MOBILE_BAR_CLICK,
+    MetricKey.LEAD_FORM_START, MetricKey.LEAD_SUBMIT_ERROR,
+)
 
 
 class MetricEventSerializer(serializers.Serializer):

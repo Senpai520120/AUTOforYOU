@@ -4,6 +4,7 @@
  * Гість не втрачає введене: 401 тут не веде на /login (api/client не редиректить).
  */
 import { trackEvent } from '@/lib/analytics';
+import { sendMetric } from '@/lib/metrics';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiGet, ApiError } from '@/api/client';
@@ -96,6 +97,8 @@ export default function LeadForm({
   // Ключ ідемпотентності однієї відправки (10.13): не змінюється при помилках, змінюється після успіху.
   const keyRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
+  // Старт форми рахуємо один раз на ключ відправки (лічильник без ПДн, 10.15).
+  const startedRef = useRef(false);
   const aliveRef = useRef(true);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -160,6 +163,12 @@ export default function LeadForm({
   const partnerReady = !!consentText;
   const canSubmit = captcha.ready && partnerReady && partnerConsent && !submitting;
 
+  const trackStart = () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    sendMetric('lead_form_start');
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting || inFlightRef.current) return;
@@ -201,9 +210,11 @@ export default function LeadForm({
     try {
       const created = await leadsApi.create(payload, keyRef.current);
       keyRef.current = null; // наступна відправка («Надіслати ще») - нова заявка з новим ключем
+      startedRef.current = false;
       setPublicId(created.public_id);
       trackEvent('lead_submit', { source }); // лише категорія джерела, без ПДн
     } catch (err) {
+      sendMetric('lead_submit_error'); // лише ключ: без статусу, тексту й ПДн
       if (err instanceof ApiError && err.status === 400) {
         if (isCaptchaFailed(err)) {
           setGeneral('Не вдалося пройти перевірку. Спробуйте ще раз.');
@@ -231,7 +242,7 @@ export default function LeadForm({
   };
 
   return (
-    <form onSubmit={submit} noValidate data-testid="lead-form"
+    <form onSubmit={submit} onInput={trackStart} noValidate data-testid="lead-form"
       className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
       <h3 className="font-bold text-slate-900 text-lg">Залишити заявку брокеру</h3>
       {vehicleLabel && landingSlug && (
