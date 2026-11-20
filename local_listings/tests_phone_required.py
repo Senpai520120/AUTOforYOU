@@ -35,9 +35,14 @@ class TestPhoneRequiredForPosting(APITestCase):
         resp = auth_client(user).post(self.URL, self.payload(), format='json')
         self.assertEqual(resp.status_code, 201)
 
-    def test_staff_without_verification_can_post(self):
-        resp = auth_client(make_staff()).post(self.URL, self.payload(), format='json')
+    def test_admin_without_verification_can_post(self):
+        resp = auth_client(make_staff(superuser=True)).post(self.URL, self.payload(), format='json')
         self.assertEqual(resp.status_code, 201)
+
+    def test_plain_staff_without_verification_is_403(self):
+        resp = auth_client(make_staff()).post(self.URL, self.payload(), format='json')
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.json()['code'], 'phone_not_verified')
 
     def test_anonymous_is_401(self):
         self.assertEqual(APIClient().post(self.URL, self.payload(), format='json').status_code, 401)

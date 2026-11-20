@@ -36,7 +36,7 @@ GOOD_SETTINGS = dict(
     CSRF_TRUSTED_ORIGINS=['https://shop.example.test'], SITE_URL='https://shop.example.test',
     EMAIL_HOST='smtp.example.test', EMAIL_HOST_USER='mailer', EMAIL_HOST_PASSWORD='test-only-mail-password',
     DEFAULT_FROM_EMAIL='noreply@shop.example.test',
-    ANTISPAM_MODE='hard', C2C_ENABLED=False, C2C_PUBLIC_POSTING_ENABLED=False, PAYMENTS_ENABLED=False,
+    ANTISPAM_MODE='hard', PHONE_VERIFICATION_REQUIRED=True, C2C_ENABLED=False, C2C_PUBLIC_POSTING_ENABLED=False, PAYMENTS_ENABLED=False,
     LOTS_ENABLED=False, B2B_ENABLED=False, DEALERS_ENABLED=False, SHIPMENTS_ENABLED=False,
     VIN_REPORTS_ENABLED=False, LEGACY_CARS_API_ENABLED=False,
     CAPTCHA_PROVIDER='turnstile', TURNSTILE_SECRET_KEY='test-only-turnstile-secret',
@@ -271,6 +271,20 @@ class FlagsTests(LaunchCheckTestCase):
         code, out = self.run_check(C2C_ENABLED=True, C2C_PUBLIC_POSTING_ENABLED=False)
         self.assertOk(code, out)
         self.assertIn('режим «засів»', out)
+
+    def test_c2c_without_phone_verification_in_prod_is_error(self):
+        code, out = self.run_check(C2C_ENABLED=True, PHONE_VERIFICATION_REQUIRED=False)
+        self.assertFails(code, out, 'PHONE_VERIFICATION_REQUIRED=false при C2C_ENABLED=true')
+
+    def test_c2c_without_phone_verification_in_debug_is_warning(self):
+        code, out = self.run_check(C2C_ENABLED=True, PHONE_VERIFICATION_REQUIRED=False, DEBUG=True)
+        self.assertOk(code, out)
+        self.assertIn('PHONE_VERIFICATION_REQUIRED=false при C2C_ENABLED=true', out)
+
+    def test_phone_verification_off_with_c2c_off_is_clean(self):
+        code, out = self.run_check(C2C_ENABLED=False, PHONE_VERIFICATION_REQUIRED=False)
+        self.assertOk(code, out)
+        self.assertNotIn('PHONE_VERIFICATION_REQUIRED', out)
 
     def test_frozen_modules_enabled_are_warnings(self):
         for name in launch.FROZEN_MODULE_FLAGS:

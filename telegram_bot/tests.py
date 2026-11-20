@@ -15,7 +15,7 @@ from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.throttling import SimpleRateThrottle
@@ -370,6 +370,35 @@ class BotAccountLinkTest(BotRuntimeTestCase):
         reply, ask = self.replies()  # 4.10: после привязки бот просит поделиться контактом
         self.assertIn('успішно', reply)
         self.assertIn('Поділитися контактом', ask)
+
+    def test_relink_to_other_telegram_resets_phone_and_hides_listing_phone(self):
+        # 10.23: подтверждение телефона относилось к чату A; после перепривязки на B оно недействительно
+        from local_listings.models import LocalListing
+        from tests.factories import auth_client, make_local_listing
+        User.objects.filter(pk=self.user.pk).update(
+            telegram_id=TG_USER_ID + 500, verified_phone='+380671234567', phone_verified_at=timezone.now())
+        listing = make_local_listing(self.user, contact_phone='+380671234567')
+        token = self._token()
+        self.send(f'/start link_{token.token}')
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.telegram_id, TG_USER_ID)
+        self.assertIsNone(self.user.verified_phone)
+        self.assertIsNone(self.user.phone_verified_at)
+        with override_settings(PHONE_VERIFICATION_REQUIRED=True):
+            resp = auth_client(User.objects.create_user(email='viewer@test.com', password='pass')).get(
+                f'/api/v1/local/listings/{listing.pk}/contact/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {'contact_phone': None})
+        self.assertEqual(LocalListing.objects.get(pk=listing.pk).contact_phone, '+380671234567')
+
+    def test_first_link_keeps_existing_verified_phone_untouched(self):
+        # первая привязка (telegram_id был пуст): ничего не сбрасываем
+        User.objects.filter(pk=self.user.pk).update(verified_phone='+380671234567', phone_verified_at=timezone.now())
+        token = self._token()
+        self.send(f'/start link_{token.token}')
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.verified_phone, '+380671234567')
 
     def test_token_cannot_be_reused(self):
         token = self._token()

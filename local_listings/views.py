@@ -45,6 +45,7 @@ from users.permissions import IsEmailVerified
 from .filters import LocalListingFilter
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .permissions import POSTING_CLOSED_DETAIL, CanPostLocalListing, PhoneVerifiedForPosting, posting_allowed
+from .phone import effective_contact_phone
 from .serializers import (
     CitySearchSerializer,
     CitySerializer,
@@ -580,9 +581,10 @@ class LocalListingContactView(APIView):
 
     def _reveal(self, listing, **who):
         record_contact_view(listing, **who)
-        if listing.contact_phone:
+        phone = effective_contact_phone(listing)  # 10.23: только подтверждённый номер владельца
+        if phone:
             record_metric(MetricKey.PHONE_VIEW)
-        return Response({'contact_phone': listing.contact_phone or None})
+        return Response({'contact_phone': phone or None})
 
     @extend_schema(tags=['local'], summary='Телефон продавця (авторизованому)', responses=_ContactPhoneSerializer)
     def get(self, request, pk):

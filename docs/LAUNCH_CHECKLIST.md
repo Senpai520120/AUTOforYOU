@@ -37,6 +37,7 @@
 - [ ] 15. Telegram и заявки: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BROKER_CHAT_ID`, `BROKER_NOTIFY_EMAIL`, `LEAD_JOURNAL_CHAT_ID` (группа с партнёром) → разделы 2.7, 2.4.
 - [ ] 16. Алерты владельцу: `FAILED_TASK_ALERT_CHAT_ID` и/или `FAILED_TASK_ALERT_EMAIL` (общий канал для упавших задач, недоставленных и неотвеченных заявок, диска) → раздел 1 «Алерт о росте упавших задач».
 - [ ] 17. Ресурсы 4 ГБ: `GUNICORN_WORKERS=2`, `CELERY_CONCURRENCY=2` → раздел 2.3.
+- [ ] 18a. Перед открытием C2C: `PHONE_VERIFICATION_REQUIRED=true` (по умолчанию; при `false` и `C2C_ENABLED=true` `launch_check` даёт ERROR: в объявление можно записать чужой номер, задача 10.23). Не переопределять в `.env`.
 - [ ] 18. Флаги ВОЛНЫ-1 не менять от шаблона: `PAYMENTS_ENABLED=false`, `C2C_PUBLIC_POSTING_ENABLED=false`, `ANTISPAM_MODE=hard` (launch_check) → раздел 7.10.
 
 **В. Деплой**

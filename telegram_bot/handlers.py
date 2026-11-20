@@ -160,8 +160,14 @@ async def _handle_link_token(message: Message, token_str: str) -> None:
                 return 'expired'
             try:
                 with transaction.atomic():  # savepoint: IntegrityError не ломает внешнюю транзакцию
+                    update_fields = ['telegram_id']
+                    if user.telegram_id is not None:
+                        # 10.23: перепривязка на другой Telegram - подтверждение телефона было для прежнего чата
+                        user.verified_phone = None
+                        user.phone_verified_at = None
+                        update_fields += ['verified_phone', 'phone_verified_at']
                     user.telegram_id = telegram_id
-                    user.save(update_fields=['telegram_id'])
+                    user.save(update_fields=update_fields)
             except IntegrityError:
                 transaction.set_rollback(True)  # откатывается и погашение: токен остаётся неиспользованным
                 return 'taken'

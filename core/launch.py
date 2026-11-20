@@ -168,6 +168,11 @@ def check_flags() -> list:
         findings.append(Finding(OK, f'C2C_PUBLIC_POSTING_ENABLED={str(posting).lower()}'))
     if c2c_enabled():
         findings.append(Finding(INFO, 'C2C_ENABLED=true: розділ видно (режим «засів»)'))
+        if not getattr(settings, 'PHONE_VERIFICATION_REQUIRED', True):
+            # 10.23 (F1): без подтверждения телефона в объявление можно записать чужой номер
+            level = ERROR if prod else WARNING
+            findings.append(Finding(level, 'PHONE_VERIFICATION_REQUIRED=false при C2C_ENABLED=true: у оголошенні можна '
+                                           'вказати чужий номер (знахідка F1, задача 10.23); верніть true'))
     else:
         findings.append(Finding(OK, 'C2C_ENABLED=false: розділ «Оголошення по Україні» вимкнено'))
     if payments_enabled() and prod:

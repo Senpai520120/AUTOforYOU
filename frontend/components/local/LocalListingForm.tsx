@@ -207,6 +207,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const descriptionMax = config?.description_max ?? 0;
   const descriptionTooLong = descriptionMax > 0 && description.length > descriptionMax;
   const [needPhone, setNeedPhone] = useState(false);
+  const phoneLocked = !!(authUser?.phone_verified && authUser?.verified_phone);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notVerified, setNotVerified] = useState(false);
 
@@ -268,8 +269,10 @@ export default function LocalListingForm({ initial, listingId }: Props) {
       fuel_type: fuelType, transmission, body_type: bodyType, condition,
       price, currency, price_type: priceType,
       region: Number(region), city: Number(city),
-      description, contact_phone: contactPhone,
+      description,
     };
+    // 10.23: телефон підставляє сервер (підтверджений номер) — поле лише для читання, у запит не йде
+    if (!authUser?.phone_verified) payload.contact_phone = contactPhone;
     try {
       if (isEdit) {
         // 10-Q3: лише змінені поля — незмінене не відправляє оголошення на повторну модерацію.
@@ -555,14 +558,19 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         <input id={fid('contact_phone')}
           className={inputCls}
           type="tel"
-          value={contactPhone}
+          value={phoneLocked ? (authUser?.verified_phone ?? '') : contactPhone}
           onChange={e => setContactPhone(e.target.value)}
+          readOnly={phoneLocked}
           aria-invalid={!!errors.contact_phone}
           aria-describedby={errors.contact_phone ? fid('err-contact_phone') : undefined}
           placeholder="+380501234567"
         />
         {errors.contact_phone && <p id={fid('err-contact_phone')} role="alert" className={errCls}>{errors.contact_phone}</p>}
-        <p className="text-xs text-slate-600 mt-1">Показується тільки авторизованим покупцям</p>
+        <p className="text-xs text-slate-600 mt-1">
+          {phoneLocked
+            ? 'Підставляється підтверджений у Telegram номер; змінити його можна лише повторним підтвердженням.'
+            : 'Показується тільки авторизованим покупцям'}
+        </p>
       </div>
 
       {!isEdit && (

@@ -10,6 +10,7 @@ from users.display import public_display_name
 
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .permissions import is_staff_or_admin
+from .phone import PHONE_NEEDED, can_publish, effective_contact_phone, verified_phone
 from .services import is_substantive_change
 
 PHONE_FORMAT_ERROR = 'Телефон у форматі +380XXXXXXXXX або 0XXXXXXXXX.'
@@ -209,7 +210,7 @@ class LocalListingOwnerSerializer(LocalListingDetailSerializer):
     def to_representation(self, instance):
         # 10-Q1: владельцу (и модератору) - его телефон; публичный detail по-прежнему отдаёт null.
         data = super().to_representation(instance)
-        data['contact_phone'] = instance.contact_phone
+        data['contact_phone'] = effective_contact_phone(instance) or None  # 10.23
         data['photos_count'] = len(data.get('images') or [])  # 8.4: для плашки «додайте фото»
         return data
 
@@ -275,6 +276,13 @@ class LocalListingCreateSerializer(serializers.ModelSerializer):
         if city and region and city.region_id != region.id:
             raise serializers.ValidationError({'city': 'Місто не належить до вказаної області.'})
         self._check_active_limit()
+        # 10.23 (F1): телефон объявления - подтверждённый номер владельца, присланный клиентом игнорируется
+        owner = self.context['request'].user
+        confirmed = verified_phone(owner)
+        if confirmed:
+            attrs['contact_phone'] = confirmed
+        elif not can_publish(owner):
+            raise serializers.ValidationError({'contact_phone': [PHONE_NEEDED]})
         return attrs
 
     def _check_active_limit(self):
@@ -362,10 +370,19 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         region = attrs.get('region', getattr(self.instance, 'region', None))
         if city and region and city.region_id != region.id:
             raise serializers.ValidationError({'city': 'Місто не належить до вказаної області.'})
+        # 10.23 (F1): правит владелец или модератор; номер берётся у владельца объявления, не у request.user
+        owner = getattr(self.instance, 'owner', None)
+        confirmed = verified_phone(owner)
+        if confirmed:
+            attrs['contact_phone'] = confirmed
         return attrs
 
     def validate_contact_phone(self, value):
         # 10-Q1: телефон не затирается пустой строкой; отсутствие поля в PATCH его не меняет.
+        # 10.23: у владельца с подтверждённым номером присланное значение игнорируется (подставит validate()).
+        confirmed = verified_phone(getattr(self.instance, 'owner', None))
+        if confirmed:
+            return confirmed
         value = (value or '').strip().replace(' ', '')
         if not value:
             raise serializers.ValidationError("Вкажіть телефон для зв'язку.")
@@ -397,6 +414,10 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
         elif current_status == LocalListing.Status.REJECTED:
             validated_data['status'] = LocalListing.Status.PENDING
             validated_data['rejection_reason'] = ''
+
+        # 10.23 (F4): на модерацию уходит только объявление владельца с подтверждённым телефоном
+        if validated_data.get('status') == LocalListing.Status.PENDING and not can_publish(instance.owner):
+            raise serializers.ValidationError({'contact_phone': [PHONE_NEEDED]})
 
         antispam_mode = getattr(dj_settings, 'ANTISPAM_MODE', 'soft')
         if antispam_mode != 'off' and 'description' in validated_data:

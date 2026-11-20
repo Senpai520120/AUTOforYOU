@@ -39,7 +39,7 @@ PHONE_NOT_VERIFIED = {
 class PhoneVerifiedForPosting(BasePermission):
     """4.10: подача нового объявления - только с телефоном, подтверждённым контактом в Telegram.
 
-    Staff/admin (засев) не блокируются. Выключается PHONE_VERIFICATION_REQUIRED=false. Ставить вместе с
+    Admin/суперпользователь (засев) не блокируются; модератор и брокер с is_staff - блокируются (10.23). Выключается PHONE_VERIFICATION_REQUIRED=false. Ставить вместе с
     IsAuthenticated: код ответа анониму задаёт он.
     """
     message = PHONE_NOT_VERIFIED
@@ -51,7 +51,7 @@ class PhoneVerifiedForPosting(BasePermission):
         user = request.user
         if not (user and user.is_authenticated):
             return False
-        return is_staff_or_admin(user) or user.phone_verified_at is not None
+        return bool(getattr(user, 'is_admin_role', False)) or user.phone_verified_at is not None
 
 
 class CanPostLocalListing(BasePermission):
