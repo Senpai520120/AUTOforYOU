@@ -268,8 +268,12 @@ class LeadAdmin(admin.ModelAdmin):
 
 @admin.register(LeadNotificationSettings)
 class LeadNotificationSettingsAdmin(admin.ModelAdmin):
+    # Сюда задаются получатели ПДн заявок (chat_id, email): только superuser.
     def has_add_permission(self, request):
-        return not LeadNotificationSettings.objects.exists()
+        return request.user.is_superuser and not LeadNotificationSettings.objects.exists()
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
 
     def has_delete_permission(self, request, obj=None):
         return False

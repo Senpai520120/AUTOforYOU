@@ -68,7 +68,6 @@ def notify_broker_new_lead(self, lead_id: int, force: bool = False):
 
 
 def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool) -> dict:
-    from telegram_bot import sender
     from telegram_bot.provider import telegram_configured
 
     lead_id = lead.pk
@@ -76,7 +75,10 @@ def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool)
         return {'status': 'already_sent'}
 
     chat_id = notify.broker_chat_id()
-    if not cfg.telegram_enabled or not chat_id or not telegram_configured():
+    backup_id = notify.backup_chat_id()
+    if backup_id == chat_id:
+        backup_id = ''  # тот же получатель: второй отправки не будет
+    if not cfg.telegram_enabled or not (chat_id or backup_id) or not telegram_configured():
         logger.warning('lead.notify lead_id=%s telegram not configured', lead_id)
         _mark(lead, NotifyStatus.SKIPPED)
         return {'status': NotifyStatus.SKIPPED}
@@ -103,6 +105,28 @@ def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool)
         return {'status': 'in_progress'}
     # В eager-режиме (dev без Redis, тесты) self.retry не перезапускает задачу: повторяем в цикле.
     eager = bool(getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False))
+    if chat_id:
+        status, error = _send_one(self, lead, chat_id, text, buttons, eager, allow_retry=True)
+    else:
+        status, error = NotifyStatus.FAILED, 'no_primary'
+    if status == NotifyStatus.FAILED and backup_id:
+        # 10.19: основной не принял после всех попыток (или не задан) - запасной получатель. Только код в журнал.
+        backup_status, _ = _send_one(self, lead, backup_id, text, buttons, eager, allow_retry=False)
+        if backup_status == NotifyStatus.SENT:
+            logger.warning('lead.notify lead_id=%s delivered via backup (%s)', lead_id, error)
+            notify.alert_owner_backup_used(lead, error)
+            status, error = NotifyStatus.SENT, f'via_backup:{error}'
+        else:
+            error = f'backup_failed:{error}'
+    _mark(lead, status, '' if status == NotifyStatus.SKIPPED else error)
+    return {'status': status}
+
+
+def _send_one(self, lead: Lead, chat_id: str, text: str, buttons, eager: bool, allow_retry: bool) -> tuple[str, str]:
+    """Одна доставка в один chat_id: (статус, код ошибки). Повтор Celery (self.retry) - только у основного."""
+    from telegram_bot import sender
+
+    lead_id = lead.pk
     attempts = MAX_RETRIES + 1 if eager else 1
     try:
         for attempt in range(attempts):
@@ -113,29 +137,25 @@ def _telegram_step(self, lead: Lead, cfg: LeadNotificationSettings, force: bool)
                 if attempt == attempts - 1:
                     raise
     except (OSError, ConnectionError) as exc:
-        if eager or self.request.retries >= MAX_RETRIES:
+        if eager or not allow_retry or self.request.retries >= MAX_RETRIES:
             logger.warning('lead.notify lead_id=%s failed after retries', lead_id)
-            _mark(lead, NotifyStatus.FAILED, type(exc).__name__)
-            return {'status': NotifyStatus.FAILED}
+            return NotifyStatus.FAILED, type(exc).__name__
         _release(lead)
         raise self.retry(exc=exc, countdown=30, max_retries=MAX_RETRIES)
     except Exception as exc:  # в т.ч. TelegramRetryAfter
         retry_after = getattr(exc, 'retry_after', None)
-        if retry_after is not None and self.request.retries < MAX_RETRIES:
+        if allow_retry and retry_after is not None and self.request.retries < MAX_RETRIES:
             # exc не передаём: в TelegramRetryAfter текст сообщения может содержать ПДн.
             _release(lead)
             raise self.retry(countdown=int(retry_after) + 1, max_retries=MAX_RETRIES)
         logger.warning('lead.notify lead_id=%s error=%s', lead_id, type(exc).__name__)
-        _mark(lead, NotifyStatus.FAILED, type(exc).__name__)
-        return {'status': NotifyStatus.FAILED}
+        return NotifyStatus.FAILED, type(exc).__name__
 
     if result.ok:
-        _mark(lead, NotifyStatus.SENT)
-        return {'status': NotifyStatus.SENT}
+        return NotifyStatus.SENT, ''
     status = NotifyStatus.SKIPPED if result.reason == 'not_configured' else NotifyStatus.FAILED
     logger.warning('lead.notify lead_id=%s reason=%s', lead_id, result.reason)
-    _mark(lead, status, '' if status == NotifyStatus.SKIPPED else result.reason)
-    return {'status': status}
+    return status, '' if status == NotifyStatus.SKIPPED else result.reason
 
 
 def _mark_email(lead: Lead, status: str, error: str = '') -> None:

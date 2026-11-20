@@ -6,6 +6,15 @@
 
 ---
 
+## Задача 10.19 — запасной получатель заявок (2026-11-20) ✓
+
+- `LeadNotificationSettings.backup_telegram_chat_id` (тот же валидатор, миграция `leads/0013` — только AddField), `notify.backup_chat_id()`.
+- `leads/tasks.py`: отправка вынесена в `_send_one`; основной не принял после всех попыток или не задан → то же сообщение в запасной (одна попытка, без `self.retry`). Видно в заявке: `sent` + `telegram_error=via_backup:<код>` / `via_backup:no_primary`; оба упали → `failed`, `backup_failed:<код>`. Запасной = основной → одна отправка; нет токена/Telegram выключен → `skipped`, запасной не пробуем.
+- Журнал партнёра (2.15) — отдельная группа `LEAD_JOURNAL_CHAT_ID`, не затронут: записи по заявке одна. Логи: только `lead_id` и код ошибки.
+- Ревью: тесты не-eager (запасной только после последнего Celery-повтора основного; RetryAfter на запасном не повторяется); `LeadNotificationSettingsAdmin` — правка только superuser (тест 403 для staff с правом change); при `via_backup:` владельцу один алерт на окно `LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES` через `_send_failed_task_alert` (только `public_id` и код, при недоставке ключ откатывается); help_text про возможный дубль при таймауте после доставки.
+- Осталось: запасной без основного в `launch_check` по-прежнему ERROR (основной обязателен по замыслу).
+- `launch_check`: запасной не задан → WARNING. Тесты: `leads/tests_backup_recipient.py`, `core/tests_launch_check.py`.
+
 ## Задача 10.15 — события воронки lead_form_start и lead_submit_error (2026-11-20) ✓
 
 - `MetricKey` + `PUBLIC_KEYS` (белый список, неизвестный ключ — 400), миграция `metrics/0003_funnel_event_keys`. Только ключ-счётчик, без класса ошибки и ПДн; серверный `DailyMetric`, согласие на аналитику не нужно (как `mobile_bar_click`).

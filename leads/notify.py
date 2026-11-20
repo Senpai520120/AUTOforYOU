@@ -45,6 +45,11 @@ def broker_chat_id() -> str:
             or getattr(settings, 'TELEGRAM_BROKER_CHAT_ID', '').strip())
 
 
+def backup_chat_id() -> str:
+    """Запасной получатель (10.19): только из админки, в .env его нет."""
+    return LeadNotificationSettings.get_solo().backup_telegram_chat_id.strip()
+
+
 def admin_url(lead: Lead) -> str:
     return settings.SITE_URL.rstrip('/') + reverse('admin:leads_lead_change', args=[lead.pk])
 
@@ -270,6 +275,39 @@ def alert_owner_undelivered(leads: list[Lead]) -> bool:
         return False
     if not delivered:
         logger.warning('lead.undelivered lead_ids=%s: алерт владельцу не дійшов, буде повтор', ids)
+    return delivered
+
+
+OWNER_BACKUP_SUBJECT = 'AUTOforYOU: заявка пішла в запасний чат'
+BACKUP_ALERT_KEY = 'leads:backup_used_alert'
+
+
+def alert_owner_backup_used(lead: Lead, reason: str) -> bool:
+    """10.19: основной чат не принял заявку, она ушла в запасной - владельцу один алерт на окно (не на каждую заявку).
+    Текст без ПДн: только public_id и код ошибки. Не бросает исключений."""
+    if not owner_channel_configured():
+        return False
+    from django.core.cache import cache
+
+    from core.tasks import _send_failed_task_alert  # импорт внутри: без циклов
+    cooldown = int(settings.LEAD_UNANSWERED_ALERT_COOLDOWN_MINUTES) * 60
+    try:
+        if not cache.add(BACKUP_ALERT_KEY, 1, timeout=cooldown):
+            return False
+    except Exception:  # Redis недоступен: лучше повторить алерт, чем промолчать
+        logger.warning('lead.backup: кэш недоступен, дедупликации нет')
+    text = (f'⚠ AUTOforYOU: основний Telegram-чат брокера не прийняв заявку {lead.public_id} ({reason}), '
+            f'вона пішла в запасний чат. Перевірте основний chat_id.\nСписок в адмінці: {unanswered_list_url()}')
+    try:
+        delivered = _send_failed_task_alert(text, OWNER_BACKUP_SUBJECT)
+    except Exception as exc:
+        logger.warning('lead.backup lead_id=%s: алерт владельцу не відправлено (%s)', lead.pk, type(exc).__name__)
+        delivered = False
+    if not delivered:
+        try:
+            cache.delete(BACKUP_ALERT_KEY)
+        except Exception:
+            logger.warning('lead.backup: кэш недоступен')
     return delivered
 
 

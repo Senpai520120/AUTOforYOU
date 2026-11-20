@@ -381,6 +381,11 @@ def check_lead_notifications() -> list:
     else:
         findings.append(Finding(ERROR, 'TELEGRAM_BROKER_CHAT_ID не задано (і порожньо в «Налаштування сповіщень про '
                                        'заявки»): заявки нікуди не прийдуть'))
+    if row and row.backup_telegram_chat_id.strip():
+        findings.append(Finding(OK, 'Запасний Telegram chat_id для заявок: задано'))
+    else:
+        findings.append(Finding(WARNING, 'Запасний Telegram chat_id не задано («Налаштування сповіщень про заявки»): '
+                                         'якщо чат брокера недоступний, заявка піде лише листом'))
     if str(emails).strip():
         findings.append(Finding(OK, 'Резервний email брокера: задано'))
     else:

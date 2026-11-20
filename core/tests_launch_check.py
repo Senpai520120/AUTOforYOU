@@ -619,3 +619,19 @@ class LandingContentTests(LaunchCheckTestCase):
         _code, out = self.run_check()
         self.assertIn('Усі опубліковані сторінки моделей мають достатньо унікального тексту', out)
         self.assertNotIn('Тонкий контент', out)
+
+
+class BackupRecipientCheckTests(LaunchCheckTestCase):
+    """10.19: запасной chat_id заявок - предупреждение, не ошибка."""
+
+    def test_backup_not_set_is_warning_not_error(self):
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('[УВАГА  ] Запасний Telegram chat_id не задано', out)
+
+    def test_backup_set_is_ok(self):
+        LeadNotificationSettings.objects.filter(pk=1).update(backup_telegram_chat_id='-1009998887776')
+        code, out = self.run_check()
+        self.assertOk(code, out)
+        self.assertIn('Запасний Telegram chat_id для заявок: задано', out)
+        self.assertNotIn('Запасний Telegram chat_id не задано', out)
