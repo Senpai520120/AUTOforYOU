@@ -11,7 +11,7 @@ export function isListingSubmitNext(next: string): boolean {
 export default function ListingSubmitNotice() {
   return (
     <p data-testid="listing-submit-notice"
-      className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+      className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-foreground">
       Щоб подати оголошення, увійдіть або зареєструйтесь. Реєстрація безкоштовна.
     </p>
   );

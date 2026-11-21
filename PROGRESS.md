@@ -6,6 +6,14 @@
 
 ---
 
+## Задача 11.14b: каталог /ua, карточка объявления, форма заявки (2026-11-21)
+
+- `/ua`: карточки на `Card` (фото 4:3 без CLS, цена крупно, параметры с иконками lucide), фильтры на `Card`/`Input`/`Button` (нативные `select` сохранены), пагинация и пустые/ошибочные состояния на токенах. Карточка `/local/[id]`: галерея, цена 4xl, характеристики сеткой `dl` с иконками, блок продавца и контактов, кнопки на `Button`. `LeadForm`/`LeadSuccess` на `Input`/`Label`/`Textarea`/`Button`, ошибки с иконкой и текстом. Общие `ui/*` (Badge, EmptyState, ErrorState, Skeleton, Modal, ConfirmDialog, FlashMessage, CookieBanner/Settings/SettingsLink, MobileActionBar, FallbackContact, EmailNotVerified) и вспомогательные (SaveSearch, WriteSeller, Report, Heart, ScamWarning, SellerBlock, GuestPhoneReveal, CityAutocomplete) на токенах. Общие классы полей: `components/local/field-classes.ts`.
+- Исправлено: `EmptyState` давал контраст ~2.9:1 (`text-slate-400`) -> `text-muted-foreground`.
+- UX-правки: «+ Подати оголошення» -> иконка Plus; эмодзи (🚗, 🔍, ✅, ⚠, ▲▼) -> иконки lucide; сердечко и кнопка закрытия Modal/Flash — lucide; кнопки «Поскаржитися»/«Написати продавцю» с иконкой; текст рейтинга-звёзд заменён иконкой Star + число.
+- Тёмная тема НЕ включена: остаётся 53 файла с `slate/blue/gray` (было 80 до 11.14): страницы `/listings`, `/me/*`, `/login`, `/register`, `/local/new|edit`, юр. страницы, `/about`, `/b2b`, брокерские `leads/*`, `LocalListingForm`, `PromoteModal`, `PhotoUploadBlock` и др. Список и решение — в `docs/design/DESIGN_SYSTEM.md`.
+- Проверки: lint 0 errors (34 прежних предупреждения), `tsc --noEmit` чисто, `npm run build` ок. Playwright не запускался (прогонит оркестратор).
+
 ## Задача 11.14a: редизайн главной, лендинга, калькулятора (2026-11-21)
 
 - Главная, `/prigon` и `/prigon/[slug]`, калькулятор переведены на токены и `Card`/`Button`/`Input`/`Label`/`Badge`/`Skeleton`, иконки lucide. Общие `LeadCta`, `DemoBanner`, `CalcNotes`, `Spinner`, `Breadcrumbs` тоже на токенах. Тексты, testid, aria, h1, JSON-LD, метаданные не менялись; `<select>` калькулятора остался нативным (e2e `selectOption`).

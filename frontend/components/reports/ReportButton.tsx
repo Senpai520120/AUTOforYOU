@@ -5,6 +5,12 @@ import { useAuth } from '@/lib/auth-context';
 import { reportsApi } from '@/api/reports';
 import { ReportReason } from '@/lib/types';
 import { ApiError, firstDataMessage, getErrorMessage } from '@/lib/errors';
+import { CircleAlert, Flag } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { Label } from '@/components/shadcn/label';
+import { Textarea } from '@/components/shadcn/textarea';
+import { ICON_STROKE } from '@/lib/utils';
+import { FIELD_CLASS } from '@/components/local/field-classes';
 
 interface Props {
   listingId?: number;
@@ -57,12 +63,11 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className={`text-xs text-slate-400 hover:text-red-500 transition-colors ${className}`}
-      >
+      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(true)}
+        className={`text-muted-foreground hover:text-destructive ${className}`}>
+        <Flag strokeWidth={ICON_STROKE} aria-hidden="true" />
         Поскаржитися
-      </button>
+      </Button>
 
       {open && (
         <Modal title="Поскаржитися" onClose={() => setOpen(false)}>
@@ -70,24 +75,21 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
 
             {done ? (
               <div className="text-center py-4">
-                <p className="text-green-700 font-medium mb-1">Скаргу подано.</p>
-                <p className="text-sm text-slate-500">Ми розглянемо її найближчим часом.</p>
-                <button
-                  onClick={() => { setOpen(false); setDone(false); }}
-                  className="mt-4 px-4 py-2 bg-slate-100 rounded-lg text-sm hover:bg-slate-200"
-                >
+                <p className="text-success font-medium mb-1">Скаргу подано.</p>
+                <p className="text-sm text-muted-foreground">Ми розглянемо її найближчим часом.</p>
+                <Button type="button" variant="secondary" onClick={() => { setOpen(false); setDone(false); }} className="mt-4">
                   Закрити
-                </button>
+                </Button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label htmlFor={reasonId} className="block text-sm font-medium text-slate-700 mb-1">Причина</label>
+                  <Label htmlFor={reasonId} className="mb-1.5">Причина</Label>
                   <select
                     id={reasonId}
                     value={reason}
                     onChange={e => setReason(e.target.value as ReportReason)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    className={FIELD_CLASS}
                   >
                     {REASONS.map(r => (
                       <option key={r.value} value={r.value}>{r.label}</option>
@@ -95,32 +97,29 @@ export default function ReportButton({ listingId, reportedUserId, className = ''
                   </select>
                 </div>
                 <div>
-                  <label htmlFor={commentId} className="block text-sm font-medium text-slate-700 mb-1">Коментар (необов'язково)</label>
-                  <textarea
+                  <Label htmlFor={commentId} className="mb-1.5">Коментар (необов'язково)</Label>
+                  <Textarea
                     id={commentId}
                     value={comment}
                     onChange={e => setComment(e.target.value)}
                     rows={3}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none"
+                    className="resize-none"
                     placeholder="Опишіть проблему..."
                   />
                 </div>
-                {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+                {error && (
+                  <p role="alert" className="flex items-start gap-2 text-sm text-destructive">
+                    <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                    {error}
+                  </p>
+                )}
                 <div className="flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setOpen(false)}
-                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
-                  >
+                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Скасувати
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-lg disabled:opacity-60"
-                  >
+                  </Button>
+                  <Button type="submit" variant="destructive" disabled={loading}>
                     {loading ? 'Надсилаємо...' : 'Подати скаргу'}
-                  </button>
+                  </Button>
                 </div>
               </form>
             )}

@@ -1,5 +1,7 @@
 'use client';
 import Link from 'next/link';
+import { TriangleAlert } from 'lucide-react';
+import { ICON_STROKE } from '@/lib/utils';
 import { useSiteConfig } from '@/lib/use-site-config';
 import { SAFE_DEAL_RULES_LABEL } from '@/lib/labels';
 
@@ -16,15 +18,15 @@ export default function ScamWarningBanner({ className = '' }: { className?: stri
     <div
       role="note"
       data-testid="scam-warning"
-      className={`rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 ${className}`}
+      className={`flex items-start gap-2 rounded-lg border border-warning bg-warning/15 p-3 text-xs text-foreground ${className}`}
     >
-      <p>
-        <span aria-hidden="true">⚠ </span>
-        {text}
-      </p>
-      <Link href="/rules" className="mt-1 inline-block font-semibold text-amber-900 underline hover:no-underline">
-        {SAFE_DEAL_RULES_LABEL}
-      </Link>
+      <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+      <div>
+        <p>{text}</p>
+        <Link href="/rules" className="mt-1 inline-block font-semibold text-foreground underline hover:no-underline">
+          {SAFE_DEAL_RULES_LABEL}
+        </Link>
+      </div>
     </div>
   );
 }

@@ -23,7 +23,7 @@
 | `--footer`, `--footer-foreground`, `--footer-muted` | slate-900 / slate-300 / slate-400 | подвал |
 | `--radius` | `0.625rem` | базовый радиус; `sm/md/lg/xl` считаются от него |
 
-Тёмная тема: токены `.dark` определены, но НЕ включены (нет ни класса `dark` на `<html>`, ни `prefers-color-scheme`). На `:root` явно `color-scheme: light`. Включение и переключатель — решение 11.14.
+Тёмная тема: токены `.dark` определены, но НЕ включены (нет ни класса `dark` на `<html>`, ни `prefers-color-scheme`). На `:root` явно `color-scheme: light`. Решение 11.14 (2026-11-21): тёмная тема НЕ включается (см. раздел «Тёмная тема: решение 11.14»).
 
 Старые переменные (`--bg`, `--surface`, `--text`, `--muted`, `--danger`, `--primary-dark`) удалены; использований в коде (`var(--…)`, CSS-модули, arbitrary values) не было, страницы на хардкод-классах `slate-*`/`blue-*` переводит 11.14.
 
@@ -101,7 +101,7 @@ Manrope (Google Fonts, OFL) через `next/font/google` в `frontend/app/layou
 - Цвета только токенами (`bg-primary`, `text-muted-foreground`, `border-input`), не `slate-*`/`blue-*`/hex.
 - Правки сгенерированных файлов shadcn (сознательные): высоты `min-h-*` вместо `h-*` (текст не обрезается при увеличенных интервалах, WCAG 1.4.12; кнопки и поля по умолчанию 44 px), сплошной фокус `ring-2 ring-ring` вместо полупрозрачного `ring-ring/50` (иначе < 3:1). При повторном `add` с перезаписью эти правки возвращать.
 - Фокус: глобальное правило в `globals.css` (`outline: 2px solid var(--ring)`, поведение 10.28), для shadcn-компонентов — собственный `ring`. На тёмных блоках (шапка, подвал) атрибут `data-on-dark` переключает обводку на светлую. `@media (forced-colors: active)`: обводка `Highlight`.
-- Тёмная тема: не включать без решения 11.14; проверять оба набора токенов.
+- Тёмная тема: отложена (решение 11.14); при правках проверять оба набора токенов.
 
 ## Лицензии
 
@@ -109,3 +109,9 @@ Manrope (Google Fonts, OFL) через `next/font/google` в `frontend/app/layou
 - lucide — ISC: https://lucide.dev/license
 - Manrope — SIL OFL 1.1: https://github.com/sharanda/manrope/blob/master/OFL.txt (https://fonts.google.com/specimen/Manrope/license)
 - Radix UI (зависимость shadcn) — MIT; tw-animate-css — MIT; class-variance-authority — Apache-2.0; clsx — MIT; tailwind-merge — MIT.
+
+## Тёмная тема: решение 11.14
+
+Не включаем. На токены переведены главная, `/prigon`, калькулятор, каталог `/ua`, карточка объявления `/local/[id]`, форма заявки и общие `components/ui/*`. Остальной сайт ещё на хардкоде `slate/blue/gray` (в части файлов и `red/green/amber`): с классом `dark` он стал бы смесью светлых и тёмных блоков, а контраст `.dark` для этих страниц не проверен. Токены `.dark` и их контраст посчитаны (таблица выше), включать после перевода остатка и axe-прогона в тёмной теме.
+
+Остаток (53 файла по `grep -rlE "(bg|text|border)-(slate|blue|gray)-[0-9]" app components`, было 80): `app/{about,b2b,cookies,dealers/apply,error,how-it-works,not-found,login,register,password-reset,password-reset/confirm,privacy,refund,rules,terms,verify-email}`, `app/listings/{ListingsGrid,WholesaleHint,loading,page}`, `app/local/new`, `app/local/[id]/edit`, `app/me/*` (MeDashboard, calculations, data, deals, favorites, leads, loading, local-listings, messages, notifications, profile, saved-searches, security, shipments, telegram, trusted-shops), `app/sellers/[id]`, `components/{PhoneVerifyTelegram,c2c/ComingSoon,content/FaqBlock,legal/LegalPage}`, `components/leads/{AccessDenied,BrokerLeadCard,BrokerLeadList,LeadStatusBadge}`, `components/listings/{ListingCard,ListingDetail,ListingFilters}`, `components/local/{LocalListingForm,PhotoUploadBlock,PromoteModal}`.

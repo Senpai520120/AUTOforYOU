@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { localApi } from '@/api/local';
 import type { CityOption } from '@/lib/types';
+import { FIELD_CLASS, FIELD_LABEL_CLASS } from './field-classes';
 
 export type { CityOption };
 
@@ -131,7 +132,7 @@ export default function CityAutocomplete({
 
   return (
     <div className="relative w-full">
-      <label htmlFor={id} className={labelClassName ?? 'block text-sm font-medium text-slate-700 mb-1'}>
+      <label htmlFor={id} className={labelClassName ?? FIELD_LABEL_CLASS}>
         {label}
       </label>
       <input
@@ -154,7 +155,7 @@ export default function CityAutocomplete({
         // Закриття з затримкою: на iOS дотик знімає фокус раніше, ніж click по пункту встигає спрацювати.
         onBlur={() => { blurTimer.current = window.setTimeout(() => { setIsOpen(false); setHighlightedIndex(-1); }, 150); }}
         onKeyDown={handleKeyDown}
-        className={inputClassName ?? 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'}
+        className={inputClassName ?? FIELD_CLASS}
       />
       <p id={`${id}-hint`} className="sr-only">Введіть щонайменше {minChars} символи та оберіть пункт зі списку</p>
 
@@ -163,12 +164,12 @@ export default function CityAutocomplete({
           id={listboxId}
           role="listbox"
           aria-label={label}
-          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-border bg-popover text-popover-foreground py-1 shadow-lg"
         >
-          {isLoading && <li className="px-3 py-2 text-sm text-slate-500">Пошук…</li>}
-          {!isLoading && fetchError && <li role="alert" className="px-3 py-2 text-sm text-red-600">{fetchError}</li>}
+          {isLoading && <li className="px-3 py-2 text-sm text-muted-foreground">Пошук…</li>}
+          {!isLoading && fetchError && <li role="alert" className="px-3 py-2 text-sm text-destructive">{fetchError}</li>}
           {!isLoading && !fetchError && searched && options.length === 0 && (
-            <li className="px-3 py-2 text-sm text-slate-500">Нічого не знайдено. Перевірте написання.</li>
+            <li className="px-3 py-2 text-sm text-muted-foreground">Нічого не знайдено. Перевірте написання.</li>
           )}
           {!isLoading && !fetchError && options.map((option, index) => (
             <li
@@ -182,7 +183,7 @@ export default function CityAutocomplete({
               onPointerUp={() => selectOption(option)}
               onClick={() => { if (value?.id !== option.id) selectOption(option); }}
               onMouseEnter={() => setHighlightedIndex(index)}
-              className={`cursor-pointer px-3 py-2 text-sm ${index === highlightedIndex ? 'bg-blue-600 text-white' : 'text-slate-900 hover:bg-slate-100'}`}
+              className={`cursor-pointer px-3 py-2 text-sm ${index === highlightedIndex ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary'}`}
             >
               {option.label}
             </li>
@@ -190,7 +191,7 @@ export default function CityAutocomplete({
         </ul>
       )}
 
-      {error && <p id={`${id}-error`} role="alert" className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p id={`${id}-error`} role="alert" className="mt-1 text-xs text-destructive">{error}</p>}
     </div>
   );
 }

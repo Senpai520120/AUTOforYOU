@@ -10,12 +10,12 @@ interface Props {
 
 /** Порожній стан: заголовок, підказка, необов'язкова дія. Помилку завантаження ним не показувати. */
 export default function EmptyState({ title, hint, icon, action }: Props) {
-  const cls = 'mt-3 inline-block text-blue-600 hover:underline text-sm';
+  const cls = 'mt-3 inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80';
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-400">
-      {icon && <div className="text-4xl mb-2">{icon}</div>}
-      <p className="text-sm font-medium">{title}</p>
-      {hint && <p className="text-xs mt-1">{hint}</p>}
+    <div className="rounded-xl border border-dashed border-input bg-card p-10 text-center text-muted-foreground">
+      {icon && <div className="mb-3 flex justify-center text-4xl" aria-hidden="true">{icon}</div>}
+      <p className="text-base font-semibold text-foreground">{title}</p>
+      {hint && <p className="mt-1 text-sm">{hint}</p>}
       {action?.href && <Link href={action.href} className={cls}>{action.label}</Link>}
       {action && !action.href && <button type="button" onClick={action.onClick} className={cls}>{action.label}</button>}
     </div>
