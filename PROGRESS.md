@@ -6,6 +6,15 @@
 
 ---
 
+## Задача 11.13: дизайн-система (2026-11-21)
+
+- shadcn/ui (`frontend/components.json`, алиас `ui` -> `@/components/shadcn`): 11 компонентов, `cn` в `lib/utils.ts`; `components/ui/` не тронут. Правки сгенерированного: `min-h-*` вместо `h-*`, сплошной `ring-ring`.
+- Токены OKLCH в `app/globals.css` (`:root`, `.dark` не включена, `color-scheme: light`), Manrope через `next/font/google` (latin+cyrillic, `--font-sans`), lucide-react со `strokeWidth` 2 (`ICON_STROKE`). Header/Footer/MobileNav на токенах; старые `--bg/--surface/...` удалены (использований не было). Фокус 10.28 через `--ring`, `forced-colors`, светлая обводка на тёмных блоках.
+- Контраст посчитан скриптом, пары и значения в `docs/design/DESIGN_SYSTEM.md`, непрошедших нет. Зависимости зафиксированы точно.
+- Проверки: `npm run lint` 0 ошибок (34 прежних предупреждения), `tsc --noEmit` чисто, `npm run build` ок (с `NEXT_PUBLIC_API_URL`/`SITE_URL`). Ручной просмотр в браузере и Playwright — в 11.14.
+
+---
+
 ## Решения владельца и правки 2026-11-20
 
 - Решения владельца записаны в `docs/ANSWERS.md` (этап 10) и `docs/LAUNCH_CHECKLIST.md`.
