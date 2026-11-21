@@ -11,7 +11,7 @@
 Elastic IP `63.180.126.91`. SG `sg-095c0abb3b8fd462c` (22 — только IP владельца, 80/443 — все). Ключ: `C:\Users\kirit\.ssh\autoforyou-ec2.pem`.
 Сменился домашний IP → обновить правило 22 в SG, иначе SSH не пустит.
 
-> **Состояние на 2026-11-16 (блоки 0–7 `docs/EC2_CREDITS_ROADMAP.md` выполнены).** Стек работает по `https://63-180-126-91.sslip.io` (Let's Encrypt)
+> **Состояние на 2026-11-16 (блоки 0–7 `docs/archive/EC2_CREDITS_ROADMAP.md` выполнены).** Стек работает по `https://63-180-126-91.sslip.io` (Let's Encrypt)
 > (тег `3de025a`, `~deploy/autoforyou`, ветка `finish-site`). S3: бакеты `autoforyou-{media,private,backup}-piats1`,
 > IAM `autoforyou-app-s3` и `autoforyou-backup-s3`. Подробности и цифры — `PROGRESS.md`, раздел «EC2 за кредиты».
 > Осталось за владельцем: `createsuperuser` (пароль), свой `BACKUP_ENCRYPTION_PASSPHRASE` (сейчас сгенерирован на сервере),

@@ -17,6 +17,7 @@ from notifications.models import Notification
 from notifications.services import create_notification
 
 from .models import ContactMethod, Lead, LeadNotificationSettings
+from .services import lead_total_usd_full
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,8 @@ def raw_context(lead: Lead) -> dict[str, str]:
     return {
         'id': lead.public_id, 'name': lead.name, 'phone': lead.phone, 'email': lead.email,
         'contact_method': method, 'contact_handle': lead.contact_handle,
-        'car': _car(lead), 'total_usd': _money(lead.total_usd), 'total_uah': _money(lead.total_uah),
+        'car': _car(lead), 'total_usd': _money(lead.total_usd), 'total_usd_full': _money(lead_total_usd_full(lead)),
+        'total_uah': _money(lead.total_uah),
         'source': lead.get_source_display(), 'source_details': _source_details(lead),
         'utm_source': str(utm.get('source', '')), 'utm_medium': str(utm.get('medium', '')),
         'utm_campaign': str(utm.get('campaign', '')), 'utm_content': str(utm.get('content', '')),
@@ -145,7 +147,7 @@ def notify_brokers_in_app(title: str, link: str, text: str = '') -> int:
 FALLBACK_EMAIL_SUBJECT = 'Нова заявка {id}'
 # Письмо без ПДн (9.56): контакты клиента брокер видит в заявке после входа, а не в почте.
 FALLBACK_EMAIL_BODY = (
-    'Нова заявка {id}\n\nАвто: {car}\nПідсумок: ≈ ${total_usd} / {total_uah} грн\n'
+    'Нова заявка {id}\n\nАвто: {car}\nПідсумок: ≈ ${total_usd_full} (з розмитненням, орієнтовно) / {total_uah} грн\n'
     'Спосіб звʼязку: {contact_method}\nДжерело: {source_details}\n\n'
     'Контакти клієнта — у заявці (потрібен вхід): {cabinet_url}\nЗаявка в адмінці: {admin_url}\n'
 )

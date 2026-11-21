@@ -2,7 +2,7 @@
 
 Точка восстановления после `/clear`: продолжать с первого пункта со статусом не «готово».
 Код проекта не меняется. Пишутся только `docs/audit/`, `docs/tasks/`, `ROADMAP.md`, `docs/LAUNCH_CHECKLIST.md`
-(и итоговые `docs/AUDIT_SUMMARY.md`, `docs/QUESTIONS.md`).
+(и итоговые `docs/archive/AUDIT_SUMMARY.md`, `docs/QUESTIONS.md`).
 
 Ветка: `finish-site` @ `d4cbfab`. Старт: 2026-09-25.
 
@@ -52,7 +52,7 @@
 
 | Файл | Статус | Дата |
 |---|---|---|
-| [../AUDIT_SUMMARY.md](../AUDIT_SUMMARY.md) | готово | 2026-09-26 |
+| [../AUDIT_SUMMARY.md](../archive/AUDIT_SUMMARY.md) | готово | 2026-09-26 |
 | [../../ROADMAP.md](../../ROADMAP.md) | готово (57 задач) | 2026-09-26 |
 | `docs/tasks/*.md` | готово: 57 файлов, шаблон брифа §7 соблюдён во всех | 2026-09-27 |
 | Таблица «находка → задача» ([24_TRACEABILITY.md](24_TRACEABILITY.md)) | готово: 169 находок, все назначены и упомянуты в файлах своих задач | 2026-09-26 |

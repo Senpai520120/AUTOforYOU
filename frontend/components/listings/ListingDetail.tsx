@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import Link from 'next/link';
 import { Listing } from '@/lib/types';
 import Badge from '@/components/ui/Badge';
@@ -42,6 +43,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
                 className="object-cover"
                 sizes="(max-width: 1024px) 100vw, 50vw"
                 priority
+                unoptimized={isLocalMediaUrl(imgSrc)}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-slate-300" aria-label="Фото відсутнє">
@@ -66,7 +68,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
                     }`}
                   >
                     {src && (
-                      <Image src={src} alt={`Фото ${i + 1}`} fill className="object-cover" sizes="64px" />
+                      <Image src={src} alt={`Фото ${i + 1}`} fill className="object-cover" sizes="64px" unoptimized={isLocalMediaUrl(src)} />
                     )}
                   </button>
                 );

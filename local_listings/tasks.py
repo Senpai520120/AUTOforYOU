@@ -4,6 +4,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from core.c2c import c2c_enabled
+from core.tasks import ResilientTask
 
 
 # Пакетная задача: глобальный лимит 120/180 с (CELERY_TASK_SOFT_TIME_LIMIT) мал для большого объёма, поэтому свой лимит.
@@ -102,3 +103,15 @@ def cleanup_contact_views():
     cutoff = timezone.now() - timedelta(days=settings.CONTACT_VIEW_RETENTION_DAYS)
     deleted, _ = ContactView.objects.filter(created_at__lt=cutoff).delete()
     return {'deleted': deleted}
+
+
+# 10.30: ежедневная чистка фото rejected/sold старше LOCAL_LISTING_PHOTO_PURGE_DAYS (idempotent).
+@shared_task(base=ResilientTask, soft_time_limit=900, time_limit=960)
+def purge_closed_listing_photos():
+    from .services import listings_due_for_photo_purge, purge_listing_photos
+
+    listings = photos = 0
+    for listing in listings_due_for_photo_purge().iterator():
+        photos += purge_listing_photos(listing)
+        listings += 1
+    return f'listings={listings} photos={photos}'

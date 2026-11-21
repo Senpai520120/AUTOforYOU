@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import { localApi } from '@/api/local';
 import { LocalConfig, LocalListingImage } from '@/lib/types';
 import { ApiError, firstDataMessage } from '@/lib/errors';
@@ -121,6 +122,7 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
                 fill
                 className="object-cover"
                 sizes="150px"
+                unoptimized={isLocalMediaUrl(imgSrc(img))}
               />
               {img.is_primary && (
                 <span className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">

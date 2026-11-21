@@ -11,7 +11,7 @@ from users.display import public_display_name
 from .models import City, LocalListing, LocalListingImage, PromotionTariff, Region
 from .permissions import is_staff_or_admin
 from .phone import PHONE_NEEDED, can_publish, effective_contact_phone, verified_phone
-from .services import is_substantive_change
+from .services import is_substantive_change, min_photos
 
 PHONE_FORMAT_ERROR = 'Телефон у форматі +380XXXXXXXXX або 0XXXXXXXXX.'
 PHONE_RE = re.compile(r'^(\+380\d{9}|0\d{9})$')
@@ -412,6 +412,12 @@ class LocalListingUpdateSerializer(serializers.ModelSerializer):
 
         # Будь-яка правка rejected → ремодерація (власник виправив)
         elif current_status == LocalListing.Status.REJECTED:
+            # 10.30: фото отклонённого могли удалить через N дней - без них на модерацию не отправляем
+            need = min_photos()
+            if need and instance.images.count() < need:
+                raise serializers.ValidationError({'images': [
+                    f'Фото цього оголошення видалено. Завантажте фото заново: потрібно щонайменше {need}.'
+                ]})
             validated_data['status'] = LocalListing.Status.PENDING
             validated_data['rejection_reason'] = ''
 

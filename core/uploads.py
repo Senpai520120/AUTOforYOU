@@ -34,7 +34,7 @@ from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
 
 # Форматы, которые сервис умеет пересохранить. Настройка может только сузить список.
 SUPPORTED_FORMATS = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp'}
-# Должен совпадать с internal-location в nginx/nginx.conf.
+# Должен совпадать с internal-location в nginx/templates/locations.conf.template.
 X_ACCEL_PREFIX = '/protected-media/'
 SANITIZED_NAME_RE = re.compile(r'^[0-9a-f]{32}\.(jpg|png|webp)$')
 

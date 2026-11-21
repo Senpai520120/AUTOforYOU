@@ -693,6 +693,8 @@ export interface BrokerLeadRow {
   /** public_id першої заявки, якщо це повтор (10.13); інакше null. */
   duplicate_of: string | null;
   total_usd: string | null;
+  /** Повна сума з розмитненням (10.1); для старих заявок = total_usd. */
+  total_usd_full: string | null;
   total_uah: string | null;
   source: LeadSource;
   source_display: string;
