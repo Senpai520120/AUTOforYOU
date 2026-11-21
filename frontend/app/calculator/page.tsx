@@ -12,6 +12,12 @@ import CalculatorFaq from '@/components/content/CalculatorFaq';
 import CalculatorHowWeCount from '@/components/calculator/CalculatorHowWeCount';
 import DemoBanner from '@/components/ui/DemoBanner';
 import Spinner from '@/components/ui/Spinner';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Label } from '@/components/shadcn/label';
+import { Skeleton } from '@/components/shadcn/skeleton';
+import { CircleAlert } from 'lucide-react';
+import { ICON_STROKE } from '@/lib/utils';
 import FallbackContact, { useFallbackSettings } from '@/components/ui/FallbackContact';
 
 // Числові поля в стані форми — рядки: порожнє поле лишається порожнім (не 0), спрацьовує required.
@@ -103,12 +109,14 @@ function focusFirstInvalid(errors: Record<string, string>) {
   if (first) document.getElementById(first)?.focus();
 }
 
-const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm';
-const labelCls = 'block text-xs font-semibold text-slate-600 mb-1';
+// Нативний <select>: e2e та мобільні браузери працюють з ним краще, ніж з Radix-списком; вигляд — як у shadcn Input.
+const selectCls = 'min-h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-destructive';
+const labelCls = 'mb-1.5 text-sm font-semibold text-foreground';
+const hintCls = 'text-xs text-muted-foreground mt-1.5';
 
 function FieldError({ name, errors }: { name: string; errors: Record<string, string> }) {
   if (!errors[name]) return null;
-  return <p id={`err-${name}`} role="alert" className="text-xs text-red-600 mt-1" data-testid={`error-${name}`}>{errors[name]}</p>;
+  return <p id={`err-${name}`} role="alert" className="mt-1.5 flex items-start gap-1 text-xs font-medium text-destructive" data-testid={`error-${name}`}><CircleAlert className="mt-px size-3.5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />{errors[name]}</p>;
 }
 
 function Select({ id, label, value, options, onChange, errors, disabledValues = [] }: {
@@ -117,8 +125,8 @@ function Select({ id, label, value, options, onChange, errors, disabledValues = 
 }) {
   return (
     <div>
-      <label htmlFor={id} className={labelCls}>{label}</label>
-      <select id={id} name={id} aria-invalid={!!errors[id]} aria-describedby={errors[id] ? `err-${id}` : undefined} className={inputCls} value={value} onChange={e => onChange(e.target.value)}>
+      <Label htmlFor={id} className={labelCls}>{label}</Label>
+      <select id={id} name={id} aria-invalid={!!errors[id]} aria-describedby={errors[id] ? `err-${id}` : undefined} className={selectCls} value={value} onChange={e => onChange(e.target.value)}>
         {options.map(o => (
           <option key={o.value} value={o.value} disabled={disabledValues.includes(o.value)}>{o.label}</option>
         ))}
@@ -193,19 +201,19 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
   return (
     <>
       <DemoBanner show={data.is_demo} title={data.demo_banner.title} text={data.demo_banner.text} />
-      <form onSubmit={calculate} noValidate className="bg-white border border-slate-200 rounded-xl p-6 mt-4 space-y-5">
+      <form onSubmit={calculate} noValidate className="bg-card text-card-foreground border border-border rounded-xl shadow-sm p-6 md:p-8 mt-6 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="auction_price_usd" className={labelCls}>Ціна аукціону ($)</label>
-            <input id="auction_price_usd" name="auction_price_usd" aria-invalid={!!fieldErrors.auction_price_usd} aria-describedby={fieldErrors.auction_price_usd ? "err-auction_price_usd" : undefined} type="number" required min={0} className={inputCls}
+            <Label htmlFor="auction_price_usd" className={labelCls}>Ціна аукціону ($)</Label>
+            <Input id="auction_price_usd" name="auction_price_usd" aria-invalid={!!fieldErrors.auction_price_usd} aria-describedby={fieldErrors.auction_price_usd ? "err-auction_price_usd" : undefined} type="number" required min={0}
               placeholder="Наприклад, 8500"
               value={form.auction_price_usd} onChange={e => set('auction_price_usd', e.target.value)} />
-            <p className="text-xs text-slate-500 mt-1">Вкажіть ставку на аукціоні в USD.</p>
+            <p className={hintCls}>Вкажіть ставку на аукціоні в USD.</p>
             <FieldError name="auction_price_usd" errors={fieldErrors} />
           </div>
           <div>
-            <label htmlFor="engine_cc" className={labelCls}>Об&apos;єм двигуна (см³)</label>
-            <input id="engine_cc" name="engine_cc" aria-invalid={!!fieldErrors.engine_cc} aria-describedby={fieldErrors.engine_cc ? "err-engine_cc" : undefined} type="number" required={!requiresBattery} min={0} max={10000} className={inputCls}
+            <Label htmlFor="engine_cc" className={labelCls}>Об&apos;єм двигуна (см³)</Label>
+            <Input id="engine_cc" name="engine_cc" aria-invalid={!!fieldErrors.engine_cc} aria-describedby={fieldErrors.engine_cc ? "err-engine_cc" : undefined} type="number" required={!requiresBattery} min={0} max={10000}
               placeholder="Наприклад, 2000"
               value={form.engine_cc} onChange={e => set('engine_cc', e.target.value)} />
             <FieldError name="engine_cc" errors={fieldErrors} />
@@ -214,17 +222,17 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
             onChange={v => set('fuel_type', v)} errors={fieldErrors} />
           {requiresBattery && (
             <div>
-              <label htmlFor="battery_capacity_kwh" className={labelCls}>Ємність батареї (кВт·год)</label>
-              <input id="battery_capacity_kwh" name="battery_capacity_kwh" aria-invalid={!!fieldErrors.battery_capacity_kwh} aria-describedby={fieldErrors.battery_capacity_kwh ? "err-battery_capacity_kwh" : undefined} type="number" required min={1} max={300} step="0.1"
-                className={inputCls}
+              <Label htmlFor="battery_capacity_kwh" className={labelCls}>Ємність батареї (кВт·год)</Label>
+              <Input id="battery_capacity_kwh" name="battery_capacity_kwh" aria-invalid={!!fieldErrors.battery_capacity_kwh} aria-describedby={fieldErrors.battery_capacity_kwh ? "err-battery_capacity_kwh" : undefined} type="number" required min={1} max={300} step="0.1"
+               
                 value={form.battery_capacity_kwh} onChange={e => set('battery_capacity_kwh', e.target.value)} />
-              <p className="text-xs text-slate-500 mt-1">Акциз електро й PHEV рахується від ємності батареї.</p>
+              <p className={hintCls}>Акциз електро й PHEV рахується від ємності батареї.</p>
               <FieldError name="battery_capacity_kwh" errors={fieldErrors} />
             </div>
           )}
           <div>
-            <label htmlFor="vehicle_year" className={labelCls}>Рік випуску</label>
-            <input id="vehicle_year" name="vehicle_year" aria-invalid={!!fieldErrors.vehicle_year} aria-describedby={fieldErrors.vehicle_year ? "err-vehicle_year" : undefined} type="number" required min={1990} max={2030} className={inputCls}
+            <Label htmlFor="vehicle_year" className={labelCls}>Рік випуску</Label>
+            <Input id="vehicle_year" name="vehicle_year" aria-invalid={!!fieldErrors.vehicle_year} aria-describedby={fieldErrors.vehicle_year ? "err-vehicle_year" : undefined} type="number" required min={1990} max={2030}
               placeholder="Наприклад, 2019"
               value={form.vehicle_year} onChange={e => set('vehicle_year', e.target.value)} />
             <FieldError name="vehicle_year" errors={fieldErrors} />
@@ -243,7 +251,7 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
 
         {/* 09-C5: параметри тарифу аукціону — видно, з якими значеннями рахується збір */}
         <details className="text-sm">
-          <summary className="cursor-pointer text-slate-600">Параметри збору аукціону</summary>
+          <summary className="cursor-pointer font-medium text-muted-foreground hover:text-foreground">Параметри збору аукціону</summary>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
             <Select id="member_type" label="Тип учасника" value={form.member_type ?? ''} options={o.member_types}
               onChange={v => set('member_type', v)} errors={fieldErrors} />
@@ -254,13 +262,12 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
           </div>
         </details>
 
-        <button type="submit" disabled={loading}
-          className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-base">
+        <Button type="submit" size="lg" disabled={loading} className="w-full text-base font-bold">
           {loading ? 'Розраховую...' : 'Розрахувати'}
-        </button>
+        </Button>
 
         {error && (
-          <div role="alert" data-testid="calc-error" className="text-red-700 text-sm bg-red-50 border border-red-200 rounded p-3">
+          <div role="alert" data-testid="calc-error" className="text-destructive text-sm bg-destructive/10 border border-destructive/30 rounded-md p-3">
             <p>{error.message}</p>
             {error.details.length > 0 && (
               <ul className="list-disc ml-5 mt-1 text-xs">{error.details.map(d => <li key={d}>{d}</li>)}</ul>
@@ -281,8 +288,8 @@ function CalculatorForm({ data }: { data: CalcRatesResponse }) {
 
 function FormSkeleton() {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="calc-skeleton" aria-busy="true">
-      {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />)}
+    <div className="bg-card border border-border rounded-xl shadow-sm p-6 md:p-8 mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="calc-skeleton" aria-busy="true">
+      {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-md bg-muted" />)}
     </div>
   );
 }
@@ -312,7 +319,7 @@ function CalculatorLoader() {
 
   if (failed) {
     return (
-      <div role="alert" data-testid="calc-load-failed" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-4">
+      <div role="alert" data-testid="calc-load-failed" className="mt-6 text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-md p-4">
         <p>Не вдалося завантажити калькулятор.</p>
         <FallbackContact settings={settings} onRetry={retry} retrying={retrying} />
       </div>
@@ -321,7 +328,7 @@ function CalculatorLoader() {
   if (!data) return <FormSkeleton />;
   if (!data.options.is_configured) {
     return (
-      <div data-testid="calc-not-configured" className="mt-4 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-4">
+      <div data-testid="calc-not-configured" className="mt-6 text-sm text-card-foreground bg-muted border border-border rounded-md p-4">
         <p>Калькулятор ще не налаштовано. Розрахунок можна отримати в менеджера.</p>
         <FallbackContact settings={settings} onRetry={retry} retrying={retrying} />
       </div>
@@ -334,7 +341,7 @@ export default function CalculatorPage() {
   useEffect(() => { trackCalculatorVisitOnce(); }, []);
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-slate-900 mb-2">Калькулятор вартості «під ключ»</h1>
+      <h1 className="text-balance text-2xl md:text-3xl font-extrabold tracking-tight text-foreground mb-2">Калькулятор вартості «під ключ»</h1>
       <Suspense fallback={<FormSkeleton />}>
         <CalculatorLoader />
       </Suspense>

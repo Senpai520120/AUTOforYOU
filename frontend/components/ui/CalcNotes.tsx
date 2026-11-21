@@ -17,14 +17,14 @@ export function FeesFreshness({ checkedOn, stale }: FeesProps) {
   if (stale) {
     return (
       <p data-testid="fees-stale" role="status"
-        className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2 mt-2">
+        className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md p-2 mt-2">
         Аукціонні збори звірено з сайтом аукціону {formatNoteDate(checkedOn)} — понад 90 днів тому. Фактичні ставки
         могли змінитися: вартість підтвердить брокер.
       </p>
     );
   }
   return (
-    <p data-testid="fees-checked" className="text-xs text-slate-500 mt-2">
+    <p data-testid="fees-checked" className="text-xs text-muted-foreground mt-2">
       Ставки аукціонних зборів станом на {formatNoteDate(checkedOn)}.
     </p>
   );
@@ -35,8 +35,8 @@ export function ExclusionsList({ items }: { items?: string[] }) {
   if (!items || items.length === 0) return null;
   return (
     <div className="mt-4" data-testid="calc-exclusions">
-      <h3 className="font-semibold text-slate-900 text-sm">Що не входить у розрахунок</h3>
-      <ul className="list-disc pl-5 mt-1 text-sm text-slate-600">
+      <h3 className="font-semibold text-foreground text-sm">Що не входить у розрахунок</h3>
+      <ul className="list-disc pl-5 mt-1 text-sm text-muted-foreground">
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </div>

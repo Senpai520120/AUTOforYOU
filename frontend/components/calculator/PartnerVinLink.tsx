@@ -23,12 +23,12 @@ export default function PartnerVinLink() {
 
   if (!url) return null;
   return (
-    <p data-testid="partner-vin-link" className="mt-6 text-sm text-slate-700">
+    <p data-testid="partner-vin-link" className="mt-6 text-sm text-card-foreground">
       <a href={url} target="_blank" rel="sponsored noopener noreferrer"
-         className="text-blue-700 underline hover:text-blue-900">
+         className="text-primary underline underline-offset-4 hover:text-primary/80">
         Перевірити авто за VIN (carVertical)
       </a>{' '}
-      <span className="text-xs text-slate-500">партнерське посилання</span>
+      <span className="text-xs text-muted-foreground">партнерське посилання</span>
     </p>
   );
 }

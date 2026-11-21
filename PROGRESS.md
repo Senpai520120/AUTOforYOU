@@ -6,6 +6,12 @@
 
 ---
 
+## Задача 11.14a: редизайн главной, лендинга, калькулятора (2026-11-21)
+
+- Главная, `/prigon` и `/prigon/[slug]`, калькулятор переведены на токены и `Card`/`Button`/`Input`/`Label`/`Badge`/`Skeleton`, иконки lucide. Общие `LeadCta`, `DemoBanner`, `CalcNotes`, `Spinner`, `Breadcrumbs` тоже на токенах. Тексты, testid, aria, h1, JSON-LD, метаданные не менялись; `<select>` калькулятора остался нативным (e2e `selectOption`).
+- UX-правки: эмодзи-флаги -> иконки lucide; ⚠ в демо-баннере -> иконка; в итоге калькулятора добавлен бейдж «Орієнтовно» при `is_estimate`.
+- Проверки: lint 0 errors, tsc чисто; `npm run build` собирает страницы, но падает на проверке версии Next (16.4.4, SecurityFatalError) — не из-за кода. e2e не запускался (после 11.14b).
+
 ## Задача 11.13: дизайн-система (2026-11-21)
 
 - shadcn/ui (`frontend/components.json`, алиас `ui` -> `@/components/shadcn`): 11 компонентов, `cn` в `lib/utils.ts`; `components/ui/` не тронут. Правки сгенерированного: `min-h-*` вместо `h-*`, сплошной `ring-ring`.

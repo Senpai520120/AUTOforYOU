@@ -15,12 +15,12 @@ export default function ModelFacts({ page }: { page: LandingDetail }) {
   if (!rows.length) return null;
   return (
     <section aria-labelledby="model-facts-title" data-testid="model-facts">
-      <h2 id="model-facts-title" className="text-lg font-semibold text-slate-900 mb-2">Коротко про модель</h2>
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm text-slate-700">
+      <h2 id="model-facts-title" className="mb-3 text-lg font-semibold text-foreground">Коротко про модель</h2>
+      <dl className="grid grid-cols-1 gap-3 rounded-xl border border-border bg-card p-4 text-sm sm:grid-cols-2">
         {rows.map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="text-slate-500">{k}</dt>
-            <dd>{v}</dd>
+          <div key={k} className="flex flex-col">
+            <dt className="text-xs text-muted-foreground">{k}</dt>
+            <dd className="font-semibold text-card-foreground">{v}</dd>
           </div>
         ))}
       </dl>

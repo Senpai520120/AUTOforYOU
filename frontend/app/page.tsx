@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ArrowRight, Calculator, Check, ClipboardCheck, MapPin, Search, Ship, type LucideIcon } from 'lucide-react';
 import { CATALOG_LABEL } from '@/lib/labels';
 import { getC2CFlags } from '@/lib/c2c';
 import { getDemoStatus } from '@/lib/site-config';
@@ -10,6 +11,9 @@ import { buildMetadata } from '@/lib/seo';
 import { serverGet } from '@/lib/server-api';
 import { getLandingList, POPULAR_LANDINGS_LIMIT } from '@/lib/landings';
 import PopularModels from '@/components/landing/PopularModels';
+import { Button } from '@/components/shadcn/button';
+import { Card, CardContent } from '@/components/shadcn/card';
+import { ICON_STROKE } from '@/lib/utils';
 
 /**
  * Рендер на кожен запит, а не на етапі збірки.
@@ -38,26 +42,30 @@ async function fetchUsdRate(): Promise<ExchangeRate | null> {
   return data?.exchange_rates?.find(r => r.from_currency === 'USD' && r.to_currency === 'UAH') ?? null;
 }
 
-const STEPS = [
+const STEPS: { n: string; title: string; text: string; icon: LucideIcon }[] = [
   {
     n: '1',
     title: 'Обираєте лот',
     text: 'Знаходите авто на Copart або IAAI. Перевіряєте VIN і стан.',
+    icon: Search,
   },
   {
     n: '2',
     title: 'Рахуєте вартість',
     text: 'Калькулятор показує повну суму «під ключ»: аукціонний збір, логістика, розмитнення.',
+    icon: Calculator,
   },
   {
     n: '3',
     title: 'Викуп і доставка',
     text: 'Авто їде на склад у США, далі морем до порту ЄС і автовозом в Україну.',
+    icon: Ship,
   },
   {
     n: '4',
     title: 'Розмитнення',
     text: 'Акциз, мито, ПДВ і пенсійний збір. Контейнер відстежується в особистому кабінеті.',
+    icon: ClipboardCheck,
   },
 ];
 
@@ -72,90 +80,123 @@ const COST_ITEMS = [
   'Пенсійний збір',
 ];
 
+const H2 = 'text-2xl font-bold tracking-tight text-foreground mb-6';
+const CARD_LINK = 'group block rounded-xl transition-transform motion-safe:hover:-translate-y-0.5';
+const CARD_HOVER = 'h-full transition-shadow group-hover:border-primary group-hover:shadow-md';
+
+/** Іконка в плитці: декоративна, назву несе заголовок поруч. */
+function IconTile({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span className="inline-flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+      <Icon className="size-6" strokeWidth={ICON_STROKE} />
+    </span>
+  );
+}
+
 export default async function Home() {
   const [usdRate, c2c, isDemo, settings, landings] = await Promise.all([
     fetchUsdRate(), getC2CFlags(), getDemoStatus(), getSiteSettings(), getLandingList(),
   ]);
 
   return (
-    <div className="space-y-14">
+    <div className="space-y-16">
       <JsonLd data={[organizationLd(settings), websiteLd()]} />
       {/* Hero */}
-      <section className="bg-gradient-to-br from-blue-900 to-blue-700 text-white rounded-2xl p-12 text-center">
-        <h1 className="text-4xl font-extrabold mb-3">Пригон авто з США під ключ в Україну</h1>
-        <p className="text-blue-200 text-lg mb-8 max-w-xl mx-auto">
-          Copart · IAAI · доставка · розмитнення · калькулятор вартості
-        </p>
-        <div className="flex flex-wrap gap-4 justify-center">
-          <Link
-            href="/calculator"
-            className="bg-amber-400 hover:bg-amber-300 text-black font-bold px-8 py-3 rounded-xl text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200"
-          >
-            Порахувати вартість
-          </Link>
-        </div>
-        {isDemo === true && (
-          <p className="mt-6 text-xs text-amber-300" data-testid="home-demo-note">
-            ⚠ Тестові тарифи — всі розрахунки є демонстраційними
+      <section data-on-dark className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-header to-primary px-6 py-14 text-center text-header-foreground md:py-20">
+        <Ship
+          className="pointer-events-none absolute -right-10 -bottom-10 size-64 text-header-foreground/10"
+          strokeWidth={1}
+          aria-hidden="true"
+        />
+        <div className="relative">
+          <h1 className="mx-auto mb-4 max-w-3xl text-balance text-3xl font-extrabold tracking-tight md:text-5xl">
+            Пригон авто з США під ключ в Україну
+          </h1>
+          <p className="mx-auto mb-8 max-w-xl text-lg text-header-foreground/90">
+            Copart · IAAI · доставка · розмитнення · калькулятор вартості
           </p>
-        )}
+          <div className="flex flex-wrap justify-center gap-4">
+            <Button asChild size="lg" className="bg-accent px-8 focus-visible:ring-header-foreground text-lg font-bold text-accent-foreground hover:bg-accent/90">
+              <Link href="/calculator">
+                Порахувати вартість
+                <ArrowRight className="size-5" strokeWidth={ICON_STROKE} aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+          {isDemo === true && (
+            <p className="mt-6 text-sm text-warning" data-testid="home-demo-note">
+              ⚠ Тестові тарифи — всі розрахунки є демонстраційними
+            </p>
+          )}
+        </div>
       </section>
 
       {/* Два напрямки — прибирає плутанину між імпортом і локальним каталогом */}
       <section aria-labelledby="directions-heading">
-        <h2 id="directions-heading" className="text-2xl font-bold text-slate-900 mb-6">
+        <h2 id="directions-heading" className={H2}>
           Два напрямки
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Link
-            href="/calculator"
-            className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <div className="text-4xl mb-3" aria-hidden="true">🇺🇸</div>
-            <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
-              Імпорт з аукціонів США
-            </h3>
-            <p className="text-sm text-slate-500">
-              Авто з Copart та IAAI: розрахунок «під ключ», викуп, доставка й розмитнення.
-            </p>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <Link href="/calculator" className={CARD_LINK}>
+            <Card className={CARD_HOVER}>
+              <CardContent className="space-y-3">
+                <IconTile icon={Ship} />
+                <h3 className="text-lg font-bold text-card-foreground transition-colors group-hover:text-primary">
+                  Імпорт з аукціонів США
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Авто з Copart та IAAI: розрахунок «під ключ», викуп, доставка й розмитнення.
+                </p>
+              </CardContent>
+            </Card>
           </Link>
           {c2c.enabled ? (
-            <Link
-              href="/ua"
-              className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-blue-300 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
-              <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-700 transition-colors mb-1">
-                {CATALOG_LABEL}
-              </h3>
-              <p className="text-sm text-slate-500">
-                Оголошення від власників і дилерів по всій Україні.
-                {c2c.postingEnabled ? ' Подати своє — безкоштовно.' : ''}
-              </p>
+            <Link href="/ua" className={CARD_LINK}>
+              <Card className={CARD_HOVER}>
+                <CardContent className="space-y-3">
+                  <IconTile icon={MapPin} />
+                  <h3 className="text-lg font-bold text-card-foreground transition-colors group-hover:text-primary">
+                    {CATALOG_LABEL}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Оголошення від власників і дилерів по всій Україні.
+                    {c2c.postingEnabled ? ' Подати своє — безкоштовно.' : ''}
+                  </p>
+                </CardContent>
+              </Card>
             </Link>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-xl p-6" data-testid="home-ua-soon">
-              <div className="text-4xl mb-3" aria-hidden="true">🇺🇦</div>
-              <h3 className="font-bold text-lg text-slate-900 mb-1">{CATALOG_LABEL} — незабаром</h3>
-              <p className="text-sm text-slate-500">Каталог авто від власників і дилерів готується до запуску.</p>
-            </div>
+            <Card data-testid="home-ua-soon" className="h-full">
+              <CardContent className="space-y-3">
+                <IconTile icon={MapPin} />
+                <h3 className="text-lg font-bold text-card-foreground">{CATALOG_LABEL} — незабаром</h3>
+                <p className="text-sm text-muted-foreground">Каталог авто від власників і дилерів готується до запуску.</p>
+              </CardContent>
+            </Card>
           )}
         </div>
       </section>
 
       {/* Як це працює */}
       <section aria-labelledby="how-heading">
-        <h2 id="how-heading" className="text-2xl font-bold text-slate-900 mb-6">
+        <h2 id="how-heading" className={H2}>
           Як це працює
         </h2>
-        <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map(s => (
-            <li key={s.n} className="bg-white border border-slate-200 rounded-xl p-5">
-              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-700 text-white font-bold text-sm mb-3">
-                {s.n}
-              </span>
-              <h3 className="font-semibold text-slate-900 mb-1">{s.title}</h3>
-              <p className="text-sm text-slate-500">{s.text}</p>
+            <li key={s.n}>
+              <Card className="h-full">
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex size-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                      {s.n}
+                    </span>
+                    <s.icon className="size-6 text-primary" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                  </div>
+                  <h3 className="font-semibold text-card-foreground">{s.title}</h3>
+                  <p className="text-sm text-muted-foreground">{s.text}</p>
+                </CardContent>
+              </Card>
             </li>
           ))}
         </ol>
@@ -165,36 +206,37 @@ export default async function Home() {
       <PopularModels models={landings} limit={POPULAR_LANDINGS_LIMIT} showAll />
 
       {/* Що входить у розрахунок */}
-      <section aria-labelledby="cost-heading" className="bg-white border border-slate-200 rounded-xl p-6 md:p-8">
-        <h2 id="cost-heading" className="text-2xl font-bold text-slate-900 mb-2">
-          Що входить у розрахунок
-        </h2>
-        <p className="text-sm text-slate-500 mb-6">
-          Калькулятор розкладає суму на статті — без прихованих рядків. Кожен розрахунок зберігає
-          знімок застосованих ставок і курсу, тож до нього можна повернутися пізніше.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-          {COST_ITEMS.map(item => (
-            <div key={item} className="flex items-start gap-2 text-sm text-slate-700">
-              <span className="text-blue-700 mt-0.5" aria-hidden="true">•</span>
-              <span>{item}</span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <Link
-            href="/calculator"
-            className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            Відкрити калькулятор
-          </Link>
-          {usdRate && (
-            <p className="text-sm text-slate-500">
-              Курс НБУ на {usdRate.date}:{' '}
-              <strong className="text-slate-800 font-mono">{usdRate.rate} грн/$</strong>
+      <section aria-labelledby="cost-heading">
+        <Card>
+          <CardContent className="md:px-8">
+            <h2 id="cost-heading" className="mb-2 text-2xl font-bold tracking-tight text-card-foreground">
+              Що входить у розрахунок
+            </h2>
+            <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
+              Калькулятор розкладає суму на статті — без прихованих рядків. Кожен розрахунок зберігає
+              знімок застосованих ставок і курсу, тож до нього можна повернутися пізніше.
             </p>
-          )}
-        </div>
+            <ul className="grid grid-cols-1 gap-x-8 gap-y-3 md:grid-cols-2">
+              {COST_ITEMS.map(item => (
+                <li key={item} className="flex items-start gap-3 text-sm text-card-foreground">
+                  <Check className="mt-0.5 size-5 shrink-0 text-success" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <Button asChild size="lg" className="font-semibold">
+                <Link href="/calculator">Відкрити калькулятор</Link>
+              </Button>
+              {usdRate && (
+                <p className="text-sm text-muted-foreground">
+                  Курс НБУ на {usdRate.date}:{' '}
+                  <strong className="font-mono text-foreground">{usdRate.rate} грн/$</strong>
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </section>
     </div>
   );
