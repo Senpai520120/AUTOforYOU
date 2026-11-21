@@ -27,7 +27,7 @@ export default function PopularModels({ models, limit, showAll = false, title = 
         {shown.map(m => (
           <li key={m.slug}>
             <Link href={`/prigon/${m.slug}`} data-testid="popular-model"
-              className="inline-flex min-h-10 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-primary shadow-xs transition-colors hover:border-primary hover:bg-primary/5">
+              className="inline-flex min-h-10 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-link shadow-xs transition-colors hover:border-primary hover:bg-primary/5">
               {m.make} {m.model}
             </Link>
           </li>
@@ -36,7 +36,7 @@ export default function PopularModels({ models, limit, showAll = false, title = 
       {showAll && (
         <p className="mt-4 text-sm">
           <Link href="/prigon" data-testid="popular-models-all"
-            className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-4 hover:text-primary/80">
+            className="inline-flex items-center gap-1 font-medium text-link underline underline-offset-4 hover:text-link/80">
             Усі моделі
             <ArrowRight className="size-4" strokeWidth={ICON_STROKE} aria-hidden="true" />
           </Link>

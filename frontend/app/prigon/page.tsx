@@ -52,8 +52,8 @@ export default async function LandingIndexPage() {
       )}
 
       <p className="mt-8 flex flex-wrap gap-4 text-sm">
-        {howItWorksOn && <Link href="/how-it-works" className="text-primary underline underline-offset-4 hover:text-primary/80">{HOW_IT_WORKS_LABEL}</Link>}
-        <Link href="/calculator" className="text-primary underline underline-offset-4 hover:text-primary/80" data-testid="prigon-link-calculator">{CALC_COST_LABEL}</Link>
+        {howItWorksOn && <Link href="/how-it-works" className="text-link underline underline-offset-4 hover:text-link/80">{HOW_IT_WORKS_LABEL}</Link>}
+        <Link href="/calculator" className="text-link underline underline-offset-4 hover:text-link/80" data-testid="prigon-link-calculator">{CALC_COST_LABEL}</Link>
       </p>
       <p className="mt-4 text-xs text-muted-foreground">Послугу пригону надає партнер, а не AUTOforYOU.</p>
     </div>

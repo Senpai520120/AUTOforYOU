@@ -6,7 +6,7 @@ const styles: Record<Variant, string> = {
   success: 'bg-success text-success-foreground',
   warning: 'bg-warning text-warning-foreground',
   danger: 'bg-destructive/10 text-destructive',
-  info: 'bg-primary/10 text-primary',
+  info: 'bg-link/10 text-link',
 };
 
 export default function Badge({ children, variant = 'default' }: {

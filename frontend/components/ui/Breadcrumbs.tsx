@@ -20,7 +20,7 @@ export default function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
               {last ? (
                 <span aria-current="page" className="font-semibold text-foreground">{c.name}</span>
               ) : (
-                <Link href={c.path} className="text-primary underline underline-offset-2 hover:text-primary/80">
+                <Link href={c.path} className="text-link underline underline-offset-2 hover:text-link/80">
                   {c.name}
                 </Link>
               )}

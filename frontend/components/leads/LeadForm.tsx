@@ -393,7 +393,7 @@ export default function LeadForm({
             onChange={(e) => setConsent(e.target.checked)} />
           <span>
             Погоджуюсь на обробку персональних даних відповідно до{' '}
-            <Link href="/privacy" target="_blank" className="text-primary underline underline-offset-4">політики конфіденційності</Link>
+            <Link href="/privacy" target="_blank" className="text-link underline underline-offset-4">політики конфіденційності</Link>
           </span>
         </label>
         <FieldError id="lead-consent-err" text={errors.consent} />

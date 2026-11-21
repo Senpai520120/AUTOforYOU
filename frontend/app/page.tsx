@@ -87,7 +87,7 @@ const CARD_HOVER = 'h-full transition-shadow group-hover:border-primary group-ho
 /** Іконка в плитці: декоративна, назву несе заголовок поруч. */
 function IconTile({ icon: Icon }: { icon: LucideIcon }) {
   return (
-    <span className="inline-flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+    <span className="inline-flex size-12 items-center justify-center rounded-lg bg-link/10 text-link" aria-hidden="true">
       <Icon className="size-6" strokeWidth={ICON_STROKE} />
     </span>
   );
@@ -102,7 +102,7 @@ export default async function Home() {
     <div className="space-y-16">
       <JsonLd data={[organizationLd(settings), websiteLd()]} />
       {/* Hero */}
-      <section data-on-dark className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-header to-primary px-6 py-14 text-center text-header-foreground md:py-20">
+      <section data-on-dark className="relative overflow-hidden rounded-2xl bg-header px-6 py-14 text-center text-header-foreground md:py-20">
         <Ship
           className="pointer-events-none absolute -right-10 -bottom-10 size-64 text-header-foreground/10"
           strokeWidth={1}
@@ -141,7 +141,7 @@ export default async function Home() {
             <Card className={CARD_HOVER}>
               <CardContent className="space-y-3">
                 <IconTile icon={Ship} />
-                <h3 className="text-lg font-bold text-card-foreground transition-colors group-hover:text-primary">
+                <h3 className="text-lg font-bold text-card-foreground transition-colors group-hover:text-link">
                   Імпорт з аукціонів США
                 </h3>
                 <p className="text-sm text-muted-foreground">
@@ -155,7 +155,7 @@ export default async function Home() {
               <Card className={CARD_HOVER}>
                 <CardContent className="space-y-3">
                   <IconTile icon={MapPin} />
-                  <h3 className="text-lg font-bold text-card-foreground transition-colors group-hover:text-primary">
+                  <h3 className="text-lg font-bold text-card-foreground transition-colors group-hover:text-link">
                     {CATALOG_LABEL}
                   </h3>
                   <p className="text-sm text-muted-foreground">
@@ -191,7 +191,7 @@ export default async function Home() {
                     <span className="inline-flex size-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
                       {s.n}
                     </span>
-                    <s.icon className="size-6 text-primary" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                    <s.icon className="size-6 text-link" strokeWidth={ICON_STROKE} aria-hidden="true" />
                   </div>
                   <h3 className="font-semibold text-card-foreground">{s.title}</h3>
                   <p className="text-sm text-muted-foreground">{s.text}</p>

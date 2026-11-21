@@ -11,7 +11,7 @@ export default function ChannelBadge({ channel, className = '' }: { channel?: st
       target="_blank"
       rel="nofollow noopener noreferrer"
       data-testid="channel-badge"
-      className={`inline-block text-xs bg-card text-primary border border-border rounded-full px-2 py-0.5 hover:border-primary ${className}`}
+      className={`inline-block text-xs bg-card text-link border border-border rounded-full px-2 py-0.5 hover:border-primary ${className}`}
     >
       від @{channel}
     </a>

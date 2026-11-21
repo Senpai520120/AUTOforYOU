@@ -1,73 +1,75 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Тёмная тема: токены есть, но НЕ включена (11.13). Включение — решение 11.14. */
+/* Палітра «Графіт і лайм» (2026-11-21). Лайм — лише заливка, не колір тексту на світлому. Тёмная тема не включена (решение 11.14). */
 @custom-variant dark (&:is(.dark *));
 
 /* Токены в формате shadcn (OKLCH). Контраст пар — docs/design/DESIGN_SYSTEM.md. */
 :root {
   color-scheme: light;
   --radius: 0.625rem;
-  --background: oklch(0.984 0.003 247.9);
-  --foreground: oklch(0.208 0.04 265.8);
+  --background: oklch(0.97 0.003 264.5);
+  --foreground: oklch(0.19 0.009 255.6);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.04 265.8);
+  --card-foreground: oklch(0.19 0.009 255.6);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.04 265.8);
-  --primary: oklch(0.424 0.181 265.6);
+  --popover-foreground: oklch(0.19 0.009 255.6);
+  --primary: oklch(0.19 0.009 255.6);
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.968 0.007 247.9);
-  --secondary-foreground: oklch(0.208 0.04 265.8);
-  --muted: oklch(0.968 0.007 247.9);
-  --muted-foreground: oklch(0.446 0.037 257.3);
-  --accent: oklch(0.769 0.165 70.1);
-  --accent-foreground: oklch(0.208 0.04 265.8);
+  --secondary: oklch(0.967 0.003 264.5);
+  --secondary-foreground: oklch(0.19 0.009 255.6);
+  --muted: oklch(0.967 0.003 264.5);
+  --muted-foreground: oklch(0.446 0.026 256.8);
+  --accent: oklch(0.903 0.208 122.9);
+  --accent-foreground: oklch(0.19 0.009 255.6);
   --destructive: oklch(0.505 0.19 27.5);
   --destructive-foreground: oklch(1 0 0);
   --success: oklch(0.527 0.137 150.1);
   --success-foreground: oklch(1 0 0);
   --warning: oklch(0.837 0.164 84.4);
-  --warning-foreground: oklch(0.208 0.04 265.8);
-  --border: oklch(0.929 0.013 255.5);
-  --input: oklch(0.554 0.041 257.4);
-  --ring: oklch(0.488 0.217 264.4);
-  --header: oklch(0.379 0.138 265.5);
+  --warning-foreground: oklch(0.19 0.009 255.6);
+  --border: oklch(0.928 0.006 264.5);
+  --input: oklch(0.551 0.023 264.4);
+  --link: oklch(0.453 0.113 130.9);
+  --ring: oklch(0.453 0.113 130.9);
+  --header: oklch(0.19 0.009 255.6);
   --header-foreground: oklch(1 0 0);
-  --footer: oklch(0.208 0.04 265.8);
-  --footer-foreground: oklch(0.869 0.02 252.9);
-  --footer-muted: oklch(0.711 0.035 256.8);
+  --footer: oklch(0.19 0.009 255.6);
+  --footer-foreground: oklch(0.872 0.009 258.3);
+  --footer-muted: oklch(0.754 0.017 253.9);
 }
 
 .dark {
   color-scheme: dark;
-  --background: oklch(0.129 0.041 264.7);
-  --foreground: oklch(0.984 0.003 247.9);
-  --card: oklch(0.208 0.04 265.8);
-  --card-foreground: oklch(0.984 0.003 247.9);
-  --popover: oklch(0.208 0.04 265.8);
-  --popover-foreground: oklch(0.984 0.003 247.9);
-  --primary: oklch(0.714 0.143 254.6);
-  --primary-foreground: oklch(0.129 0.041 264.7);
-  --secondary: oklch(0.279 0.037 260);
-  --secondary-foreground: oklch(0.984 0.003 247.9);
-  --muted: oklch(0.279 0.037 260);
-  --muted-foreground: oklch(0.711 0.035 256.8);
-  --accent: oklch(0.769 0.165 70.1);
-  --accent-foreground: oklch(0.129 0.041 264.7);
+  --background: oklch(0.19 0.009 255.6);
+  --foreground: oklch(0.97 0.003 264.5);
+  --card: oklch(0.238 0.013 258.4);
+  --card-foreground: oklch(0.97 0.003 264.5);
+  --popover: oklch(0.238 0.013 258.4);
+  --popover-foreground: oklch(0.97 0.003 264.5);
+  --primary: oklch(0.903 0.208 122.9);
+  --primary-foreground: oklch(0.19 0.009 255.6);
+  --secondary: oklch(0.288 0.016 259.8);
+  --secondary-foreground: oklch(0.97 0.003 264.5);
+  --muted: oklch(0.288 0.016 259.8);
+  --muted-foreground: oklch(0.754 0.017 253.9);
+  --accent: oklch(0.903 0.208 122.9);
+  --accent-foreground: oklch(0.19 0.009 255.6);
   --destructive: oklch(0.711 0.166 22.2);
-  --destructive-foreground: oklch(0.129 0.041 264.7);
+  --destructive-foreground: oklch(0.19 0.009 255.6);
   --success: oklch(0.8 0.182 151.7);
   --success-foreground: oklch(0.266 0.063 152.9);
   --warning: oklch(0.837 0.164 84.4);
-  --warning-foreground: oklch(0.129 0.041 264.7);
-  --border: oklch(0.279 0.037 260);
-  --input: oklch(0.554 0.041 257.4);
-  --ring: oklch(0.714 0.143 254.6);
-  --header: oklch(0.379 0.138 265.5);
+  --warning-foreground: oklch(0.19 0.009 255.6);
+  --border: oklch(0.307 0.018 258.4);
+  --input: oklch(0.613 0.021 255.6);
+  --link: oklch(0.903 0.208 122.9);
+  --ring: oklch(0.903 0.208 122.9);
+  --header: oklch(0.19 0.009 255.6);
   --header-foreground: oklch(1 0 0);
-  --footer: oklch(0.208 0.04 265.8);
-  --footer-foreground: oklch(0.869 0.02 252.9);
-  --footer-muted: oklch(0.711 0.035 256.8);
+  --footer: oklch(0.19 0.009 255.6);
+  --footer-foreground: oklch(0.872 0.009 258.3);
+  --footer-muted: oklch(0.754 0.017 253.9);
 }
 
 @theme inline {
@@ -98,6 +100,7 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-link: var(--link);
   --color-ring: var(--ring);
   --color-header: var(--header);
   --color-header-foreground: var(--header-foreground);
@@ -127,7 +130,7 @@
     outline-offset: 2px;
   }
 
-  /* Шапка й підвал — завжди темні: синя ring на них не видна, обводка світла. */
+  /* Шапка й підвал — завжди темні: ring на них не видна (графіт), обводка світла. */
   [data-on-dark] a:focus-visible,
   [data-on-dark] button:focus-visible,
   [data-on-dark] [tabindex]:not([tabindex="-1"]):focus-visible {

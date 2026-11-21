@@ -114,7 +114,7 @@ export default function LandingCalc({ calculation: c, termText, includedText }: 
 
       {termText && (
         <p className="mt-4 flex items-start gap-2 text-sm text-card-foreground" data-testid="landing-term">
-          <Clock className="size-4 mt-0.5 shrink-0 text-primary" strokeWidth={ICON_STROKE} aria-hidden="true" />
+          <Clock className="size-4 mt-0.5 shrink-0 text-link" strokeWidth={ICON_STROKE} aria-hidden="true" />
           <span><span className="font-semibold">Орієнтовний термін: </span>{termText}</span>
         </p>
       )}

@@ -92,7 +92,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
-        <Link href="/ua" className="inline-flex min-h-11 items-center underline-offset-4 hover:text-primary hover:underline">{CATALOG_LABEL}</Link>
+        <Link href="/ua" className="inline-flex min-h-11 items-center underline-offset-4 hover:text-link hover:underline">{CATALOG_LABEL}</Link>
         <ChevronRight className="size-4" strokeWidth={ICON_STROKE} aria-hidden="true" />
         <span>{listing.make} {listing.model}</span>
       </div>
@@ -182,7 +182,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
             <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-1.5">
               <span>Продавець: <strong className="text-foreground">{listing.owner_name}</strong></span>
               {listing.seller_type === 'dealer' && (
-                <span data-testid="verified-dealer" className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">✓ {VERIFIED_DEALER_LABEL}</span>
+                <span data-testid="verified-dealer" className="rounded-full bg-link/10 px-2 py-0.5 text-xs font-semibold text-link">✓ {VERIFIED_DEALER_LABEL}</span>
               )}
               {listing.seller_has_badge && (
                 <span className="rounded-full bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground">

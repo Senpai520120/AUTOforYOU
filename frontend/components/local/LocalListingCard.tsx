@@ -66,13 +66,13 @@ export default function LocalListingCard({ listing, priority = false }: { listin
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <ChannelBadge channel={listing.source_channel} />
               {listing.seller_type === 'dealer' && (
-                <span data-testid="verified-dealer" className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                <span data-testid="verified-dealer" className="inline-block rounded-full bg-link/10 px-2 py-0.5 text-xs font-semibold text-link">
                   ✓ {VERIFIED_DEALER_LABEL}
                 </span>
               )}
             </div>
           )}
-          <Link href={`/local/${listing.id}`} className="hover:text-primary">
+          <Link href={`/local/${listing.id}`} className="hover:text-link">
             <h2 className="text-base font-semibold leading-snug text-foreground">
               {listing.make} {listing.model} {listing.year}
             </h2>

@@ -66,7 +66,7 @@ export function ContactList({ settings, title = "Зв'яжіться з нами
         {links.map((l) => (
           <li key={l.key}>
             {l.href ? (
-              <a href={l.href} className="text-primary underline underline-offset-4"
+              <a href={l.href} className="text-link underline underline-offset-4"
                 {...(l.href.startsWith('https:') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
                 {l.label}
               </a>

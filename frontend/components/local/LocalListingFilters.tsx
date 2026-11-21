@@ -119,7 +119,7 @@ export default function LocalListingFilters() {
         onClick={() => setOpen((v) => !v)}
       >
         <span className="inline-flex items-center gap-2">
-          <SlidersHorizontal className="size-5 text-primary" strokeWidth={ICON_STROKE} aria-hidden="true" />
+          <SlidersHorizontal className="size-5 text-link" strokeWidth={ICON_STROKE} aria-hidden="true" />
           <span>Фільтри{activeCount > 0 ? ` (${activeCount})` : ''}</span>
         </span>
         <ChevronDown className={`size-5 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} strokeWidth={ICON_STROKE} aria-hidden="true" />

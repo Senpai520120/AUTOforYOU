@@ -11,7 +11,7 @@ export default function SellerBlock({ listing }: { listing: LocalListing }) {
     <div data-testid="seller-block" className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
       {since && <span>{since}</span>}
       {count > 0 && <span>· активних оголошень: {count}</span>}
-      <Link href={`/sellers/${listing.seller_id}`} className="text-primary underline underline-offset-4 hover:text-primary/80 font-medium">
+      <Link href={`/sellers/${listing.seller_id}`} className="text-link underline underline-offset-4 hover:text-link/80 font-medium">
         {SELLER_ALL_LISTINGS_LABEL}
       </Link>
     </div>

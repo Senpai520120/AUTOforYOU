@@ -31,11 +31,11 @@ export default function CalculatorHowWeCount() {
       <p className="mt-3 text-sm">
         {howItWorksOn && (
           <>
-            <Link href="/how-it-works" className="text-primary underline underline-offset-4 hover:text-primary/80" data-testid="calc-link-how-it-works">{HOW_IT_WORKS_LABEL}</Link>
+            <Link href="/how-it-works" className="text-link underline underline-offset-4 hover:text-link/80" data-testid="calc-link-how-it-works">{HOW_IT_WORKS_LABEL}</Link>
             {' · '}
           </>
         )}
-        <Link href="/prigon" className="text-primary underline underline-offset-4 hover:text-primary/80" data-testid="calc-link-prigon">Пригон за моделями</Link>
+        <Link href="/prigon" className="text-link underline underline-offset-4 hover:text-link/80" data-testid="calc-link-prigon">Пригон за моделями</Link>
       </p>
     </section>
   );

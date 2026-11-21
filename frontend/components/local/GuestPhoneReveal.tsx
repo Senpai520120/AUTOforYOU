@@ -87,7 +87,7 @@ function GuestCaptchaForm({ listingId, onPhone }: { listingId: number; onPhone: 
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        Або <Link href="/login" className="font-medium text-primary underline underline-offset-4">увійдіть</Link> — без перевірки.
+        Або <Link href="/login" className="font-medium text-link underline underline-offset-4">увійдіть</Link> — без перевірки.
       </p>
     </div>
   );

@@ -25,7 +25,7 @@ export default function PartnerVinLink() {
   return (
     <p data-testid="partner-vin-link" className="mt-6 text-sm text-card-foreground">
       <a href={url} target="_blank" rel="sponsored noopener noreferrer"
-         className="text-primary underline underline-offset-4 hover:text-primary/80">
+         className="text-link underline underline-offset-4 hover:text-link/80">
         Перевірити авто за VIN (carVertical)
       </a>{' '}
       <span className="text-xs text-muted-foreground">партнерське посилання</span>

@@ -50,11 +50,11 @@ export default function LocalCatalogGrid({
           action={filtered ? { label: 'Скинути фільтри', href: '/ua' } : undefined}
         />
         <p className="mt-3 text-center text-sm text-muted-foreground">
-          <Link href="/calculator" className="font-medium text-primary underline underline-offset-4 hover:text-primary/80">Порахувати пригон з США</Link>
+          <Link href="/calculator" className="font-medium text-link underline underline-offset-4 hover:text-link/80">Порахувати пригон з США</Link>
           {postingEnabled && (
             <>
               {' '}або{' '}
-              <Link href="/local/new" className="font-medium text-primary underline underline-offset-4 hover:text-primary/80">
+              <Link href="/local/new" className="font-medium text-link underline underline-offset-4 hover:text-link/80">
                 додайте своє оголошення
               </Link>
             </>

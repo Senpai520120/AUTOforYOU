@@ -6,6 +6,10 @@
 
 ---
 
+## Задача 11.16: палитра «Графіт і лайм» (2026-11-21)
+
+- `frontend/app/globals.css`: токены light и `.dark` в гамме графит/лайм, новый `--link` (#3F6212, `text-link`); ссылки-текст на токенах переведены с `text-primary` на `text-link` (20 файлов), hero главной — плоский `bg-header`. Контраст пересчитан скриптом, таблица и раздел «Палітра Графіт і лайм» в `docs/design/DESIGN_SYSTEM.md`; непрошедших нет. e2e `home.spec.ts`: `not.toHaveClass(/bg-accent/)`. lint 0 errors, tsc, build зелёные. Не закоммичено.
+
 ## Задача 11.15: Storybook и визуальные тесты (2026-11-21)
 
 - Совместимость подтверждена: `storybook`, `@storybook/nextjs-vite`, `@storybook/addon-a11y`, `@storybook/addon-docs` 10.6.8 и `vite` 8.3.8 (exact, devDependencies) с Next 16.4.6, React 19.3.1, Tailwind 4. `build-storybook` проходит, 8 проверенных stories (в т.ч. LeadForm, CalcBreakdown, Sheet) рендерятся без ошибок и без сетевых запросов.

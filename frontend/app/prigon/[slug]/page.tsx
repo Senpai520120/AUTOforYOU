@@ -95,11 +95,11 @@ export default async function LandingPage({ params }: Params) {
       <ModelFaq items={faq} />
 
       <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm" aria-label="Корисні посилання">
-        <Link href={calculatorHref(p.calculation.inputs)} className="text-primary underline underline-offset-4 hover:text-primary/80" data-testid="landing-calc-link">
+        <Link href={calculatorHref(p.calculation.inputs)} className="text-link underline underline-offset-4 hover:text-link/80" data-testid="landing-calc-link">
           {CALC_COST_LABEL} під ваші параметри
         </Link>
-        {howItWorksOn && <Link href="/how-it-works" className="text-primary underline underline-offset-4 hover:text-primary/80">{HOW_IT_WORKS_LABEL}</Link>}
-        <Link href="/prigon" className="text-primary underline underline-offset-4 hover:text-primary/80">Інші моделі</Link>
+        {howItWorksOn && <Link href="/how-it-works" className="text-link underline underline-offset-4 hover:text-link/80">{HOW_IT_WORKS_LABEL}</Link>}
+        <Link href="/prigon" className="text-link underline underline-offset-4 hover:text-link/80">Інші моделі</Link>
       </nav>
 
       <SimilarModels models={similar} />
