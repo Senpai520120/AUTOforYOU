@@ -59,7 +59,7 @@ export default async function HowItWorksPage() {
                   <span className="text-blue-700 mr-2">{i + 1}.</span>
                   {step.title}
                 </h2>
-                {step.duration && <p className="text-xs font-semibold text-slate-500 mt-1">{step.duration}</p>}
+                {step.duration && <p className="text-xs font-semibold text-muted-foreground mt-1">{step.duration}</p>}
                 {step.description && (
                   <p className="text-sm text-slate-600 mt-2 whitespace-pre-line">{step.description}</p>
                 )}
@@ -88,7 +88,7 @@ export default async function HowItWorksPage() {
               <Link href="/prigon" className="text-blue-700 underline" data-testid="how-link-prigon">{LANDING_INDEX_LABEL}: моделі та орієнтовна ціна</Link>
             </p>
           )}
-          <p className="mt-6 text-xs text-slate-500" data-testid="how-partner-phrase">{partnerPhrase(settings?.partner_name)}.</p>
+          <p className="mt-6 text-xs text-muted-foreground" data-testid="how-partner-phrase">{partnerPhrase(settings?.partner_name)}.</p>
         </>
       )}
     </div>

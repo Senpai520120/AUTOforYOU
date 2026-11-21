@@ -81,7 +81,7 @@ export default async function CookiesPage() {
               </tbody>
             </table>
           </div>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-muted-foreground mt-2">
             Cookie <span className="font-mono">access</span> і <span className="font-mono">refresh</span> 
             видаляються під час виходу з акаунта, а сесія скасовується на сервері.
           </p>
@@ -107,7 +107,7 @@ export default async function CookiesPage() {
               </tbody>
             </table>
           </div>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-muted-foreground mt-2">
             Cookie <span className="font-mono">sessionid</span> встановлюється лише при відвідуванні{' '}
             <span className="font-mono">/admin</span> і не стосується звичайних користувачів сайту.
           </p>
@@ -141,7 +141,7 @@ export default async function CookiesPage() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-sm text-slate-500 mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 Після відкликання згоди ці cookie видаляються, а відправка даних припиняється.
               </p>
             </>

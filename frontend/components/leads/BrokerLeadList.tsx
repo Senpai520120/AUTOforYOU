@@ -140,7 +140,7 @@ export default function BrokerLeadList() {
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-slate-500">{fmt(lead.created_at)}</p>
+                    <p className="text-xs text-muted-foreground">{fmt(lead.created_at)}</p>
                   </div>
                   <LeadStatusBadge status={lead.status} label={lead.status_display} />
                 </div>

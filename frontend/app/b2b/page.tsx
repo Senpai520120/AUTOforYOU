@@ -30,7 +30,7 @@ export default function B2BPage() {
       <div className="max-w-xl mx-auto text-center py-24">
         <div className="text-5xl mb-4">🔒</div>
         <h1 className="text-2xl font-bold text-slate-900 mb-3">Доступ обмежено</h1>
-        <p className="text-slate-500 mb-2">B2B-дошка доступна лише для верифікованих перекупників.</p>
+        <p className="text-muted-foreground mb-2">B2B-дошка доступна лише для верифікованих перекупників.</p>
         <p className="text-slate-400 text-sm mb-6">Доступ відкривається менеджером.</p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link href="/me" className="bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-800 transition-colors">
@@ -49,7 +49,7 @@ export default function B2BPage() {
     <div className="max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">B2B-дошка</h1>
-        <p className="text-slate-500 text-sm mt-1">Оптові лоти — лише для верифікованих перекупників</p>
+        <p className="text-muted-foreground text-sm mt-1">Оптові лоти — лише для верифікованих перекупників</p>
       </div>
 
       {listings.length === 0 ? (

@@ -44,7 +44,7 @@ export default function MyCalculationsPage() {
             <div key={c.id} className="bg-white border border-slate-200 rounded-xl p-5">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs text-slate-500">{new Date(c.created_at).toLocaleString('uk-UA')}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString('uk-UA')}</p>
                   <p className="font-bold text-blue-800 text-xl mt-1">
                     {formatUsd(c.breakdown?.total_usd_full ?? c.total_usd)} / {formatUah(c.total_uah)}
                   </p>

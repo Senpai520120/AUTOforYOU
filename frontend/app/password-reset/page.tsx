@@ -36,12 +36,12 @@ export default function PasswordResetRequestPage() {
         {sent ? (
           <div role="status" data-testid="reset-sent">
             <p className="text-slate-700 text-sm mb-4">{sent}</p>
-            <p className="text-slate-500 text-sm mb-4">Лист може йти кілька хвилин. Перевірте також папку «Спам».</p>
+            <p className="text-muted-foreground text-sm mb-4">Лист може йти кілька хвилин. Перевірте також папку «Спам».</p>
             <Link href="/login" className="text-blue-600 hover:underline text-sm">Повернутися до входу</Link>
           </div>
         ) : (
           <>
-            <p className="text-slate-500 text-sm mb-6">
+            <p className="text-muted-foreground text-sm mb-6">
               Вкажіть email акаунту — ми надішлемо посилання для встановлення нового пароля.
             </p>
             <form onSubmit={submit} className="space-y-4">
@@ -59,7 +59,7 @@ export default function PasswordResetRequestPage() {
                 {loading ? 'Надсилаємо...' : 'Надіслати посилання'}
               </button>
             </form>
-            <p className="mt-4 text-sm text-center text-slate-500">
+            <p className="mt-4 text-sm text-center text-muted-foreground">
               <Link href="/login" className="text-blue-600 hover:underline">Повернутися до входу</Link>
             </p>
           </>

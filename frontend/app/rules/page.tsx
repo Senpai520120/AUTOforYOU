@@ -127,7 +127,7 @@ export default async function RulesPage() {
           </p>
         </section>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         Контакти: <EmailOrMissing email={supportContact(s)} />
       </p>
     </LegalPage>

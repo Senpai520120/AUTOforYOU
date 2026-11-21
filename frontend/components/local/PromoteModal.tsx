@@ -71,7 +71,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
     <Modal title="Просування оголошення" onClose={onClose} showClose>
       <div>
         <div>
-          <p className="text-sm text-slate-500 mb-4 truncate">{listingTitle}</p>
+          <p className="text-sm text-muted-foreground mb-4 truncate">{listingTitle}</p>
 
           {/* Sandbox notice */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 mb-4">
@@ -84,7 +84,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
           ) : loadError ? (
             <div className="mb-4"><ErrorState error={loadError} onRetry={loadTariffs} /></div>
           ) : tariffs.length === 0 ? (
-            <p className="text-center text-sm text-slate-500 py-6">Просування тимчасово недоступне</p>
+            <p className="text-center text-sm text-muted-foreground py-6">Просування тимчасово недоступне</p>
           ) : (
             <div className="space-y-2 mb-4">
               {tariffs.map(t => (
@@ -110,8 +110,8 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
                         {Number(t.price).toLocaleString('uk-UA')} {t.currency}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{t.description}</p>
-                    <span className="inline-block mt-1 text-[11px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                    <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
+                    <span className="inline-block mt-1 text-[11px] bg-slate-100 text-muted-foreground px-1.5 py-0.5 rounded">
                       {TYPE_LABELS[t.type]}
                       {t.duration_days > 0 ? ` · ${t.duration_days} дн.` : ''}
                     </span>

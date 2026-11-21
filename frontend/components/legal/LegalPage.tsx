@@ -24,7 +24,7 @@ export function OwnerDetails({ settings }: { settings: SiteSettings | null }) {
 
 /** Email-посилання або «не заповнено». */
 export function EmailOrMissing({ email }: { email: string }) {
-  if (!email) return <span className="text-slate-500">{NOT_FILLED}</span>;
+  if (!email) return <span className="text-muted-foreground">{NOT_FILLED}</span>;
   return (
     <a href={`mailto:${email}`} className="font-mono text-blue-600 hover:underline">
       {email}
@@ -56,7 +56,7 @@ export default function LegalPage({ title, settings, showOwner = true, children 
 
       <div className="prose prose-slate max-w-none space-y-6 text-slate-700 [&_a]:underline">
         {children}
-        <p className="text-xs text-slate-500 mt-10 border-t pt-4">
+        <p className="text-xs text-muted-foreground mt-10 border-t pt-4">
           Останнє оновлення: {date || NOT_FILLED}
         </p>
       </div>

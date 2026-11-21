@@ -80,7 +80,7 @@ export default function SecurityPage() {
 
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-2">Сесії</h2>
-        <p className="text-sm text-slate-500 mb-4">Завершить усі сесії, зокрема на цьому пристрої. Знадобиться увійти знову.</p>
+        <p className="text-sm text-muted-foreground mb-4">Завершить усі сесії, зокрема на цьому пристрої. Знадобиться увійти знову.</p>
         {allError && <p role="alert" className="text-red-600 text-sm mb-2">{allError}</p>}
         <button type="button" onClick={exitAll}
           className="border border-slate-300 hover:border-red-300 hover:text-red-600 text-slate-700 px-5 py-2 rounded-xl text-sm transition-colors">

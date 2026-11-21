@@ -91,7 +91,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
+      <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/me" className="hover:text-blue-700">Кабінет</Link>
         <span>/</span>
         <span>Сповіщення</span>
@@ -138,7 +138,7 @@ export default function NotificationsPage() {
                       )}
                     </div>
                     {item.text && (
-                      <p className="text-xs text-slate-500 mt-0.5 truncate">{item.text}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.text}</p>
                     )}
                     <p className="text-xs text-slate-400 mt-0.5">{timeAgo(item.created_at)}</p>
                   </div>

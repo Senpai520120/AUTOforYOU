@@ -94,10 +94,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Snapshot({ lead }: { lead: BrokerLeadDetail }) {
   const snap = lead.calculation_snapshot ?? {};
   const breakdown = Object.entries(snap.breakdown ?? {});
-  if (!snap.total_usd && breakdown.length === 0) return <p className="text-sm text-slate-500">Розрахунку немає</p>;
+  if (!snap.total_usd && breakdown.length === 0) return <p className="text-sm text-muted-foreground">Розрахунку немає</p>;
   return (
     <div className="text-sm">
-      {snap.created_at && <p className="text-slate-500 mb-2">Курси на {fmt(snap.created_at)}</p>}
+      {snap.created_at && <p className="text-muted-foreground mb-2">Курси на {fmt(snap.created_at)}</p>}
       {breakdown.length > 0 && (
         <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
           {breakdown.map(([k, v]) => (
@@ -239,7 +239,7 @@ export default function BrokerLeadCard({ id }: { id: number }) {
             </div>
           </>
         ) : (
-          <p className="text-sm text-slate-500">Заявку закрито, переходів немає.</p>
+          <p className="text-sm text-muted-foreground">Заявку закрито, переходів немає.</p>
         )}
         <label className="block text-sm text-slate-700 mt-4">
           <span className="block mb-1">Статус за словами партнера</span>
@@ -274,7 +274,7 @@ export default function BrokerLeadCard({ id }: { id: number }) {
           ))}
         </div>
         {lead.attribution_until && (
-          <p className="mt-3 text-xs text-slate-500">Атрибуція партнера діє до {fmt(lead.attribution_until)}</p>
+          <p className="mt-3 text-xs text-muted-foreground">Атрибуція партнера діє до {fmt(lead.attribution_until)}</p>
         )}
       </Section>
 
@@ -285,7 +285,7 @@ export default function BrokerLeadCard({ id }: { id: number }) {
               <p className="text-slate-900">
                 {h.from_status_display ? `${h.from_status_display} → ` : ''}<strong>{h.to_status_display}</strong>
               </p>
-              <p className="text-xs text-slate-500">{fmt(h.created_at)} · {h.changed_by ? h.changed_by.name : 'клієнт / система'}</p>
+              <p className="text-xs text-muted-foreground">{fmt(h.created_at)} · {h.changed_by ? h.changed_by.name : 'клієнт / система'}</p>
               {h.note && <p className="text-slate-700 break-words">{h.note}</p>}
             </li>
           ))}

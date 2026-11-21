@@ -10,7 +10,7 @@ export default function ComingSoon({ variant = 'section' }: { variant?: 'section
       <h1 className="text-2xl font-bold text-slate-900 mb-2">
         {posting ? 'Подача оголошень скоро відкриється' : `${CATALOG_LABEL} — незабаром`}
       </h1>
-      <p className="text-slate-500 mb-6">
+      <p className="text-muted-foreground mb-6">
         {posting
           ? 'Зараз оголошення додає команда сайту. Перегляньте каталог.'
           : 'Розділ ще готується до запуску. Тим часом порахуйте вартість авто з США.'}

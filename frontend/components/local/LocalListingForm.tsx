@@ -564,7 +564,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         {/* 8.5: ліміт довжини з /local/config/ (description_max), лічильник «N / max» */}
         {descriptionMax > 0 && (
           <p id={fid('desc-count')} data-testid="description-counter"
-            className={`text-xs mt-1 text-right ${descriptionTooLong ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+            className={`text-xs mt-1 text-right ${descriptionTooLong ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
             {description.length} / {descriptionMax}
           </p>
         )}

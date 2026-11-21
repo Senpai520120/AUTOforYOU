@@ -18,7 +18,7 @@ export default function Error({
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4" data-testid="error-page">
       <p className="text-6xl mb-4">⚠</p>
       <h2 className="text-2xl font-bold text-slate-900 mb-2">Щось пішло не так</h2>
-      <p className="text-slate-500 mb-8 max-w-sm">
+      <p className="text-muted-foreground mb-8 max-w-sm">
         Сталася помилка при завантаженні сторінки. Спробуйте ще раз.
       </p>
       <div className="flex gap-3">

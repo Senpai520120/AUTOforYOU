@@ -21,7 +21,7 @@ export default function ListingsGrid({
   if (data === null) {
     return (
       <div className="text-center py-16">
-        <p className="text-slate-500">Не вдалося завантажити список оголошень.</p>
+        <p className="text-muted-foreground">Не вдалося завантажити список оголошень.</p>
         <p className="text-slate-400 text-sm mt-1">Спробуйте оновити сторінку пізніше.</p>
       </div>
     );
@@ -31,7 +31,7 @@ export default function ListingsGrid({
     return (
       <div className="text-center py-20">
         <p className="text-5xl mb-4" aria-hidden="true">🚗</p>
-        <p className="text-slate-500 text-lg">Оголошень не знайдено</p>
+        <p className="text-muted-foreground text-lg">Оголошень не знайдено</p>
         <p className="text-slate-400 text-sm mt-1">Спробуйте змінити фільтри</p>
       </div>
     );
@@ -41,7 +41,7 @@ export default function ListingsGrid({
 
   return (
     <>
-      <p className="text-sm text-slate-500 mb-4">Знайдено: {data.count}</p>
+      <p className="text-sm text-muted-foreground mb-4">Знайдено: {data.count}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {data.results.map((l, i) => (
           <ListingCard key={l.id} listing={l} priority={i === 0} />

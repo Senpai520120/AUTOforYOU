@@ -70,7 +70,7 @@ export default function MyShipmentsPage() {
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <p className="font-bold text-slate-900 text-lg">{s.container_no}</p>
-                    {s.vessel && <p className="text-sm text-slate-500">{s.vessel}</p>}
+                    {s.vessel && <p className="text-sm text-muted-foreground">{s.vessel}</p>}
                   </div>
                   <div className="text-right">
                     <Badge variant={s.status === 'delivered' ? 'success' : 'info'}>
@@ -87,7 +87,7 @@ export default function MyShipmentsPage() {
                   ))}
                 </div>
                 <p className="text-xs text-slate-400 mt-1">{step + 1} / {STATUS_STEPS.length} кроків</p>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   {s.vehicle_count} авто · порт: {s.arrival_port_eu}
                 </p>
               </div>

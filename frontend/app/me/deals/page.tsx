@@ -13,7 +13,7 @@ import { getErrorMessage } from '@/lib/errors';
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   proposed:  { label: 'Очікує підтвердження', cls: 'bg-amber-100 text-amber-800' },
   confirmed: { label: 'Підтверджено',          cls: 'bg-green-100 text-green-800' },
-  cancelled: { label: 'Скасовано',             cls: 'bg-slate-100 text-slate-500' },
+  cancelled: { label: 'Скасовано',             cls: 'bg-slate-100 text-muted-foreground' },
 };
 
 function StarRating({ rating }: { rating: number }) {
@@ -48,7 +48,7 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
           <Link href={`/local/${deal.listing.id}`} className="font-semibold text-blue-700 hover:underline">
             {deal.listing.make} {deal.listing.model} {deal.listing.year}
           </Link>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {isBuyer ? `Продавець: ${deal.seller.display_name}` : `Покупець: ${deal.buyer.display_name}`}
           </p>
         </div>
@@ -77,7 +77,7 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
       {deal.status === 'proposed' && !isBuyer && (
         <button
           onClick={() => onCancel(deal.id)}
-          className="w-full border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm py-1.5 rounded-lg"
+          className="w-full border border-slate-300 text-muted-foreground hover:bg-slate-50 text-sm py-1.5 rounded-lg"
         >
           Скасувати пропозицію
         </button>
@@ -119,7 +119,7 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
 
       {deal.review && (
         <div className="border-t border-slate-100 pt-3">
-          <p className="text-xs text-slate-500 mb-1">Ваш відгук:</p>
+          <p className="text-xs text-muted-foreground mb-1">Ваш відгук:</p>
           <StarRating rating={deal.review.rating} />
           {deal.review.text && <p className="text-sm text-slate-700 mt-1">{deal.review.text}</p>}
         </div>

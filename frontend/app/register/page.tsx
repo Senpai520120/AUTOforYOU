@@ -98,7 +98,7 @@ function RegisterForm() {
               підтвердженням не надіслано.
             </p>
           )}
-          <p className="mt-4 text-sm text-slate-500">
+          <p className="mt-4 text-sm text-muted-foreground">
             <Link href={loginHref} className="text-blue-600 hover:underline">Перейти до входу</Link>
           </p>
         </div>
@@ -178,7 +178,7 @@ function RegisterForm() {
             {loading ? 'Реєстрація...' : 'Зареєструватися'}
           </button>
         </form>
-        <p className="mt-4 text-sm text-center text-slate-500">
+        <p className="mt-4 text-sm text-center text-muted-foreground">
           Вже є акаунт? <Link href={loginHref} className="text-blue-600 underline">Увійти</Link>
         </p>
       </div>

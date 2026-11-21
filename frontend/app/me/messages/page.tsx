@@ -196,7 +196,7 @@ export default function MessagesPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
+      <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/me" className="hover:text-blue-700">Кабінет</Link>
         <span>/</span>
         <span>Повідомлення</span>
@@ -324,7 +324,7 @@ export default function MessagesPage() {
                       <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2 text-sm ${isMine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'}`}>
                           {!isMine && (
-                            <div className="text-xs font-semibold mb-1 text-slate-500">{msg.sender_name}</div>
+                            <div className="text-xs font-semibold mb-1 text-muted-foreground">{msg.sender_name}</div>
                           )}
                           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                           <div className={`text-xs mt-1 ${isMine ? 'text-blue-200' : 'text-slate-400'} text-right`}>

@@ -53,7 +53,7 @@ export default async function RefundPage() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-sm text-slate-500 mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 Актуальні ціни вказані на сторінці оголошення в момент замовлення послуги.
                 Оплата приймається через платіжний сервіс LiqPay.
               </p>

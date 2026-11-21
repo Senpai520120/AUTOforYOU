@@ -117,7 +117,7 @@ export default async function SellerPage({ params, searchParams }: { params: Par
         {(previous || next) && (
           <nav aria-label="Сторінки" className="mt-6 flex justify-center gap-3 text-sm">
             {previous && <Link className="text-blue-700 hover:underline" href={`/sellers/${s.id}?page=${page - 1}`}>← Попередня</Link>}
-            <span className="text-slate-500">Сторінка {page}</span>
+            <span className="text-muted-foreground">Сторінка {page}</span>
             {next && <Link className="text-blue-700 hover:underline" href={`/sellers/${s.id}?page=${page + 1}`}>Наступна →</Link>}
           </nav>
         )}

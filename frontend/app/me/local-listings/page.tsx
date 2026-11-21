@@ -23,8 +23,8 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   rejected: { label: 'Відхилено',       cls: 'bg-red-100 text-red-800' },
   hidden:   { label: 'Приховане',       cls: 'bg-slate-100 text-slate-600' },
   sold:     { label: 'Продано',         cls: 'bg-blue-100 text-blue-800' },
-  expired:  { label: 'Закінчилося',     cls: 'bg-slate-100 text-slate-500' },
-  draft:    { label: 'Чернетка',        cls: 'bg-slate-100 text-slate-500' },
+  expired:  { label: 'Закінчилося',     cls: 'bg-slate-100 text-muted-foreground' },
+  draft:    { label: 'Чернетка',        cls: 'bg-slate-100 text-muted-foreground' },
 };
 
 function daysUntil(dateStr: string | null): number | null {
@@ -137,12 +137,12 @@ export default function MyLocalListingsPage() {
       {soldModal && (
         <Modal title="Позначити як продано" onClose={() => setSoldModal(null)}>
           <div>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               {soldModal.listing.make} {soldModal.listing.model} {soldModal.listing.year} — оберіть покупця:
             </p>
             {soldModal.loading && <p className="text-slate-400 text-sm py-4 text-center">Завантаження...</p>}
             {!soldModal.loading && soldModal.buyers.length === 0 && (
-              <p className="text-slate-500 text-sm py-3 text-center">Ніхто ще не писав по цьому оголошенню.</p>
+              <p className="text-muted-foreground text-sm py-3 text-center">Ніхто ще не писав по цьому оголошенню.</p>
             )}
             {soldError && <p role="alert" className="text-red-600 text-sm mb-2">{soldError}</p>}
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -159,7 +159,7 @@ export default function MyLocalListingsPage() {
             </div>
             <button
               onClick={() => setSoldModal(null)}
-              className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700"
+              className="mt-4 w-full text-sm text-muted-foreground hover:text-slate-700"
             >
               Закрити
             </button>
@@ -187,7 +187,7 @@ export default function MyLocalListingsPage() {
       ) : (
         <div className="space-y-4">
           {listings.map(l => {
-            const badge = STATUS_BADGE[l.status] ?? { label: l.status, cls: 'bg-slate-100 text-slate-500' };
+            const badge = STATUS_BADGE[l.status] ?? { label: l.status, cls: 'bg-slate-100 text-muted-foreground' };
             const daysLeft = daysUntil(l.expires_at);
             const expiringSoon = l.status === 'active' && daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
             const isTop = l.promoted_until && new Date(l.promoted_until) > new Date();
@@ -209,7 +209,7 @@ export default function MyLocalListingsPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <p className="text-sm text-muted-foreground mt-1">
                       {Number(l.price).toLocaleString('uk-UA')} {l.currency}
                       {' · '}{l.city_name}, {l.region_name}
                       {' · '}{l.mileage_km.toLocaleString()} км

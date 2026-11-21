@@ -99,7 +99,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
               ['Статус', listing.status === 'in_transit' ? 'В дорозі' : listing.status === 'in_stock' ? 'В наявності' : 'Продано'],
             ].map(([label, val]) => (
               <div key={label}>
-                <dt className="text-xs text-slate-500 font-semibold uppercase tracking-wide">{label}</dt>
+                <dt className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">{label}</dt>
                 <dd className="mt-0.5 text-slate-900">{val}</dd>
               </div>
             ))}
@@ -107,7 +107,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
 
           {listing.repair_description && (
             <div className="mt-5 bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Опис ремонту</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">Опис ремонту</p>
               <p className="text-sm text-slate-700 whitespace-pre-wrap">{listing.repair_description}</p>
             </div>
           )}

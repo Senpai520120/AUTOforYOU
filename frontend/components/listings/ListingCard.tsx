@@ -59,7 +59,7 @@ export default function ListingCard({ listing, priority = false }: { listing: Li
           <p className="font-bold text-slate-900 text-lg group-hover:text-blue-700 transition-colors truncate">
             {v.year} {v.make} {v.model}
           </p>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {FUEL_LABELS[v.fuel_type] ?? v.fuel_type} · {(v.engine_cc / 1000).toFixed(1)}L · {v.mileage_km.toLocaleString('uk-UA')} км
           </p>
           {v.damage_type && (

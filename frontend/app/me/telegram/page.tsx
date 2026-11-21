@@ -80,13 +80,13 @@ export default function TelegramPage() {
 
   return (
     <div className="max-w-lg mx-auto">
-      <button onClick={() => router.back()} className="text-slate-500 hover:text-slate-800 text-sm mb-4 flex items-center gap-1">
+      <button onClick={() => router.back()} className="text-muted-foreground hover:text-slate-800 text-sm mb-4 flex items-center gap-1">
         ← Назад
       </button>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6">
         <h1 className="text-xl font-bold text-slate-900 mb-1">Telegram</h1>
-        <p className="text-sm text-slate-500 mb-6">Отримуйте сповіщення про нові повідомлення, оголошення та угоди прямо в Telegram.</p>
+        <p className="text-sm text-muted-foreground mb-6">Отримуйте сповіщення про нові повідомлення, оголошення та угоди прямо в Telegram.</p>
 
         {/* 4.10: статус телефону — підтверджується контактом у боті після прив'язки */}
         <p role="status" data-testid="phone-status"
@@ -146,7 +146,7 @@ export default function TelegramPage() {
                 <p className="text-xs text-slate-400 text-center">{until ? `Посилання діє до ${until}. ` : ''}Після прив'язки оновіть сторінку.</p>
                 <button
                   onClick={handleGenerateLink}
-                  className="w-full text-sm text-slate-500 hover:text-slate-700 underline"
+                  className="w-full text-sm text-muted-foreground hover:text-slate-700 underline"
                 >
                   Отримати нове посилання
                 </button>

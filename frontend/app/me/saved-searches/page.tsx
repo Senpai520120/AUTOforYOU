@@ -70,7 +70,7 @@ export default function SavedSearchesPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
+      <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/me" className="hover:text-blue-700">Кабінет</Link>
         <span>/</span>
         <span>Збережені пошуки</span>
@@ -92,7 +92,7 @@ export default function SavedSearchesPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-slate-900 text-sm">{item.name}</div>
-                  <div className="text-xs text-slate-500 mt-0.5 truncate">{filtersLabel(item.filters)}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 truncate">{filtersLabel(item.filters)}</div>
                   {item.last_notified_at && (
                     <div className="text-xs text-slate-400 mt-0.5">
                       Останнє сповіщення: {new Date(item.last_notified_at).toLocaleDateString('uk-UA')}

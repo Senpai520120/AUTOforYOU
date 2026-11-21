@@ -36,7 +36,7 @@ export default async function TermsPage() {
           <p>
             Послугу пригону автомобіля надає партнер, а не AUTOforYOU.
           </p>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Усі розрахунки є орієнтовними (is_estimate: true) та не є офіційною консультацією.
             Актуальні митні ставки необхідно уточнювати на офіційних ресурсах Митної служби України.
           </p>

@@ -99,7 +99,7 @@ export default function MeDashboard() {
           </div>
           <div>
             <h1 className="font-bold text-slate-900 text-lg">{user.first_name || user.email}</h1>
-            <p className="text-slate-500 text-sm">{user.email}</p>
+            <p className="text-muted-foreground text-sm">{user.email}</p>
             <div className="flex gap-2 mt-1">
               <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-semibold">
                 {ROLE_LABELS[user.role] ?? 'Покупець'}
@@ -119,7 +119,7 @@ export default function MeDashboard() {
             <span className="text-3xl" aria-hidden="true">{item.icon}</span>
             <div>
               <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">{item.title}</p>
-              <p className="text-sm text-slate-500">{item.desc}</p>
+              <p className="text-sm text-muted-foreground">{item.desc}</p>
             </div>
             <span className="ml-auto text-slate-400 group-hover:text-blue-600">→</span>
           </Link>

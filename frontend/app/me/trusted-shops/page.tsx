@@ -116,7 +116,7 @@ export default function TrustedShopsPage() {
             <div key={s.id} className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-start">
               <div>
                 <p className="font-semibold text-slate-900">{s.name}</p>
-                <p className="text-xs text-slate-500">{TYPE_LABELS[s.type]} · {'★'.repeat(s.rating)}</p>
+                <p className="text-xs text-muted-foreground">{TYPE_LABELS[s.type]} · {'★'.repeat(s.rating)}</p>
                 {s.contacts && <p className="text-sm text-slate-600 mt-1">{s.contacts}</p>}
                 {s.notes && <p className="text-xs text-slate-400 mt-0.5">{s.notes}</p>}
               </div>

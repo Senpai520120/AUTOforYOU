@@ -70,7 +70,7 @@ function ProfileForm({ user, onSaved }: { user: User; onSaved: () => Promise<voi
       <h1 className="text-2xl font-bold text-slate-900 mt-2 mb-6">Профіль</h1>
 
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
-        <p className="text-sm text-slate-500 mb-4">
+        <p className="text-sm text-muted-foreground mb-4">
           Email: <span className="font-semibold text-slate-700">{user.email}</span> (змінити email не можна)
         </p>
         <form onSubmit={submit} noValidate className="space-y-4">

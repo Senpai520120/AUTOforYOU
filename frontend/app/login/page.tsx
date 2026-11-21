@@ -95,10 +95,10 @@ function LoginForm() {
             Увійти через SSO
           </a>
         )}
-        <p className="mt-4 text-sm text-center text-slate-500">
+        <p className="mt-4 text-sm text-center text-muted-foreground">
           <Link href="/password-reset" className="text-blue-600 hover:underline">Забули пароль?</Link>
         </p>
-        <p className="mt-2 text-sm text-center text-slate-500">
+        <p className="mt-2 text-sm text-center text-muted-foreground">
           Немає акаунту? <Link href={next === '/me' ? '/register' : `/register?${new URLSearchParams({ next })}`} className="text-blue-600 underline">Реєстрація</Link>
         </p>
       </div>

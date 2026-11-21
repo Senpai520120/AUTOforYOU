@@ -37,7 +37,7 @@ export default function DealerApplyPage() {
       <div className="max-w-md mx-auto text-center py-24">
         <div className="text-5xl mb-4">✅</div>
         <h1 className="text-2xl font-bold text-slate-900 mb-3">Заявку подано!</h1>
-        <p className="text-slate-500 mb-6">Менеджер розгляне її та повідомить вас на email.</p>
+        <p className="text-muted-foreground mb-6">Менеджер розгляне її та повідомить вас на email.</p>
         <button
           onClick={() => router.push('/me')}
           className="bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-800 transition-colors"
@@ -84,7 +84,7 @@ export default function DealerApplyPage() {
   return (
     <div className="max-w-lg mx-auto py-12">
       <h1 className="text-2xl font-bold text-slate-900 mb-2">Заявка на B2B-доступ</h1>
-      <p className="text-slate-500 mb-8 text-sm">
+      <p className="text-muted-foreground mb-8 text-sm">
         Заповніть форму — менеджер розгляне вашу заявку та надасть доступ до оптового каталогу.
       </p>
 

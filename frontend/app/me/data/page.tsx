@@ -74,7 +74,7 @@ export default function MyDataPage() {
 
       <section className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-2">Копія моїх даних</h2>
-        <p className="text-sm text-slate-500 mb-4">
+        <p className="text-sm text-muted-foreground mb-4">
           Файл JSON з профілем, оголошеннями, заявками, розрахунками, перепискою, угодами, платежами
           та журналом ваших згод. Інших користувачів у файлі видно лише за відображуваним ім&apos;ям.
         </p>
@@ -101,7 +101,7 @@ export default function MyDataPage() {
           </div>
         ) : (
           <form onSubmit={remove} className="space-y-4">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted-foreground">
               Оголошення одразу знімаються з публікації, усі пристрої виходять з акаунта. Протягом
               періоду скасування видалення можна скасувати. Після нього ім&apos;я, телефон і email
               стираються, угоди й платежі зберігаються у знеособленому вигляді.

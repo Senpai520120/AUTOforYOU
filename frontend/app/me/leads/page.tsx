@@ -54,7 +54,7 @@ export default function MyLeadsPage() {
               <div className="flex justify-between items-start gap-3">
                 <div>
                   <p className="font-mono font-bold text-slate-900">{lead.public_id}</p>
-                  <p className="text-xs text-slate-500">{new Date(lead.created_at).toLocaleString('uk-UA')}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(lead.created_at).toLocaleString('uk-UA')}</p>
                   {lead.vehicle_label && <p className="text-sm text-slate-700 mt-1">{lead.vehicle_label}</p>}
                 </div>
                 <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-semibold">
