@@ -61,13 +61,11 @@ log_format main_anon '$remote_addr_anon - [$time_local] "$request_method $uri $s
                      '$status $body_bytes_sent $request_time';
 access_log /var/log/nginx/access.log main_anon;
 
-upstream backend {
-    server backend:8000;
-}
-
-upstream frontend {
-    server frontend:3000;
-}
+# Docker DNS: адрес backend/frontend резолвится при каждом запросе (TTL 10 с), а не один раз при старте nginx.
+# Иначе после пересоздания контейнера (новый IP) nginx шлёт на старый адрес и весь /api/ отдаёт 503.
+# proxy_pass с переменной (set $..._upstream) без URI-части передаёт исходный $request_uri без изменений.
+resolver 127.0.0.11 valid=10s ipv6=off;
+resolver_timeout 5s;
 
 # Сгенерировано скриптом: real_ip (Cloudflare), карты X-Forwarded-Proto и HSTS.
 include /etc/nginx/generated/real-ip.conf;

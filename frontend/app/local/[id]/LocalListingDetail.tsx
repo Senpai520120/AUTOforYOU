@@ -1,5 +1,6 @@
 'use client';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { LocalListing } from '@/lib/types';
@@ -107,6 +108,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               className="object-cover"
               sizes="(max-width: 1024px) 100vw, 50vw"
               priority
+              unoptimized={isLocalMediaUrl(mainImg)}
               onError={() => markFailed(activeSrc)}
             />
           </div>
@@ -126,6 +128,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                     fill
                     className="object-cover"
                     sizes="64px"
+                    unoptimized={isLocalMediaUrl(thumbSrc)}
                     onError={() => markFailed(thumbSrc)}
                   />
                 </button>

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import { Listing } from '@/lib/types';
 import { listingSlug } from '@/lib/utils';
 import Badge from '@/components/ui/Badge';
@@ -36,6 +37,7 @@ export default function ListingCard({ listing, priority = false }: { listing: Li
               {...(priority ? { loading: 'eager', fetchPriority: 'high' } as const : {})}
               className="object-cover"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              unoptimized={isLocalMediaUrl(imgSrc)}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-slate-300" aria-label="Фото відсутнє">

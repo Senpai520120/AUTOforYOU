@@ -251,3 +251,37 @@ def record_price_change(listing: LocalListing) -> bool:
         return False
     ListingPriceHistory.objects.create(listing=listing, price=price, currency=listing.currency)
     return True
+
+
+# 10.30: фото закрытых объявлений. Ссылка на /media/local_listings/... работает по UUID без авторизации,
+# поэтому у rejected и sold файлы не должны лежать вечно. Hidden/expired не трогаем: владелец может вернуть их.
+PURGE_PHOTO_STATUSES = (LocalListing.Status.REJECTED, LocalListing.Status.SOLD)
+
+
+def photo_purge_days() -> int:
+    from django.conf import settings
+    return max(1, int(settings.LOCAL_LISTING_PHOTO_PURGE_DAYS))
+
+
+def listings_due_for_photo_purge(now=None):
+    """Объявления rejected/sold, закрытые (updated_at) не позже N дней назад и ещё с фото."""
+    from datetime import timedelta
+    border = (now or timezone.now()) - timedelta(days=photo_purge_days())
+    return LocalListing.objects.filter(
+        status__in=PURGE_PHOTO_STATUSES, updated_at__lte=border, images__isnull=False,
+    ).distinct()
+
+
+def purge_listing_photos(listing: LocalListing) -> int:
+    """Удалить фото объявления (записи; файлы и миниатюры уйдут сигналом post_delete после коммита).
+
+    Только для rejected/sold: иначе 0. Идемпотентно. Возвращает число удалённых фото.
+    """
+    if listing.status not in PURGE_PHOTO_STATUSES:
+        return 0
+    count = 0
+    with transaction.atomic():
+        for image in listing.images.all():
+            image.delete()
+            count += 1
+    return count
