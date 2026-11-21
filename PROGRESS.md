@@ -6,6 +6,16 @@
 
 ---
 
+## Задача 11.15: Storybook и визуальные тесты (2026-11-21)
+
+- Совместимость подтверждена: `storybook`, `@storybook/nextjs-vite`, `@storybook/addon-a11y`, `@storybook/addon-docs` 10.6.8 и `vite` 8.3.8 (exact, devDependencies) с Next 16.4.6, React 19.3.1, Tailwind 4. `build-storybook` проходит, 8 проверенных stories (в т.ч. LeadForm, CalcBreakdown, Sheet) рендерятся без ошибок и без сетевых запросов.
+- Конфиг: `frontend/.storybook/{main,preview}.ts` (кэш Vite в `node_modules/.cache`, т.е. на диске D). `preview.ts` подключает `app/globals.css`, глобально подменяет `fetch` фейком (`stories/fixtures/site.ts`), `parameters.a11y.test = 'error'`. Шрифт Manrope (next/font/google) в Storybook не подключён: нужна сеть при сборке, работает fallback `--font-sans` (system-ui); метрики текста чуть отличаются от сайта. Нарушения a11y как ошибки сработают при прогоне через vitest-аддон (не ставили); сейчас они видны в панели a11y.
+- Stories: 11 `components/shadcn/*` (button, badge, card, input, label, select, separator, sheet, skeleton, tabs, textarea), `local/LocalListingCard`, `calculator/CalcBreakdown`, `leads/LeadForm`, `ui/EmptyState`, `ui/ErrorState`. Фикстуры без ПДн: `frontend/stories/fixtures/`.
+- Скрипты `npm run storybook` / `build-storybook`; `storybook-static/` в `.gitignore` и `globalIgnores` eslint. CI: шаг «Build Storybook» в frontend-джобе (сборка ~8 с).
+- Замеры: `node_modules` 558 591 КБ -> 656 408 КБ (+~98 МБ); `build-storybook` ~8 с локально; `next build` ~15 с. Время скриншот-прогона в CI пока не замерено (снимков нет).
+- Визуальные тесты: `e2e/visual.spec.ts` (главная, /calculator, /ua; Chromium, `maxDiffPixelRatio` 0.02, маски карточек/дат) оформлен как `test.fixme('11.15-VIS → ...')`: базовые снимки с Windows не коммитим (иной рендер, CI на Linux покраснеет). Как снять: убрать `.fixme`, на Linux (CI или контейнер `mcr.microsoft.com/playwright`) со стеком e2e по CLAUDE.md выполнить `npx playwright test visual.spec.ts --project=chromium --update-snapshots`, закоммитить `e2e/visual.spec.ts-snapshots/*-chromium-linux.png`; затем два прогона подряд и проверка мутацией (цвет кнопки). Лендинг, карточка и форма заявки в снимки не включены (нужны сид-данные) - добавить при съёмке.
+- Не проверено: `npm audit` без `--omit=dev` показывает 11 moderate (minimatch в dev-цепочке Storybook); CI проверяет `--omit=dev` (0).
+
 ## Задача 11.14b: каталог /ua, карточка объявления, форма заявки (2026-11-21)
 
 - `/ua`: карточки на `Card` (фото 4:3 без CLS, цена крупно, параметры с иконками lucide), фильтры на `Card`/`Input`/`Button` (нативные `select` сохранены), пагинация и пустые/ошибочные состояния на токенах. Карточка `/local/[id]`: галерея, цена 4xl, характеристики сеткой `dl` с иконками, блок продавца и контактов, кнопки на `Button`. `LeadForm`/`LeadSuccess` на `Input`/`Label`/`Textarea`/`Button`, ошибки с иконкой и текстом. Общие `ui/*` (Badge, EmptyState, ErrorState, Skeleton, Modal, ConfirmDialog, FlashMessage, CookieBanner/Settings/SettingsLink, MobileActionBar, FallbackContact, EmailNotVerified) и вспомогательные (SaveSearch, WriteSeller, Report, Heart, ScamWarning, SellerBlock, GuestPhoneReveal, CityAutocomplete) на токенах. Общие классы полей: `components/local/field-classes.ts`.

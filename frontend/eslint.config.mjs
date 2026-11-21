@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
     "test-results/**",
     "blob-report/**",
+    // Сборка Storybook (11.15): сгенерированный бандл.
+    "storybook-static/**",
   ]),
   {
     rules: {

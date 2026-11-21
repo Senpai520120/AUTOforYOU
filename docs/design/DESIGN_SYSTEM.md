@@ -103,6 +103,16 @@ Manrope (Google Fonts, OFL) через `next/font/google` в `frontend/app/layou
 - Фокус: глобальное правило в `globals.css` (`outline: 2px solid var(--ring)`, поведение 10.28), для shadcn-компонентов — собственный `ring`. На тёмных блоках (шапка, подвал) атрибут `data-on-dark` переключает обводку на светлую. `@media (forced-colors: active)`: обводка `Highlight`.
 - Тёмная тема: отложена (решение 11.14); при правках проверять оба набора токенов.
 
+## Storybook (11.15)
+
+- Запуск (из `frontend/`): `npm run storybook` (http://localhost:6006), сборка — `npm run build-storybook` (выход `storybook-static/`, в git не попадает; в CI собирается шагом «Build Storybook»).
+- Фреймворк `@storybook/nextjs-vite`, аддоны a11y и docs. Конфиг — `frontend/.storybook/`. Токены берутся из `app/globals.css`.
+- Stories лежат рядом с компонентами (`*.stories.tsx`); данные — `frontend/stories/fixtures/` (фейковые, без ПДн). Запросы к API подменены в `preview.ts`, сети нет.
+- Шрифт Manrope в Storybook не грузится (next/font), используется системный fallback из `--font-sans`.
+- Кэш Vite — `frontend/node_modules/.cache/storybook-vite` (диск D).
+- Новый компонент в `components/shadcn` — добавлять рядом `<name>.stories.tsx`.
+- Визуальные снимки страниц: `e2e/visual.spec.ts`, инструкция по съёмке базы в шапке файла и в PROGRESS.
+
 ## Лицензии
 
 - shadcn/ui — MIT: https://github.com/shadcn-ui/ui/blob/main/LICENSE.md
