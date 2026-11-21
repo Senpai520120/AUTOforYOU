@@ -1,4 +1,7 @@
+import { CircleAlert } from 'lucide-react';
 import { getErrorMessage } from '@/lib/errors';
+import { Button } from '@/components/shadcn/button';
+import { ICON_STROKE } from '@/lib/utils';
 
 interface Props {
   error: unknown;
@@ -8,16 +11,15 @@ interface Props {
 /** Помилка завантаження з кнопкою повтору. */
 export default function ErrorState({ error, onRetry }: Props) {
   return (
-    <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-      <p className="text-sm text-red-700 font-medium">{getErrorMessage(error)}</p>
+    <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-8 text-center">
+      <p className="flex items-center justify-center gap-2 text-sm font-medium text-destructive">
+        <CircleAlert className="size-5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+        {getErrorMessage(error)}
+      </p>
       {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-3 px-4 py-2 text-sm font-semibold rounded-lg bg-white border border-red-300 text-red-700 hover:bg-red-100"
-        >
+        <Button type="button" variant="outline" onClick={onRetry} className="mt-3">
           Спробувати ще раз
-        </button>
+        </Button>
       )}
     </div>
   );

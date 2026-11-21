@@ -1,4 +1,5 @@
 'use client';
+import { Button } from '@/components/shadcn/button';
 /**
  * Кнопка «Залишити заявку» поруч з підсумком (10.12): не відправляє, а веде до форми заявки
  * (прокрутка + фокус на перше поле). Якщо форми на сторінці немає (екран успіху) - нічого не робить.
@@ -13,9 +14,9 @@ export function scrollToLeadForm(): void {
 
 export default function LeadCta({ className = '' }: { className?: string }) {
   return (
-    <button type="button" data-testid="lead-cta" onClick={scrollToLeadForm}
-      className={`bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 px-6 rounded-xl transition-colors ${className}`}>
+    <Button type="button" size="lg" data-testid="lead-cta" onClick={scrollToLeadForm}
+      className={`font-bold ${className}`}>
       Залишити заявку
-    </button>
+    </Button>
   );
 }

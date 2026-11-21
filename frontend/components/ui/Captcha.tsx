@@ -140,7 +140,7 @@ function TurnstileWidget({ siteKey, onToken, resetKey }: {
   return (
     <div>
       <div ref={box} data-testid="captcha-widget" />
-      {failed && <p role="alert" className="text-red-600 text-sm">{CAPTCHA_LOAD_ERROR}</p>}
+      {failed && <p role="alert" className="text-destructive text-sm">{CAPTCHA_LOAD_ERROR}</p>}
     </div>
   );
 }

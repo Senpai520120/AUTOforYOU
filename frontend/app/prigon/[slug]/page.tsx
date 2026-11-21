@@ -58,7 +58,7 @@ export default async function LandingPage({ params }: Params) {
   if (result.status === 'error') {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10" data-testid="landing-error">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6">{LANDING_INDEX_LABEL}</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-6">{LANDING_INDEX_LABEL}</h1>
         <ErrorState error={null} />
       </div>
     );
@@ -75,12 +75,12 @@ export default async function LandingPage({ params }: Params) {
   const faq = p.faq ?? [];
   const similar = similarLandings(landingList, p.slug, p.make);
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 pb-28 md:pb-10 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-10 pb-28 md:pb-10 space-y-8">
       <JsonLd data={[breadcrumbLd(crumbs), faqLd(faq)].filter((d) => d !== null)} />
       <Breadcrumbs crumbs={crumbs} />
       <header>
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900" data-testid="landing-h1">{p.h1}</h1>
-        {p.intro && <p className="mt-3 text-slate-700 whitespace-pre-line">{p.intro}</p>}
+        <h1 className="text-balance text-2xl md:text-4xl font-extrabold tracking-tight text-foreground" data-testid="landing-h1">{p.h1}</h1>
+        {p.intro && <p className="mt-3 text-lg text-muted-foreground whitespace-pre-line">{p.intro}</p>}
       </header>
 
       <ModelFacts page={p} />
@@ -88,18 +88,18 @@ export default async function LandingPage({ params }: Params) {
       <LandingCalc calculation={p.calculation} termText={p.typical_term_text} includedText={p.included_text} />
 
       {/* На мобільних є липка панель (LandingMobileBar), тут кнопка для десктопа. */}
-      <LeadCta className="hidden md:block" />
+      <LeadCta className="hidden md:inline-flex" />
 
-      {p.description && <p className="text-sm text-slate-700 whitespace-pre-line">{p.description}</p>}
+      {p.description && <p className="text-sm text-muted-foreground whitespace-pre-line">{p.description}</p>}
 
       <ModelFaq items={faq} />
 
-      <nav className="flex flex-wrap gap-4 text-sm" aria-label="Корисні посилання">
-        <Link href={calculatorHref(p.calculation.inputs)} className="text-blue-700 underline" data-testid="landing-calc-link">
+      <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm" aria-label="Корисні посилання">
+        <Link href={calculatorHref(p.calculation.inputs)} className="text-primary underline underline-offset-4 hover:text-primary/80" data-testid="landing-calc-link">
           {CALC_COST_LABEL} під ваші параметри
         </Link>
-        {howItWorksOn && <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>}
-        <Link href="/prigon" className="text-blue-700 underline">Інші моделі</Link>
+        {howItWorksOn && <Link href="/how-it-works" className="text-primary underline underline-offset-4 hover:text-primary/80">{HOW_IT_WORKS_LABEL}</Link>}
+        <Link href="/prigon" className="text-primary underline underline-offset-4 hover:text-primary/80">Інші моделі</Link>
       </nav>
 
       <SimilarModels models={similar} />
@@ -109,7 +109,7 @@ export default async function LandingPage({ params }: Params) {
           defaultBudgetUsd={budgetFrom(p.calculation.total_usd_full ?? p.calculation.total_usd)} />
       </section>
 
-      <p className="text-xs text-slate-500" data-testid="landing-disclaimer">
+      <p className="text-xs text-muted-foreground" data-testid="landing-disclaimer">
         Послугу пригону надає партнер, а не AUTOforYOU.
       </p>
 

@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useId, useRef } from 'react';
+import { X } from 'lucide-react';
+import { ICON_STROKE } from '@/lib/utils';
 
 interface Props {
   /** Заголовок: на нього вказує aria-labelledby. */
@@ -81,22 +83,22 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`bg-white rounded-2xl shadow-xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto p-6 outline-none`}
+        className={`bg-card text-card-foreground rounded-2xl shadow-xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto p-6 outline-none`}
       >
         {showClose ? (
           <div className="flex items-start justify-between gap-3 mb-3">
-            <h2 id={titleId} className="text-lg font-bold text-slate-900">{title}</h2>
+            <h2 id={titleId} className="text-lg font-bold text-foreground">{title}</h2>
             <button
               type="button"
               onClick={onClose}
               aria-label="Закрити"
-              className="text-slate-500 hover:text-slate-700 text-xl leading-none px-1"
+              className="-m-2 inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
             >
-              <span aria-hidden="true">×</span>
+              <X className="size-5" strokeWidth={ICON_STROKE} aria-hidden="true" />
             </button>
           </div>
         ) : (
-          <h2 id={titleId} className="text-lg font-bold text-slate-900 mb-3">{title}</h2>
+          <h2 id={titleId} className="text-lg font-bold text-foreground mb-3">{title}</h2>
         )}
         {children}
       </div>
