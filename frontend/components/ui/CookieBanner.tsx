@@ -111,7 +111,7 @@ export default function CookieBanner() {
             type="button"
             variant="outline"
             onClick={() => choose('necessary')}
-            className="border-footer-muted bg-transparent text-header-foreground hover:bg-white/10 hover:text-header-foreground focus-visible:ring-header-foreground"
+            className="border-footer-muted bg-transparent text-header-foreground hover:bg-header-foreground/10 hover:text-header-foreground focus-visible:ring-header-foreground"
           >
             Лише необхідні
           </Button>

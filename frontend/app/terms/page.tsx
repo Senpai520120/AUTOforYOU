@@ -17,7 +17,7 @@ export default async function TermsPage() {
   return (
     <LegalPage title="Умови використання" settings={s}>
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">1. Загальні положення</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">1. Загальні положення</h2>
           <p>
             Ці Умови використання (далі — «Умови») регулюють відносини між сервісом AUTOforYOU
             (далі — «Платформа», «ми») та користувачами (далі — «ви», «користувач»).
@@ -27,7 +27,7 @@ export default async function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">2. Послуги Платформи</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">2. Послуги Платформи</h2>
           <p>
             AUTOforYOU — маркетплейс транспортних засобів з аукціонів США (Copart, IAAI) з доставкою
             в Україну. Ми надаємо інформацію про автомобілі, розраховуємо орієнтовну вартість
@@ -43,7 +43,7 @@ export default async function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">3. Реєстрація та обліковий запис</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">3. Реєстрація та обліковий запис</h2>
           <p>
             Для доступу до частини функцій необхідна реєстрація. Ви зобов&apos;язані надати достовірні
             дані та зберігати конфіденційність свого пароля. Платформа не несе відповідальності за
@@ -52,7 +52,7 @@ export default async function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">4. Права та обов&apos;язки користувача</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">4. Права та обов&apos;язки користувача</h2>
           <p>Ви зобов&apos;язані:</p>
           <ul className="list-disc list-inside space-y-1 ml-4">
             <li>використовувати Платформу лише в законних цілях;</li>
@@ -62,7 +62,7 @@ export default async function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">5. Відповідальність</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">5. Відповідальність</h2>
           <p>
             Платформа надає інформацію «як є». Ми не гарантуємо безперервну роботу сервісу та не несемо
             відповідальності за збитки, що виникли внаслідок використання Платформи або неможливості
@@ -71,7 +71,7 @@ export default async function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">6. Зміни Умов</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">6. Зміни Умов</h2>
           <p>
             Ми залишаємо за собою право змінювати ці Умови. Про суттєві зміни ми повідомлятимемо
             електронною поштою або через сповіщення на Платформі. Продовження використання Платформи
@@ -80,7 +80,7 @@ export default async function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">7. Контакти</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">7. Контакти</h2>
           <p>
             З питань щодо цих Умов звертайтеся за адресою:{' '}
             <EmailOrMissing email={supportContact(s)} />

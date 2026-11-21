@@ -49,30 +49,30 @@ export default function PhoneVerifyTelegram({ onCheck }: { onCheck: () => Promis
   }
 
   return (
-    <section aria-labelledby="phone-verify-title" className="max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-      <h2 id="phone-verify-title" className="text-lg font-semibold text-slate-900">Підтвердіть телефон</h2>
-      <p className="text-sm text-slate-700">
+    <section aria-labelledby="phone-verify-title" className="max-w-xl rounded-xl border border-warning bg-warning/15 p-5 space-y-3">
+      <h2 id="phone-verify-title" className="text-lg font-semibold text-foreground">Підтвердіть телефон</h2>
+      <p className="text-sm text-foreground">
         Подавати оголошення можуть лише користувачі з підтвердженим телефоном — це захищає покупців від шахраїв.
         Відкрийте нашого бота в Telegram і натисніть «Поділитися контактом».
       </p>
       {!link ? (
         <button type="button" onClick={getLink} disabled={busy}
-          className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60">
+          className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
           Підтвердити через Telegram
         </button>
       ) : (
         <div className="flex flex-wrap gap-2">
           <a href={link} target="_blank" rel="noopener noreferrer"
-            className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600">
+            className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
             Відкрити бота в Telegram
           </a>
           <button type="button" onClick={check} disabled={busy}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60">
+            className="rounded-lg border border-input bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60">
             Я поділився контактом — перевірити
           </button>
         </div>
       )}
-      {message && <p role="status" className="text-sm text-slate-700">{message}</p>}
+      {message && <p role="status" className="text-sm text-foreground">{message}</p>}
     </section>
   );
 }

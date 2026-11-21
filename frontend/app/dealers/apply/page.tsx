@@ -36,11 +36,11 @@ export default function DealerApplyPage() {
     return (
       <div className="max-w-md mx-auto text-center py-24">
         <div className="text-5xl mb-4">✅</div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-3">Заявку подано!</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-3">Заявку подано!</h1>
         <p className="text-muted-foreground mb-6">Менеджер розгляне її та повідомить вас на email.</p>
         <button
           onClick={() => router.push('/me')}
-          className="bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-800 transition-colors"
+          className="bg-primary text-primary-foreground px-6 py-2.5 rounded-xl font-semibold hover:bg-primary/90 transition-colors"
         >
           До кабінету
         </button>
@@ -83,58 +83,58 @@ export default function DealerApplyPage() {
 
   return (
     <div className="max-w-lg mx-auto py-12">
-      <h1 className="text-2xl font-bold text-slate-900 mb-2">Заявка на B2B-доступ</h1>
+      <h1 className="text-2xl font-bold text-foreground mb-2">Заявка на B2B-доступ</h1>
       <p className="text-muted-foreground mb-8 text-sm">
         Заповніть форму — менеджер розгляне вашу заявку та надасть доступ до оптового каталогу.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-2xl shadow-sm border border-border p-6">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Назва компанії *</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Назва компанії *</label>
           <input
             required
             value={form.company_name}
             onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
             placeholder="ТОВ Авто Трейд"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">ПІБ *</label>
+          <label className="block text-sm font-medium text-foreground mb-1">ПІБ *</label>
           <input
             required
             value={form.full_name}
             onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
             placeholder="Іван Петрович Іванов"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Контактний телефон *</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Контактний телефон *</label>
           <input
             required
             type="tel"
             value={form.contact_phone}
             onChange={e => setForm(f => ({ ...f, contact_phone: e.target.value }))}
             placeholder="+380991234567"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            Посилання на документи <span className="text-slate-400 font-normal">(необов&#39;язково)</span>
+          <label className="block text-sm font-medium text-foreground mb-1">
+            Посилання на документи <span className="text-muted-foreground font-normal">(необов&#39;язково)</span>
           </label>
           <input
             type="url"
             value={form.documents}
             onChange={e => setForm(f => ({ ...f, documents: e.target.value }))}
             placeholder="https://drive.google.com/..."
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
-          <p className="text-xs text-slate-400 mt-1">Виписка з ЄДР, свідоцтво про реєстрацію або інший документ</p>
+          <p className="text-xs text-muted-foreground mt-1">Виписка з ЄДР, свідоцтво про реєстрацію або інший документ</p>
         </div>
 
         <div className="flex items-start gap-3 pt-1">
@@ -143,12 +143,12 @@ export default function DealerApplyPage() {
             type="checkbox"
             checked={agreedToProcessing}
             onChange={e => setAgreedToProcessing(e.target.checked)}
-            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-2 focus:ring-amber-400"
+            className="mt-1 h-4 w-4 shrink-0 rounded border-input text-primary focus:ring-2 focus:ring-ring"
           />
-          <label htmlFor="agreed_to_processing" className="text-sm text-slate-600">
+          <label htmlFor="agreed_to_processing" className="text-sm text-muted-foreground">
             Я даю згоду на обробку вказаних персональних даних (ПІБ, телефон, документи компанії)
             з метою розгляду цієї заявки, відповідно до{' '}
-            <Link href="/privacy" className="text-blue-600 hover:underline" target="_blank">
+            <Link href="/privacy" className="text-link hover:underline" target="_blank">
               Політики конфіденційності
             </Link>
             .
@@ -161,9 +161,9 @@ export default function DealerApplyPage() {
             type="checkbox"
             checked={confirmedAge18}
             onChange={e => setConfirmedAge18(e.target.checked)}
-            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-2 focus:ring-amber-400"
+            className="mt-1 h-4 w-4 shrink-0 rounded border-input text-primary focus:ring-2 focus:ring-ring"
           />
-          <label htmlFor="confirmed_age_18" className="text-sm text-slate-600">
+          <label htmlFor="confirmed_age_18" className="text-sm text-muted-foreground">
             {AGE_18_LABEL}
           </label>
         </div>
@@ -173,7 +173,7 @@ export default function DealerApplyPage() {
 
         {notVerified && <EmailNotVerified />}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+          <div className="bg-destructive/10 border border-destructive/40 text-destructive rounded-lg px-4 py-3 text-sm">
             {error}
           </div>
         )}
@@ -181,7 +181,7 @@ export default function DealerApplyPage() {
         <button
           type="submit"
           disabled={submitting || !captcha.ready}
-          className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-semibold py-2.5 rounded-xl transition-colors"
+          className="w-full bg-accent hover:bg-accent/90 disabled:opacity-60 text-accent-foreground font-semibold py-2.5 rounded-xl transition-colors"
         >
           {submitting ? 'Відправляємо...' : 'Подати заявку'}
         </button>

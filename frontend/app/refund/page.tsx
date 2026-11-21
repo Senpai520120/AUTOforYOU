@@ -20,7 +20,7 @@ export default async function RefundPage() {
   return (
     <LegalPage title="Політика повернення коштів" settings={s}>
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">1. Які послуги є платними</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">1. Які послуги є платними</h2>
           <p>
             Реєстрація, подання оголошень, пошук і калькулятор — безкоштовні.
           </p>
@@ -32,20 +32,20 @@ export default async function RefundPage() {
             <>
               <p>Платними є лише послуги просування власних оголошень:</p>
               <div className="overflow-x-auto" data-testid="refund-tariffs">
-                <table className="w-full text-sm border-collapse border border-slate-200 rounded">
-                  <thead className="bg-slate-50">
+                <table className="w-full text-sm border-collapse border border-border rounded">
+                  <thead className="bg-muted">
                     <tr>
-                      <th className="border border-slate-200 px-3 py-2 text-left">Послуга</th>
-                      <th className="border border-slate-200 px-3 py-2 text-left">Що дає</th>
-                      <th className="border border-slate-200 px-3 py-2 text-left">Строк</th>
+                      <th className="border border-border px-3 py-2 text-left">Послуга</th>
+                      <th className="border border-border px-3 py-2 text-left">Що дає</th>
+                      <th className="border border-border px-3 py-2 text-left">Строк</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tariffs.map((t) => (
                       <tr key={t.id}>
-                        <td className="border border-slate-200 px-3 py-2">{t.name}</td>
-                        <td className="border border-slate-200 px-3 py-2">{t.description}</td>
-                        <td className="border border-slate-200 px-3 py-2">
+                        <td className="border border-border px-3 py-2">{t.name}</td>
+                        <td className="border border-border px-3 py-2">{t.description}</td>
+                        <td className="border border-border px-3 py-2">
                           {t.duration_days > 0 ? `${t.duration_days} дн.` : 'одноразово'}
                         </td>
                       </tr>
@@ -64,7 +64,7 @@ export default async function RefundPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">2. Право на відмову</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">2. Право на відмову</h2>
           <p>
             Згідно зі ст. 13 Закону України «Про захист прав споживачів» ви маєте право
             відмовитися від замовленої дистанційно послуги протягом <strong>14 днів</strong>.
@@ -77,7 +77,7 @@ export default async function RefundPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">3. Коли ми повертаємо кошти</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">3. Коли ми повертаємо кошти</h2>
           <ul className="list-disc list-inside space-y-1 ml-4">
             <li>послуга не була надана через технічну помилку на нашому боці;</li>
             <li>кошти списано двічі за одне замовлення;</li>
@@ -90,12 +90,12 @@ export default async function RefundPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">4. Коли кошти не повертаються</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">4. Коли кошти не повертаються</h2>
           <ul className="list-disc list-inside space-y-1 ml-4">
             <li>послуга надана в повному обсязі;</li>
             <li>
               оголошення знято за порушення{' '}
-              <Link href="/rules" className="text-blue-600 hover:underline">
+              <Link href="/rules" className="text-link hover:underline">
                 Правил розміщення
               </Link>{' '}
               або внаслідок блокування вашого акаунта;
@@ -108,7 +108,7 @@ export default async function RefundPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">5. Як подати запит</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">5. Як подати запит</h2>
           <p>Надішліть запит із зазначенням:</p>
           <ul className="list-disc list-inside space-y-1 ml-4">
             <li>email, на який зареєстровано акаунт;</li>
@@ -122,7 +122,7 @@ export default async function RefundPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">6. Строки</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">6. Строки</h2>
           <p>
             Ми розглядаємо запит протягом <strong>14 календарних днів</strong> з моменту отримання.
             У разі позитивного рішення кошти повертаються тим самим способом, яким було здійснено
@@ -132,7 +132,7 @@ export default async function RefundPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">7. Спори</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-2">7. Спори</h2>
           <p>
             Ми прагнемо вирішувати спори шляхом переговорів. Якщо домовитися не вдалося, спір
             вирішується в порядку, передбаченому законодавством України. Ви також можете

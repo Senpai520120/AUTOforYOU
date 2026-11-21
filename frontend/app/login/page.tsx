@@ -63,43 +63,43 @@ function LoginForm() {
 
   return (
     <div className="max-w-md mx-auto mt-10">
-      <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6">Вхід</h1>
+      <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
+        <h1 className="text-2xl font-bold text-foreground mb-6">Вхід</h1>
         {isListingSubmitNext(next) && <ListingSubmitNotice />}
-        {ssoError && <p role="alert" className="mb-4 text-red-600 text-sm">{ssoError}</p>}
+        {ssoError && <p role="alert" className="mb-4 text-destructive text-sm">{ssoError}</p>}
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label htmlFor={emailId} className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
-            <input id={emailId} type="email" autoComplete="email" inputMode="email" required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base"
+            <label htmlFor={emailId} className="block text-sm font-semibold text-foreground mb-1">Email</label>
+            <input id={emailId} type="email" autoComplete="email" inputMode="email" required className="w-full border border-input rounded-lg px-3 py-2 text-base"
               value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <div>
-            <label htmlFor={passwordId} className="block text-sm font-semibold text-slate-700 mb-1">Пароль</label>
-            <input id={passwordId} type="password" autoComplete="current-password" required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base"
+            <label htmlFor={passwordId} className="block text-sm font-semibold text-foreground mb-1">Пароль</label>
+            <input id={passwordId} type="password" autoComplete="current-password" required className="w-full border border-input rounded-lg px-3 py-2 text-base"
               value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           {showCaptcha && (
             <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
               resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
           )}
-          {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
+          {error && <p role="alert" className="text-destructive text-sm">{error}</p>}
           <button type="submit" disabled={loading || (showCaptcha && !captcha.ready)}
-            className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors">
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors">
             {loading ? 'Вхід...' : 'Увійти'}
           </button>
         </form>
         {config?.oidc_enabled && config.oidc_start_url && (
           // Звичайне посилання, не fetch: далі редіректи на Keycloak і назад (задача SSO-1).
           <a href={`${config.oidc_start_url}?${new URLSearchParams({ next })}`}
-            className="mt-3 block w-full text-center border border-slate-300 hover:border-blue-400 text-slate-700 font-semibold py-2.5 rounded-xl transition-colors">
+            className="mt-3 block w-full text-center border border-input hover:border-ring text-foreground font-semibold py-2.5 rounded-xl transition-colors">
             Увійти через SSO
           </a>
         )}
         <p className="mt-4 text-sm text-center text-muted-foreground">
-          <Link href="/password-reset" className="text-blue-600 hover:underline">Забули пароль?</Link>
+          <Link href="/password-reset" className="text-link hover:underline">Забули пароль?</Link>
         </p>
         <p className="mt-2 text-sm text-center text-muted-foreground">
-          Немає акаунту? <Link href={next === '/me' ? '/register' : `/register?${new URLSearchParams({ next })}`} className="text-blue-600 underline">Реєстрація</Link>
+          Немає акаунту? <Link href={next === '/me' ? '/register' : `/register?${new URLSearchParams({ next })}`} className="text-link underline">Реєстрація</Link>
         </p>
       </div>
     </div>

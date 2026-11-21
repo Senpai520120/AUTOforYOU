@@ -71,13 +71,13 @@ export default function SavedSearchesPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/me" className="hover:text-blue-700">Кабінет</Link>
+        <Link href="/me" className="hover:text-link">Кабінет</Link>
         <span>/</span>
         <span>Збережені пошуки</span>
       </div>
-      <h1 className="text-xl font-bold text-slate-900 mb-4">Збережені пошуки</h1>
+      <h1 className="text-xl font-bold text-foreground mb-4">Збережені пошуки</h1>
 
-      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+      {actionError && <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-3 py-2">{actionError}</p>}
 
       {busy ? (
         <LoadingState />
@@ -88,13 +88,13 @@ export default function SavedSearchesPage() {
       ) : (
         <ul className="space-y-3">
           {items.map(item => (
-            <li key={item.id} className="bg-white border border-slate-200 rounded-xl p-4">
+            <li key={item.id} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-slate-900 text-sm">{item.name}</div>
+                  <div className="font-semibold text-foreground text-sm">{item.name}</div>
                   <div className="text-xs text-muted-foreground mt-0.5 truncate">{filtersLabel(item.filters)}</div>
                   {item.last_notified_at && (
-                    <div className="text-xs text-slate-400 mt-0.5">
+                    <div className="text-xs text-muted-foreground mt-0.5">
                       Останнє сповіщення: {new Date(item.last_notified_at).toLocaleDateString('uk-UA')}
                     </div>
                   )}
@@ -105,15 +105,15 @@ export default function SavedSearchesPage() {
                     title={item.notify ? 'Вимкнути сповіщення' : 'Увімкнути сповіщення'}
                     className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
                       item.notify
-                        ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                        : 'border-slate-200 text-slate-400 hover:border-slate-300'
+                        ? 'border-link/40 bg-link/10 text-link hover:bg-link/10'
+                        : 'border-border text-muted-foreground hover:border-input'
                     }`}
                   >
                     {item.notify ? '🔔 Сповіщення увімк.' : '🔕 Сповіщення вимк.'}
                   </button>
                   <button
                     onClick={() => setToDelete(item)}
-                    className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                   >
                     Видалити
                   </button>
@@ -122,7 +122,7 @@ export default function SavedSearchesPage() {
               <div className="mt-2">
                 <Link
                   href={`/ua?${new URLSearchParams(item.filters).toString()}`}
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-link hover:underline"
                 >
                   Відкрити пошук →
                 </Link>

@@ -30,18 +30,18 @@ function VerifyEmailBanner() {
   };
   return (
     <div role="status" data-testid="verify-email-banner"
-      className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-900">
+      className="mb-6 bg-warning/15 border border-warning rounded-2xl p-4 text-sm text-foreground">
       <p className="font-semibold">Підтвердіть email</p>
       <p className="mt-1">Без підтвердження не можна додавати оголошення, писати повідомлення та подавати заявку дилера.</p>
       {state === 'sent' ? (
         <p className="mt-2 font-semibold">Лист надіслано. Перевірте пошту.</p>
       ) : (
         <button type="button" onClick={resend} disabled={state === 'sending'}
-          className="mt-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-semibold px-4 py-1.5 rounded-lg">
+          className="mt-2 bg-accent hover:bg-accent/90 disabled:opacity-60 text-accent-foreground font-semibold px-4 py-1.5 rounded-lg">
           Надіслати ще раз
         </button>
       )}
-      {state === 'error' && <p className="mt-2 text-red-700">{msg}</p>}
+      {state === 'error' && <p className="mt-2 text-destructive">{msg}</p>}
     </div>
   );
 }
@@ -49,11 +49,11 @@ function VerifyEmailBanner() {
 function DeletionBanner({ date }: { date: string }) {
   return (
     <div role="status" data-testid="deletion-banner"
-      className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-900">
+      className="mb-6 bg-destructive/10 border border-destructive/40 rounded-2xl p-4 text-sm text-destructive">
       <p className="font-semibold">Акаунт буде видалено {formatDeletionDate(date)}</p>
       <p className="mt-1">До цієї дати видалення можна скасувати.</p>
       <Link href="/me/data"
-        className="inline-block mt-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-1.5 rounded-lg">
+        className="inline-block mt-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground font-semibold px-4 py-1.5 rounded-lg">
         Скасувати видалення
       </Link>
     </div>
@@ -92,20 +92,20 @@ export default function MeDashboard() {
     <div className="max-w-2xl mx-auto">
       {user.deletion_scheduled_for && <DeletionBanner date={user.deletion_scheduled_for} />}
       {!user.is_email_verified && <VerifyEmailBanner />}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+      <div className="bg-card border border-border rounded-2xl p-6 mb-6">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center text-2xl font-bold text-blue-700">
+          <div className="w-14 h-14 bg-link/10 rounded-full flex items-center justify-center text-2xl font-bold text-link">
             {user.email[0].toUpperCase()}
           </div>
           <div>
-            <h1 className="font-bold text-slate-900 text-lg">{user.first_name || user.email}</h1>
+            <h1 className="font-bold text-foreground text-lg">{user.first_name || user.email}</h1>
             <p className="text-muted-foreground text-sm">{user.email}</p>
             <div className="flex gap-2 mt-1">
-              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-semibold">
+              <span className="text-xs bg-link/10 text-link px-2 py-0.5 rounded font-semibold">
                 {ROLE_LABELS[user.role] ?? 'Покупець'}
               </span>
               {user.is_verified_dealer && (
-                <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-semibold">✓ Верифіковано</span>
+                <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded font-semibold">✓ Верифіковано</span>
               )}
             </div>
           </div>
@@ -115,18 +115,18 @@ export default function MeDashboard() {
       <div className="grid gap-4">
         {menuItems.map(item => (
           <Link key={item.href} href={item.href}
-            className="bg-white border border-slate-200 rounded-xl p-5 flex items-center gap-4 hover:shadow-md hover:border-blue-300 transition-all group">
+            className="bg-card border border-border rounded-xl p-5 flex items-center gap-4 hover:shadow-md hover:border-link/40 transition-all group">
             <span className="text-3xl" aria-hidden="true">{item.icon}</span>
             <div>
-              <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">{item.title}</p>
+              <p className="font-semibold text-foreground group-hover:text-link transition-colors">{item.title}</p>
               <p className="text-sm text-muted-foreground">{item.desc}</p>
             </div>
-            <span className="ml-auto text-slate-400 group-hover:text-blue-600">→</span>
+            <span className="ml-auto text-muted-foreground group-hover:text-link">→</span>
           </Link>
         ))}
       </div>
 
-      <button onClick={logout} className="mt-6 w-full border border-slate-300 hover:border-red-300 hover:text-red-600 text-slate-600 py-2 rounded-xl text-sm transition-colors">
+      <button onClick={logout} className="mt-6 w-full border border-input hover:border-destructive/40 hover:text-destructive text-muted-foreground py-2 rounded-xl text-sm transition-colors">
         Вийти
       </button>
     </div>

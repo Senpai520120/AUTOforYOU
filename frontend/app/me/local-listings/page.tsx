@@ -18,13 +18,13 @@ interface Buyer { id: number; display_name: string; }
 interface SoldModalState { listing: LocalListing; buyers: Buyer[]; loading: boolean; }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  active:   { label: 'Активне',         cls: 'bg-green-100 text-green-800' },
-  pending:  { label: 'На модерації',    cls: 'bg-amber-100 text-amber-800' },
-  rejected: { label: 'Відхилено',       cls: 'bg-red-100 text-red-800' },
-  hidden:   { label: 'Приховане',       cls: 'bg-slate-100 text-slate-600' },
-  sold:     { label: 'Продано',         cls: 'bg-blue-100 text-blue-800' },
-  expired:  { label: 'Закінчилося',     cls: 'bg-slate-100 text-muted-foreground' },
-  draft:    { label: 'Чернетка',        cls: 'bg-slate-100 text-muted-foreground' },
+  active:   { label: 'Активне',         cls: 'bg-success/10 text-success' },
+  pending:  { label: 'На модерації',    cls: 'bg-warning/15 text-foreground' },
+  rejected: { label: 'Відхилено',       cls: 'bg-destructive/10 text-destructive' },
+  hidden:   { label: 'Приховане',       cls: 'bg-muted text-muted-foreground' },
+  sold:     { label: 'Продано',         cls: 'bg-link/10 text-link' },
+  expired:  { label: 'Закінчилося',     cls: 'bg-muted text-muted-foreground' },
+  draft:    { label: 'Чернетка',        cls: 'bg-muted text-muted-foreground' },
 };
 
 function daysUntil(dateStr: string | null): number | null {
@@ -140,18 +140,18 @@ export default function MyLocalListingsPage() {
             <p className="text-sm text-muted-foreground mb-4">
               {soldModal.listing.make} {soldModal.listing.model} {soldModal.listing.year} — оберіть покупця:
             </p>
-            {soldModal.loading && <p className="text-slate-400 text-sm py-4 text-center">Завантаження...</p>}
+            {soldModal.loading && <p className="text-muted-foreground text-sm py-4 text-center">Завантаження...</p>}
             {!soldModal.loading && soldModal.buyers.length === 0 && (
               <p className="text-muted-foreground text-sm py-3 text-center">Ніхто ще не писав по цьому оголошенню.</p>
             )}
-            {soldError && <p role="alert" className="text-red-600 text-sm mb-2">{soldError}</p>}
+            {soldError && <p role="alert" className="text-destructive text-sm mb-2">{soldError}</p>}
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {soldModal.buyers.map(b => (
                 <button
                   key={b.id}
                   onClick={() => handleProposeDeal(b.id)}
                   disabled={proposingTo === b.id}
-                  className="w-full flex items-center justify-between border border-slate-200 hover:bg-blue-50 rounded-lg px-4 py-2.5 text-sm text-left disabled:opacity-60"
+                  className="w-full flex items-center justify-between border border-border hover:bg-link/10 rounded-lg px-4 py-2.5 text-sm text-left disabled:opacity-60"
                 >
                   <span>{b.display_name}</span>
                 </button>
@@ -159,7 +159,7 @@ export default function MyLocalListingsPage() {
             </div>
             <button
               onClick={() => setSoldModal(null)}
-              className="mt-4 w-full text-sm text-muted-foreground hover:text-slate-700"
+              className="mt-4 w-full text-sm text-muted-foreground hover:text-foreground"
             >
               Закрити
             </button>
@@ -168,17 +168,17 @@ export default function MyLocalListingsPage() {
       )}
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Мої оголошення</h1>
+        <h1 className="text-2xl font-bold text-foreground">Мої оголошення</h1>
         <Link
           href="/local/new"
-          className="bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 py-2 rounded-lg text-sm"
+          className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-4 py-2 rounded-lg text-sm"
         >
           + Нове оголошення
         </Link>
       </div>
 
-      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
-      {notice && <p role="status" className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{notice}</p>}
+      {actionError && <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-3 py-2">{actionError}</p>}
+      {notice && <p role="status" className="mb-4 text-sm text-success bg-success/10 border border-success/40 rounded-lg px-3 py-2">{notice}</p>}
 
       {loadError ? (
         <ErrorState error={loadError} onRetry={load} />
@@ -187,24 +187,24 @@ export default function MyLocalListingsPage() {
       ) : (
         <div className="space-y-4">
           {listings.map(l => {
-            const badge = STATUS_BADGE[l.status] ?? { label: l.status, cls: 'bg-slate-100 text-muted-foreground' };
+            const badge = STATUS_BADGE[l.status] ?? { label: l.status, cls: 'bg-muted text-muted-foreground' };
             const daysLeft = daysUntil(l.expires_at);
             const expiringSoon = l.status === 'active' && daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
             const isTop = l.promoted_until && new Date(l.promoted_until) > new Date();
 
             return (
-              <div key={l.id} className={`bg-white border rounded-xl p-4 ${expiringSoon ? 'border-amber-300' : 'border-slate-200'}`}>
+              <div key={l.id} className={`bg-card border rounded-xl p-4 ${expiringSoon ? 'border-warning' : 'border-border'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Link href={`/local/${l.id}`} className="font-semibold text-slate-900 hover:text-blue-700">
+                      <Link href={`/local/${l.id}`} className="font-semibold text-foreground hover:text-link">
                         {l.make} {l.model} {l.year}
                       </Link>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
                         {badge.label}
                       </span>
                       {isTop && (
-                        <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+                        <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-warning/15 text-foreground">
                           ⭐ ТОП
                         </span>
                       )}
@@ -217,38 +217,38 @@ export default function MyLocalListingsPage() {
 
                     {/* Термін дії */}
                     {l.expires_at && l.status === 'active' && daysLeft !== null && (
-                      <p className={`mt-1 text-xs ${expiringSoon ? 'text-amber-700 font-medium' : 'text-slate-400'}`}>
+                      <p className={`mt-1 text-xs ${expiringSoon ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                         {expiringSoon ? '⚠️ ' : ''}
                         Дійсне до {new Date(l.expires_at).toLocaleDateString('uk-UA')}
                         {daysLeft > 0 ? ` (${daysLeft} дн.)` : ' — закінчується сьогодні'}
                       </p>
                     )}
                     {payments && l.status === 'expired' && (
-                      <p className="mt-1 text-xs text-red-600">Термін дії закінчився. Продовжте оголошення.</p>
+                      <p className="mt-1 text-xs text-destructive">Термін дії закінчився. Продовжте оголошення.</p>
                     )}
 
                     {/* Причина відхилення */}
                     {l.status === 'rejected' && l.rejection_reason && (
-                      <div className="mt-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                      <div className="mt-2 bg-destructive/10 border border-destructive/40 rounded-lg p-3 text-sm text-destructive">
                         <strong>Причина відхилення:</strong> {l.rejection_reason}
                       </div>
                     )}
 
                     {l.status === 'pending' && (
-                      <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 inline-block">
+                      <p className="mt-2 text-xs text-foreground bg-warning/15 rounded px-2 py-1 inline-block">
                         Очікує перевірки модератором
                       </p>
                     )}
                     {minPhotos > 0 && (l.status === 'pending' || l.status === 'draft')
                       && (l.photos_count ?? l.images.length) < minPhotos && (
-                      <p role="status" className="mt-2 text-xs text-amber-800 bg-amber-100 border border-amber-300 rounded px-2 py-1">
+                      <p role="status" className="mt-2 text-xs text-foreground bg-warning/15 border border-warning rounded px-2 py-1">
                         Додайте щонайменше {minPhotos} фото, щоб оголошення пройшло модерацію.{' '}
                         <Link href={`/local/${l.id}/edit`} className="underline">Додати фото</Link>
                       </p>
                     )}
                   </div>
 
-                  <span className="text-xs text-slate-400 whitespace-nowrap">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {new Date(l.created_at).toLocaleDateString('uk-UA')}
                   </span>
                 </div>
@@ -258,14 +258,14 @@ export default function MyLocalListingsPage() {
                   {l.status === 'rejected' ? (
                     <Link
                       href={`/local/${l.id}/edit`}
-                      className="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors"
+                      className="text-sm bg-primary hover:bg-primary text-primary-foreground px-3 py-1.5 rounded-lg transition-colors"
                     >
                       Редагувати і надіслати знову
                     </Link>
                   ) : (l.status === 'active' || l.status === 'pending' || l.status === 'hidden') ? (
                     <Link
                       href={`/local/${l.id}/edit`}
-                      className="text-sm border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg transition-colors"
+                      className="text-sm border border-input hover:bg-muted text-foreground px-3 py-1.5 rounded-lg transition-colors"
                     >
                       Редагувати
                     </Link>
@@ -275,7 +275,7 @@ export default function MyLocalListingsPage() {
                   {payments && l.status === 'expired' && (
                     <button
                       onClick={() => openPromote(l, 'renew')}
-                      className="text-sm bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors"
+                      className="text-sm bg-success hover:bg-success text-success-foreground px-3 py-1.5 rounded-lg transition-colors"
                     >
                       🔄 Продовжити
                     </button>
@@ -283,7 +283,7 @@ export default function MyLocalListingsPage() {
                   {payments && l.status === 'active' && expiringSoon && (
                     <button
                       onClick={() => openPromote(l, 'renew')}
-                      className="text-sm border border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg transition-colors"
+                      className="text-sm border border-warning bg-warning/15 hover:bg-warning/15 text-foreground px-3 py-1.5 rounded-lg transition-colors"
                     >
                       🔄 Продовжити (скоро закінчиться)
                     </button>
@@ -292,14 +292,14 @@ export default function MyLocalListingsPage() {
                     <>
                       <button
                         onClick={() => openSoldModal(l)}
-                        className="text-sm bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors"
+                        className="text-sm bg-success hover:bg-success text-success-foreground px-3 py-1.5 rounded-lg transition-colors"
                       >
                         ✅ Позначити проданим
                       </button>
                       {payments && (
 <button
                         onClick={() => openPromote(l, 'bump')}
-                        className="text-sm border border-blue-200 hover:bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg transition-colors"
+                        className="text-sm border border-link/40 hover:bg-link/10 text-link px-3 py-1.5 rounded-lg transition-colors"
                       >
                         ⬆️ Підняти
                       </button>
@@ -307,7 +307,7 @@ export default function MyLocalListingsPage() {
                       {payments && (
 <button
                         onClick={() => openPromote(l, 'top')}
-                        className="text-sm border border-amber-300 hover:bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg transition-colors"
+                        className="text-sm border border-warning hover:bg-warning/15 text-foreground px-3 py-1.5 rounded-lg transition-colors"
                       >
                         ⭐ ТОП
                       </button>
@@ -318,7 +318,7 @@ export default function MyLocalListingsPage() {
                   {(l.status !== 'sold' && l.status !== 'expired') && (
                     <button
                       onClick={() => setToDelete(l)}
-                      className="text-sm border border-red-200 hover:bg-red-50 text-red-600 px-3 py-1.5 rounded-lg transition-colors"
+                      className="text-sm border border-destructive/40 hover:bg-destructive/10 text-destructive px-3 py-1.5 rounded-lg transition-colors"
                     >
                       Видалити
                     </button>

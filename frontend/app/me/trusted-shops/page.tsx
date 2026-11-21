@@ -70,37 +70,37 @@ export default function TrustedShopsPage() {
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link href="/me" className="text-blue-600 hover:underline text-sm">← Кабінет</Link>
-          <h1 className="text-xl font-bold text-slate-900">Мої партнери</h1>
+          <Link href="/me" className="text-link hover:underline text-sm">← Кабінет</Link>
+          <h1 className="text-xl font-bold text-foreground">Мої партнери</h1>
         </div>
         <button onClick={() => setShowForm(v => !v)}
-          className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800">
+          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold hover:bg-primary/90">
           + Додати
         </button>
       </div>
 
-      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+      {actionError && <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-3 py-2">{actionError}</p>}
 
       {showForm && (
-        <form onSubmit={create} className="bg-white border border-blue-200 rounded-xl p-5 mb-5 space-y-3">
-          <h2 className="font-semibold text-slate-800">Новий партнер</h2>
-          <input required aria-label="Назва" placeholder="Назва" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+        <form onSubmit={create} className="bg-card border border-link/40 rounded-xl p-5 mb-5 space-y-3">
+          <h2 className="font-semibold text-foreground">Новий партнер</h2>
+          <input required aria-label="Назва" placeholder="Назва" className="w-full border border-input rounded px-3 py-2 text-sm"
             value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           <div className="grid grid-cols-2 gap-3">
-            <select aria-label="Тип" className="border border-slate-300 rounded px-3 py-2 text-sm"
+            <select aria-label="Тип" className="border border-input rounded px-3 py-2 text-sm"
               value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
               {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-            <select aria-label="Рейтинг" className="border border-slate-300 rounded px-3 py-2 text-sm"
+            <select aria-label="Рейтинг" className="border border-input rounded px-3 py-2 text-sm"
               value={form.rating} onChange={e => setForm(f => ({ ...f, rating: Number(e.target.value) }))}>
               {[5, 4, 3, 2, 1].map(r => <option key={r} value={r}>{'★'.repeat(r)}</option>)}
             </select>
           </div>
-          <textarea aria-label="Контакти" placeholder="Контакти" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+          <textarea aria-label="Контакти" placeholder="Контакти" className="w-full border border-input rounded px-3 py-2 text-sm"
             value={form.contacts} onChange={e => setForm(f => ({ ...f, contacts: e.target.value }))} />
-          <textarea aria-label="Нотатки" placeholder="Нотатки" className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+          <textarea aria-label="Нотатки" placeholder="Нотатки" className="w-full border border-input rounded px-3 py-2 text-sm"
             value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-          <button type="submit" disabled={saving} className="disabled:opacity-50 bg-amber-500 hover:bg-amber-400 text-black font-bold px-6 py-2 rounded-lg text-sm">
+          <button type="submit" disabled={saving} className="disabled:opacity-50 bg-accent hover:bg-accent/90 text-accent-foreground font-bold px-6 py-2 rounded-lg text-sm">
             Зберегти
           </button>
         </form>
@@ -113,14 +113,14 @@ export default function TrustedShopsPage() {
       ) : (
         <div className="space-y-3">
           {shops.map(s => (
-            <div key={s.id} className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-start">
+            <div key={s.id} className="bg-card border border-border rounded-xl p-4 flex justify-between items-start">
               <div>
-                <p className="font-semibold text-slate-900">{s.name}</p>
+                <p className="font-semibold text-foreground">{s.name}</p>
                 <p className="text-xs text-muted-foreground">{TYPE_LABELS[s.type]} · {'★'.repeat(s.rating)}</p>
-                {s.contacts && <p className="text-sm text-slate-600 mt-1">{s.contacts}</p>}
-                {s.notes && <p className="text-xs text-slate-400 mt-0.5">{s.notes}</p>}
+                {s.contacts && <p className="text-sm text-muted-foreground mt-1">{s.contacts}</p>}
+                {s.notes && <p className="text-xs text-muted-foreground mt-0.5">{s.notes}</p>}
               </div>
-              <button onClick={() => setToDelete(s)} className="text-red-400 hover:text-red-600 text-xs ml-4">
+              <button onClick={() => setToDelete(s)} className="text-destructive hover:text-destructive/80 text-xs ml-4">
                 Видалити
               </button>
             </div>

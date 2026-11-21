@@ -30,7 +30,7 @@ export default async function RulesPage() {
   return (
     <LegalPage title="Правила розміщення оголошень" settings={s}>
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">1. Загальні положення</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">1. Загальні положення</h2>
           <p>
             Ці Правила розміщення оголошень (далі — «Правила») визначають умови розміщення оголошень
             про продаж транспортних засобів на платформі AUTOforYOU (далі — «Платформа»).
@@ -39,7 +39,7 @@ export default async function RulesPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">2. Що можна розміщувати</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">2. Що можна розміщувати</h2>
           <ul className="list-disc list-inside space-y-1">
             <li>Легкові автомобілі, що перебувають у власності або законному розпорядженні продавця.</li>
             <li>Транспортні засоби, що відповідають технічним та правовим вимогам для продажу в Україні.</li>
@@ -50,7 +50,7 @@ export default async function RulesPage() {
         </section>
 
         <section>
-          <h2 id="forbidden" className="text-xl font-semibold text-slate-800 mb-3">3. Що забороняється</h2>
+          <h2 id="forbidden" className="text-xl font-semibold text-foreground mb-3">3. Що забороняється</h2>
           <ul className="list-disc list-inside space-y-1">
             {/* 8.5 (N6.1): ПРОВЕРИТЬ С ЮРИСТОМ — чернетка формулювань */}
             <li>Оголошення про автомобіль, що перебуває в розшуку.</li>
@@ -67,7 +67,7 @@ export default async function RulesPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">4. Відповідальність продавця</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">4. Відповідальність продавця</h2>
           <p>
             Продавець несе повну відповідальність за достовірність інформації, зазначеної в оголошенні,
             включаючи технічний стан автомобіля, пробіг, рік випуску, наявність пошкоджень та юридичну чистоту
@@ -77,13 +77,13 @@ export default async function RulesPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">5. Модерація</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">5. Модерація</h2>
           <p>
             Кожне оголошення проходить перевірку модератора перед публікацією. Платформа залишає за собою
             право відхилити або видалити оголошення, що порушує ці Правила, без попередження та без
             повернення коштів за платні послуги просування. Випадки, коли кошти повертаються,
             описані в{' '}
-            <Link href="/refund" className="text-blue-600 hover:underline">
+            <Link href="/refund" className="text-link hover:underline">
               Політиці повернення коштів
             </Link>
             .
@@ -91,9 +91,9 @@ export default async function RulesPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">6. Відмова від відповідальності за C2C-угоди</h2>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="font-semibold text-blue-900 mb-2">Платформа є посередником, а не стороною угоди.</p>
+          <h2 className="text-xl font-semibold text-foreground mb-3">6. Відмова від відповідальності за C2C-угоди</h2>
+          <div className="bg-link/10 border border-link/30 rounded-lg p-4">
+            <p className="font-semibold text-foreground mb-2">Платформа є посередником, а не стороною угоди.</p>
             <p>
               AUTOforYOU надає технологічний майданчик для зустрічі продавців і покупців. Платформа <strong>не є</strong> учасником,
               гарантом або відповідальною стороною угод купівлі-продажу між користувачами.
@@ -109,7 +109,7 @@ export default async function RulesPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">7. Термін дії оголошення</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">7. Термін дії оголошення</h2>
           <p>
             {expiryDays !== null ? `Оголошення діє ${expiryDays} ${daysWord(expiryDays)} з моменту схвалення модератором. ` : 'Оголошення діє обмежений термін з моменту схвалення модератором. '}
             Після закінчення терміну оголошення автоматично знімається з публікації.{' '}
@@ -120,7 +120,7 @@ export default async function RulesPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-slate-800 mb-3">8. Зміни до Правил</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">8. Зміни до Правил</h2>
           <p>
             Платформа залишає за собою право вносити зміни до цих Правил. Продовження використання
             Платформи після внесення змін означає прийняття нових умов.

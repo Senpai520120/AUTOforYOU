@@ -29,9 +29,9 @@ const QUESTIONS: { key: LeadQuestionKey; label: string }[] = [
   { key: 'q_ready_deposit', label: 'Готовий до депозиту' },
 ];
 const QUALIFICATION_COLORS: Record<string, string> = {
-  hot: 'bg-red-100 text-red-800',
-  cold: 'bg-sky-100 text-sky-800',
-  unrated: 'bg-slate-100 text-slate-700',
+  hot: 'bg-destructive/10 text-destructive',
+  cold: 'bg-link/10 text-link',
+  unrated: 'bg-muted text-foreground',
 };
 
 function interval(fromIso: string, toIso: string): string {
@@ -55,18 +55,18 @@ function ContactLinks({ lead }: { lead: BrokerLeadDetail }) {
   return (
     <div className="space-y-1 text-sm">
       <p>
-        Телефон: <a href={`tel:${lead.phone}`} className="text-blue-700 hover:underline font-semibold">{lead.phone}</a>
+        Телефон: <a href={`tel:${lead.phone}`} className="text-link hover:underline font-semibold">{lead.phone}</a>
       </p>
       {lead.email && <p>Email: <span className="break-all">{lead.email}</span></p>}
       <p>Спосіб звʼязку: <strong>{lead.contact_method_display || '—'}</strong></p>
       {lead.contact_method === 'telegram' && lead.contact_handle && (
         TG_HANDLE.test(lead.contact_handle)
           ? <p>Telegram: <a href={`https://t.me/${lead.contact_handle.replace(/^@/, '')}`} target="_blank" rel="noopener noreferrer"
-              className="text-blue-700 hover:underline">{lead.contact_handle}</a></p>
+              className="text-link hover:underline">{lead.contact_handle}</a></p>
           : <p>Telegram: <span className="break-all">{lead.contact_handle}</span></p>
       )}
       {lead.contact_method === 'viber' && (
-        <p>Viber: <a href={`viber://chat?number=%2B${digits}`} className="text-blue-700 hover:underline">{lead.phone}</a></p>
+        <p>Viber: <a href={`viber://chat?number=%2B${digits}`} className="text-link hover:underline">{lead.phone}</a></p>
       )}
       {lead.contact_method !== 'telegram' && lead.contact_handle && (
         <p>Контакт: <span className="break-all">{lead.contact_handle}</span></p>
@@ -84,8 +84,8 @@ function FirstResponse({ lead }: { lead: BrokerLeadDetail }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-5">
-      <h2 className="font-bold text-slate-900 mb-3">{title}</h2>
+    <section className="bg-card border border-border rounded-xl p-5">
+      <h2 className="font-bold text-foreground mb-3">{title}</h2>
       {children}
     </section>
   );
@@ -101,7 +101,7 @@ function Snapshot({ lead }: { lead: BrokerLeadDetail }) {
       {breakdown.length > 0 && (
         <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
           {breakdown.map(([k, v]) => (
-            <div key={k} className="contents"><dt className="text-slate-600 break-words">{k}</dt><dd className="text-right">{formatValue(v)}</dd></div>
+            <div key={k} className="contents"><dt className="text-muted-foreground break-words">{k}</dt><dd className="text-right">{formatValue(v)}</dd></div>
           ))}
         </dl>
       )}
@@ -156,8 +156,8 @@ export default function BrokerLeadCard({ id }: { id: number }) {
   if (!lead) {
     return (
       <div>
-        <Link href="/broker/leads" className="text-blue-600 hover:underline text-sm">← Заявки</Link>
-        <p role="alert" className="mt-4 text-red-600 bg-red-50 border border-red-200 rounded-xl p-4">{loadError}</p>
+        <Link href="/broker/leads" className="text-link hover:underline text-sm">← Заявки</Link>
+        <p role="alert" className="mt-4 text-destructive bg-destructive/10 border border-destructive/40 rounded-xl p-4">{loadError}</p>
       </div>
     );
   }
@@ -169,22 +169,22 @@ export default function BrokerLeadCard({ id }: { id: number }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Link href="/broker/leads" className="text-blue-600 hover:underline text-sm">← Заявки</Link>
-        <h1 className="text-xl font-bold text-slate-900 font-mono">{lead.public_id}</h1>
+        <Link href="/broker/leads" className="text-link hover:underline text-sm">← Заявки</Link>
+        <h1 className="text-xl font-bold text-foreground font-mono">{lead.public_id}</h1>
         <LeadStatusBadge status={lead.status} label={lead.status_display} />
         {lead.duplicate_of && (
           <span data-testid="lead-duplicate-badge"
-            className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+            className="rounded bg-warning/15 px-2 py-0.5 text-xs font-semibold text-foreground">
             Повтор заявки {lead.duplicate_of}
           </span>
         )}
       </div>
 
       <Section title="Клієнт">
-        <p className="font-semibold text-slate-900 mb-2 break-words">{lead.name}</p>
+        <p className="font-semibold text-foreground mb-2 break-words">{lead.name}</p>
         <ContactLinks lead={lead} />
-        {lead.comment && <p className="mt-3 text-sm text-slate-700 whitespace-pre-wrap break-words">Коментар: {lead.comment}</p>}
-        <dl className="mt-3 text-sm text-slate-600 space-y-1">
+        {lead.comment && <p className="mt-3 text-sm text-foreground whitespace-pre-wrap break-words">Коментар: {lead.comment}</p>}
+        <dl className="mt-3 text-sm text-muted-foreground space-y-1">
           {lead.city && <div>Місто: {lead.city}</div>}
           {lead.budget_usd && <div>Бюджет: {formatUsd(lead.budget_usd)}</div>}
           {lead.needed_when_display && <div>Коли потрібне авто: {lead.needed_when_display}</div>}
@@ -194,7 +194,7 @@ export default function BrokerLeadCard({ id }: { id: number }) {
 
       <Section title="Авто та розрахунок">
         {lead.car && <p className="text-sm font-semibold mb-2 break-words">{lead.car}</p>}
-        {lead.listing && <p className="text-sm mb-2"><Link href={lead.listing.url} className="text-blue-700 hover:underline">Відкрити лот #{lead.listing.id}</Link></p>}
+        {lead.listing && <p className="text-sm mb-2"><Link href={lead.listing.url} className="text-link hover:underline">Відкрити лот #{lead.listing.id}</Link></p>}
         <Snapshot lead={lead} />
       </Section>
 
@@ -212,27 +212,27 @@ export default function BrokerLeadCard({ id }: { id: number }) {
       </Section>
 
       <Section title="Робота із заявкою">
-        <p className="text-sm text-slate-600 mb-3">
+        <p className="text-sm text-muted-foreground mb-3">
           Відповідальний: {lead.assigned_to ? lead.assigned_to.name : 'не призначено'}
         </p>
-        {actionError && <p role="alert" className="mb-3 text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 text-sm">{actionError}</p>}
+        {actionError && <p role="alert" className="mb-3 text-destructive bg-destructive/10 border border-destructive/40 rounded-lg p-3 text-sm">{actionError}</p>}
         {canTake && (
           <button type="button" disabled={busy} onClick={() => act(() => brokerLeadsApi.take(lead.id))}
-            className="mb-3 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white px-4 py-2 rounded-lg font-semibold">
+            className="mb-3 bg-primary hover:bg-primary/90 disabled:opacity-60 text-primary-foreground px-4 py-2 rounded-lg font-semibold">
             Взяти в роботу
           </button>
         )}
         {transitions.length > 0 ? (
           <>
-            <label className="block text-sm text-slate-700 mb-3">
+            <label className="block text-sm text-foreground mb-3">
               <span className="block mb-1">Нотатка до зміни статусу</span>
               <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2}
-                className="border border-slate-300 rounded-lg px-3 py-2 w-full" />
+                className="border border-input rounded-lg px-3 py-2 w-full" />
             </label>
             <div className="flex flex-wrap gap-2">
               {transitions.map((s: LeadStatus) => (
                 <button key={s} type="button" disabled={busy} onClick={() => act(() => brokerLeadsApi.setStatus(lead.id, s, note), true)}
-                  className="border border-blue-700 text-blue-800 hover:bg-blue-50 disabled:opacity-60 px-3 py-1.5 rounded-lg text-sm font-semibold">
+                  className="border border-link text-link hover:bg-link/10 disabled:opacity-60 px-3 py-1.5 rounded-lg text-sm font-semibold">
                   {leadStatusLabel(s)}
                 </button>
               ))}
@@ -241,11 +241,11 @@ export default function BrokerLeadCard({ id }: { id: number }) {
         ) : (
           <p className="text-sm text-muted-foreground">Заявку закрито, переходів немає.</p>
         )}
-        <label className="block text-sm text-slate-700 mt-4">
+        <label className="block text-sm text-foreground mt-4">
           <span className="block mb-1">Статус за словами партнера</span>
           <select value={lead.partner_status} disabled={busy}
             onChange={(e) => act(() => brokerLeadsApi.setPartnerStatus(lead.id, e.target.value as LeadPartnerStatus))}
-            className="border border-slate-300 rounded-lg px-3 py-1.5">
+            className="border border-input rounded-lg px-3 py-1.5">
             {PARTNER_STATUSES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </label>
@@ -262,7 +262,7 @@ export default function BrokerLeadCard({ id }: { id: number }) {
           {QUESTIONS.map((q) => (
             <fieldset key={q.key} className="flex flex-wrap items-center gap-3" disabled={busy}>
               <legend className="sr-only">{q.label}</legend>
-              <span className="w-64 text-slate-700" aria-hidden="true">{q.label}</span>
+              <span className="w-64 text-foreground" aria-hidden="true">{q.label}</span>
               {([['Так', true], ['Ні', false]] as const).map(([text, value]) => (
                 <label key={text} className="flex items-center gap-1">
                   <input type="radio" name={q.key} checked={lead[q.key] === value}
@@ -281,12 +281,12 @@ export default function BrokerLeadCard({ id }: { id: number }) {
       <Section title="Журнал статусів">
         <ol data-testid="lead-history" className="space-y-2 text-sm">
           {lead.history.map((h) => (
-            <li key={h.id} data-testid="history-item" className="border-l-2 border-blue-200 pl-3">
-              <p className="text-slate-900">
+            <li key={h.id} data-testid="history-item" className="border-l-2 border-border pl-3">
+              <p className="text-foreground">
                 {h.from_status_display ? `${h.from_status_display} → ` : ''}<strong>{h.to_status_display}</strong>
               </p>
               <p className="text-xs text-muted-foreground">{fmt(h.created_at)} · {h.changed_by ? h.changed_by.name : 'клієнт / система'}</p>
-              {h.note && <p className="text-slate-700 break-words">{h.note}</p>}
+              {h.note && <p className="text-foreground break-words">{h.note}</p>}
             </li>
           ))}
         </ol>

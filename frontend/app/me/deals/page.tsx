@@ -11,14 +11,14 @@ import { getErrorMessage } from '@/lib/errors';
 
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  proposed:  { label: 'Очікує підтвердження', cls: 'bg-amber-100 text-amber-800' },
-  confirmed: { label: 'Підтверджено',          cls: 'bg-green-100 text-green-800' },
-  cancelled: { label: 'Скасовано',             cls: 'bg-slate-100 text-muted-foreground' },
+  proposed:  { label: 'Очікує підтвердження', cls: 'bg-warning/15 text-foreground' },
+  confirmed: { label: 'Підтверджено',          cls: 'bg-success/10 text-success' },
+  cancelled: { label: 'Скасовано',             cls: 'bg-muted text-muted-foreground' },
 };
 
 function StarRating({ rating }: { rating: number }) {
   return (
-    <span className="text-amber-400">
+    <span className="text-foreground">
       {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
     </span>
   );
@@ -42,10 +42,10 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
   const isBuyer = role === 'buyer';
 
   return (
-    <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+    <div className="border border-border rounded-xl p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <Link href={`/local/${deal.listing.id}`} className="font-semibold text-blue-700 hover:underline">
+          <Link href={`/local/${deal.listing.id}`} className="font-semibold text-link hover:underline">
             {deal.listing.make} {deal.listing.model} {deal.listing.year}
           </Link>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -61,13 +61,13 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
         <div className="flex gap-2">
           <button
             onClick={() => onConfirm(deal.id)}
-            className="flex-1 bg-green-700 hover:bg-green-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+            className="flex-1 bg-success hover:bg-success text-success-foreground text-sm font-semibold py-2 rounded-lg transition-colors"
           >
             Підтвердити угоду
           </button>
           <button
             onClick={() => onCancel(deal.id)}
-            className="flex-1 border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-semibold py-2 rounded-lg transition-colors"
+            className="flex-1 border border-input text-muted-foreground hover:bg-muted text-sm font-semibold py-2 rounded-lg transition-colors"
           >
             Відхилити
           </button>
@@ -77,15 +77,15 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
       {deal.status === 'proposed' && !isBuyer && (
         <button
           onClick={() => onCancel(deal.id)}
-          className="w-full border border-slate-300 text-muted-foreground hover:bg-slate-50 text-sm py-1.5 rounded-lg"
+          className="w-full border border-input text-muted-foreground hover:bg-muted text-sm py-1.5 rounded-lg"
         >
           Скасувати пропозицію
         </button>
       )}
 
       {deal.status === 'confirmed' && isBuyer && !deal.review && (
-        <div className="border-t border-slate-100 pt-3 space-y-2">
-          <p className="text-sm font-medium text-slate-700">Залишити відгук про продавця:</p>
+        <div className="border-t border-border pt-3 space-y-2">
+          <p className="text-sm font-medium text-foreground">Залишити відгук про продавця:</p>
           <div role="radiogroup" aria-label="Оцінка" className="flex gap-1">
             {[1,2,3,4,5].map(star => (
               <button
@@ -95,22 +95,22 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
                 aria-checked={(review?.rating || 0) === star}
                 aria-label={`${star} з 5`}
                 onClick={() => onRating(deal.id, star)}
-                className={`text-2xl transition-colors ${(review?.rating || 0) >= star ? 'text-amber-400' : 'text-slate-300 hover:text-amber-300'}`}
-              ><span aria-hidden="true">★</span></button>
+                className={`text-2xl transition-colors ${(review?.rating || 0) >= star ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              ><span aria-hidden="true">{(review?.rating || 0) >= star ? '★' : '☆'}</span></button>
             ))}
           </div>
           <textarea
             aria-label="Відгук про продавця"
             placeholder="Напишіть відгук (необов'язково)..."
             rows={2}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm resize-none"
             value={review?.text || ''}
             onChange={e => onText(deal.id, e.target.value)}
           />
           <button
             onClick={() => onSubmitReview(deal.id)}
             disabled={!review?.rating || submitting}
-            className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg"
+            className="w-full bg-primary hover:bg-primary disabled:opacity-50 text-primary-foreground text-sm font-semibold py-2 rounded-lg"
           >
             {submitting ? 'Надсилаємо...' : 'Надіслати відгук'}
           </button>
@@ -118,10 +118,10 @@ function DealCard({ deal, role, review, submitting, onConfirm, onCancel, onRatin
       )}
 
       {deal.review && (
-        <div className="border-t border-slate-100 pt-3">
+        <div className="border-t border-border pt-3">
           <p className="text-xs text-muted-foreground mb-1">Ваш відгук:</p>
           <StarRating rating={deal.review.rating} />
-          {deal.review.text && <p className="text-sm text-slate-700 mt-1">{deal.review.text}</p>}
+          {deal.review.text && <p className="text-sm text-foreground mt-1">{deal.review.text}</p>}
         </div>
       )}
     </div>
@@ -202,10 +202,10 @@ export default function MyDealsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Мої угоди</h1>
+      <h1 className="text-2xl font-bold text-foreground mb-6">Мої угоди</h1>
 
       {error && (
-        <div role="alert" className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm">{error}</div>
+        <div role="alert" className="mb-4 bg-destructive/10 border border-destructive/40 text-destructive rounded-lg px-4 py-2 text-sm">{error}</div>
       )}
 
       {loadError ? (
@@ -216,7 +216,7 @@ export default function MyDealsPage() {
 
       {asBuyer.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-lg font-semibold text-slate-800 mb-3">Я — покупець</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-3">Я — покупець</h2>
           <div className="space-y-3">
             {asBuyer.map(d => <DealCard
               key={d.id} deal={d} role="buyer"
@@ -234,7 +234,7 @@ export default function MyDealsPage() {
 
       {asSeller.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-slate-800 mb-3">Я — продавець</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-3">Я — продавець</h2>
           <div className="space-y-3">
             {asSeller.map(d => <DealCard
               key={d.id} deal={d} role="seller"

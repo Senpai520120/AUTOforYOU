@@ -25,10 +25,10 @@ export default function ListingCard({ listing, priority = false }: { listing: Li
   const altText = `${v.year} ${v.make} ${v.model}`;
 
   return (
-    <Link href={`/listings/${listingSlug(listing)}`} className="block group focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-xl">
-      <article className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md hover:border-blue-300 transition-all">
+    <Link href={`/listings/${listingSlug(listing)}`} className="block group focus:outline-none focus:ring-2 focus:ring-ring rounded-xl">
+      <article className="bg-card rounded-xl border border-border overflow-hidden hover:shadow-md hover:border-link/50 transition-all">
         {/* Photo */}
-        <div className="relative h-48 bg-slate-100">
+        <div className="relative h-48 bg-muted">
           {imgSrc ? (
             <Image
               src={imgSrc}
@@ -40,7 +40,7 @@ export default function ListingCard({ listing, priority = false }: { listing: Li
               unoptimized={isLocalMediaUrl(imgSrc)}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-slate-300" aria-label="Фото відсутнє">
+            <div className="flex items-center justify-center h-full text-muted-foreground" aria-label="Фото відсутнє">
               <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
@@ -56,20 +56,20 @@ export default function ListingCard({ listing, priority = false }: { listing: Li
 
         {/* Info */}
         <div className="p-4">
-          <p className="font-bold text-slate-900 text-lg group-hover:text-blue-700 transition-colors truncate">
+          <p className="font-bold text-foreground text-lg group-hover:text-link transition-colors truncate">
             {v.year} {v.make} {v.model}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {FUEL_LABELS[v.fuel_type] ?? v.fuel_type} · {(v.engine_cc / 1000).toFixed(1)}L · {v.mileage_km.toLocaleString('uk-UA')} км
           </p>
           {v.damage_type && (
-            <p className="text-xs text-amber-700 mt-1 truncate">Пошкодження: {v.damage_type}</p>
+            <p className="text-xs text-foreground mt-1 truncate">Пошкодження: {v.damage_type}</p>
           )}
           <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-2xl font-extrabold text-blue-800">
+            <span className="text-2xl font-extrabold text-foreground">
               {Number(listing.price).toLocaleString('uk-UA')}
             </span>
-            <span className="text-sm font-semibold text-blue-600">{listing.currency}</span>
+            <span className="text-sm font-semibold text-link">{listing.currency}</span>
           </div>
         </div>
       </article>

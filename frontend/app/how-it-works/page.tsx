@@ -40,7 +40,7 @@ export default async function HowItWorksPage() {
       {data?.published && (
         <JsonLd data={breadcrumbLd([{ name: HOME_LABEL, path: '/' }, { name: HOW_IT_WORKS_LABEL, path: '/how-it-works' }])} />
       )}
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">{HOW_IT_WORKS_LABEL}</h1>
+      <h1 className="text-2xl font-bold text-foreground mb-6">{HOW_IT_WORKS_LABEL}</h1>
 
       {data === null && <ErrorState error={null} />}
 
@@ -54,14 +54,14 @@ export default async function HowItWorksPage() {
         <>
           <ol className="space-y-4" data-testid="import-steps">
             {data.steps.map((step, i) => (
-              <li key={i} data-testid="import-step" className="bg-white border border-slate-200 rounded-xl p-5">
-                <h2 className="font-semibold text-slate-900">
-                  <span className="text-blue-700 mr-2">{i + 1}.</span>
+              <li key={i} data-testid="import-step" className="bg-card border border-border rounded-xl p-5">
+                <h2 className="font-semibold text-foreground">
+                  <span className="text-link mr-2">{i + 1}.</span>
                   {step.title}
                 </h2>
                 {step.duration && <p className="text-xs font-semibold text-muted-foreground mt-1">{step.duration}</p>}
                 {step.description && (
-                  <p className="text-sm text-slate-600 mt-2 whitespace-pre-line">{step.description}</p>
+                  <p className="text-sm text-muted-foreground mt-2 whitespace-pre-line">{step.description}</p>
                 )}
               </li>
             ))}
@@ -71,21 +71,21 @@ export default async function HowItWorksPage() {
 
           <PopularModels models={models} />
 
-          <div className="mt-10 bg-blue-50 border border-blue-200 rounded-xl p-5 text-center">
+          <div className="mt-10 bg-link/10 border border-link/30 rounded-xl p-5 text-center">
             <Link
               href="/calculator"
-              className="inline-block bg-blue-700 hover:bg-blue-800 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+              className="inline-block bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-6 py-3 rounded-xl transition-colors"
             >
               {CALC_COST_LABEL}
             </Link>
-            <p className="text-sm text-slate-600 mt-3">
+            <p className="text-sm text-muted-foreground mt-3">
               Заявку на підбір авто можна залишити одразу після розрахунку.
             </p>
           </div>
 
           {models !== null && models.length > 0 && (
             <p className="mt-6 text-sm">
-              <Link href="/prigon" className="text-blue-700 underline" data-testid="how-link-prigon">{LANDING_INDEX_LABEL}: моделі та орієнтовна ціна</Link>
+              <Link href="/prigon" className="text-link underline" data-testid="how-link-prigon">{LANDING_INDEX_LABEL}: моделі та орієнтовна ціна</Link>
             </p>
           )}
           <p className="mt-6 text-xs text-muted-foreground" data-testid="how-partner-phrase">{partnerPhrase(settings?.partner_name)}.</p>

@@ -30,8 +30,8 @@ export default async function AboutPage() {
     <div className="max-w-3xl mx-auto px-4 py-10">
       <JsonLd data={breadcrumbLd(crumbs)} />
       <Breadcrumbs crumbs={crumbs} />
-      <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-6">{ABOUT_LABEL}</h1>
-      <div data-testid="about-text" className="space-y-4 text-slate-700">
+      <h1 className="text-2xl font-bold text-foreground mt-4 mb-6">{ABOUT_LABEL}</h1>
+      <div data-testid="about-text" className="space-y-4 text-foreground">
         {paragraphs.map((p, i) => <p key={i} className="whitespace-pre-line">{p}</p>)}
       </div>
     </div>

@@ -13,7 +13,7 @@ export const metadata: Metadata = buildMetadata({
   path: '/privacy',
 });
 
-const H2 = 'text-xl font-semibold text-slate-800 mb-2';
+const H2 = 'text-xl font-semibold text-foreground mb-2';
 const UL = 'list-disc list-inside space-y-1 ml-4';
 
 export default async function PrivacyPage() {
@@ -131,7 +131,7 @@ export default async function PrivacyPage() {
         </ul>
         <p className="mt-2">
           Скористатися правами на доступ і видалення можна у розділі{' '}
-          <Link href="/me/data" className="text-blue-600 hover:underline">Мої дані</Link>.
+          <Link href="/me/data" className="text-link hover:underline">Мої дані</Link>.
         </p>
         <p className="mt-2">
           Видалення акаунта: підтвердьте дію паролем; протягом {graceDays} днів видалення можна
@@ -166,7 +166,7 @@ export default async function PrivacyPage() {
         <h2 className={H2}>9. Cookie</h2>
         <p>
           Детальніше про використання cookie дивіться у нашій{' '}
-          <Link href="/cookies" className="text-blue-600 hover:underline">
+          <Link href="/cookies" className="text-link hover:underline">
             Політиці щодо файлів cookie
           </Link>
           .

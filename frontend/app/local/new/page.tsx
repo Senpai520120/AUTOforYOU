@@ -10,7 +10,7 @@ export default function NewLocalListingPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-slate-900 mb-2">Подати оголошення</h1>
+      <h1 className="text-2xl font-bold text-foreground mb-2">Подати оголошення</h1>
       <p className="text-sm text-muted-foreground mb-8">Розмістіть авто в Каталозі Україна — безкоштовно</p>
       <LocalListingForm />
     </div>

@@ -197,24 +197,24 @@ export default function MessagesPage() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/me" className="hover:text-blue-700">Кабінет</Link>
+        <Link href="/me" className="hover:text-link">Кабінет</Link>
         <span>/</span>
         <span>Повідомлення</span>
       </div>
-      <h1 className="text-xl font-bold text-slate-900 mb-4">Повідомлення</h1>
+      <h1 className="text-xl font-bold text-foreground mb-4">Повідомлення</h1>
 
       {notVerified && <EmailNotVerified className="mb-3" />}
       {error && (
-        <div role="alert" className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+        <div role="alert" className="mb-3 text-sm text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-4 py-2">
           {error}
           <button className="ml-2 underline" onClick={() => setError('')}>×</button>
         </div>
       )}
 
-      <div className="flex border border-slate-200 rounded-2xl overflow-hidden bg-white" style={{ minHeight: 480 }}>
+      <div className="flex border border-border rounded-2xl overflow-hidden bg-card" style={{ minHeight: 480 }}>
         {/* Conversation list */}
-        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-72 border-r border-slate-200 flex-col flex-shrink-0`}>
-          <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">
+        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-72 border-r border-border flex-col flex-shrink-0`}>
+          <div className="px-4 py-3 border-b border-border text-sm font-semibold text-foreground">
             Діалоги
           </div>
           {loadingConvs ? (
@@ -226,33 +226,33 @@ export default function MessagesPage() {
               <EmptyState title="Немає діалогів." hint="Напишіть продавцю з картки оголошення." />
             </div>
           ) : (
-            <ul className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            <ul className="flex-1 overflow-y-auto divide-y divide-border">
               {conversations.map(conv => (
                 <li key={conv.id}>
                   <button
                     onClick={() => openConversation(conv.id)}
-                    className={`w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors ${activeId === conv.id ? 'bg-blue-50 border-l-2 border-blue-600' : ''}`}
+                    className={`w-full text-left px-4 py-3 hover:bg-link/10 transition-colors ${activeId === conv.id ? 'bg-link/10 border-l-2 border-primary' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-medium text-slate-900 text-sm truncate">
+                      <span className="font-medium text-foreground text-sm truncate">
                         {conv.other_participant?.display_name || 'Менеджер'}
                       </span>
                       {conv.unread_count > 0 && (
-                        <span className="bg-blue-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                        <span className="bg-primary text-primary-foreground text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                           {conv.unread_count}
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-blue-700 truncate mt-0.5">{conv.subject_title}</div>
-                    <div className="text-xs text-slate-400 truncate mt-0.5">{conv.last_message_text}</div>
-                    <div className="text-xs text-slate-300 mt-0.5">{timeAgo(conv.last_message_at)}</div>
+                    <div className="text-xs text-link truncate mt-0.5">{conv.subject_title}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">{conv.last_message_text}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{timeAgo(conv.last_message_at)}</div>
                   </button>
                 </li>
               ))}
               {hasMoreConvs && (
                 <li className="p-3 text-center">
                   <button type="button" onClick={loadMoreConversations} disabled={loadingMore}
-                    className="text-sm text-blue-700 hover:underline disabled:opacity-50">
+                    className="text-sm text-link hover:underline disabled:opacity-50">
                     {loadingMore ? 'Завантаження…' : 'Показати ще'}
                   </button>
                 </li>
@@ -264,14 +264,14 @@ export default function MessagesPage() {
         {/* Thread */}
         <div className={`${activeId ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`}>
           {!activeId ? (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
               Оберіть діалог
             </div>
           ) : loadingThread ? (
             <LoadingState size="md" />
           ) : threadError ? (
             <div className="p-4">
-              <button type="button" onClick={backToList} className="md:hidden mb-3 text-sm text-blue-700 hover:underline">← Діалоги</button>
+              <button type="button" onClick={backToList} className="md:hidden mb-3 text-sm text-link hover:underline">← Діалоги</button>
               {threadError instanceof ApiError && (threadError.status === 404 || threadError.status === 403) ? (
                 <EmptyState title="Немає доступу до цієї розмови" hint="Розмову не знайдено або ви не її учасник." />
               ) : (
@@ -281,23 +281,23 @@ export default function MessagesPage() {
           ) : active ? (
             <>
               {/* Thread header */}
-              <div className="px-3 sm:px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+              <div className="px-3 sm:px-5 py-3 border-b border-border flex items-center gap-3">
                 <button
                   type="button"
                   onClick={backToList}
-                  className="md:hidden shrink-0 text-sm text-blue-700 hover:underline min-h-8"
+                  className="md:hidden shrink-0 text-sm text-link hover:underline min-h-8"
                 >
                   ← Діалоги
                 </button>
                 <div className="min-w-0">
-                  <div className="font-semibold text-slate-900 text-sm">{active.subject_title}</div>
-                  <Link href={active.subject_url} className="text-xs text-blue-600 hover:underline">
+                  <div className="font-semibold text-foreground text-sm">{active.subject_title}</div>
+                  <Link href={active.subject_url} className="text-xs text-link hover:underline">
                     Переглянути оголошення →
                   </Link>
                 </div>
                 <button
                   onClick={() => openConversation(activeId)}
-                  className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                  className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors"
                   title="Оновити"
                   aria-label="Оновити діалог"
                 >
@@ -310,24 +310,24 @@ export default function MessagesPage() {
                 {active.has_earlier && (
                   <div className="text-center">
                     <button type="button" onClick={loadEarlier} disabled={loadingEarlier}
-                      className="text-xs text-blue-700 hover:underline disabled:opacity-50">
+                      className="text-xs text-link hover:underline disabled:opacity-50">
                       {loadingEarlier ? 'Завантаження…' : 'Завантажити раніші'}
                     </button>
                   </div>
                 )}
                 {active.messages.length === 0 ? (
-                  <div className="text-center text-slate-400 text-sm mt-8">Немає повідомлень</div>
+                  <div className="text-center text-muted-foreground text-sm mt-8">Немає повідомлень</div>
                 ) : (
                   active.messages.map(msg => {
                     const isMine = msg.sender === user.id;
                     return (
                       <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2 text-sm ${isMine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'}`}>
+                        <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2 text-sm ${isMine ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
                           {!isMine && (
                             <div className="text-xs font-semibold mb-1 text-muted-foreground">{msg.sender_name}</div>
                           )}
                           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                          <div className={`text-xs mt-1 ${isMine ? 'text-blue-200' : 'text-slate-400'} text-right`}>
+                          <div className={`text-xs mt-1 ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'} text-right`}>
                             {timeAgo(msg.created_at)}
                             {isMine && msg.read_at && <span className="ml-1">✓</span>}
                           </div>
@@ -343,7 +343,7 @@ export default function MessagesPage() {
               {active.subject_url?.startsWith('/local/') && <ScamWarningBanner className="mx-5 mt-3" />}
 
               {/* Input */}
-              <div className="px-5 py-3 border-t border-slate-100 flex gap-2 items-end">
+              <div className="px-5 py-3 border-t border-border flex gap-2 items-end">
                 <div className="flex-1">
                   <textarea
                     value={text}
@@ -352,14 +352,14 @@ export default function MessagesPage() {
                     aria-label="Повідомлення" placeholder="Написати повідомлення… (Enter — надіслати)"
                     aria-invalid={!!fieldError}
                     rows={2}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="w-full border border-border rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                   />
-                  {fieldError && <p role="alert" className="text-xs text-red-600 mt-1">{fieldError}</p>}
+                  {fieldError && <p role="alert" className="text-xs text-destructive mt-1">{fieldError}</p>}
                 </div>
                 <button
                   onClick={handleSend}
                   disabled={!text.trim() || sending}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors"
+                  className="bg-primary hover:bg-primary disabled:opacity-40 text-primary-foreground font-semibold px-4 py-2 rounded-xl text-sm transition-colors"
                 >
                   {sending ? '…' : 'Надіслати'}
                 </button>

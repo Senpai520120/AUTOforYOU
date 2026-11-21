@@ -42,25 +42,25 @@ function VerifyEmail() {
 
   return (
     <div className="max-w-md mx-auto mt-10">
-      <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
-        {state === 'loading' && <p className="text-slate-600">Підтверджуємо email…</p>}
+      <div className="bg-card border border-border rounded-2xl p-8 shadow-sm text-center">
+        {state === 'loading' && <p className="text-muted-foreground">Підтверджуємо email…</p>}
         {state === 'ok' && (
           <>
-            <h1 className="text-2xl font-bold text-slate-900 mb-3">Email підтверджено</h1>
-            <p className="text-slate-600 text-sm mb-4">Дякуємо! Тепер вам доступні всі функції сайту.</p>
-            <Link href={user ? '/me' : '/login'} className="text-blue-600 hover:underline">
+            <h1 className="text-2xl font-bold text-foreground mb-3">Email підтверджено</h1>
+            <p className="text-muted-foreground text-sm mb-4">Дякуємо! Тепер вам доступні всі функції сайту.</p>
+            <Link href={user ? '/me' : '/login'} className="text-link hover:underline">
               {user ? 'До кабінету' : 'Увійти'}
             </Link>
           </>
         )}
         {state === 'error' && (
           <>
-            <h1 className="text-2xl font-bold text-slate-900 mb-3">Не вдалося підтвердити email</h1>
-            <p className="text-slate-600 text-sm mb-4">
+            <h1 className="text-2xl font-bold text-foreground mb-3">Не вдалося підтвердити email</h1>
+            <p className="text-muted-foreground text-sm mb-4">
               Посилання недійсне, прострочене або вже використане. Увійдіть і надішліть лист ще раз
               у кабінеті.
             </p>
-            <Link href="/login?next=/me" className="text-blue-600 hover:underline">Увійти</Link>
+            <Link href="/login?next=/me" className="text-link hover:underline">Увійти</Link>
           </>
         )}
       </div>

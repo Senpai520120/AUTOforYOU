@@ -26,7 +26,7 @@ export function OwnerDetails({ settings }: { settings: SiteSettings | null }) {
 export function EmailOrMissing({ email }: { email: string }) {
   if (!email) return <span className="text-muted-foreground">{NOT_FILLED}</span>;
   return (
-    <a href={`mailto:${email}`} className="font-mono text-blue-600 hover:underline">
+    <a href={`mailto:${email}`} className="font-mono text-link hover:underline">
       {email}
     </a>
   );
@@ -40,21 +40,21 @@ export default function LegalPage({ title, settings, showOwner = true, children 
       {!approved && (
         <p
           data-testid="legal-template-badge"
-          className="text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-4 py-2 mb-8"
+          className="text-xs bg-warning/15 border border-warning text-foreground rounded-lg px-4 py-2 mb-8"
         >
           Шаблон — потребує перевірки юристом перед публікацією
         </p>
       )}
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">{title}</h1>
+      <h1 className="text-3xl font-bold text-foreground mb-8">{title}</h1>
 
       {showOwner && (
-        <div className="mb-8 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          <p className="font-semibold text-slate-800 mb-1">Власник персональних даних</p>
+        <div className="mb-8 rounded-lg border border-border bg-muted px-4 py-3 text-sm text-foreground">
+          <p className="font-semibold text-foreground mb-1">Власник персональних даних</p>
           <OwnerDetails settings={settings} />
         </div>
       )}
 
-      <div className="prose prose-slate max-w-none space-y-6 text-slate-700 [&_a]:underline">
+      <div className="prose max-w-none space-y-6 text-foreground [&_a]:underline">
         {children}
         <p className="text-xs text-muted-foreground mt-10 border-t pt-4">
           Останнє оновлення: {date || NOT_FILLED}

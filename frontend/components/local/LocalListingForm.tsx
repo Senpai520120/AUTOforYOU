@@ -130,26 +130,26 @@ function CreateModePhotoPicker({ config, onChange }: { config: LocalConfig; onCh
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={files.length >= config.max_photos}
-          className="text-sm bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors"
+          className="text-sm bg-link/10 hover:bg-link/20 disabled:opacity-50 text-link border border-link/30 rounded-lg px-3 py-1.5 transition-colors"
         >
           + Вибрати фото
         </button>
-        <span className="text-xs text-slate-600">{photoHint(config, files.length)}</span>
+        <span className="text-xs text-muted-foreground">{photoHint(config, files.length)}</span>
         <input ref={inputRef} type="file" accept={config.allowed_types.join(',')} multiple className="hidden" onChange={handleChange} />
       </div>
-      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
       {files.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {files.map((f, i) => (
-            <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+            <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-border bg-muted">
               <FileThumb file={f} alt={`Фото ${i + 1} з ${files.length}`} />
               {i === 0 && (
-                <span className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Головне</span>
+                <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">Головне</span>
               )}
               <button
                 type="button"
                 onClick={() => remove(i)}
-                className="absolute top-1 right-1 bg-white/90 hover:bg-white text-red-600 text-xs font-bold w-8 h-8 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                className="absolute top-1 right-1 bg-card/90 hover:bg-card text-destructive text-xs font-bold w-8 h-8 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                 aria-label="Видалити фото"
               >
                 ✕
@@ -339,28 +339,28 @@ export default function LocalListingForm({ initial, listingId }: Props) {
     }
   }
 
-  const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-  const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
-  const errCls = 'text-xs text-red-600 mt-1';
+  const inputCls = 'w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring';
+  const labelCls = 'block text-sm font-medium text-foreground mb-1';
+  const errCls = 'text-xs text-destructive mt-1';
 
   if (submitted) {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center max-w-md mx-auto">
+      <div className="bg-link/10 border border-link/30 rounded-2xl p-8 text-center max-w-md mx-auto">
         <p className="text-4xl mb-4">🕐</p>
-        <h2 className="text-xl font-bold text-blue-900 mb-2">Оголошення надіслано на модерацію</h2>
-        <p className="text-sm text-blue-700 mb-4">
+        <h2 className="text-xl font-bold text-foreground mb-2">Оголошення надіслано на модерацію</h2>
+        <p className="text-sm text-link mb-4">
           Ми перевіримо оголошення і опублікуємо його незабаром. Ви отримаєте сповіщення.
         </p>
-        {moderationTerm && <p data-testid="moderation-term" className="text-sm text-blue-700 mb-4">{moderationTerm}</p>}
+        {moderationTerm && <p data-testid="moderation-term" className="text-sm text-link mb-4">{moderationTerm}</p>}
         {photoError && (
-          <div role="alert" className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-3 text-sm mb-4 text-left">
+          <div role="alert" className="bg-warning/15 border border-warning text-foreground rounded-lg p-3 text-sm mb-4 text-left">
             <p>{photoError}</p>
             {createdListingId && (
               <a href={`/local/${createdListingId}/edit`} className="underline font-semibold">Додати фото</a>
             )}
           </div>
         )}
-        <a href="/me/local-listings" className="text-blue-700 underline text-sm">
+        <a href="/me/local-listings" className="text-link underline text-sm">
           Переглянути мої оголошення →
         </a>
       </div>
@@ -376,8 +376,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   }
   if (!isEdit && !config.posting_open) {
     return (
-      <div role="status" className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center">
-        <p className="text-slate-700">
+      <div role="status" className="bg-muted border border-border rounded-2xl p-8 text-center">
+        <p className="text-foreground">
           Подача оголошень поки доступна лише за запрошенням. Напишіть нам — ми додамо ваше оголошення.
         </p>
       </div>
@@ -388,8 +388,8 @@ export default function LocalListingForm({ initial, listingId }: Props) {
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
       {/* VIN prefill */}
       {!isEdit && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-amber-800 mb-2">Автозаповнення за VIN (безкоштовно)</p>
+        <div className="bg-warning/15 border border-warning rounded-xl p-4">
+          <p className="text-sm font-medium text-foreground mb-2">Автозаповнення за VIN (безкоштовно)</p>
           <div className="flex gap-2">
             <input
               className={inputCls + ' flex-1 font-mono uppercase'}
@@ -403,7 +403,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
               type="button"
               onClick={handleVinPrefill}
               disabled={vinLoading}
-              className="bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+              className="bg-accent hover:bg-accent/90 disabled:opacity-60 text-accent-foreground font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
             >
               {vinLoading ? 'Завантаження...' : 'Заповнити за VIN'}
             </button>
@@ -415,7 +415,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
       {notVerified && <EmailNotVerified />}
 
       {errors._general && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700" role="alert">
+        <div className="bg-destructive/10 border border-destructive/40 rounded-lg p-3 text-sm text-destructive" role="alert">
           {errors._general}
         </div>
       )}
@@ -547,7 +547,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         ) : (
           <CreateModePhotoPicker config={config} onChange={setPendingFiles} />
         )}
-        {photoError && <p role="alert" className="text-xs text-red-600 mt-1">{photoError}</p>}
+        {photoError && <p role="alert" className="text-xs text-destructive mt-1">{photoError}</p>}
       </div>
 
       <div>
@@ -564,7 +564,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
         {/* 8.5: ліміт довжини з /local/config/ (description_max), лічильник «N / max» */}
         {descriptionMax > 0 && (
           <p id={fid('desc-count')} data-testid="description-counter"
-            className={`text-xs mt-1 text-right ${descriptionTooLong ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+            className={`text-xs mt-1 text-right ${descriptionTooLong ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
             {description.length} / {descriptionMax}
           </p>
         )}
@@ -587,16 +587,16 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           placeholder="+380501234567"
         />
         {errors.contact_phone && <p id={fid('err-contact_phone')} role="alert" className={errCls}>{errors.contact_phone}</p>}
-        <p data-testid="phone-hint" className="text-xs text-slate-600 mt-1">
+        <p data-testid="phone-hint" className="text-xs text-muted-foreground mt-1">
           {phoneLocked ? (
             <>
               Номер з вашого підтвердженого Telegram. Щоб змінити його, надішліть боту команду /unlink і підтвердіть
-              новий номер у розділі <Link href="/me/telegram" className="text-blue-700 underline">«Telegram»</Link> кабінету.
+              новий номер у розділі <Link href="/me/telegram" className="text-link underline">«Telegram»</Link> кабінету.
             </>
           ) : (
             <>
               Номер не підтверджено. Підтвердіть його через Telegram у розділі{' '}
-              <Link href="/me/telegram" className="text-blue-700 underline">«Telegram»</Link> кабінету —
+              <Link href="/me/telegram" className="text-link underline">«Telegram»</Link> кабінету —
               тоді він підставиться автоматично.
             </>
           )}
@@ -608,18 +608,18 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+              className="mt-0.5 h-4 w-4 rounded border-input text-link"
               checked={agreedToRules}
               onChange={e => setAgreedToRules(e.target.checked)}
               required
             />
-            <span className="text-sm text-slate-700">
+            <span className="text-sm text-foreground">
               Погоджуюсь з{' '}
-              <a href="/rules" target="_blank" className="text-blue-600 underline">
+              <a href="/rules" target="_blank" className="text-link underline">
                 правилами розміщення оголошень
               </a>{' '}
               та{' '}
-              <a href="/terms" target="_blank" className="text-blue-600 underline">
+              <a href="/terms" target="_blank" className="text-link underline">
                 умовами використання
               </a>
             </span>
@@ -628,15 +628,15 @@ export default function LocalListingForm({ initial, listingId }: Props) {
           <label className="mt-3 flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+              className="mt-0.5 h-4 w-4 rounded border-input text-link"
               checked={legalConfirmed}
               onChange={e => setLegalConfirmed(e.target.checked)}
               aria-describedby={errors.legal_confirmed ? fid('err-legal_confirmed') : undefined}
               required
             />
-            <span className="text-sm text-slate-700">
+            <span className="text-sm text-foreground">
               Авто не в розшуку, не в заставі, документи в наявності{' '}
-              (<a href="/rules#forbidden" target="_blank" className="text-blue-600 underline">що забороняється</a>)
+              (<a href="/rules#forbidden" target="_blank" className="text-link underline">що забороняється</a>)
             </span>
           </label>
           {errors.legal_confirmed && <p id={fid('err-legal_confirmed')} role="alert" className={errCls}>{errors.legal_confirmed}</p>}
@@ -645,26 +645,26 @@ export default function LocalListingForm({ initial, listingId }: Props) {
 
       {/* 8.6: тип продавця визначає сервер (дилер — лише верифікований), вибору у формі немає. */}
       {authUser?.is_verified_dealer && (
-        <p data-testid="posting-as-dealer" className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+        <p data-testid="posting-as-dealer" className="text-sm text-foreground bg-link/10 border border-link/30 rounded-lg px-3 py-2">
           ✓ {POSTING_AS_DEALER}
         </p>
       )}
 
       {!isEdit && moderationTerm && (
-        <p data-testid="moderation-term" className="text-sm text-slate-600">{moderationTerm}</p>
+        <p data-testid="moderation-term" className="text-sm text-muted-foreground">{moderationTerm}</p>
       )}
       <div className="flex gap-3 pt-2">
         <button
           type="submit"
           disabled={submitting || descriptionTooLong || (!isEdit && !(agreedToRules && legalConfirmed))}
-          className="bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold px-8 py-3 rounded-lg transition-colors"
+          className="bg-primary hover:bg-primary/90 disabled:opacity-60 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors"
         >
           {submitting ? 'Збереження...' : isEdit ? 'Зберегти зміни' : SUBMIT_LABEL}
         </button>
         <button
           type="button"
           onClick={() => router.back()}
-          className="border border-slate-300 hover:bg-slate-50 text-slate-600 px-6 py-3 rounded-lg transition-colors"
+          className="border border-input hover:bg-muted text-muted-foreground px-6 py-3 rounded-lg transition-colors"
         >
           Скасувати
         </button>

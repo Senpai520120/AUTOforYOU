@@ -74,7 +74,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
           <p className="text-sm text-muted-foreground mb-4 truncate">{listingTitle}</p>
 
           {/* Sandbox notice */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 mb-4">
+          <div className="bg-warning/15 border border-warning rounded-lg px-3 py-2 text-xs text-foreground mb-4">
             <strong>Тестовий режим (SANDBOX).</strong> Реальні гроші не списуються.
             Повноцінну оплату перевіримо на живому сервері.
           </div>
@@ -91,7 +91,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
                 <label
                   key={t.code}
                   className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                    selected === t.code ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'
+                    selected === t.code ? 'border-ring bg-link/10' : 'border-border hover:border-input'
                   }`}
                 >
                   <input
@@ -105,13 +105,13 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span aria-hidden="true">{TYPE_ICONS[t.type]}</span>
-                      <span className="font-medium text-slate-900 text-sm">{t.name}</span>
-                      <span className="ml-auto text-sm font-bold text-blue-700 whitespace-nowrap">
+                      <span className="font-medium text-foreground text-sm">{t.name}</span>
+                      <span className="ml-auto text-sm font-bold text-link whitespace-nowrap">
                         {Number(t.price).toLocaleString('uk-UA')} {t.currency}
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
-                    <span className="inline-block mt-1 text-[11px] bg-slate-100 text-muted-foreground px-1.5 py-0.5 rounded">
+                    <span className="inline-block mt-1 text-[11px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
                       {TYPE_LABELS[t.type]}
                       {t.duration_days > 0 ? ` · ${t.duration_days} дн.` : ''}
                     </span>
@@ -121,19 +121,19 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
             </div>
           )}
 
-          {error && <p role="alert" className="text-xs text-red-600 mb-3">{error}</p>}
+          {error && <p role="alert" className="text-xs text-destructive mb-3">{error}</p>}
 
           <div className="flex gap-2">
             <button
               onClick={handlePay}
               disabled={!selected || paying}
-              className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+              className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-semibold py-2.5 rounded-xl text-sm transition-colors"
             >
               {paying ? 'Перехід до оплати...' : `Оплатити${selectedTariff ? ` ${Number(selectedTariff.price).toLocaleString('uk-UA')} ${selectedTariff.currency}` : ''}`}
             </button>
             <button
               onClick={onClose}
-              className="px-4 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+              className="px-4 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted transition-colors"
             >
               Скасувати
             </button>
