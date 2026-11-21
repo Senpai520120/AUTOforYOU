@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { CATALOG_LABEL } from '@/lib/labels';
 import { Suspense } from 'react';
 import Link from 'next/link';
+import { Plus, CircleAlert } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { ICON_STROKE } from '@/lib/utils';
 import LocalListingFilters from '@/components/local/LocalListingFilters';
 import LocalCatalogGrid from './LocalCatalogGrid';
 import SaveSearchButton from '@/components/local/SaveSearchButton';
@@ -65,8 +68,8 @@ export default async function UaCatalogPage({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{CATALOG_LABEL}</h1>
-          <p className="text-sm text-slate-500 mt-1">Місцеві оголошення від власників</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{CATALOG_LABEL}</h1>
+          <p className="text-sm text-muted-foreground mt-1">Місцеві оголошення від власників</p>
         </div>
         <div className="flex items-center gap-2">
           {/* «Засів»: пошуки й подача закриті (бекенд: 404 / 403) — кнопок немає ні в кого. */}
@@ -75,12 +78,12 @@ export default async function UaCatalogPage({
               <Suspense>
                 <SaveSearchButton />
               </Suspense>
-              <Link
-                href="/local/new"
-                className="bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
-              >
-                + Подати оголошення
-              </Link>
+              <Button asChild className="bg-accent font-semibold text-accent-foreground hover:bg-accent/90">
+                <Link href="/local/new">
+                  <Plus strokeWidth={ICON_STROKE} aria-hidden="true" />
+                  Подати оголошення
+                </Link>
+              </Button>
             </>
           )}
         </div>
@@ -92,7 +95,8 @@ export default async function UaCatalogPage({
 
       <div className="mt-6">
         {badFilters.length > 0 ? (
-          <div role="alert" className="text-center py-12 text-red-600" data-testid="ua-filter-error">
+          <div role="alert" className="flex items-center justify-center gap-2 py-12 text-center text-destructive" data-testid="ua-filter-error">
+            <CircleAlert className="size-5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
             Некоректне значення фільтра (ціна, рік або пробіг мають бути числом). Змініть фільтри та спробуйте ще раз.
           </div>
         ) : (

@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { CarFront, CircleAlert } from 'lucide-react';
+import { ICON_STROKE } from '@/lib/utils';
 import EmptyState from '@/components/ui/EmptyState';
 import { countActiveFilters } from '@/lib/local-filters';
 import LocalListingCard from '@/components/local/LocalListingCard';
@@ -30,7 +32,8 @@ export default function LocalCatalogGrid({
 }) {
   if (data === null) {
     return (
-      <div className="text-center py-12 text-slate-500">
+      <div className="flex items-center justify-center gap-2 py-12 text-center text-muted-foreground">
+        <CircleAlert className="size-5 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
         Не вдалося завантажити оголошення. Спробуйте оновити сторінку пізніше.
       </div>
     );
@@ -41,17 +44,17 @@ export default function LocalCatalogGrid({
     return (
       <div data-testid="ua-empty">
         <EmptyState
-          icon="🚗"
+          icon={<CarFront className="size-10" strokeWidth={ICON_STROKE} aria-hidden="true" />}
           title="Оголошень не знайдено"
           hint={filtered ? 'Спробуйте змінити фільтри або скинути їх.' : 'Поки що тут порожньо.'}
           action={filtered ? { label: 'Скинути фільтри', href: '/ua' } : undefined}
         />
-        <p className="mt-3 text-center text-sm text-slate-600">
-          <Link href="/calculator" className="text-blue-600 underline">Порахувати пригон з США</Link>
+        <p className="mt-3 text-center text-sm text-muted-foreground">
+          <Link href="/calculator" className="font-medium text-link underline underline-offset-4 hover:text-link/80">Порахувати пригон з США</Link>
           {postingEnabled && (
             <>
               {' '}або{' '}
-              <Link href="/local/new" className="text-blue-600 underline">
+              <Link href="/local/new" className="font-medium text-link underline underline-offset-4 hover:text-link/80">
                 додайте своє оголошення
               </Link>
             </>
@@ -66,7 +69,7 @@ export default function LocalCatalogGrid({
 
   return (
     <div>
-      <p className="text-sm text-slate-500 mb-4">Знайдено: {listingsCount(data.count)}</p>
+      <p className="text-sm text-muted-foreground mb-4">Знайдено: {listingsCount(data.count)}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {data.results.map((l, i) => (
           <LocalListingCard key={l.id} listing={l} priority={i === 0} />
@@ -76,16 +79,16 @@ export default function LocalCatalogGrid({
       {totalPages > 1 && (
         <nav aria-label="Пагінація" className="mt-8 flex justify-center gap-2 flex-wrap">
           {pageWindow(currentPage, totalPages).map((p, i) => p === null ? (
-            <span key={`gap-${i}`} aria-hidden="true" className="inline-flex items-center px-1 text-sm text-slate-400">…</span>
+            <span key={`gap-${i}`} aria-hidden="true" className="inline-flex items-center px-1 text-sm text-muted-foreground">…</span>
           ) : (
             <Link
               key={p}
               href={pageHref('/ua', params, p)}
               aria-current={p === currentPage ? 'page' : undefined}
-              className={`inline-flex items-center justify-center min-w-11 min-h-11 px-3 rounded text-sm border transition-colors ${
+              className={`inline-flex items-center justify-center min-w-11 min-h-11 px-3 rounded-md text-sm font-medium border transition-colors ${
                 p === currentPage
-                  ? 'bg-blue-700 text-white border-blue-700'
-                  : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border bg-card text-foreground hover:bg-secondary'
               }`}
             >
               {p}

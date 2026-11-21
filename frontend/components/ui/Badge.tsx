@@ -1,11 +1,12 @@
 type Variant = 'default' | 'success' | 'warning' | 'danger' | 'info';
 
+// Текст завжди з контрастом >= 4.5:1 (див. docs/design/DESIGN_SYSTEM.md); статус дублюється текстом.
 const styles: Record<Variant, string> = {
-  default: 'bg-slate-100 text-slate-700',
-  success: 'bg-green-100 text-green-800',
-  warning: 'bg-amber-100 text-amber-800',
-  danger: 'bg-red-100 text-red-700',
-  info: 'bg-blue-100 text-blue-800',
+  default: 'bg-secondary text-secondary-foreground',
+  success: 'bg-success text-success-foreground',
+  warning: 'bg-warning text-warning-foreground',
+  danger: 'bg-destructive/10 text-destructive',
+  info: 'bg-link/10 text-link',
 };
 
 export default function Badge({ children, variant = 'default' }: {
@@ -13,7 +14,7 @@ export default function Badge({ children, variant = 'default' }: {
   variant?: Variant;
 }) {
   return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${styles[variant]}`}>
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${styles[variant]}`}>
       {children}
     </span>
   );

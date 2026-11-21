@@ -2,6 +2,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
+import { Menu, X } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { ICON_STROKE } from '@/lib/utils';
 import type { C2CFlags } from '@/lib/c2c-flags';
 import { CATALOG_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 
@@ -23,7 +26,7 @@ interface NavUser {
  */
 export function getNavLinks(user: NavUser | null, c2c: Pick<C2CFlags, 'enabled'>, hasLandings = false): NavLink[] {
   const links: NavLink[] = [];
-  if (c2c.enabled) links.push({ href: '/ua', label: CATALOG_LABEL, className: 'text-amber-300' });
+  if (c2c.enabled) links.push({ href: '/ua', label: CATALOG_LABEL, className: 'text-accent' });
   // /prigon — лише коли є опубліковані сторінки: без 404 і порожнього індексу.
   if (hasLandings) links.push({ href: '/prigon', label: LANDING_INDEX_LABEL });
   links.push({ href: '/calculator', label: 'Калькулятор' });
@@ -54,28 +57,28 @@ export default function MobileNav({ links, loggedIn, onLogout }: Props) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const item = 'flex items-center min-h-11 px-4 py-3 text-sm font-medium hover:bg-blue-800 transition-colors';
+  const item = 'flex items-center min-h-11 px-4 py-3 text-sm font-medium hover:bg-header-foreground/10 transition-colors';
 
   return (
     <>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         aria-label="Меню"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpenPath(open ? null : pathname)}
-        className="md:hidden shrink-0 w-11 h-11 flex items-center justify-center rounded hover:bg-blue-800"
+        className="md:hidden shrink-0 text-header-foreground hover:bg-header-foreground/10 hover:text-header-foreground focus-visible:ring-header-foreground"
       >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          {open
-            ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
-            : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
-        </svg>
-      </button>
+        {open
+          ? <X className="size-6" strokeWidth={ICON_STROKE} aria-hidden="true" />
+          : <Menu className="size-6" strokeWidth={ICON_STROKE} aria-hidden="true" />}
+      </Button>
       <div
         id={panelId}
         hidden={!open}
-        className="md:hidden absolute left-0 right-0 top-full z-40 bg-blue-900 border-t border-blue-800 shadow-lg"
+        className="md:hidden absolute left-0 right-0 top-full z-40 bg-header text-header-foreground border-t border-header-foreground/20 shadow-lg"
       >
         <nav aria-label="Мобільне меню" className="flex flex-col py-1">
           {links.map(l => (

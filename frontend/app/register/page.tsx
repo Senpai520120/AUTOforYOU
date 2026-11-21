@@ -85,21 +85,21 @@ function RegisterForm() {
   if (registeredEmail) {
     return (
       <div className="max-w-md mx-auto mt-10">
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-3">Перевірте пошту</h1>
+        <div className="bg-card border border-border rounded-2xl p-8 shadow-sm text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-3">Перевірте пошту</h1>
           {emailSent ? (
-            <p className="text-slate-600 text-sm" data-testid="register-email-sent">
+            <p className="text-muted-foreground text-sm" data-testid="register-email-sent">
               Якщо адреса <strong>{registeredEmail}</strong> доступна, ми надіслали на неї лист із
               посиланням для підтвердження. Перейдіть за посиланням, щоб активувати всі функції.
             </p>
           ) : (
-            <p className="text-slate-600 text-sm" data-testid="register-email-unavailable">
+            <p className="text-muted-foreground text-sm" data-testid="register-email-unavailable">
               Відправка листів тимчасово не налаштована, зверніться до підтримки. Лист із
               підтвердженням не надіслано.
             </p>
           )}
-          <p className="mt-4 text-sm text-slate-500">
-            <Link href={loginHref} className="text-blue-600 hover:underline">Перейти до входу</Link>
+          <p className="mt-4 text-sm text-muted-foreground">
+            <Link href={loginHref} className="text-link hover:underline">Перейти до входу</Link>
           </p>
         </div>
       </div>
@@ -108,8 +108,8 @@ function RegisterForm() {
 
   return (
     <div className="max-w-md mx-auto mt-10">
-      <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6">Реєстрація</h1>
+      <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
+        <h1 className="text-2xl font-bold text-foreground mb-6">Реєстрація</h1>
         {isListingSubmitNext(next) && <ListingSubmitNotice />}
         <form ref={formRef} onSubmit={submit} className="space-y-4">
           {[
@@ -123,14 +123,14 @@ function RegisterForm() {
             const err = fieldErrors[f.key];
             return (
               <div key={f.key}>
-                <label htmlFor={id} className="block text-sm font-semibold text-slate-700 mb-1">{f.label}</label>
+                <label htmlFor={id} className="block text-sm font-semibold text-foreground mb-1">{f.label}</label>
                 <input id={id} type={f.type} autoComplete={f.autoComplete} inputMode={f.inputMode}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-amber-400 aria-[invalid=true]:border-red-600"
+                  className="w-full border border-input rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-ring aria-[invalid=true]:border-destructive"
                   placeholder={'placeholder' in f ? f.placeholder : undefined}
                   value={form[f.key as keyof typeof form]} onChange={e => set(f.key, e.target.value)}
                   aria-invalid={err ? true : undefined} aria-describedby={err ? `${id}-err` : undefined}
                   required={f.key !== 'first_name' && f.key !== 'phone'} />
-                {err && <p id={`${id}-err`} className="mt-1 text-sm text-red-700">{err}</p>}
+                {err && <p id={`${id}-err`} className="mt-1 text-sm text-destructive">{err}</p>}
               </div>
             );
           })}
@@ -140,16 +140,16 @@ function RegisterForm() {
               type="checkbox"
               checked={agreedToTerms}
               onChange={e => setAgreedToTerms(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-500 focus:ring-2 focus:ring-amber-400 cursor-pointer"
+              className="mt-0.5 h-4 w-4 rounded border-input accent-primary focus:ring-2 focus:ring-ring cursor-pointer"
               required
             />
-            <label htmlFor="agreed_to_terms" className="text-sm text-slate-600 cursor-pointer leading-snug">
+            <label htmlFor="agreed_to_terms" className="text-sm text-muted-foreground cursor-pointer leading-snug">
               Погоджуюсь з{' '}
-              <Link href="/terms" className="text-blue-600 hover:underline" target="_blank" rel="noopener">
+              <Link href="/terms" className="text-link hover:underline" target="_blank" rel="noopener">
                 Умовами використання
               </Link>{' '}
               та{' '}
-              <Link href="/privacy" className="text-blue-600 hover:underline" target="_blank" rel="noopener">
+              <Link href="/privacy" className="text-link hover:underline" target="_blank" rel="noopener">
                 Політикою конфіденційності
               </Link>
             </label>
@@ -161,10 +161,10 @@ function RegisterForm() {
               type="checkbox"
               checked={isAdult}
               onChange={e => setIsAdult(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-500 focus:ring-2 focus:ring-amber-400 cursor-pointer"
+              className="mt-0.5 h-4 w-4 rounded border-input accent-primary focus:ring-2 focus:ring-ring cursor-pointer"
               required
             />
-            <label htmlFor="confirmed_age_18" className="text-sm text-slate-600 cursor-pointer leading-snug">
+            <label htmlFor="confirmed_age_18" className="text-sm text-muted-foreground cursor-pointer leading-snug">
               {AGE_18_LABEL}
             </label>
           </div>
@@ -172,14 +172,14 @@ function RegisterForm() {
           <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
             resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
 
-          {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
+          {error && <p role="alert" className="text-destructive text-sm">{error}</p>}
           <button type="submit" disabled={loading || !captcha.ready}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400">
+            className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-bold py-2.5 rounded-xl disabled:opacity-60 transition-colors focus:outline-none focus:ring-2 focus:ring-ring">
             {loading ? 'Реєстрація...' : 'Зареєструватися'}
           </button>
         </form>
-        <p className="mt-4 text-sm text-center text-slate-500">
-          Вже є акаунт? <Link href={loginHref} className="text-blue-600 underline">Увійти</Link>
+        <p className="mt-4 text-sm text-center text-muted-foreground">
+          Вже є акаунт? <Link href={loginHref} className="text-link underline">Увійти</Link>
         </p>
       </div>
     </div>

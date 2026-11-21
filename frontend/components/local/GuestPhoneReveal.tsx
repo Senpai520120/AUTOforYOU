@@ -13,6 +13,9 @@ import Captcha from '@/components/ui/Captcha';
 import { localApi } from '@/api/local';
 import { useAuthConfig, useCaptchaState } from '@/lib/captcha';
 import { phoneErrorText } from '@/lib/usePhoneReveal';
+import { CircleAlert, Phone } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { ICON_STROKE } from '@/lib/utils';
 
 /** @deprecated назва 4.5a; те саме, що phoneErrorText. */
 export const guestPhoneError = phoneErrorText;
@@ -25,13 +28,10 @@ export default function GuestPhoneReveal({ listingId, open, onOpen, onPhone }: {
 }) {
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={onOpen}
-        className="w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg transition-colors"
-      >
+      <Button type="button" size="lg" onClick={onOpen} className="w-full font-semibold">
+        <Phone strokeWidth={ICON_STROKE} aria-hidden="true" />
         Показати телефон
-      </button>
+      </Button>
     );
   }
   return <GuestCaptchaForm listingId={listingId} onPhone={onPhone} />;
@@ -67,8 +67,8 @@ function GuestCaptchaForm({ listingId, onPhone }: { listingId: number; onPhone: 
 
   return (
     <div ref={boxRef} tabIndex={-1} role="group" aria-label="Перевірка перед показом номера"
-      className="space-y-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg" data-testid="guest-phone">
-      <p className="text-xs text-slate-500">Підтвердіть, що ви не робот, щоб побачити номер.</p>
+      className="space-y-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg" data-testid="guest-phone">
+      <p className="text-xs text-muted-foreground">Підтвердіть, що ви не робот, щоб побачити номер.</p>
       {config?.captcha.provider !== 'honeypot' && (
         <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>
           <input type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue=""
@@ -77,21 +77,17 @@ function GuestCaptchaForm({ listingId, onPhone }: { listingId: number; onPhone: 
       )}
       <Captcha config={config?.captcha ?? null} onToken={captcha.setToken}
         resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!captcha.ready || loading}
-        className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
-      >
+      <Button type="button" size="lg" onClick={submit} disabled={!captcha.ready || loading} className="w-full font-semibold">
         {loading ? 'Завантаження...' : 'Показати номер'}
-      </button>
+      </Button>
       {(error || configError) && (
-        <p role="alert" className="text-xs text-red-600">
+        <p role="alert" className="flex items-start gap-1.5 text-xs text-destructive">
+          <CircleAlert className="size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
           {error || 'Не вдалося завантажити перевірку. Спробуйте пізніше.'}
         </p>
       )}
-      <p className="text-xs text-slate-500">
-        Або <Link href="/login" className="text-blue-700 hover:underline">увійдіть</Link> — без перевірки.
+      <p className="text-xs text-muted-foreground">
+        Або <Link href="/login" className="font-medium text-link underline underline-offset-4">увійдіть</Link> — без перевірки.
       </p>
     </div>
   );

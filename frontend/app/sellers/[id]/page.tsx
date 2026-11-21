@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 function Stars({ value }: { value: number }) {
   const r = Math.max(0, Math.min(5, Math.round(value)));
-  return <span className="text-amber-400" aria-label={`Оцінка ${value.toFixed(1)} з 5`}>{'★'.repeat(r)}{'☆'.repeat(5 - r)}</span>;
+  return <span className="text-foreground" aria-label={`Оцінка ${value.toFixed(1)} з 5`}>{'★'.repeat(r)}{'☆'.repeat(5 - r)}</span>;
 }
 
 export default async function SellerPage({ params, searchParams }: { params: Params; searchParams: Search }) {
@@ -72,7 +72,7 @@ export default async function SellerPage({ params, searchParams }: { params: Par
   if (data.kind === 'error') {
     return (
       <div className="max-w-3xl mx-auto px-4 py-10">
-        <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-8 text-center text-sm text-red-700">
+        <div role="alert" className="bg-destructive/10 border border-destructive/40 rounded-xl p-8 text-center text-sm text-destructive">
           Не вдалося завантажити сторінку продавця. Спробуйте оновити сторінку пізніше.
         </div>
       </div>
@@ -84,16 +84,16 @@ export default async function SellerPage({ params, searchParams }: { params: Par
   const { results, next, previous } = s.listings;
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <section data-testid="seller-profile" className="bg-white border border-slate-100 rounded-xl p-5">
+      <section data-testid="seller-profile" className="bg-card border border-border rounded-xl p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-900">{s.display_name}</h1>
+          <h1 className="text-xl font-bold text-foreground">{s.display_name}</h1>
           {s.is_verified_dealer && (
-            <span data-testid="verified-dealer" className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
+            <span data-testid="verified-dealer" className="text-xs bg-link/10 text-link px-1.5 py-0.5 rounded font-semibold">
               ✓ {VERIFIED_DEALER_LABEL}
             </span>
           )}
         </div>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {since && <span>{since}</span>}
           <span>Активних оголошень: {s.active_listings_count}</span>
           <span>Підтверджених угод: {s.deal_count}</span>
@@ -106,7 +106,7 @@ export default async function SellerPage({ params, searchParams }: { params: Par
       </section>
 
       <section className="mt-8">
-        <h2 className="font-semibold text-slate-900 mb-3">Оголошення продавця</h2>
+        <h2 className="font-semibold text-foreground mb-3">Оголошення продавця</h2>
         {results.length === 0 ? (
           <EmptyState title="Активних оголошень зараз немає" />
         ) : (
@@ -116,25 +116,25 @@ export default async function SellerPage({ params, searchParams }: { params: Par
         )}
         {(previous || next) && (
           <nav aria-label="Сторінки" className="mt-6 flex justify-center gap-3 text-sm">
-            {previous && <Link className="text-blue-700 hover:underline" href={`/sellers/${s.id}?page=${page - 1}`}>← Попередня</Link>}
-            <span className="text-slate-500">Сторінка {page}</span>
-            {next && <Link className="text-blue-700 hover:underline" href={`/sellers/${s.id}?page=${page + 1}`}>Наступна →</Link>}
+            {previous && <Link className="text-link hover:underline" href={`/sellers/${s.id}?page=${page - 1}`}>← Попередня</Link>}
+            <span className="text-muted-foreground">Сторінка {page}</span>
+            {next && <Link className="text-link hover:underline" href={`/sellers/${s.id}?page=${page + 1}`}>Наступна →</Link>}
           </nav>
         )}
       </section>
 
       {s.reviews.length > 0 && (
         <section className="mt-8">
-          <h2 className="font-semibold text-slate-900 mb-3">Відгуки</h2>
+          <h2 className="font-semibold text-foreground mb-3">Відгуки</h2>
           <ul className="space-y-3">
             {s.reviews.map((r, i) => (
-              <li key={i} className="bg-white border border-slate-100 rounded-xl p-4 text-sm">
+              <li key={i} className="bg-card border border-border rounded-xl p-4 text-sm">
                 <div className="flex items-center gap-2">
                   <Stars value={r.rating} />
-                  <span className="text-slate-700 font-medium">{r.author_name}</span>
-                  <span className="text-slate-400 text-xs">{new Date(r.created_at).toLocaleDateString('uk-UA')}</span>
+                  <span className="text-foreground font-medium">{r.author_name}</span>
+                  <span className="text-muted-foreground text-xs">{new Date(r.created_at).toLocaleDateString('uk-UA')}</span>
                 </div>
-                {r.text && <p className="mt-1 text-slate-700 whitespace-pre-line">{r.text}</p>}
+                {r.text && <p className="mt-1 text-foreground whitespace-pre-line">{r.text}</p>}
               </li>
             ))}
           </ul>

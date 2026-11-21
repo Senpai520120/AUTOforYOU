@@ -29,7 +29,7 @@ test.describe('Головна сторінка @smoke', () => {
     await expect(cta).toHaveAttribute('href', '/calculator');
     const register = header.getByRole('link', { name: 'Реєстрація' });
     await expect(register).toHaveAttribute('href', '/register');
-    await expect(register).not.toHaveClass(/bg-amber/);
+    await expect(register).not.toHaveClass(/bg-accent/);
     await cta.click();
     await expect(page).toHaveURL(/\/calculator$/);
   });

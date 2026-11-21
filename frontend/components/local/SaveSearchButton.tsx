@@ -4,6 +4,11 @@ import Modal from '@/components/ui/Modal';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { createSavedSearch } from '@/api/saved-searches';
+import { CircleAlert, CircleCheck, Search } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Label } from '@/components/shadcn/label';
+import { ICON_STROKE } from '@/lib/utils';
 
 export default function SaveSearchButton() {
   const { user } = useAuth();
@@ -55,33 +60,33 @@ export default function SaveSearchButton() {
 
   return (
     <>
-      <button
-        onClick={handleOpen}
-        className="text-xs border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
-      >
-        🔍 Зберегти пошук
-      </button>
+      <Button type="button" variant="outline" onClick={handleOpen} className="border-primary text-primary hover:bg-primary/5 hover:text-primary">
+        <Search strokeWidth={ICON_STROKE} aria-hidden="true" />
+        Зберегти пошук
+      </Button>
 
       {open && (
         <Modal title="Зберегти пошук" onClose={() => setOpen(false)} maxWidth="max-w-sm">
           <div>
             {done ? (
               <div className="text-center py-4">
-                <div className="text-4xl mb-2" aria-hidden="true">✅</div>
-                <p className="font-semibold text-slate-900">Пошук збережено!</p>
-                <p className="text-xs text-slate-500 mt-1">Перегляньте у «Збережені пошуки»</p>
+                <CircleCheck className="mx-auto mb-2 size-10 text-success" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                <p className="font-semibold text-foreground">Пошук збережено!</p>
+                <p className="text-xs text-muted-foreground mt-1">Перегляньте у «Збережені пошуки»</p>
               </div>
             ) : (
               <>
                 {error && (
-                  <div role="alert" className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
+                  <div role="alert" className="mb-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                    {error}
+                  </div>
                 )}
-                <label htmlFor={nameId} className="block text-sm text-slate-700 mb-1">Назва</label>
-                <input
+                <Label htmlFor={nameId} className="mb-1.5">Назва</Label>
+                <Input
                   id={nameId}
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                   autoFocus
                 />
                 <label className="flex items-center gap-2 mt-3 cursor-pointer">
@@ -89,25 +94,18 @@ export default function SaveSearchButton() {
                     type="checkbox"
                     checked={notify}
                     onChange={e => setNotify(e.target.checked)}
-                    className="rounded"
+                    className="size-4 rounded accent-primary"
                   />
-                  <span className="text-sm text-slate-700">Отримувати сповіщення про нові авто</span>
+                  <span className="text-sm text-foreground">Отримувати сповіщення про нові авто</span>
                 </label>
-                <p className="text-xs text-slate-400 mt-1 ml-6">Раз на день, якщо з&apos;являться нові оголошення</p>
+                <p className="text-xs text-muted-foreground mt-1 ml-6">Раз на день, якщо з&apos;являться нові оголошення</p>
                 <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={() => setOpen(false)}
-                    className="flex-1 border border-slate-300 text-slate-600 hover:border-slate-400 py-2 rounded-xl text-sm transition-colors"
-                  >
+                  <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
                     Скасувати
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={!name.trim() || saving}
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold py-2 rounded-xl text-sm transition-colors"
-                  >
+                  </Button>
+                  <Button type="button" onClick={handleSave} disabled={!name.trim() || saving} className="flex-1 font-semibold">
                     {saving ? 'Збереження…' : 'Зберегти'}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}

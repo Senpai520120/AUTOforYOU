@@ -9,18 +9,18 @@ export const metadata: Metadata = {
 export default function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-      <p className="text-8xl font-extrabold text-blue-700 mb-4">404</p>
-      <h1 className="text-2xl font-bold text-slate-900 mb-2">Сторінку не знайдено</h1>
-      <p className="text-slate-500 mb-8 max-w-sm">
+      <p className="text-8xl font-extrabold text-link mb-4">404</p>
+      <h1 className="text-2xl font-bold text-foreground mb-2">Сторінку не знайдено</h1>
+      <p className="text-muted-foreground mb-8 max-w-sm">
         Можливо, посилання застаріло.
       </p>
       <Link
         href="/calculator"
-        className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 rounded-xl transition-colors"
+        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-6 py-3 rounded-xl transition-colors"
       >
         Порахувати вартість
       </Link>
-      <Link href="/" className="mt-4 text-sm text-blue-700 hover:underline">
+      <Link href="/" className="mt-4 text-sm text-link hover:underline">
         На головну
       </Link>
     </div>

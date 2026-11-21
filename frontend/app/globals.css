@@ -1,27 +1,124 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+/* Палітра «Графіт і лайм» (2026-11-21). Лайм — лише заливка, не колір тексту на світлому. Тёмная тема не включена (решение 11.14). */
+@custom-variant dark (&:is(.dark *));
+
+/* Токены в формате shadcn (OKLCH). Контраст пар — docs/design/DESIGN_SYSTEM.md. */
 :root {
-  --bg: #f8fafc;
-  --surface: #ffffff;
-  --primary: #1d4ed8;
-  --primary-dark: #1e3a8a;
-  --accent: #f59e0b;
-  --danger: #dc2626;
-  --text: #0f172a;
-  --muted: #64748b;
-  --border: #e2e8f0;
+  color-scheme: light;
+  --radius: 0.625rem;
+  --background: oklch(0.97 0.003 264.5);
+  --foreground: oklch(0.19 0.009 255.6);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.19 0.009 255.6);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.19 0.009 255.6);
+  --primary: oklch(0.19 0.009 255.6);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.967 0.003 264.5);
+  --secondary-foreground: oklch(0.19 0.009 255.6);
+  --muted: oklch(0.967 0.003 264.5);
+  --muted-foreground: oklch(0.446 0.026 256.8);
+  --accent: oklch(0.903 0.208 122.9);
+  --accent-foreground: oklch(0.19 0.009 255.6);
+  --destructive: oklch(0.505 0.19 27.5);
+  --destructive-foreground: oklch(1 0 0);
+  --success: oklch(0.527 0.137 150.1);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.837 0.164 84.4);
+  --warning-foreground: oklch(0.19 0.009 255.6);
+  --border: oklch(0.928 0.006 264.5);
+  --input: oklch(0.551 0.023 264.4);
+  --link: oklch(0.453 0.113 130.9);
+  --ring: oklch(0.453 0.113 130.9);
+  --header: oklch(0.19 0.009 255.6);
+  --header-foreground: oklch(1 0 0);
+  --footer: oklch(0.19 0.009 255.6);
+  --footer-foreground: oklch(0.872 0.009 258.3);
+  --footer-muted: oklch(0.754 0.017 253.9);
 }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.19 0.009 255.6);
+  --foreground: oklch(0.97 0.003 264.5);
+  --card: oklch(0.238 0.013 258.4);
+  --card-foreground: oklch(0.97 0.003 264.5);
+  --popover: oklch(0.238 0.013 258.4);
+  --popover-foreground: oklch(0.97 0.003 264.5);
+  --primary: oklch(0.903 0.208 122.9);
+  --primary-foreground: oklch(0.19 0.009 255.6);
+  --secondary: oklch(0.288 0.016 259.8);
+  --secondary-foreground: oklch(0.97 0.003 264.5);
+  --muted: oklch(0.288 0.016 259.8);
+  --muted-foreground: oklch(0.754 0.017 253.9);
+  --accent: oklch(0.903 0.208 122.9);
+  --accent-foreground: oklch(0.19 0.009 255.6);
+  --destructive: oklch(0.711 0.166 22.2);
+  --destructive-foreground: oklch(0.19 0.009 255.6);
+  --success: oklch(0.8 0.182 151.7);
+  --success-foreground: oklch(0.266 0.063 152.9);
+  --warning: oklch(0.837 0.164 84.4);
+  --warning-foreground: oklch(0.19 0.009 255.6);
+  --border: oklch(0.307 0.018 258.4);
+  --input: oklch(0.613 0.021 255.6);
+  --link: oklch(0.903 0.208 122.9);
+  --ring: oklch(0.903 0.208 122.9);
+  --header: oklch(0.19 0.009 255.6);
+  --header-foreground: oklch(1 0 0);
+  --footer: oklch(0.19 0.009 255.6);
+  --footer-foreground: oklch(0.872 0.009 258.3);
+  --footer-muted: oklch(0.754 0.017 253.9);
 }
 
-* { box-sizing: border-box; }
+@theme inline {
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-link: var(--link);
+  --color-ring: var(--ring);
+  --color-header: var(--header);
+  --color-header-foreground: var(--header-foreground);
+  --color-footer: var(--footer);
+  --color-footer-foreground: var(--footer-foreground);
+  --color-footer-muted: var(--footer-muted);
+}
 
-/* Видимий фокус клавіатури (WCAG 2.4.7): контрастна обводка для інтерактивних елементів. */
 @layer base {
+  * { box-sizing: border-box; border-color: var(--border); }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  /* Видимий фокус клавіатури (WCAG 2.4.7, задача 10.28): контрастна обводка через --ring. */
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
@@ -29,7 +126,29 @@ body {
   textarea:focus-visible,
   summary:focus-visible,
   [tabindex]:not([tabindex="-1"]):focus-visible {
-    outline: 2px solid #1d4ed8;
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Шапка й підвал — завжди темні: ring на них не видна (графіт), обводка світла. */
+  [data-on-dark] a:focus-visible,
+  [data-on-dark] button:focus-visible,
+  [data-on-dark] [tabindex]:not([tabindex="-1"]):focus-visible {
+    outline-color: var(--header-foreground);
+  }
+}
+
+/* Windows High Contrast: системні кольори замість токенів, обводка не зникає. */
+@media (forced-colors: active) {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible,
+  [role="tab"]:focus-visible {
+    outline: 2px solid Highlight;
     outline-offset: 2px;
   }
 }

@@ -25,7 +25,7 @@ const BAR_HEIGHT = '4.25rem';
 const TEXT_INPUT = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=hidden]), textarea, select, [contenteditable="true"]';
 
 export const mobileBarButtonClass =
-  'flex w-full min-h-11 items-center justify-center rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500';
+  'flex w-full min-h-11 items-center justify-center rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring';
 
 function useTyping(): boolean {
   const [typing, setTyping] = useState(false);
@@ -64,7 +64,7 @@ export default function MobileActionBar({ actions, label = 'Дії з оголо
         aria-label={label}
         data-testid="mobile-action-bar"
         hidden={typing}
-        className="md:hidden fixed inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur px-3 pt-2 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
+        className="md:hidden fixed inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur px-3 pt-2 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
         style={{
           bottom: 'var(--cookie-banner-h, 0px)',
           paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))',

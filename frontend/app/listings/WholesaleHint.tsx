@@ -20,9 +20,9 @@ export default function WholesaleHint() {
   if (!user?.is_verified_dealer) return null;
 
   return (
-    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-900">
+    <div className="mb-6 bg-link/10 border border-link/30 rounded-lg px-4 py-3 text-sm text-foreground">
       Ви верифікований дилер. Оптові лоти — на{' '}
-      <Link href="/b2b" className="font-semibold underline hover:text-blue-700">
+      <Link href="/b2b" className="font-semibold underline hover:text-link">
         B2B-дошці
       </Link>
       .

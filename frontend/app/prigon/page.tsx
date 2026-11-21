@@ -32,7 +32,7 @@ export default async function LandingIndexPage() {
     <div className="max-w-3xl mx-auto px-4 py-10">
       <JsonLd data={breadcrumbLd(crumbs)} />
       <Breadcrumbs crumbs={crumbs} />
-      <h1 className="text-2xl font-bold text-slate-900 mt-4 mb-6">{LANDING_INDEX_LABEL}</h1>
+      <h1 className="text-2xl font-bold text-foreground mt-4 mb-6">{LANDING_INDEX_LABEL}</h1>
 
       {list === null && <ErrorState error={null} />}
       {list !== null && list.length === 0 && (
@@ -43,8 +43,8 @@ export default async function LandingIndexPage() {
           {list.map((l) => (
             <li key={l.slug}>
               <Link href={`/prigon/${l.slug}`} data-testid="landing-index-item"
-                className="block bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-400">
-                <span className="font-semibold text-slate-900">{l.make} {l.model}</span>
+                className="block bg-card border border-border rounded-xl p-4 shadow-xs transition hover:border-primary hover:shadow-md">
+                <span className="font-semibold text-foreground">{l.make} {l.model}</span>
               </Link>
             </li>
           ))}
@@ -52,10 +52,10 @@ export default async function LandingIndexPage() {
       )}
 
       <p className="mt-8 flex flex-wrap gap-4 text-sm">
-        {howItWorksOn && <Link href="/how-it-works" className="text-blue-700 underline">{HOW_IT_WORKS_LABEL}</Link>}
-        <Link href="/calculator" className="text-blue-700 underline" data-testid="prigon-link-calculator">{CALC_COST_LABEL}</Link>
+        {howItWorksOn && <Link href="/how-it-works" className="text-link underline underline-offset-4 hover:text-link/80">{HOW_IT_WORKS_LABEL}</Link>}
+        <Link href="/calculator" className="text-link underline underline-offset-4 hover:text-link/80" data-testid="prigon-link-calculator">{CALC_COST_LABEL}</Link>
       </p>
-      <p className="mt-4 text-xs text-slate-500">Послугу пригону надає партнер, а не AUTOforYOU.</p>
+      <p className="mt-4 text-xs text-muted-foreground">Послугу пригону надає партнер, а не AUTOforYOU.</p>
     </div>
   );
 }
