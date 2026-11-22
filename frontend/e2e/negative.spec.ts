@@ -74,6 +74,8 @@ test.describe('Реєстрація — негативні сценарії', ()
 
     const [first] = await Promise.all([waitRegisterResponse(page), submit()]);
     expect(first.status()).toBe(201);
+    // Тело читаем до перехода: после навигации Playwright (с 1.65) отбрасывает тело старого ответа.
+    const firstBody = await first.json();
     await expect(page.getByRole('heading', { name: 'Перевірте пошту' })).toBeVisible();
 
     await page.goto('/register');
@@ -81,7 +83,7 @@ test.describe('Реєстрація — негативні сценарії', ()
 
     // Той самий 201 і той самий екран, що й для нового email; тексту про «зайнятий» немає.
     expect(second.status()).toBe(201);
-    expect(await second.json()).toEqual(await first.json());
+    expect(await second.json()).toEqual(firstBody);
     await expect(page.getByRole('heading', { name: 'Перевірте пошту' })).toBeVisible();
     await expect(page.getByText(/already exists|вже існує|зайнят/i)).toHaveCount(0);
   });
