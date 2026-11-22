@@ -10,9 +10,9 @@ PyJWT==2.15.1
 cryptography==50.0.2
 drf-spectacular==0.29.0
 httpx==0.28.1
-liqpay==1.0
+liqpay==1.0.1
 # Промт 7: PostgreSQL URL-парсер и S3-хранилище
-dj-database-url==2.3.0
+dj-database-url==3.1.2
 django-storages[s3]==1.14.6
 boto3==1.44.3
 # Промт 9: Redis-кэш (включается через REDIS_URL; без него — LocMemCache)
@@ -26,7 +26,7 @@ django-celery-beat==2.9.0
 # Промт 11: Telegram-бот (aiogram 3.x; без TELEGRAM_BOT_TOKEN бот не стартует, сайт работает)
 aiogram==3.29.0
 # Промт 15: WSGI-сервер для Docker/production (runserver НЕ використовується у Docker)
-gunicorn==26.0.0
+gunicorn==27.0.1
 sentry-sdk[django,celery]==2.75.0
 # Тесты: manage.py test --parallel (задача 9.47): без tblib исключения из воркеров не передаются
 tblib==3.2.2
