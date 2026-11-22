@@ -98,6 +98,17 @@ class BeforeSendTests(CleanCacheTestCase):
         self.assertEqual(monitoring.before_send(event, None)['user'], {'id': 7})
         self.assertIn('UA', out)
 
+    def test_ssr_headers_removed(self):
+        # 12.4: секрет SSR и IP посетителя не уходят в Sentry (имена бывают и как в META, и через дефис)
+        event = {'request': {'url': '/x', 'headers': {
+            'X-SSR-Key': 'SECRETKEY123', 'x-ssr-client-ip': '198.51.100.77', 'HTTP_X_SSR_KEY': 'SECRETKEY456',
+            'HTTP_X_SSR_CLIENT_IP': '198.51.100.78', 'User-Agent': 'UA'}}}
+        result = monitoring.before_send(event, None)
+        out = json.dumps(result)
+        for leaked in ('SECRETKEY123', 'SECRETKEY456', '198.51.100.77', '198.51.100.78'):
+            self.assertNotIn(leaked, out)
+        self.assertEqual(set(result['request']['headers']), {'User-Agent'})
+
     def test_django_request_repr_and_query_removed(self):
         event = {
             'extra': {'request': "<WSGIRequest: GET '/api/x/?q=Ivan+Petrenko'>", 'note': "see /api/y/?vin=WAUZZZ1"},

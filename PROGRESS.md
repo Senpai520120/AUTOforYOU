@@ -14,6 +14,13 @@
 - Не разбиралось: контейнер `backup` в dev unhealthy. Диск C почти полный — сжать vhdx Docker.
 - Добавлен этап 12 (AEO, `ROADMAP.md`). Следующий шаг: этап 12 или ответы по 11.1.
 
+## Задача 12.4: общий анонимный лимит SSR (2026-11-22)
+- Гипотеза подтверждена тестом (`core/tests_ssr_throttle.py`, `SsrSharedBucketProofTests`): SSR Next ходит в `backend:8000` без XFF, при `NUM_PROXIES=1` все посетители делили один бакет `anon` (3/h в тесте: 4-й «другой» посетитель получал 429).
+- Исправление: `core/ssr.py` — доверенный SSR = `X-SSR-Key` (`SSR_INTERNAL_KEY` ≥ 32 символов, `compare_digest`) И нет XFF; IP посетителя из `X-SSR-Client-IP` (IPv6 → /64) подставляется в `REMOTE_ADDR`. Троттл `SsrAwareAnonThrottle`: scope `ssr` по посетителю (600/h), без IP — `ssr_shared` (6000/h). nginx сбрасывает `X-SSR-*`; ключ и IP вырезаются из Sentry; check `core.W001` при `NUM_PROXIES>=1` без ключа.
+- Фронт: кэшируемые fetch шлют только ключ (кэш Next не дробится по IP), no-store (`serverGetAuthed`, `/sellers/[id]`) — ключ + `x-real-ip`.
+- Владельцу: сгенерировать `SSR_INTERNAL_KEY` в `.env` сервера (backend и frontend), подтвердить ставки `THROTTLE_SSR_RATE`/`THROTTLE_SSR_SHARED_RATE` (LAUNCH_CHECKLIST).
+- Хвосты: после слияния PR #82 перевести fetch в `app/listings/[id]`, `app/local/[id]` на `ssrKeyHeaders()`; автотест конфига nginx (каждый `proxy_pass` со сбросом `X-SSR-*`).
+
 ## Задача 11.16: палитра «Графіт і лайм» (2026-11-21)
 
 - `frontend/app/globals.css`: токены light и `.dark` в гамме графит/лайм, новый `--link` (#3F6212, `text-link`); ссылки-текст на токенах переведены с `text-primary` на `text-link` (20 файлов), hero главной — плоский `bg-header`. Контраст пересчитан скриптом, таблица и раздел «Палітра Графіт і лайм» в `docs/design/DESIGN_SYSTEM.md`; непрошедших нет. e2e `home.spec.ts`: `not.toHaveClass(/bg-accent/)`. Коммит e8d8c09.

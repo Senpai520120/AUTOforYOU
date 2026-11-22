@@ -96,6 +96,8 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'core.middleware.NulByteQueryMiddleware',
+    # 12.4: до любого кода, читающего REMOTE_ADDR (троттлинг, аудит, блокировка входа).
+    'core.ssr.SsrTrustMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'core.middleware.ModuleFlagMiddleware',
@@ -271,6 +273,8 @@ _THROTTLE_EXPENSIVE = os.environ.get('THROTTLE_EXPENSIVE_RATE', '10/hour')
 # 0 — dev без прокси (REMOTE_ADDR); 1 — за nginx из docker-compose, в том числе с Cloudflare/LB:
 # real_ip в nginx уже подставил IP клиента, а XFF перезаписывается (не дописывается). 2 не ставить.
 NUM_PROXIES_COUNT = int(os.environ.get('NUM_PROXIES', '0'))
+# 12.4: общий секрет SSR Next <-> backend (>= 32 символов; пусто или короче = функция выключена).
+SSR_INTERNAL_KEY = os.environ.get('SSR_INTERNAL_KEY', '').strip()
 LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', '5'))
 LOGIN_FAILURE_WINDOW_MINUTES = int(os.environ.get('LOGIN_FAILURE_WINDOW_MINUTES', '15'))
 LOGIN_LOCKOUT_MINUTES = int(os.environ.get('LOGIN_LOCKOUT_MINUTES', '15'))
@@ -351,12 +355,16 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ),
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
+        'core.ssr.SsrAwareAnonThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': _THROTTLE_ANON,
         'user': _THROTTLE_USER,
+        # 12.4: доверенный SSR Next, бакет по IP посетителя. ПРОВЕРИТЬ с владельцем.
+        'ssr': os.environ.get('THROTTLE_SSR_RATE', '600/hour'),
+        # 12.4: доверенный SSR без IP посетителя (кэшируемые запросы), общий бакет по IP фронта. ПРОВЕРИТЬ с владельцем.
+        'ssr_shared': os.environ.get('THROTTLE_SSR_SHARED_RATE', '6000/hour'),
         'expensive': _THROTTLE_EXPENSIVE,
         'messages': os.environ.get('THROTTLE_MESSAGES_RATE', '30/hour'),
         # Ответы в существующем диалоге (4.7, 06-S6): отдельный лимит от старта диалогов.
@@ -851,6 +859,7 @@ if _TESTING:
     C2C_ENABLED = True
     C2C_PUBLIC_POSTING_ENABLED = True
     PAYMENTS_ENABLED = True
+    SSR_INTERNAL_KEY = ''
     CARVERTICAL_PARTNER_URL = ''
     CELERY_HEARTBEAT_URL = ''
     FAILED_TASK_ALERT_CHAT_ID = ''

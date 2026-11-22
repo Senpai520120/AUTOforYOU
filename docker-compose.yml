@@ -192,6 +192,8 @@ services:
       # Django: SSL-редирект и HSTS включены. Принудительного off по умолчанию нет.
       TLS_MODE: ${TLS_MODE:-}
       DOMAIN: ${DOMAIN:-}
+      # 12.4: общий секрет SSR Next <-> backend (одно значение; пусто = функция выключена).
+      SSR_INTERNAL_KEY: ${SSR_INTERNAL_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -227,6 +229,8 @@ services:
       NODE_ENV: production
       # Runtime env for Next.js SSR calls — uses Docker internal network
       INTERNAL_API_URL: http://backend:8000
+      # 12.4: ключ и IP посетителя уходят в backend, чтобы anon-лимит считался по посетителю, а не по контейнеру фронта.
+      SSR_INTERNAL_KEY: ${SSR_INTERNAL_KEY:-}
       # Фото для OG-картинок: /media/ в проді віддає nginx (том media), не Django (задача 6.3b).
       INTERNAL_MEDIA_URL: ${INTERNAL_MEDIA_URL:-http://nginx}
       # Потолок heap Node под mem_limit (ПРОВЕРИТЬ замером).
