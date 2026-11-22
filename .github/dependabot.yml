@@ -5,6 +5,11 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    ignore:
+      # 2026-11-22: django-celery-beat 2.9.0 (последняя) требует Django<6.1, Django 6.1 не ставится (PR #69).
+      # Снять, когда выйдет django-celery-beat с поддержкой Django 6.1. Патчи 6.0.x приходят как обычно.
+      - dependency-name: "django"
+        versions: [">=6.1"]
   - package-ecosystem: npm
     directory: "/frontend"
     schedule:

@@ -192,7 +192,7 @@ pre-commit install                  # ставить хуки pre-commit і pre-
 
 - Коміт (лише змінені файли): `ruff check`, конфлікти злиття, YAML, великі файли (>1000 КБ), `*.sh` лише LF, eslint для `frontend/**/*.{ts,tsx}`.
 - Пуш (`scripts/hooks/pre-push.sh`): `ruff check .`, `manage.py check`, `makemigrations --check`, LF у `*.sh`, `npm run lint` і `tsc --noEmit` (frontend-кроки лише якщо змінювався `frontend/`). Тести, збірка й e2e - окремо (`scripts/test-backend.ps1`) та в CI.
-- gitleaks без Go локально не ставиться: працює в CI, вручну - `pre-commit run gitleaks --hook-stage manual`.
+- gitleaks (секрети) — теж перед комітом; при першому запуску pre-commit сам завантажує Go, це кілька хвилин.
 - Екстрений пропуск: `git commit --no-verify` / `git push --no-verify` - лише свідомо.
 
 ## Захист від витоку секретів

@@ -19,11 +19,9 @@ repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
     hooks:
-      # Без Go - только CI и `pre-commit run gitleaks --hook-stage manual`.
-      # gitleaks-docker не взят: на этой машине Docker-демон не запущен, проверить нельзя.
+      # pre-commit сам скачивает Go при первом запуске (несколько минут), отдельно ставить Go не нужно.
       - id: gitleaks
         args: ["--config=.gitleaks.toml"]
-        stages: [manual]
 
   - repo: local
     hooks:
