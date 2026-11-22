@@ -3528,9 +3528,12 @@ components:
           minLength: 1
           maxLength: 32
         email:
-          type: string
-          format: email
-          maxLength: 254
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
         contact_method:
           oneOf:
           - $ref: '#/components/schemas/ContactMethodEnum'
@@ -5268,10 +5271,13 @@ components:
           title: Прізвище
           maxLength: 150
         phone:
-          type: string
           title: Телефон
-          pattern: ^\+380\d{9}$
-          maxLength: 20
+          oneOf:
+          - type: string
+            pattern: ^\+380\d{9}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
     PaymentTypeEnum:
       enum:
       - secured
@@ -5395,10 +5401,13 @@ components:
           title: Прізвище
           maxLength: 150
         phone:
-          type: string
           title: Телефон
-          pattern: ^\+380\d{9}$
-          maxLength: 20
+          oneOf:
+          - type: string
+            pattern: ^\+380\d{9}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
         email_sent:
           type: boolean
           readOnly: true
@@ -5431,10 +5440,13 @@ components:
           title: Прізвище
           maxLength: 150
         phone:
-          type: string
           title: Телефон
-          pattern: ^\+380\d{9}$
-          maxLength: 20
+          oneOf:
+          - type: string
+            pattern: ^\+380\d{9}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
         agreed_to_terms:
           type: boolean
           writeOnly: true
@@ -5887,10 +5899,13 @@ components:
           title: Прізвище
           maxLength: 150
         phone:
-          type: string
           title: Телефон
-          pattern: ^\+380\d{9}$
-          maxLength: 20
+          oneOf:
+          - type: string
+            pattern: ^\+380\d{9}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
         role:
           allOf:
           - $ref: '#/components/schemas/RoleEnum'
@@ -5957,10 +5972,13 @@ components:
           title: Прізвище
           maxLength: 150
         phone:
-          type: string
           title: Телефон
-          pattern: ^\+380\d{9}$
-          maxLength: 20
+          oneOf:
+          - type: string
+            pattern: ^\+380\d{9}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
     Vehicle:
       type: object
       properties:
