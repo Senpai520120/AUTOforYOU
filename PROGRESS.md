@@ -14,6 +14,13 @@
 - Не разбиралось: контейнер `backup` в dev unhealthy. Диск C почти полный — сжать vhdx Docker.
 - Добавлен этап 12 (AEO, `ROADMAP.md`). Следующий шаг: этап 12 или ответы по 11.1.
 
+## Задача 12.1: JSON-LD Car + Offer (2026-11-22)
+
+- Ядро `frontend/lib/jsonld-core.ts`: `buildVehicleOfferLd` (Car + вложенный Offer: цена строкой без float, валюта UAH/USD/EUR, `mileageFromOdometer` в KMT, год, марка/модель, топливо, КПП, состояние), `localAvailability`/`lotAvailability`, `normalizePrice`. Во входном типе нет полей продавца — ПДн в разметку не попадают по построению. VIN — только полный 17-символьный и только у лотов (он и так показан гостю на странице); у частных объявлений VIN нет в модели.
+- Привязка `frontend/lib/jsonld.ts`: `localListingLd`, `listingLd`, `landingLd`. Страницы: `/local/[id]` (только при C2C и статусе active/sold, остальные — без разметки), `/listings/[id]` (in_stock→InStock, in_transit→PreOrder, sold→OutOfStock), `/prigon/[slug]` (цена — оценка в USD, без availability/VIN/пробега).
+- Тесты `e2e/seo.spec.ts`: 11 unit без браузера + 4 браузерных (12.1). Прогон на e2e-стеке: 83 passed, 6 skipped (лоты выключены в ВОЛНЕ-1 — тест разметки лота пропускается), 0 failed. Мутации unit (регулярка VIN, маппер availability, проверка цены) — красные, откат.
+- Не проверено: страница лота с разметкой в браузере (LOTS выключен в e2e); охранник статуса на `/local/[id]` e2e не ловит — SSR-запрос анонимный, гость и так получает 404; защита покрыта unit-тестом маппера. Задача: `docs/tasks/12.1-vehicle-offer-jsonld.md`.
+
 ## Задача 11.16: палитра «Графіт і лайм» (2026-11-21)
 
 - `frontend/app/globals.css`: токены light и `.dark` в гамме графит/лайм, новый `--link` (#3F6212, `text-link`); ссылки-текст на токенах переведены с `text-primary` на `text-link` (20 файлов), hero главной — плоский `bg-header`. Контраст пересчитан скриптом, таблица и раздел «Палітра Графіт і лайм» в `docs/design/DESIGN_SYSTEM.md`; непрошедших нет. e2e `home.spec.ts`: `not.toHaveClass(/bg-accent/)`. Коммит e8d8c09.

@@ -4,6 +4,8 @@ import type { Metadata } from 'next';
 import ListingDetail from '@/components/listings/ListingDetail';
 import type { Listing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
+import { listingLd } from '@/lib/jsonld';
+import JsonLd from '@/components/seo/JsonLd';
 import { isModuleEnabled, requireModule } from '@/lib/site-settings';
 import { listingSlug } from '@/lib/utils';
 import { INTERNAL_API_URL } from '@/lib/config.server';
@@ -66,5 +68,11 @@ export default async function ListingDetailPage({ params }: Props) {
   const canonical = listingSlug(listing);
   if (rawId !== canonical) permanentRedirect(`/listings/${canonical}`);
 
-  return <ListingDetail listing={listing} />;
+  const ld = listingLd(listing);
+  return (
+    <>
+      {ld && <JsonLd data={ld} />}
+      <ListingDetail listing={listing} />
+    </>
+  );
 }
