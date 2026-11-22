@@ -4,6 +4,8 @@ import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { getErrorMessage } from '@/lib/errors';
 import { getFavoriteStatus, addFavorite, removeFavorite } from '@/api/favorites';
+import { Heart } from 'lucide-react';
+import { ICON_STROKE } from '@/lib/utils';
 
 interface Props {
   listingType: 'local' | 'imported';
@@ -56,7 +58,7 @@ export default function HeartButton({ listingType, listingId, size = 'md' }: Pro
     }
   };
 
-  const sz = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
+  const sz = size === 'sm' ? 'size-4' : 'size-5';
 
   return (
     <span className="relative inline-flex">
@@ -64,27 +66,14 @@ export default function HeartButton({ listingType, listingId, size = 'md' }: Pro
       onClick={toggle}
       aria-label={isFav ? 'Прибрати з обраного' : 'Додати в обране'}
       disabled={loading}
-      className={`flex items-center justify-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 ${
+      className={`flex items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
         size === 'sm' ? 'p-1' : 'p-2'
-      } ${isFav ? 'text-red-500 hover:text-red-400' : 'text-slate-300 hover:text-red-400'}`}
+      } ${isFav ? 'text-destructive' : 'text-muted-foreground hover:text-destructive'}`}
     >
-      <svg
-        className={sz}
-        fill={isFav ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-        />
-      </svg>
+      <Heart className={sz} fill={isFav ? 'currentColor' : 'none'} strokeWidth={ICON_STROKE} aria-hidden="true" />
     </button>
     {error && (
-      <span role="alert" className="absolute right-0 top-full mt-1 z-20 whitespace-nowrap rounded bg-red-600 px-2 py-1 text-xs text-white shadow">
+      <span role="alert" className="absolute right-0 top-full mt-1 z-20 whitespace-nowrap rounded bg-destructive px-2 py-1 text-xs text-destructive-foreground shadow">
         {error}
       </span>
     )}

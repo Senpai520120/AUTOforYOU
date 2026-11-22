@@ -1,4 +1,14 @@
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import type { Listing } from './types';
+
+/** Єдина товщина лінії іконок lucide по всьому сайту. */
+export const ICON_STROKE = 2;
+
+/** Склеювання Tailwind-класів без конфліктів (shadcn). */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 /**
  * Generates a human-readable slug for a listing URL.

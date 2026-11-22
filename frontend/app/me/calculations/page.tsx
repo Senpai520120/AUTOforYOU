@@ -30,8 +30,8 @@ export default function MyCalculationsPage() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/me" className="text-blue-600 hover:underline text-sm">← Кабінет</Link>
-        <h1 className="text-xl font-bold text-slate-900">Мої розрахунки</h1>
+        <Link href="/me" className="text-link hover:underline text-sm">← Кабінет</Link>
+        <h1 className="text-xl font-bold text-foreground">Мої розрахунки</h1>
       </div>
 
       {error ? (
@@ -41,17 +41,17 @@ export default function MyCalculationsPage() {
       ) : (
         <div className="space-y-4">
           {data.results.map(c => (
-            <div key={c.id} className="bg-white border border-slate-200 rounded-xl p-5">
+            <div key={c.id} className="bg-card border border-border rounded-xl p-5">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs text-slate-500">{new Date(c.created_at).toLocaleString('uk-UA')}</p>
-                  <p className="font-bold text-blue-800 text-xl mt-1">
+                  <p className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString('uk-UA')}</p>
+                  <p className="font-bold text-foreground text-xl mt-1">
                     {formatUsd(c.breakdown?.total_usd_full ?? c.total_usd)} / {formatUah(c.total_uah)}
                   </p>
                 </div>
-                <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold">⚠ Орієнтовно</span>
+                <span className="text-xs bg-warning/15 text-foreground px-2 py-1 rounded font-semibold">⚠ Орієнтовно</span>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-600">
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
                 <span>Аукціон: {formatUsd(c.breakdown.auction_price_usd)}</span>
                 <span>Фрахт: {formatUsd(c.breakdown.ocean_freight_usd)}</span>
                 <span>Мито+ПДВ: {formatUah(c.breakdown.customs_total_uah)}</span>

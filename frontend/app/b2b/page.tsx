@@ -29,11 +29,11 @@ export default function B2BPage() {
     return (
       <div className="max-w-xl mx-auto text-center py-24">
         <div className="text-5xl mb-4">🔒</div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-3">Доступ обмежено</h1>
-        <p className="text-slate-500 mb-2">B2B-дошка доступна лише для верифікованих перекупників.</p>
-        <p className="text-slate-400 text-sm mb-6">Доступ відкривається менеджером.</p>
+        <h1 className="text-2xl font-bold text-foreground mb-3">Доступ обмежено</h1>
+        <p className="text-muted-foreground mb-2">B2B-дошка доступна лише для верифікованих перекупників.</p>
+        <p className="text-muted-foreground text-sm mb-6">Доступ відкривається менеджером.</p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link href="/me" className="bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-blue-800 transition-colors">
+          <Link href="/me" className="bg-primary text-primary-foreground px-6 py-2.5 rounded-xl font-semibold hover:bg-primary/90 transition-colors">
             До кабінету
           </Link>
         </div>
@@ -48,12 +48,12 @@ export default function B2BPage() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">B2B-дошка</h1>
-        <p className="text-slate-500 text-sm mt-1">Оптові лоти — лише для верифікованих перекупників</p>
+        <h1 className="text-2xl font-bold text-foreground">B2B-дошка</h1>
+        <p className="text-muted-foreground text-sm mt-1">Оптові лоти — лише для верифікованих перекупників</p>
       </div>
 
       {listings.length === 0 ? (
-        <div className="text-center py-20 text-slate-400">
+        <div className="text-center py-20 text-muted-foreground">
           <p className="text-lg">Оптових лотів поки немає</p>
         </div>
       ) : (
@@ -62,8 +62,8 @@ export default function B2BPage() {
             <section className="mb-8">
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-lg">⚡</span>
-                <h2 className="text-lg font-bold text-amber-700">Терміновий викуп</h2>
-                <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold">{express.length} лот{express.length > 1 ? 'и' : ''}</span>
+                <h2 className="text-lg font-bold text-foreground">Терміновий викуп</h2>
+                <span className="bg-warning/15 text-foreground text-xs px-2 py-0.5 rounded font-semibold">{express.length} лот{express.length > 1 ? 'и' : ''}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {express.map(l => <ListingCard key={l.id} listing={l} />)}
@@ -73,7 +73,7 @@ export default function B2BPage() {
 
           {regular.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-slate-700 mb-4">Всі оптові лоти</h2>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Всі оптові лоти</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {regular.map(l => <ListingCard key={l.id} listing={l} />)}
               </div>

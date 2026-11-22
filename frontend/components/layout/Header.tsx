@@ -7,6 +7,9 @@ import { getUnreadCount as getNotifUnread } from '@/api/notifications';
 import { useVisibleInterval } from '@/lib/useVisibleInterval';
 import { useC2C } from '@/components/c2c/C2CProvider';
 import { PRIMARY_CTA_LABEL } from '@/lib/labels';
+import { Bell, MessageSquare } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { ICON_STROKE } from '@/lib/utils';
 import MobileNav, { getNavLinks } from '@/components/layout/MobileNav';
 
 export default function Header({ hasLandings = false }: { hasLandings?: boolean }) {
@@ -35,65 +38,63 @@ export default function Header({ hasLandings = false }: { hasLandings?: boolean 
   const handleLogout = () => { void logout(); };
 
   return (
-    <header className="relative bg-blue-900 text-white shadow-md">
+    <header data-on-dark className="relative bg-header text-header-foreground shadow-md">
       <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <Link href="/" className="flex items-center gap-2 min-h-11 font-bold text-xl tracking-tight shrink-0">
-          <span className="text-amber-400">AUTO</span>
+          <span className="text-accent">AUTO</span>
           <span>forYOU</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
           {navLinks.map(l => (
-            <Link key={l.href} href={l.href} className={`inline-flex items-center min-h-11 hover:text-amber-400 transition-colors ${l.className ?? ''}`}>{l.label}</Link>
+            <Link key={l.href} href={l.href} className={`inline-flex items-center min-h-11 hover:text-accent transition-colors ${l.className ?? ''}`}>{l.label}</Link>
           ))}
         </nav>
 
         <div className="flex items-center gap-3 text-sm min-w-0">
-          <Link
-            href="/calculator"
-            data-testid="header-primary-cta"
-            className="inline-flex items-center justify-center min-h-11 bg-amber-500 hover:bg-amber-400 text-black px-3 rounded font-semibold text-xs transition-colors shrink-0"
+          <Button
+            asChild
+            size="sm"
+            className="min-h-11 bg-accent text-accent-foreground hover:bg-accent/90 focus-visible:ring-header-foreground text-xs font-semibold shrink-0"
           >
-            {PRIMARY_CTA_LABEL}
-          </Link>
+            <Link href="/calculator" data-testid="header-primary-cta">{PRIMARY_CTA_LABEL}</Link>
+          </Button>
           {user ? (
             <>
               {/* Notifications bell */}
-              <Link href="/me/notifications" className="relative inline-flex items-center justify-center min-w-11 min-h-11 hover:text-amber-400 transition-colors" aria-label="Сповіщення">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
+              <Link href="/me/notifications" className="relative inline-flex items-center justify-center min-w-11 min-h-11 hover:text-accent transition-colors" aria-label="Сповіщення">
+                <Bell className="size-5" strokeWidth={ICON_STROKE} aria-hidden="true" />
                 {notifUnread > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-4 min-h-4 px-0.5 flex items-center justify-center leading-none">
                     {notifUnread > 9 ? '9+' : notifUnread}
                   </span>
                 )}
               </Link>
               {/* Chat icon */}
-              {chatOpen && <Link href="/me/messages" className="relative inline-flex items-center justify-center min-w-11 min-h-11 hover:text-amber-400 transition-colors" aria-label="Повідомлення">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
+              {chatOpen && <Link href="/me/messages" className="relative inline-flex items-center justify-center min-w-11 min-h-11 hover:text-accent transition-colors" aria-label="Повідомлення">
+                <MessageSquare className="size-5" strokeWidth={ICON_STROKE} aria-hidden="true" />
                 {msgUnread > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full min-w-4 min-h-4 px-0.5 flex items-center justify-center leading-none">
                     {msgUnread > 9 ? '9+' : msgUnread}
                   </span>
                 )}
               </Link>}
-              <Link href="/me" className="hover:text-amber-400 transition-colors hidden sm:inline-flex items-center min-h-11 truncate min-w-0 max-w-[16rem]">
+              <Link href="/me" className="hover:text-accent transition-colors hidden sm:inline-flex items-center min-h-11 truncate min-w-0 max-w-[16rem]">
                 {user.email.split('@')[0]}
               </Link>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleLogout}
-                className="hidden sm:inline-flex items-center min-h-11 bg-blue-700 hover:bg-blue-600 px-3 rounded text-xs transition-colors shrink-0"
+                className="hidden sm:inline-flex min-h-11 bg-header-foreground/15 text-header-foreground hover:bg-header-foreground/25 hover:text-header-foreground focus-visible:ring-header-foreground focus-visible:border-header-foreground text-xs shrink-0"
               >
                 Вийти
-              </button>
+              </Button>
             </>
           ) : (
             <>
-              <Link href="/login" className="inline-flex items-center min-h-11 px-1 hover:text-amber-400 transition-colors">Увійти</Link>
-              <Link href="/register" className="inline-flex items-center min-h-11 px-1 hover:text-amber-400 transition-colors">Реєстрація</Link>
+              <Link href="/login" className="inline-flex items-center min-h-11 px-1 hover:text-accent transition-colors">Увійти</Link>
+              <Link href="/register" className="inline-flex items-center min-h-11 px-1 hover:text-accent transition-colors">Реєстрація</Link>
             </>
           )}
           <MobileNav links={navLinks} loggedIn={!!user} onLogout={handleLogout} />

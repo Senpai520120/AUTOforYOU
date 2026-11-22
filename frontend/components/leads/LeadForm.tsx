@@ -17,6 +17,13 @@ import type { LeadContactMethod, LeadCreate, LeadNeededWhen, LeadSource, SiteSet
 import Captcha from '@/components/ui/Captcha';
 import FallbackContact, { ContactList } from '@/components/ui/FallbackContact';
 import LeadSuccess from './LeadSuccess';
+import { CircleAlert, ChevronDown, Send, TriangleAlert } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Label } from '@/components/shadcn/label';
+import { Textarea } from '@/components/shadcn/textarea';
+import { FIELD_CLASS } from '@/components/local/field-classes';
+import { ICON_STROKE } from '@/lib/utils';
 
 interface Props {
   source: LeadSource;
@@ -51,7 +58,6 @@ const FIELDS = [
 /** Поля другого (необов'язкового) кроку: помилка в них розкриває блок. */
 const DETAIL_FIELDS = ['email', 'comment', 'budget_usd', 'needed_when', 'city'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500';
 const GENERAL_ERROR = 'Не вдалося надіслати заявку. Спробуйте ще раз пізніше.';
 
 /** UUID v4; crypto.randomUUID недоступний у незахищеному контексті (http), тоді - getRandomValues. */
@@ -66,7 +72,12 @@ function newIdempotencyKey(): string {
 
 function FieldError({ id, text }: { id: string; text?: string }) {
   if (!text) return null;
-  return <p id={id} role="alert" className="text-red-600 text-xs mt-1">{text}</p>;
+  return (
+    <p id={id} role="alert" className="mt-1.5 flex items-start gap-1.5 text-sm text-destructive">
+      <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+      <span>{text}</span>
+    </p>
+  );
 }
 
 /** Помилки 400 за полями; решта ключів (calculation_id, source…) — у загальні. */
@@ -269,38 +280,38 @@ export default function LeadForm({
 
   return (
     <form ref={formRef} onSubmit={submit} onInput={trackStart} noValidate data-testid="lead-form"
-      className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-      <h3 className="font-bold text-slate-900 text-lg">Залишити заявку брокеру</h3>
-      <p className="text-sm text-slate-600">Достатньо імені, телефону та згод: решту можна додати пізніше.</p>
+      className="rounded-xl border bg-card p-5 text-card-foreground shadow-sm space-y-5 sm:p-6">
+      <h3 className="text-xl font-bold tracking-tight text-foreground">Залишити заявку брокеру</h3>
+      <p className="text-sm text-muted-foreground">Достатньо імені, телефону та згод: решту можна додати пізніше.</p>
       {vehicleLabel && landingSlug && (
-        <p data-testid="lead-vehicle" className="text-sm text-slate-700">
+        <p data-testid="lead-vehicle" className="text-sm text-foreground">
           Авто: <span className="font-semibold">{vehicleLabel}</span>
         </p>
       )}
 
       <div>
-        <label htmlFor="lead-name" className="block text-xs font-semibold text-slate-600 mb-1">Ім&apos;я *</label>
-        <input id="lead-name" name="name" required maxLength={100} autoComplete="name" className={INPUT}
+        <Label htmlFor="lead-name" className="mb-1.5">Ім&apos;я *</Label>
+        <Input id="lead-name" name="name" required maxLength={100} autoComplete="name"
           value={name} aria-invalid={!!errors.name} aria-describedby={errors.name ? 'lead-name-err' : undefined}
           onChange={(e) => { touched.current.name = true; setName(e.target.value); }} />
         <FieldError id="lead-name-err" text={errors.name} />
       </div>
 
       <div>
-        <label htmlFor="lead-phone" className="block text-xs font-semibold text-slate-600 mb-1">Телефон *</label>
-        <input id="lead-phone" name="phone" type="tel" inputMode="tel" required maxLength={32}
-          autoComplete="tel" placeholder="+380…" className={INPUT}
+        <Label htmlFor="lead-phone" className="mb-1.5">Телефон *</Label>
+        <Input id="lead-phone" name="phone" type="tel" inputMode="tel" required maxLength={32}
+          autoComplete="tel" placeholder="+380…"
           value={phone} aria-invalid={!!errors.phone} aria-describedby={errors.phone ? 'lead-phone-err' : undefined}
           onChange={(e) => { touched.current.phone = true; setPhone(e.target.value); }} />
         <FieldError id="lead-phone-err" text={errors.phone} />
       </div>
 
       <fieldset>
-        <legend className="block text-xs font-semibold text-slate-600 mb-1">Зручний спосіб зв&apos;язку</legend>
+        <legend className="mb-1.5 text-sm font-medium text-foreground">Зручний спосіб зв&apos;язку</legend>
         <div className="flex gap-4 flex-wrap">
           {METHODS.map((m) => (
-            <label key={m.value} htmlFor={`lead-method-${m.value}`} className="flex items-center gap-2 text-sm text-slate-700">
-              <input id={`lead-method-${m.value}`} type="radio" name="contact_method" value={m.value}
+            <label key={m.value} htmlFor={`lead-method-${m.value}`} className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+              <input id={`lead-method-${m.value}`} type="radio" className="size-5 accent-primary" name="contact_method" value={m.value}
                 checked={method === m.value} onChange={() => setMethod(m.value)} />
               {m.label}
             </label>
@@ -311,10 +322,10 @@ export default function LeadForm({
 
       {method !== 'phone' && (
         <div>
-          <label htmlFor="lead-handle" className="block text-xs font-semibold text-slate-600 mb-1">
+          <Label htmlFor="lead-handle" className="mb-1.5">
             Нік або контакт у {method === 'telegram' ? 'Telegram' : 'Viber'} (необов&apos;язково)
-          </label>
-          <input id="lead-handle" name="contact_handle" maxLength={64} className={INPUT}
+          </Label>
+          <Input id="lead-handle" name="contact_handle" maxLength={64}
             aria-invalid={!!errors.contact_handle} aria-describedby={errors.contact_handle ? 'lead-handle-err' : undefined}
             value={handle} onChange={(e) => setHandle(e.target.value)} />
           <FieldError id="lead-handle-err" text={errors.contact_handle} />
@@ -322,33 +333,34 @@ export default function LeadForm({
       )}
 
       <div>
-        <button type="button" aria-expanded={more} aria-controls="lead-details" onClick={() => setMore((v) => !v)}
-          className="text-sm text-blue-700 hover:underline py-2">
+        <Button type="button" variant="link" aria-expanded={more} aria-controls="lead-details" onClick={() => setMore((v) => !v)}
+          className="h-auto px-0 underline">
           {more ? 'Сховати деталі' : "Додати деталі (необов'язково)"}
-        </button>
+          <ChevronDown className={`transition-transform ${more ? 'rotate-180' : ''}`} strokeWidth={ICON_STROKE} aria-hidden="true" />
+        </Button>
         <div id="lead-details" hidden={!more} className="mt-3 space-y-3">
           <div>
-            <label htmlFor="lead-email" className="block text-xs font-semibold text-slate-600 mb-1">Email (необов&apos;язково)</label>
-            <input id="lead-email" name="email" type="email" inputMode="email" maxLength={254} autoComplete="email" className={INPUT}
+            <Label htmlFor="lead-email" className="mb-1.5">Email (необов&apos;язково)</Label>
+            <Input id="lead-email" name="email" type="email" inputMode="email" maxLength={254} autoComplete="email"
               value={email} aria-invalid={!!errors.email}
               aria-describedby={errors.email ? 'lead-email-hint lead-email-err' : 'lead-email-hint'}
               onChange={(e) => setEmail(e.target.value)} />
-            <p id="lead-email-hint" className="text-xs text-slate-500 mt-1">
+            <p id="lead-email-hint" className="text-sm text-muted-foreground mt-1">
               На нього надійде копія розрахунку та статуси заявки.
             </p>
             <FieldError id="lead-email-err" text={errors.email} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label htmlFor="lead-budget" className="block text-xs font-semibold text-slate-600 mb-1">Бюджет під ключ ($)</label>
-              <input id="lead-budget" name="budget_usd" inputMode="decimal" className={INPUT}
+              <Label htmlFor="lead-budget" className="mb-1.5">Бюджет під ключ ($)</Label>
+              <Input id="lead-budget" name="budget_usd" inputMode="decimal"
                 value={budget} aria-invalid={!!errors.budget_usd} aria-describedby={errors.budget_usd ? 'lead-budget-err' : undefined}
                 onChange={(e) => setBudget(e.target.value)} />
               <FieldError id="lead-budget-err" text={errors.budget_usd} />
             </div>
             <div>
-              <label htmlFor="lead-needed" className="block text-xs font-semibold text-slate-600 mb-1">Коли потрібне авто</label>
-              <select id="lead-needed" name="needed_when" className={INPUT} value={needed}
+              <Label htmlFor="lead-needed" className="mb-1.5">Коли потрібне авто</Label>
+              <select id="lead-needed" name="needed_when" className={FIELD_CLASS} value={needed}
                 aria-invalid={!!errors.needed_when} aria-describedby={errors.needed_when ? 'lead-needed-err' : undefined}
                 onChange={(e) => setNeeded(e.target.value as LeadNeededWhen | '')}>
                 <option value="">Не вказано</option>
@@ -357,16 +369,16 @@ export default function LeadForm({
               <FieldError id="lead-needed-err" text={errors.needed_when} />
             </div>
             <div>
-              <label htmlFor="lead-city" className="block text-xs font-semibold text-slate-600 mb-1">Місто</label>
-              <input id="lead-city" name="city" maxLength={100} autoComplete="address-level2" className={INPUT}
+              <Label htmlFor="lead-city" className="mb-1.5">Місто</Label>
+              <Input id="lead-city" name="city" maxLength={100} autoComplete="address-level2"
                 value={city} aria-invalid={!!errors.city} aria-describedby={errors.city ? 'lead-city-err' : undefined}
                 onChange={(e) => setCity(e.target.value)} />
               <FieldError id="lead-city-err" text={errors.city} />
             </div>
           </div>
           <div>
-            <label htmlFor="lead-comment" className="block text-xs font-semibold text-slate-600 mb-1">Коментар</label>
-            <textarea id="lead-comment" name="comment" rows={3} maxLength={1000} className={INPUT}
+            <Label htmlFor="lead-comment" className="mb-1.5">Коментар</Label>
+            <Textarea id="lead-comment" name="comment" rows={3} maxLength={1000}
               value={comment} aria-invalid={!!errors.comment} aria-describedby={errors.comment ? 'lead-comment-err' : undefined}
               onChange={(e) => setComment(e.target.value)} />
             <FieldError id="lead-comment-err" text={errors.comment} />
@@ -375,21 +387,21 @@ export default function LeadForm({
       </div>
 
       <div>
-        <label htmlFor="lead-consent" className="flex items-start gap-2 text-sm text-slate-700">
-          <input id="lead-consent" name="consent" type="checkbox" className="mt-1" checked={consent}
+        <label htmlFor="lead-consent" className="flex items-start gap-2.5 text-sm text-foreground">
+          <input id="lead-consent" name="consent" type="checkbox" className="mt-0.5 size-5 shrink-0 accent-primary" checked={consent}
             aria-invalid={!!errors.consent} aria-describedby={errors.consent ? 'lead-consent-err' : undefined}
             onChange={(e) => setConsent(e.target.checked)} />
           <span>
             Погоджуюсь на обробку персональних даних відповідно до{' '}
-            <Link href="/privacy" target="_blank" className="text-blue-700 underline">політики конфіденційності</Link>
+            <Link href="/privacy" target="_blank" className="text-link underline underline-offset-4">політики конфіденційності</Link>
           </span>
         </label>
         <FieldError id="lead-consent-err" text={errors.consent} />
       </div>
 
       <div>
-        <label htmlFor="lead-partner-consent" className="flex items-start gap-2 text-sm text-slate-700">
-          <input id="lead-partner-consent" name="partner_consent" type="checkbox" className="mt-1"
+        <label htmlFor="lead-partner-consent" className="flex items-start gap-2.5 text-sm text-foreground">
+          <input id="lead-partner-consent" name="partner_consent" type="checkbox" className="mt-0.5 size-5 shrink-0 accent-primary"
             checked={partnerConsent} disabled={!partnerReady}
             aria-invalid={!!errors.partner_consent} aria-describedby={errors.partner_consent ? 'lead-partner-err' : undefined}
             onChange={(e) => setPartnerConsent(e.target.checked)} />
@@ -397,8 +409,11 @@ export default function LeadForm({
         </label>
         {(consentText === '' || serverDown) && (
           <div role="alert" data-testid="lead-unavailable"
-            className="mt-2 text-sm bg-amber-50 border border-amber-200 rounded p-3">
-            <p className="font-semibold text-amber-900">Заявки онлайн тимчасово недоступні</p>
+            className="mt-2 rounded-lg border border-warning bg-warning/15 p-3 text-sm text-foreground">
+            <p className="flex items-center gap-2 font-semibold">
+              <TriangleAlert className="size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+              Заявки онлайн тимчасово недоступні
+            </p>
             <FallbackContact settings={siteSettings} onRetry={retry} retrying={retrying} />
           </div>
         )}
@@ -416,22 +431,26 @@ export default function LeadForm({
         resetKey={captcha.resetKey} onHoneypot={captcha.setWebsite} />
 
       {general && (
-        <p role="alert" className="text-red-600 text-sm bg-red-50 border border-red-200 rounded p-3">{general}</p>
+        <p role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+          <span>{general}</span>
+        </p>
       )}
 
       {siteSettings?.partner_name?.trim() && (
-        <div data-testid="lead-partner-info" className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-3">
+        <div data-testid="lead-partner-info" className="rounded-lg border bg-muted p-3 text-sm text-foreground">
           <p>Заявку обробляє партнер: <span className="font-semibold">{siteSettings.partner_name.trim()}</span></p>
           <ContactList settings={siteSettings} title="Контакти:" />
         </div>
       )}
 
-      <button type="submit" disabled={!canSubmit} aria-describedby={blockedReason ? 'lead-submit-hint' : undefined}
-        className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors">
+      <Button type="submit" size="lg" disabled={!canSubmit} aria-describedby={blockedReason ? 'lead-submit-hint' : undefined}
+        className="w-full text-base font-bold">
+        <Send strokeWidth={ICON_STROKE} aria-hidden="true" />
         {submitting ? 'Надсилаю…' : 'Надіслати'}
-      </button>
+      </Button>
       {blockedReason && (
-        <p id="lead-submit-hint" data-testid="lead-submit-hint" className="text-sm text-slate-600 -mt-2">{blockedReason}</p>
+        <p id="lead-submit-hint" data-testid="lead-submit-hint" className="text-sm text-muted-foreground -mt-2">{blockedReason}</p>
       )}
     </form>
   );

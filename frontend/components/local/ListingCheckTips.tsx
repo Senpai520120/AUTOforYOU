@@ -22,8 +22,8 @@ export default function ListingCheckTips() {
     <>
       {tips.length > 0 && (
     <section data-testid="listing-check-tips" aria-labelledby="check-tips-title" className="mt-8">
-      <h2 id="check-tips-title" className="font-semibold text-slate-900 mb-2">Як перевірити авто перед купівлею</h2>
-      <ul className="bg-white border border-slate-100 rounded-xl p-4 text-sm text-slate-700 list-disc pl-8 space-y-1">
+      <h2 id="check-tips-title" className="text-lg font-bold text-foreground mb-3">Як перевірити авто перед купівлею</h2>
+      <ul className="bg-card border rounded-xl p-4 text-sm text-foreground list-disc pl-8 space-y-1">
         {tips.map((t, i) => <li key={i}>{t}</li>)}
       </ul>
     </section>

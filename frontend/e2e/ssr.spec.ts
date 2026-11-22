@@ -85,6 +85,8 @@ test.describe('Фото оголошень у серверному HTML (10.3) @
     // Оптимізоване фото йде через /_next/image, unoptimized — напряму з /media/ або S3/R2.
     let imageRequests = 0;
     const failImage = async (route: Route) => {
+      // Шрифти next/font лежать у /_next/static/media/ — це не фото, їх не рахуємо (11.13).
+      if (route.request().url().includes('/_next/static/')) return route.continue();
       imageRequests += 1;
       await route.fulfill({ status: 404, body: '' });
     };

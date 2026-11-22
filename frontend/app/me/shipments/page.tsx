@@ -48,8 +48,8 @@ export default function MyShipmentsPage() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/me" className="text-blue-600 hover:underline text-sm">← Кабінет</Link>
-        <h1 className="text-xl font-bold text-slate-900">Мої контейнери</h1>
+        <Link href="/me" className="text-link hover:underline text-sm">← Кабінет</Link>
+        <h1 className="text-xl font-bold text-foreground">Мої контейнери</h1>
       </div>
 
       {error ? (
@@ -66,28 +66,28 @@ export default function MyShipmentsPage() {
           {shipments.map(s => {
             const step = STATUS_STEPS.indexOf(s.status);
             return (
-              <div key={s.id} className="bg-white border border-slate-200 rounded-xl p-5">
+              <div key={s.id} className="bg-card border border-border rounded-xl p-5">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <p className="font-bold text-slate-900 text-lg">{s.container_no}</p>
-                    {s.vessel && <p className="text-sm text-slate-500">{s.vessel}</p>}
+                    <p className="font-bold text-foreground text-lg">{s.container_no}</p>
+                    {s.vessel && <p className="text-sm text-muted-foreground">{s.vessel}</p>}
                   </div>
                   <div className="text-right">
                     <Badge variant={s.status === 'delivered' ? 'success' : 'info'}>
                       {STATUS_LABELS[s.status] ?? s.status}
                     </Badge>
-                    {s.eta && <p className="text-xs text-slate-400 mt-1">Орієнтовне прибуття: {s.eta}</p>}
+                    {s.eta && <p className="text-xs text-muted-foreground mt-1">Орієнтовне прибуття: {s.eta}</p>}
                   </div>
                 </div>
                 {/* Progress bar */}
                 <div className="flex gap-1 mt-3">
                   {STATUS_STEPS.map((st, i) => (
                     <div key={st} title={STATUS_LABELS[st]}
-                      className={`flex-1 h-2 rounded-full transition-colors ${i <= step ? 'bg-blue-600' : 'bg-slate-200'}`} />
+                      className={`flex-1 h-2 rounded-full transition-colors ${i <= step ? 'bg-primary' : 'bg-border'}`} />
                   ))}
                 </div>
-                <p className="text-xs text-slate-400 mt-1">{step + 1} / {STATUS_STEPS.length} кроків</p>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-muted-foreground mt-1">{step + 1} / {STATUS_STEPS.length} кроків</p>
+                <p className="text-xs text-muted-foreground mt-2">
                   {s.vehicle_count} авто · порт: {s.arrival_port_eu}
                 </p>
               </div>

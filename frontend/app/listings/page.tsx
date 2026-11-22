@@ -44,7 +44,7 @@ export default async function ListingsPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Каталог автомобілів</h1>
+      <h1 className="text-2xl font-bold text-foreground mb-6">Каталог автомобілів</h1>
 
       <WholesaleHint />
 

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/shadcn/button';
 import { fetchSiteSettings } from '@/lib/site-settings-client';
 import {
   getRawConsent,
@@ -83,7 +84,8 @@ export default function CookieBanner() {
       ref={rootRef}
       role="dialog"
       aria-label="Налаштування файлів cookie"
-      className="fixed bottom-0 inset-x-0 z-50 bg-slate-900 text-white px-4 py-4 shadow-lg"
+      data-on-dark
+      className="fixed bottom-0 inset-x-0 z-50 bg-footer text-header-foreground px-4 py-4 shadow-lg"
     >
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <p className="text-xs sm:text-sm flex-1">
@@ -92,7 +94,7 @@ export default function CookieBanner() {
           {hasGa4 && ' Аналітику Google Analytics ми вмикаємо лише з вашої згоди («Прийняти всі»).'}
           {hasCf && ' Статистику відвідувань Cloudflare Web Analytics збираємо без cookie.'}
           {!hasGa4 && !hasCf && ' Інших (аналітичних чи рекламних) cookie ми не використовуємо.'}{' '}
-          <Link href="/cookies" className="underline hover:text-amber-400 transition-colors">
+          <Link href="/cookies" className="underline underline-offset-2 hover:text-accent transition-colors">
             Що саме зберігається
           </Link>
           {stored && (
@@ -105,28 +107,30 @@ export default function CookieBanner() {
           )}
         </p>
         <div className="flex flex-wrap gap-3 shrink-0">
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => choose('necessary')}
-            className="px-4 py-2 text-sm border border-slate-500 rounded-lg hover:border-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="border-footer-muted bg-transparent text-header-foreground hover:bg-header-foreground/10 hover:text-header-foreground focus-visible:ring-header-foreground"
           >
             Лише необхідні
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => choose('all')}
-            className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="bg-accent font-semibold text-accent-foreground hover:bg-accent/90 focus-visible:ring-header-foreground"
           >
             Прийняти всі
-          </button>
+          </Button>
           {forceOpen && (
-            <button
+            <Button
               type="button"
+              variant="link"
               onClick={() => setForceOpen(false)}
-              className="px-4 py-2 text-sm text-slate-300 underline hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 rounded"
+              className="text-footer-foreground underline hover:text-header-foreground focus-visible:ring-header-foreground"
             >
               Закрити
-            </button>
+            </Button>
           )}
         </div>
       </div>

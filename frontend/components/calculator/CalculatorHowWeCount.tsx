@@ -21,8 +21,8 @@ export default function CalculatorHowWeCount() {
   }, []);
   return (
     <section className="mt-10" data-testid="calculator-how-we-count" aria-labelledby="how-we-count-title">
-      <h2 id="how-we-count-title" className="font-semibold text-slate-900 mb-2">Як рахуємо</h2>
-      <p className="text-sm text-slate-700">
+      <h2 id="how-we-count-title" className="text-xl font-bold tracking-tight text-foreground mb-3">Як рахуємо</h2>
+      <p className="text-sm text-muted-foreground">
         Вартість «під ключ» складається з ціни на аукціоні, аукціонного збору, доставки по США та морського
         фрахту, а також митних платежів в Україні: акцизу, мита, ПДВ і пенсійного збору. Ставки беруться з
         таблиць аукціонів і митних правил, дату аукціонних ставок показано під результатом. Розрахунок
@@ -31,11 +31,11 @@ export default function CalculatorHowWeCount() {
       <p className="mt-3 text-sm">
         {howItWorksOn && (
           <>
-            <Link href="/how-it-works" className="text-blue-700 underline" data-testid="calc-link-how-it-works">{HOW_IT_WORKS_LABEL}</Link>
+            <Link href="/how-it-works" className="text-link underline underline-offset-4 hover:text-link/80" data-testid="calc-link-how-it-works">{HOW_IT_WORKS_LABEL}</Link>
             {' · '}
           </>
         )}
-        <Link href="/prigon" className="text-blue-700 underline" data-testid="calc-link-prigon">Пригон за моделями</Link>
+        <Link href="/prigon" className="text-link underline underline-offset-4 hover:text-link/80" data-testid="calc-link-prigon">Пригон за моделями</Link>
       </p>
     </section>
   );

@@ -27,14 +27,14 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
 
   return (
     <div>
-      <Link href="/" className="text-blue-600 text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
+      <Link href="/" className="text-link text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded">
         ← На головну
       </Link>
 
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Gallery */}
         <div>
-          <div className="relative h-80 bg-slate-100 rounded-xl overflow-hidden">
+          <div className="relative h-80 bg-muted rounded-xl overflow-hidden">
             {imgSrc ? (
               <Image
                 src={imgSrc}
@@ -46,7 +46,7 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
                 unoptimized={isLocalMediaUrl(imgSrc)}
               />
             ) : (
-              <div className="flex items-center justify-center h-full text-slate-300" aria-label="Фото відсутнє">
+              <div className="flex items-center justify-center h-full text-muted-foreground" aria-label="Фото відсутнє">
                 <svg className="w-24 h-24" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
@@ -63,8 +63,8 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
                     onClick={() => setImgIdx(i)}
                     aria-label={`Фото ${i + 1}`}
                     aria-current={i === imgIdx}
-                    className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      i === imgIdx ? 'border-blue-600' : 'border-transparent'
+                    className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-ring ${
+                      i === imgIdx ? 'border-ring' : 'border-transparent'
                     }`}
                   >
                     {src && (
@@ -80,10 +80,10 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
         {/* Info */}
         <div>
           <div className="flex items-start gap-3 flex-wrap">
-            <h1 className="text-2xl font-extrabold text-slate-900">{v.year} {v.make} {v.model}</h1>
+            <h1 className="text-2xl font-extrabold text-foreground">{v.year} {v.make} {v.model}</h1>
             {listing.is_express_active && <Badge variant="danger">Терміновий викуп</Badge>}
           </div>
-          <p className="text-3xl font-extrabold text-blue-800 mt-2">
+          <p className="text-3xl font-extrabold text-foreground mt-2">
             {Number(listing.price).toLocaleString('uk-UA')} {listing.currency}
           </p>
 
@@ -99,28 +99,28 @@ export default function ListingDetail({ listing }: { listing: Listing }) {
               ['Статус', listing.status === 'in_transit' ? 'В дорозі' : listing.status === 'in_stock' ? 'В наявності' : 'Продано'],
             ].map(([label, val]) => (
               <div key={label}>
-                <dt className="text-xs text-slate-500 font-semibold uppercase tracking-wide">{label}</dt>
-                <dd className="mt-0.5 text-slate-900">{val}</dd>
+                <dt className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">{label}</dt>
+                <dd className="mt-0.5 text-foreground">{val}</dd>
               </div>
             ))}
           </dl>
 
           {listing.repair_description && (
-            <div className="mt-5 bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Опис ремонту</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{listing.repair_description}</p>
+            <div className="mt-5 bg-muted border border-border rounded-lg p-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">Опис ремонту</p>
+              <p className="text-sm text-foreground whitespace-pre-wrap">{listing.repair_description}</p>
             </div>
           )}
 
           <div className="mt-6 flex flex-col gap-3">
             <Link
               href={calculatorHref(listing.id, v)}
-              className="bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm text-center"
+              className="bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring text-primary-foreground font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm text-center"
             >
               Порахувати вартість
             </Link>
             <button type="button" onClick={() => setLeadOpen(true)} aria-expanded={leadOpen}
-              className="border border-blue-700 text-blue-700 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm">
+              className="border border-link text-link hover:bg-link/10 focus:outline-none focus:ring-2 focus:ring-ring font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm">
               Залишити заявку
             </button>
             {leadOpen && (
