@@ -180,6 +180,21 @@ docker compose -f docker-compose.yml -f docker-compose.sso.yml up -d --build
 
 ---
 
+## Перевірки перед комітом і пушем
+
+Хуки (pre-commit) повторюють швидкі перевірки CI. Встановлення один раз:
+
+```powershell
+.venv\Scripts\pip install -r requirements-dev.txt
+git config --unset core.hooksPath   # якщо задано: інакше pre-commit не встановиться
+pre-commit install                  # ставить хуки pre-commit і pre-push
+```
+
+- Коміт (лише змінені файли): `ruff check`, конфлікти злиття, YAML, великі файли (>1000 КБ), `*.sh` лише LF, eslint для `frontend/**/*.{ts,tsx}`.
+- Пуш (`scripts/hooks/pre-push.sh`): `ruff check .`, `manage.py check`, `makemigrations --check`, LF у `*.sh`, `npm run lint` і `tsc --noEmit` (frontend-кроки лише якщо змінювався `frontend/`). Тести, збірка й e2e - окремо (`scripts/test-backend.ps1`) та в CI.
+- gitleaks без Go локально не ставиться: працює в CI, вручну - `pre-commit run gitleaks --hook-stage manual`.
+- Екстрений пропуск: `git commit --no-verify` / `git push --no-verify` - лише свідомо.
+
 ## Захист від витоку секретів
 
 Перед комітом працює gitleaks (конфіг `.gitleaks.toml`, той самий у CI):

@@ -1,0 +1,4 @@
+# Инструменты разработчика (хуки перед коммитом/пушем). Рантайм-зависимости — в requirements.txt.
+# Установка: .venv\Scripts\pip install -r requirements-dev.txt
+pre-commit==4.7.0
+ruff==0.15.22  # та же версия, что в .github/workflows/ci-cd.yml

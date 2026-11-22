@@ -82,6 +82,8 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 - Каждый новый/исправленный тест проверяется мутацией: сломать код — тест красный — откатить.
 - На каждый эндпоинт с личными данными — тесты 401 (аноним) и 403/404 (чужой), бриф §3.
 - Для функций без UI — Django-тесты с моками внешних API (бриф §5 п. 3).
+- Хуки pre-commit/pre-push стоят (`requirements-dev.txt`, `.pre-commit-config.yaml`, `scripts/hooks/`): ruff, check, миграции, LF, eslint, tsc.
+- Агенты не используют `--no-verify`: упал хук — чинить причину.
 
 ## E2E (Playwright) — правила
 - Запускать только из `frontend/`.

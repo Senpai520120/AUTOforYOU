@@ -1,6 +1,49 @@
+# Установка: см. README, «Перевірки перед комітом і пушем».
+default_install_hook_types: [pre-commit, pre-push]
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22  # = ruff в CI
+    hooks:
+      - id: ruff-check   # без --fix: файлы молча не меняем
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: '^docker-compose.*\.yml$'  # теги Compose (!override) PyYAML не знает
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
     hooks:
+      # Без Go - только CI и `pre-commit run gitleaks --hook-stage manual`.
+      # gitleaks-docker не взят: на этой машине Docker-демон не запущен, проверить нельзя.
       - id: gitleaks
         args: ["--config=.gitleaks.toml"]
+        stages: [manual]
+
+  - repo: local
+    hooks:
+      - id: sh-lf
+        name: "*.sh только LF + бит исполнения"
+        entry: scripts/check-infra.sh lf
+        language: system
+        files: '\.sh$'
+        pass_filenames: false
+      - id: eslint-staged
+        name: eslint (frontend)
+        entry: scripts/hooks/eslint-staged.sh
+        language: system
+        files: '^frontend/.*\.(ts|tsx)$'
+        exclude: '^frontend/(node_modules|\.next)/'
+      - id: pre-push-checks
+        name: pre-push (ruff, check, migrations, LF, eslint, tsc)
+        entry: scripts/hooks/pre-push.sh
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+        verbose: true
