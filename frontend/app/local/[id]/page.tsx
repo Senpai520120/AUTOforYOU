@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import LocalListingDetail from './LocalListingDetail';
 import { LocalListing } from '@/lib/types';
 import { buildMetadata } from '@/lib/seo';
+import { localListingLd } from '@/lib/jsonld';
+import JsonLd from '@/components/seo/JsonLd';
 import { isC2CEnabled } from '@/lib/c2c';
 import { INTERNAL_API_URL } from '@/lib/config.server';
 import { publicMedia } from '@/lib/server-api';
@@ -40,5 +42,12 @@ export default async function LocalListingPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const listing = await getListing(id);
   if (!listing) notFound();
-  return <LocalListingDetail listing={listing} />;
+  // Розмітка лише при ввімкненому C2C і публічному статусі (active/sold); hidden/pending/… — без Car і Offer.
+  const ld = (await isC2CEnabled()) ? localListingLd(listing) : null;
+  return (
+    <>
+      {ld && <JsonLd data={ld} />}
+      <LocalListingDetail listing={listing} />
+    </>
+  );
 }

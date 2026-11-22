@@ -19,7 +19,14 @@
 - Исправление: `core/ssr.py` — доверенный SSR = `X-SSR-Key` (`SSR_INTERNAL_KEY` ≥ 32 символов, `compare_digest`) И нет XFF; IP посетителя из `X-SSR-Client-IP` (IPv6 → /64) подставляется в `REMOTE_ADDR`. Троттл `SsrAwareAnonThrottle`: scope `ssr` по посетителю (600/h), без IP — `ssr_shared` (6000/h). nginx сбрасывает `X-SSR-*`; ключ и IP вырезаются из Sentry; check `core.W001` при `NUM_PROXIES>=1` без ключа.
 - Фронт: кэшируемые fetch шлют только ключ (кэш Next не дробится по IP), no-store (`serverGetAuthed`, `/sellers/[id]`) — ключ + `x-real-ip`.
 - Владельцу: сгенерировать `SSR_INTERNAL_KEY` в `.env` сервера (backend и frontend), подтвердить ставки `THROTTLE_SSR_RATE`/`THROTTLE_SSR_SHARED_RATE` (LAUNCH_CHECKLIST).
-- Хвосты: после слияния PR #82 перевести fetch в `app/listings/[id]`, `app/local/[id]` на `ssrKeyHeaders()`; автотест конфига nginx (каждый `proxy_pass` со сбросом `X-SSR-*`).
+- Fetch в `app/listings/[id]`, `app/local/[id]` (из PR #82) тоже переведены на `ssrKeyHeaders()`. Хвост: автотест конфига nginx (каждый `proxy_pass` со сбросом `X-SSR-*`).
+
+## Задача 12.1: JSON-LD Car + Offer (2026-11-22)
+
+- Ядро `frontend/lib/jsonld-core.ts`: `buildVehicleOfferLd` (Car + вложенный Offer: цена строкой без float, валюта UAH/USD/EUR, `mileageFromOdometer` в KMT, год, марка/модель, топливо, КПП, состояние), `localAvailability`/`lotAvailability`, `normalizePrice`. Во входном типе нет полей продавца — ПДн в разметку не попадают по построению. VIN — только полный 17-символьный и только у лотов (он и так показан гостю на странице); у частных объявлений VIN нет в модели.
+- Привязка `frontend/lib/jsonld.ts`: `localListingLd`, `listingLd`, `landingLd`. Страницы: `/local/[id]` (только при C2C и статусе active/sold, остальные — без разметки), `/listings/[id]` (in_stock→InStock, in_transit→PreOrder, sold→OutOfStock), `/prigon/[slug]` (цена — оценка в USD, без availability/VIN/пробега).
+- Тесты `e2e/seo.spec.ts`: 11 unit без браузера + 4 браузерных (12.1). Прогон на e2e-стеке: 83 passed, 6 skipped (лоты выключены в ВОЛНЕ-1 — тест разметки лота пропускается), 0 failed. Мутации unit (регулярка VIN, маппер availability, проверка цены) — красные, откат.
+- Не проверено: страница лота с разметкой в браузере (LOTS выключен в e2e); охранник статуса на `/local/[id]` e2e не ловит — SSR-запрос анонимный, гость и так получает 404; защита покрыта unit-тестом маппера. Задача: `docs/tasks/12.1-vehicle-offer-jsonld.md`.
 
 ## Задача 11.16: палитра «Графіт і лайм» (2026-11-21)
 

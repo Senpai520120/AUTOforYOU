@@ -11,7 +11,7 @@ import { isHowItWorksPublished } from '@/lib/content';
 import { calculatorHref, getLanding, getLandingList, similarLandings } from '@/lib/landings';
 import { CALC_COST_LABEL, HOME_LABEL, HOW_IT_WORKS_LABEL, LANDING_INDEX_LABEL } from '@/lib/labels';
 import { buildMetadata } from '@/lib/seo';
-import { breadcrumbLd, faqLd } from '@/lib/jsonld';
+import { breadcrumbLd, faqLd, landingLd } from '@/lib/jsonld';
 import JsonLd from '@/components/seo/JsonLd';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import SimilarModels from '@/components/landing/SimilarModels';
@@ -76,7 +76,7 @@ export default async function LandingPage({ params }: Params) {
   const similar = similarLandings(landingList, p.slug, p.make);
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 pb-28 md:pb-10 space-y-8">
-      <JsonLd data={[breadcrumbLd(crumbs), faqLd(faq)].filter((d) => d !== null)} />
+      <JsonLd data={[breadcrumbLd(crumbs), faqLd(faq), landingLd(p)].filter((d) => d !== null)} />
       <Breadcrumbs crumbs={crumbs} />
       <header>
         <h1 className="text-balance text-2xl md:text-4xl font-extrabold tracking-tight text-foreground" data-testid="landing-h1">{p.h1}</h1>
