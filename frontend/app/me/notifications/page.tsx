@@ -91,24 +91,24 @@ export default function NotificationsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/me" className="hover:text-blue-700">Кабінет</Link>
+      <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Link href="/me" className="hover:text-link">Кабінет</Link>
         <span>/</span>
         <span>Сповіщення</span>
       </div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-slate-900">Сповіщення</h1>
+        <h1 className="text-xl font-bold text-foreground">Сповіщення</h1>
         {unread > 0 && (
           <button
             onClick={handleMarkAll}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-link hover:underline"
           >
             Позначити всі прочитаними
           </button>
         )}
       </div>
 
-      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+      {actionError && <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-3 py-2">{actionError}</p>}
 
       {busy ? (
         <LoadingState />
@@ -122,10 +122,10 @@ export default function NotificationsPage() {
             <li key={item.id}>
               <button
                 onClick={() => handleClick(item)}
-                className={`w-full text-left rounded-xl border px-4 py-3 transition-colors hover:border-blue-300 ${
+                className={`w-full text-left rounded-xl border px-4 py-3 transition-colors hover:border-link/40 ${
                   item.is_read
-                    ? 'bg-white border-slate-200 text-slate-600'
-                    : 'bg-blue-50 border-blue-200 text-slate-900'
+                    ? 'bg-card border-border text-muted-foreground'
+                    : 'bg-link/10 border-link/40 text-foreground'
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -134,13 +134,13 @@ export default function NotificationsPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm truncate">{item.title}</span>
                       {!item.is_read && (
-                        <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                        <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
                       )}
                     </div>
                     {item.text && (
-                      <p className="text-xs text-slate-500 mt-0.5 truncate">{item.text}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.text}</p>
                     )}
-                    <p className="text-xs text-slate-400 mt-0.5">{timeAgo(item.created_at)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(item.created_at)}</p>
                   </div>
                 </div>
               </button>
@@ -149,7 +149,7 @@ export default function NotificationsPage() {
           {hasMore && (
             <li className="text-center pt-2">
               <button type="button" onClick={loadMore} disabled={loadingMore}
-                className="text-sm text-blue-700 hover:underline disabled:opacity-50">
+                className="text-sm text-link hover:underline disabled:opacity-50">
                 {loadingMore ? 'Завантаження…' : 'Показати ще'}
               </button>
             </li>

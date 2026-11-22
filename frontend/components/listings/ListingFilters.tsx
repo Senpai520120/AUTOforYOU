@@ -16,11 +16,11 @@ export default function ListingFilters() {
   }, [params, router]);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap gap-3 items-end">
+    <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap gap-3 items-end">
       <div>
-        <label htmlFor={fid('f1')} className="block text-xs font-semibold text-slate-600 mb-1">Статус</label>
+        <label htmlFor={fid('f1')} className="block text-xs font-semibold text-muted-foreground mb-1">Статус</label>
         <select id={fid('f1')}
-          className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+          className="border border-input rounded px-2 py-1.5 text-sm"
           value={params.get('status') ?? ''}
           onChange={e => update('status', e.target.value)}
         >
@@ -31,9 +31,9 @@ export default function ListingFilters() {
         </select>
       </div>
       <div>
-        <label htmlFor={fid('f2')} className="block text-xs font-semibold text-slate-600 mb-1">Топливо</label>
+        <label htmlFor={fid('f2')} className="block text-xs font-semibold text-muted-foreground mb-1">Топливо</label>
         <select id={fid('f2')}
-          className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+          className="border border-input rounded px-2 py-1.5 text-sm"
           value={params.get('fuel_type') ?? ''}
           onChange={e => update('fuel_type', e.target.value)}
         >
@@ -45,20 +45,20 @@ export default function ListingFilters() {
         </select>
       </div>
       <div>
-        <label htmlFor={fid('f3')} className="block text-xs font-semibold text-slate-600 mb-1">Макс. цена ($)</label>
+        <label htmlFor={fid('f3')} className="block text-xs font-semibold text-muted-foreground mb-1">Макс. цена ($)</label>
         <input id={fid('f3')}
           type="number"
-          className="border border-slate-300 rounded px-2 py-1.5 text-sm w-28"
+          className="border border-input rounded px-2 py-1.5 text-sm w-28"
           placeholder="без лимита"
           defaultValue={params.get('max_price') ?? ''}
           onBlur={e => update('max_price', e.target.value)}
         />
       </div>
       <div>
-        <label htmlFor={fid('f4')} className="block text-xs font-semibold text-slate-600 mb-1">Поиск</label>
+        <label htmlFor={fid('f4')} className="block text-xs font-semibold text-muted-foreground mb-1">Поиск</label>
         <input id={fid('f4')}
           type="text"
-          className="border border-slate-300 rounded px-2 py-1.5 text-sm w-44"
+          className="border border-input rounded px-2 py-1.5 text-sm w-44"
           placeholder="марка, модель, VIN"
           defaultValue={params.get('search') ?? ''}
           onBlur={e => update('search', e.target.value)}

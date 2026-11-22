@@ -60,46 +60,46 @@ function ProfileForm({ user, onSaved }: { user: User; onSaved: () => Promise<voi
     }
   };
 
-  const input = 'w-full border border-slate-300 rounded-lg px-3 py-2';
+  const input = 'w-full border border-input rounded-lg px-3 py-2';
   const fieldError = (key: keyof FieldErrors) => errors[key] && (
-    <p id={`${key}-error`} role="alert" className="text-red-600 text-sm mt-1">{errors[key]}</p>
+    <p id={`${key}-error`} role="alert" className="text-destructive text-sm mt-1">{errors[key]}</p>
   );
   return (
     <div className="max-w-2xl mx-auto">
-      <Link href="/me" className="text-sm text-blue-600 hover:underline">← До кабінету</Link>
-      <h1 className="text-2xl font-bold text-slate-900 mt-2 mb-6">Профіль</h1>
+      <Link href="/me" className="text-sm text-link hover:underline">← До кабінету</Link>
+      <h1 className="text-2xl font-bold text-foreground mt-2 mb-6">Профіль</h1>
 
-      <section className="bg-white border border-slate-200 rounded-2xl p-6">
-        <p className="text-sm text-slate-500 mb-4">
-          Email: <span className="font-semibold text-slate-700">{user.email}</span> (змінити email не можна)
+      <section className="bg-card border border-border rounded-2xl p-6">
+        <p className="text-sm text-muted-foreground mb-4">
+          Email: <span className="font-semibold text-foreground">{user.email}</span> (змінити email не можна)
         </p>
         <form onSubmit={submit} noValidate className="space-y-4">
           <div>
-            <label htmlFor="first-name" className="block text-sm font-semibold text-slate-700 mb-1">Ім&apos;я</label>
+            <label htmlFor="first-name" className="block text-sm font-semibold text-foreground mb-1">Ім&apos;я</label>
             <input id="first-name" maxLength={150} autoComplete="given-name" className={input}
               aria-invalid={!!errors.first_name} aria-describedby={errors.first_name ? 'first_name-error' : undefined}
               value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             {fieldError('first_name')}
           </div>
           <div>
-            <label htmlFor="last-name" className="block text-sm font-semibold text-slate-700 mb-1">Прізвище</label>
+            <label htmlFor="last-name" className="block text-sm font-semibold text-foreground mb-1">Прізвище</label>
             <input id="last-name" maxLength={150} autoComplete="family-name" className={input}
               aria-invalid={!!errors.last_name} aria-describedby={errors.last_name ? 'last_name-error' : undefined}
               value={lastName} onChange={(e) => setLastName(e.target.value)} />
             {fieldError('last_name')}
           </div>
           <div>
-            <label htmlFor="phone" className="block text-sm font-semibold text-slate-700 mb-1">Телефон</label>
+            <label htmlFor="phone" className="block text-sm font-semibold text-foreground mb-1">Телефон</label>
             <input id="phone" type="tel" inputMode="tel" placeholder="+380XXXXXXXXX" maxLength={13}
               autoComplete="tel" className={input}
               aria-invalid={!!errors.phone} aria-describedby={errors.phone ? 'phone-error' : undefined}
               value={phone} onChange={(e) => setPhone(e.target.value)} />
             {fieldError('phone')}
           </div>
-          {error && <p role="alert" data-testid="form-error" className="text-red-600 text-sm">{error}</p>}
-          {saved && <p role="status" className="text-green-700 text-sm">Зміни збережено</p>}
+          {error && <p role="alert" data-testid="form-error" className="text-destructive text-sm">{error}</p>}
+          {saved && <p role="status" className="text-success text-sm">Зміни збережено</p>}
           <button type="submit" disabled={saving}
-            className="bg-blue-700 hover:bg-blue-800 text-white font-bold px-5 py-2.5 rounded-xl disabled:opacity-60 transition-colors">
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-5 py-2.5 rounded-xl disabled:opacity-60 transition-colors">
             {saving ? 'Зберігаємо...' : 'Зберегти'}
           </button>
         </form>

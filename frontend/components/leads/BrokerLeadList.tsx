@@ -68,10 +68,10 @@ export default function BrokerLeadList() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <Link href="/me" className="text-blue-600 hover:underline text-sm">← Кабінет</Link>
-        <h1 className="text-xl font-bold text-slate-900">Заявки</h1>
+        <Link href="/me" className="text-link hover:underline text-sm">← Кабінет</Link>
+        <h1 className="text-xl font-bold text-foreground">Заявки</h1>
         {data && (
-          <span data-testid="new-count" className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold">
+          <span data-testid="new-count" className="text-xs bg-warning/15 text-foreground px-2 py-1 rounded font-semibold">
             Нових: {data.new_count}
           </span>
         )}
@@ -79,12 +79,12 @@ export default function BrokerLeadList() {
 
       <div className="flex flex-wrap gap-2 mb-4 min-w-0" role="group" aria-label="Фільтр за статусом">
         <button type="button" onClick={() => setParams({ status: '' })} aria-pressed={!status}
-          className={`px-3 py-1 rounded-full text-sm border ${!status ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-300'}`}>
+          className={`px-3 py-1 rounded-full text-sm border ${!status ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-input'}`}>
           Усі
         </button>
         {STATUSES.map((s) => (
           <button key={s} type="button" onClick={() => setParams({ status: s })} aria-pressed={status === s}
-            className={`px-3 py-1 rounded-full text-sm border ${status === s ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-300'}`}>
+            className={`px-3 py-1 rounded-full text-sm border ${status === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-input'}`}>
             {LEAD_STATUS_LABELS[s]}
           </button>
         ))}
@@ -92,25 +92,25 @@ export default function BrokerLeadList() {
 
       <form className="flex flex-wrap items-end gap-3 mb-6 min-w-0"
         onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); setParams({ utm_source: utmInput.trim() }); }}>
-        <label className="text-sm text-slate-700 w-full min-w-0 sm:w-auto">
+        <label className="text-sm text-foreground w-full min-w-0 sm:w-auto">
           <span className="block mb-1">Ім’я або телефон</span>
           <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} maxLength={100}
-            className="border border-slate-300 rounded-lg px-3 py-1.5 w-full min-w-0" />
+            className="border border-input rounded-lg px-3 py-1.5 w-full min-w-0" />
         </label>
-        <label className="text-sm text-slate-700 w-full min-w-0 sm:w-auto">
+        <label className="text-sm text-foreground w-full min-w-0 sm:w-auto">
           <span className="block mb-1">Джерело (utm_source)</span>
           <input value={utmInput} onChange={(e) => setUtmInput(e.target.value)} maxLength={100}
-            className="border border-slate-300 rounded-lg px-3 py-1.5 w-full min-w-0" />
+            className="border border-input rounded-lg px-3 py-1.5 w-full min-w-0" />
         </label>
-        <label className="text-sm text-slate-700 flex items-center gap-2 pb-2">
+        <label className="text-sm text-foreground flex items-center gap-2 pb-2">
           <input type="checkbox" checked={mine} onChange={(e) => setParams({ assigned_to: e.target.checked ? 'me' : '' })} />
           Мої заявки
         </label>
-        <button type="submit" className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded-lg text-sm font-semibold">
+        <button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-1.5 rounded-lg text-sm font-semibold">
           Знайти
         </button>
         <a href={brokerLeadsApi.exportUrl(status)}
-          className="border border-blue-700 text-blue-800 hover:bg-blue-50 px-4 py-1.5 rounded-lg text-sm font-semibold">
+          className="border border-link text-link hover:bg-link/10 px-4 py-1.5 rounded-lg text-sm font-semibold">
           Завантажити CSV
         </a>
       </form>
@@ -118,40 +118,40 @@ export default function BrokerLeadList() {
       {fetching ? (
         <div className="flex justify-center py-16"><Spinner size="lg" /></div>
       ) : failed ? (
-        <p role="alert" className="text-red-600 bg-red-50 border border-red-200 rounded-xl p-4">
+        <p role="alert" className="text-destructive bg-destructive/10 border border-destructive/40 rounded-xl p-4">
           Не вдалося завантажити заявки. Спробуйте оновити сторінку.
         </p>
       ) : !data || data.results.length === 0 ? (
-        <p className="text-center text-slate-400 text-lg py-16">Заявок за цими умовами немає</p>
+        <p className="text-center text-muted-foreground text-lg py-16">Заявок за цими умовами немає</p>
       ) : (
         <ul className="space-y-3">
           {data.results.map((lead) => (
             <li key={lead.id} data-testid="broker-lead-item">
               <Link href={`/broker/leads/${lead.id}`}
-                className="block min-w-0 break-words bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-sm">
+                className="block min-w-0 break-words bg-card border border-border rounded-xl p-4 hover:border-link/50 hover:shadow-sm">
                 <div className="flex flex-wrap justify-between items-start gap-2">
                   <div className="min-w-0">
-                    <p className="font-mono font-bold text-slate-900">
+                    <p className="font-mono font-bold text-foreground">
                       {lead.public_id}
                       {lead.duplicate_of && (
                         <span data-testid="lead-duplicate-badge"
-                          className="ml-2 align-middle rounded bg-amber-100 px-1.5 py-0.5 font-sans text-xs font-semibold text-amber-800">
+                          className="ml-2 align-middle rounded bg-warning/15 px-1.5 py-0.5 font-sans text-xs font-semibold text-foreground">
                           Повтор {lead.duplicate_of}
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-slate-500">{fmt(lead.created_at)}</p>
+                    <p className="text-xs text-muted-foreground">{fmt(lead.created_at)}</p>
                   </div>
                   <LeadStatusBadge status={lead.status} label={lead.status_display} />
                 </div>
-                <p className="mt-2 font-semibold text-slate-900 break-words">{lead.name}</p>
-                <p className="text-sm text-slate-700 break-all">{lead.phone}</p>
-                {lead.car && <p className="text-sm text-slate-600 break-words">{lead.car}</p>}
-                <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
-                  <div><dt className="inline text-slate-400">Джерело: </dt><dd data-testid="lead-utm-source" className="inline break-all">{lead.utm_source || 'пряме'}</dd></div>
-                  <div><dt className="inline text-slate-400">Перша реакція: </dt><dd className="inline">{lead.first_response_at ? fmt(lead.first_response_at) : 'ще немає'}</dd></div>
-                  <div><dt className="inline text-slate-400">Відповідальний: </dt><dd className="inline break-all">{lead.assigned_to ? lead.assigned_to.name : '—'}</dd></div>
-                  {lead.total_usd && <div><dt className="inline text-slate-400">Сума: </dt><dd className="inline break-all">{formatUsd(lead.total_usd)}</dd></div>}
+                <p className="mt-2 font-semibold text-foreground break-words">{lead.name}</p>
+                <p className="text-sm text-foreground break-all">{lead.phone}</p>
+                {lead.car && <p className="text-sm text-muted-foreground break-words">{lead.car}</p>}
+                <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <div><dt className="inline text-muted-foreground">Джерело: </dt><dd data-testid="lead-utm-source" className="inline break-all">{lead.utm_source || 'пряме'}</dd></div>
+                  <div><dt className="inline text-muted-foreground">Перша реакція: </dt><dd className="inline">{lead.first_response_at ? fmt(lead.first_response_at) : 'ще немає'}</dd></div>
+                  <div><dt className="inline text-muted-foreground">Відповідальний: </dt><dd className="inline break-all">{lead.assigned_to ? lead.assigned_to.name : '—'}</dd></div>
+                  {(lead.total_usd_full ?? lead.total_usd) && <div><dt className="inline text-muted-foreground">Сума: </dt><dd className="inline break-all">{formatUsd((lead.total_usd_full ?? lead.total_usd) as string)} <span className="text-muted-foreground">з розмитненням, орієнтовно</span></dd></div>}
                 </dl>
               </Link>
             </li>
@@ -162,10 +162,10 @@ export default function BrokerLeadList() {
       {data && pages > 1 && (
         <nav className="flex items-center justify-center gap-3 mt-6" aria-label="Сторінки">
           <button type="button" disabled={page <= 1} onClick={() => setParams({ page: String(page - 1) })}
-            className="px-3 py-1 border border-slate-300 rounded-lg disabled:opacity-40">← Назад</button>
-          <span className="text-sm text-slate-600">{page} / {pages}</span>
+            className="px-3 py-1 border border-input rounded-lg disabled:opacity-40">← Назад</button>
+          <span className="text-sm text-muted-foreground">{page} / {pages}</span>
           <button type="button" disabled={page >= pages} onClick={() => setParams({ page: String(page + 1) })}
-            className="px-3 py-1 border border-slate-300 rounded-lg disabled:opacity-40">Далі →</button>
+            className="px-3 py-1 border border-input rounded-lg disabled:opacity-40">Далі →</button>
         </nav>
       )}
     </div>

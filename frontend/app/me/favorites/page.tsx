@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import Link from 'next/link';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import { getFavorites, removeFavorite } from '@/api/favorites';
 import type { FavoriteItem } from '@/lib/types';
 import LoadingState from '@/components/ui/LoadingState';
@@ -47,14 +48,14 @@ export default function FavoritesPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/me" className="hover:text-blue-700">Кабінет</Link>
+      <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Link href="/me" className="hover:text-link">Кабінет</Link>
         <span>/</span>
         <span>Обране</span>
       </div>
-      <h1 className="text-xl font-bold text-slate-900 mb-4">Обране</h1>
+      <h1 className="text-xl font-bold text-foreground mb-4">Обране</h1>
 
-      {actionError && <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{actionError}</p>}
+      {actionError && <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-3 py-2">{actionError}</p>}
 
       {busy ? (
         <LoadingState />
@@ -71,24 +72,25 @@ export default function FavoritesPage() {
       ) : (
         <ul className="grid gap-4">
           {items.map(item => (
-            <li key={item.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden flex gap-4 hover:shadow-md transition-shadow">
-              <Link href={item.url} className="flex-shrink-0 relative w-32 h-24 bg-slate-100">
+            <li key={item.id} className="bg-card border border-border rounded-xl overflow-hidden flex gap-4 hover:shadow-md transition-shadow">
+              <Link href={item.url} className="flex-shrink-0 relative w-32 h-24 bg-muted">
                 <Image
                   src={item.image_url || PLACEHOLDER}
                   alt={item.title}
                   fill
                   className="object-cover"
                   sizes="128px"
+                  unoptimized={isLocalMediaUrl(item.image_url)}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER; }}
                 />
               </Link>
               <div className="flex-1 py-3 pr-4 flex flex-col justify-between">
                 <div>
-                  <Link href={item.url} className="font-semibold text-slate-900 hover:text-blue-700 transition-colors text-sm">
+                  <Link href={item.url} className="font-semibold text-foreground hover:text-link transition-colors text-sm">
                     {item.title}
                   </Link>
                   {item.price && (
-                    <div className="text-sm text-slate-600 mt-0.5">
+                    <div className="text-sm text-muted-foreground mt-0.5">
                       {Number(item.price).toLocaleString('uk-UA')} {item.currency}
                     </div>
                   )}
@@ -96,13 +98,13 @@ export default function FavoritesPage() {
                 <div className="flex items-center gap-3 mt-2">
                   <Link
                     href={item.url}
-                    className="text-xs text-blue-600 hover:underline"
+                    className="text-xs text-link hover:underline"
                   >
                     Переглянути →
                   </Link>
                   <button
                     onClick={() => remove(item)}
-                    className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                   >
                     Прибрати
                   </button>

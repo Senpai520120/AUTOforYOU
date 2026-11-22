@@ -102,8 +102,9 @@ class LeadNotificationSettings(models.Model):
                   'Порожньо → запасного отримувача немає')
     new_lead_template = models.TextField(
         'Шаблон повідомлення', blank=True, validators=[validate_template],
-        help_text='HTML Telegram (<b>, <i>). Плейсхолдери: {id} {name} {phone} {email} {contact_method} '
-                  '{contact_handle} {car} {total_usd} {total_uah} {source} {source_details} {utm_source} '
+        help_text='HTML Telegram (<b>, <i>). {total_usd_full} — повна сума з розмитненням (орієнтовно), '
+                  '{total_usd} — старий плейсхолдер (без розмитнення). Плейсхолдери: {id} {name} {phone} {email} {contact_method} '
+                  '{contact_handle} {car} {total_usd_full} {total_usd} {total_uah} {source} {source_details} {utm_source} '
                   '{utm_medium} {utm_campaign} {utm_content} {referrer} {page_url} {comment} {admin_url} '
                   '{cabinet_url}. Значення екрануються автоматично.')
     notify_brokers_in_app = models.BooleanField('Сповіщення брокерам на сайті', default=True)

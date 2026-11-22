@@ -118,6 +118,9 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost
           NEXT_PUBLIC_SITE_URL: http://localhost
+      # 11.15: только сборка Storybook (локально ~10 с), без публикации
+      - name: Build Storybook
+        run: npm run build-storybook
 
   # ─── Инфраструктура (7.4, 7.5): shellcheck, LF, compose config, тесты deploy.sh и backup.sh на заглушках ───
   infra-lint:

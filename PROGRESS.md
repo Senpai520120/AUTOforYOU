@@ -1,10 +1,75 @@
 # PROGRESS.md — Живой журнал прогресса
 
-## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, 7.6 ✓, 8.9 ✓, 2.14 ✓, 2.5 ✓, 2.6 ✓, 2.7 ✓, 8.7 ✓, 2.8 ✓, 3.1 ✓, 3.2a ✓, 3.4a ✓, 2.12 ✓, 3.4b ✓, 5.1 ✓, 5.4 ✓, 6.7 ✓, 6.1 ✓, 6.2 ✓, 6.3 ✓ (6.3a, 6.3b), 6.4 ✓, 2.13 ✓, 2.16 ✓ (2.16a и 2.16b, 2026-10-28), 3.5 ✓, 7.3 ✓, 7.4 ✓, 7.1 ✓ (2026-11-03), 7.7a ✓ (2026-11-03), 2.18 ✓ (2026-11-19) — ВОЛНА-1 по коду закрыта, дальше 2.19 (ждёт решения брокера), 2.20 (ждёт прайса экспедитора), затем этап 10 P0 с 10.1 (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
+## Статус: ВОЛНА-1, этап 0 — 0.1–0.6 ✓, 1.2 ✓, 1.2b ✓, 1.3 ✓, 1.4 ✓, 1.5 ✓, 1.6 ✓, 1.12 ✓, 2.1a ✓, 2.1b ✓, 2.2 ✓, 2.3 ✓, 2.4 ✓, 1.14 ✓, 2.15 ✓, 1.1 ✓, 1.7 ✓, 1.9 ✓, 1.10 ✓, 1.11 ✓, 1.8 ✓, 7.2 ✓, 7.6 ✓, 8.9 ✓, 2.14 ✓, 2.5 ✓, 2.6 ✓, 2.7 ✓, 8.7 ✓, 2.8 ✓, 3.1 ✓, 3.2a ✓, 3.4a ✓, 2.12 ✓, 3.4b ✓, 5.1 ✓, 5.4 ✓, 6.7 ✓, 6.1 ✓, 6.2 ✓, 6.3 ✓ (6.3a, 6.3b), 6.4 ✓, 2.13 ✓, 2.16 ✓ (2.16a и 2.16b, 2026-10-28), 3.5 ✓, 7.3 ✓, 7.4 ✓, 7.1 ✓ (2026-11-03), 7.7a ✓ (2026-11-03), 2.18 ✓ (2026-11-19); этап 10: 10.1, 10.2, 10.3, 10.5–10.10, 10.12, 10.13, 10.15–10.19, 10.21–10.25, 10.28–10.30 ✓, 10.4 и 10.20 ◐ (2026-11-20, PR #72) — ВОЛНА-1 по коду закрыта; ждут владельца/брокера: 2.19 (растаможка), 2.20 (прайс экспедитора), 10.11 (комиссия), 10.14 (согласие на рассылку), 10.27 (сроки хранения), вопросы по дизельному гибриду и PHEV (порядок — ROADMAP.md) | Сервер: Hetzner CX23 (запасной CAX11), Docker Compose | Платежи и C2C-подача выключены флагами до ВОЛНЫ-2
 
 > История до 2026-10-12 (фазы 1–2, C2C-промты, Docker, QA, перенос БД) — `docs/PROGRESS_ARCHIVE.md`.
 
 ---
+
+## Передача 2026-11-22
+
+- PR #73 слит в `main`; PR #74 (редизайн) слит в `roadmap-2-16b`, но не в `main` — нужен PR `roadmap-2-16b` → `main` (сливает владелец).
+- Dev-стек: `C2C_PUBLIC_POSTING_ENABLED=true` в dev-`.env`, 10 `[DEMO]` объявлений (`seed_demo_listings`), фронт пересобран из PR #74.
+- Открытые вопросы владельцу: 11.1 (5 вопросов), 2.19, 2.20, 10.11, 10.14, 10.27 (предложения в ANSWERS/чат), дизельный гибрид и PHEV.
+- Не разбиралось: контейнер `backup` в dev unhealthy. Диск C почти полный — сжать vhdx Docker.
+- Добавлен этап 12 (AEO, `ROADMAP.md`). Следующий шаг: этап 12 или ответы по 11.1.
+
+## Задача 11.16: палитра «Графіт і лайм» (2026-11-21)
+
+- `frontend/app/globals.css`: токены light и `.dark` в гамме графит/лайм, новый `--link` (#3F6212, `text-link`); ссылки-текст на токенах переведены с `text-primary` на `text-link` (20 файлов), hero главной — плоский `bg-header`. Контраст пересчитан скриптом, таблица и раздел «Палітра Графіт і лайм» в `docs/design/DESIGN_SYSTEM.md`; непрошедших нет. e2e `home.spec.ts`: `not.toHaveClass(/bg-accent/)`. Коммит e8d8c09.
+- Контраст после смены фона: `text-slate-500` → `text-muted-foreground` (39 файлов, axe ронял 9 страниц) — 6cfefef.
+- Остаток хардкода переведён на токены (54 файла, ~760 вхождений: публичные и auth-страницы, кабинет `/me`, объявления, брокерские заявки, формы). Остался 0. Звёзды рейтинга — графит ★/☆ (жёлтый на белом не проходил контраст). e2e `c2c-submission-limits`: `/text-destructive/`. Тёмную тему теперь можно включать после axe-прогона в `.dark`.
+
+## Задача 11.15: Storybook и визуальные тесты (2026-11-21)
+
+- Совместимость подтверждена: `storybook`, `@storybook/nextjs-vite`, `@storybook/addon-a11y`, `@storybook/addon-docs` 10.6.8 и `vite` 8.3.8 (exact, devDependencies) с Next 16.4.6, React 19.3.1, Tailwind 4. `build-storybook` проходит, 8 проверенных stories (в т.ч. LeadForm, CalcBreakdown, Sheet) рендерятся без ошибок и без сетевых запросов.
+- Конфиг: `frontend/.storybook/{main,preview}.ts` (кэш Vite в `node_modules/.cache`, т.е. на диске D). `preview.ts` подключает `app/globals.css`, глобально подменяет `fetch` фейком (`stories/fixtures/site.ts`), `parameters.a11y.test = 'error'`. Шрифт Manrope (next/font/google) в Storybook не подключён: нужна сеть при сборке, работает fallback `--font-sans` (system-ui); метрики текста чуть отличаются от сайта. Нарушения a11y как ошибки сработают при прогоне через vitest-аддон (не ставили); сейчас они видны в панели a11y.
+- Stories: 11 `components/shadcn/*` (button, badge, card, input, label, select, separator, sheet, skeleton, tabs, textarea), `local/LocalListingCard`, `calculator/CalcBreakdown`, `leads/LeadForm`, `ui/EmptyState`, `ui/ErrorState`. Фикстуры без ПДн: `frontend/stories/fixtures/`.
+- Скрипты `npm run storybook` / `build-storybook`; `storybook-static/` в `.gitignore` и `globalIgnores` eslint. CI: шаг «Build Storybook» в frontend-джобе (сборка ~8 с).
+- Замеры: `node_modules` 558 591 КБ -> 656 408 КБ (+~98 МБ); `build-storybook` ~8 с локально; `next build` ~15 с. Время скриншот-прогона в CI пока не замерено (снимков нет).
+- Визуальные тесты: `e2e/visual.spec.ts` (главная, /calculator, /ua; Chromium, `maxDiffPixelRatio` 0.02, маски карточек/дат) оформлен как `test.fixme('11.15-VIS → ...')`: базовые снимки с Windows не коммитим (иной рендер, CI на Linux покраснеет). Как снять: убрать `.fixme`, на Linux (CI или контейнер `mcr.microsoft.com/playwright`) со стеком e2e по CLAUDE.md выполнить `npx playwright test visual.spec.ts --project=chromium --update-snapshots`, закоммитить `e2e/visual.spec.ts-snapshots/*-chromium-linux.png`; затем два прогона подряд и проверка мутацией (цвет кнопки). Лендинг, карточка и форма заявки в снимки не включены (нужны сид-данные) - добавить при съёмке.
+- Не проверено: `npm audit` без `--omit=dev` показывает 11 moderate (minimatch в dev-цепочке Storybook); CI проверяет `--omit=dev` (0).
+
+## Задача 11.14b: каталог /ua, карточка объявления, форма заявки (2026-11-21)
+
+- `/ua`: карточки на `Card` (фото 4:3 без CLS, цена крупно, параметры с иконками lucide), фильтры на `Card`/`Input`/`Button` (нативные `select` сохранены), пагинация и пустые/ошибочные состояния на токенах. Карточка `/local/[id]`: галерея, цена 4xl, характеристики сеткой `dl` с иконками, блок продавца и контактов, кнопки на `Button`. `LeadForm`/`LeadSuccess` на `Input`/`Label`/`Textarea`/`Button`, ошибки с иконкой и текстом. Общие `ui/*` (Badge, EmptyState, ErrorState, Skeleton, Modal, ConfirmDialog, FlashMessage, CookieBanner/Settings/SettingsLink, MobileActionBar, FallbackContact, EmailNotVerified) и вспомогательные (SaveSearch, WriteSeller, Report, Heart, ScamWarning, SellerBlock, GuestPhoneReveal, CityAutocomplete) на токенах. Общие классы полей: `components/local/field-classes.ts`.
+- Исправлено: `EmptyState` давал контраст ~2.9:1 (`text-slate-400`) -> `text-muted-foreground`.
+- UX-правки: «+ Подати оголошення» -> иконка Plus; эмодзи (🚗, 🔍, ✅, ⚠, ▲▼) -> иконки lucide; сердечко и кнопка закрытия Modal/Flash — lucide; кнопки «Поскаржитися»/«Написати продавцю» с иконкой; текст рейтинга-звёзд заменён иконкой Star + число.
+- Тёмная тема НЕ включена: остаётся 53 файла с `slate/blue/gray` (было 80 до 11.14): страницы `/listings`, `/me/*`, `/login`, `/register`, `/local/new|edit`, юр. страницы, `/about`, `/b2b`, брокерские `leads/*`, `LocalListingForm`, `PromoteModal`, `PhotoUploadBlock` и др. Список и решение — в `docs/design/DESIGN_SYSTEM.md`.
+- Проверки: lint 0 errors (34 прежних предупреждения), `tsc --noEmit` чисто, `npm run build` ок. Playwright не запускался (прогонит оркестратор).
+
+## Задача 11.14a: редизайн главной, лендинга, калькулятора (2026-11-21)
+
+- Главная, `/prigon` и `/prigon/[slug]`, калькулятор переведены на токены и `Card`/`Button`/`Input`/`Label`/`Badge`/`Skeleton`, иконки lucide. Общие `LeadCta`, `DemoBanner`, `CalcNotes`, `Spinner`, `Breadcrumbs` тоже на токенах. Тексты, testid, aria, h1, JSON-LD, метаданные не менялись; `<select>` калькулятора остался нативным (e2e `selectOption`).
+- UX-правки: эмодзи-флаги -> иконки lucide; ⚠ в демо-баннере -> иконка; в итоге калькулятора добавлен бейдж «Орієнтовно» при `is_estimate`.
+- Проверки: lint 0 errors, tsc чисто; `npm run build` собирает страницы, но падает на проверке версии Next (16.4.4, SecurityFatalError) — не из-за кода. e2e не запускался (после 11.14b).
+
+## Задача 11.13: дизайн-система (2026-11-21)
+
+- shadcn/ui (`frontend/components.json`, алиас `ui` -> `@/components/shadcn`): 11 компонентов, `cn` в `lib/utils.ts`; `components/ui/` не тронут. Правки сгенерированного: `min-h-*` вместо `h-*`, сплошной `ring-ring`.
+- Токены OKLCH в `app/globals.css` (`:root`, `.dark` не включена, `color-scheme: light`), Manrope через `next/font/google` (latin+cyrillic, `--font-sans`), lucide-react со `strokeWidth` 2 (`ICON_STROKE`). Header/Footer/MobileNav на токенах; старые `--bg/--surface/...` удалены (использований не было). Фокус 10.28 через `--ring`, `forced-colors`, светлая обводка на тёмных блоках.
+- Контраст посчитан скриптом, пары и значения в `docs/design/DESIGN_SYSTEM.md`, непрошедших нет. Зависимости зафиксированы точно.
+- Проверки: `npm run lint` 0 ошибок (34 прежних предупреждения), `tsc --noEmit` чисто, `npm run build` ок (с `NEXT_PUBLIC_API_URL`/`SITE_URL`). Ручной просмотр в браузере и Playwright — в 11.14.
+
+---
+
+## Решения владельца и правки 2026-11-20
+
+- Решения владельца записаны в `docs/ANSWERS.md` (этап 10) и `docs/LAUNCH_CHECKLIST.md`.
+- 10.21 закрыта (`0a076e6`).
+- Акциз гибрида по пп. 215.3.5-1 ПКУ (формула ДВС, миграция `pricing/0013`) и полная сумма с растаможкой брокеру в Telegram/письме/списке (`7545dfa`).
+- Удаление фото `rejected`/`sold` через `LOCAL_LISTING_PHOTO_PURGE_DAYS` (30): ежедневная задача `purge_closed_listing_photos`, команда `purge_listing_photos` (dry-run, `--apply`); правка отклонённого объявления без фото даёт 400 «Завантажте фото заново». Правки не закоммичены на момент записи.
+- Открытые вопросы брокеру: дизельный гибрид (модель не различает тип ДВС), PHEV считается как электромобиль, а по закону, вероятно, по формуле ДВС (LAUNCH_CHECKLIST 4.1).
+
+## Демо-объявления C2C (2026-11-20) ✓
+
+- `python manage.py seed_demo_listings --photos-dir PATH [--clear]`: 10 объявлений `[DEMO]` от `demo-seller@demo.test` (подтверждённый телефон, случайный пароль), по 2 фото через `sanitize_image`/`make_thumbnail`. Только при `DEMO_SEED_ALLOWED=true`; повтор не плодит дубли; `--clear` удаляет только `[DEMO]`. Фото (Wikimedia Commons, CC BY-SA) в репо не лежат. Тесты: `local_listings/tests_demo_seed.py`.
+
+## Задача 10.21 — уборка (2026-11-20) ✓
+
+- Удалён `nginx/nginx.conf` (не подключён ни одним compose/CI/скриптом; решение владельца); комментарий в `core/uploads.py` указывает на `nginx/templates/locations.conf.template`. `nginx;C` в репозитории и рабочей папке не найден; `kompas.html` оставлен (личный файл, не в git: `.git/info/exclude`, `.dockerignore`) — решение за владельцем.
+- В `docs/archive/` (+ README) перенесены `00_AUDIT`, `AUDIT_SUMMARY`, `PRODUCTION_ROADMAP`, `EC2_CREDITS_ROADMAP`, `prompts/01`, `prompts/02`; ссылки в ARCHITECTURE, ROADMAP, audit/STATUS, DEPLOY_EC2_CHECKLIST поправлены. `docs/audit/*` не переносились: на них ссылаются ~90 задач.
+- `.env.example`: в начале блок «Мінімум для запуску» (имена из `REQUIRED_VARS`, без дублей).
 
 ## Задача 10.25 — подача объявления: вход, кнопка и срок, телефон, капча (2026-11-20) ✓
 
@@ -1303,3 +1368,5 @@
 - Проверки: Django 433 теста OK (283 с); `npm run build` и `tsc --noEmit` без ошибок; `pip check` чисто; `git ls-files --eol '*.sh'` везде `i/lf w/lf`.
 - Docker на Windows: `down` + `up -d --build` → `backend` и `db` `(healthy)`, `http://localhost` и `/api/v1/listings/` отвечают 200.
 - **Первый локальный Playwright: 33 passed, 0 failed, 0 skipped (17,5 с).**
+
+- nginx: ловушка - upstream резолвился один раз при старте, после пересоздания backend/frontend (новый IP) /api/ отдавал 503 до рестарта nginx. Теперь `resolver 127.0.0.11 valid=10s` + `set $backend_upstream`/`$frontend_upstream` в locations и server-redirect (без URI-части, `$request_uri` не меняется), блоки `upstream` удалены. `check-infra.sh nginx` ок (4 режима TLS), живая проверка: recreate backend/frontend без рестарта nginx -> 200. Применение шаблона на dev: `docker compose restart nginx` (up -d не пересоздаёт).

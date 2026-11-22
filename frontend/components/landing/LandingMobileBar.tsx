@@ -1,4 +1,5 @@
 'use client';
+import { Button } from '@/components/shadcn/button';
 
 export const LANDING_FORM_ID = 'landing-lead';
 
@@ -14,11 +15,10 @@ export default function LandingMobileBar() {
   };
   return (
     <div data-testid="landing-mobile-bar"
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 px-4 py-3 shadow-lg">
-      <button type="button" onClick={open}
-        className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 rounded-xl transition-colors">
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border px-4 py-3 shadow-lg">
+      <Button type="button" onClick={open} size="lg" className="w-full font-bold">
         Залишити заявку
-      </button>
+      </Button>
     </div>
   );
 }

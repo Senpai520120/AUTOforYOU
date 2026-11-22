@@ -6,6 +6,12 @@ import { CityOption, LocalConfig, Region } from '@/lib/types';
 import CityAutocomplete from './CityAutocomplete';
 import ErrorState from '@/components/ui/ErrorState';
 import { countActiveFilters } from '@/lib/local-filters';
+import { ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Card } from '@/components/shadcn/card';
+import { ICON_STROKE } from '@/lib/utils';
+import { FIELD_CLASS, FIELD_LABEL_CLASS } from './field-classes';
 
 export default function LocalListingFilters() {
   const router = useRouter();
@@ -100,35 +106,38 @@ export default function LocalListingFilters() {
     router.push('/ua');
   }
 
-  const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-  const labelCls = 'block text-xs font-medium text-slate-600 mb-1';
+  const inputCls = FIELD_CLASS;
+  const labelCls = FIELD_LABEL_CLASS;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4">
+    <Card className="gap-0 p-4">
       <button
         type="button"
-        className="md:hidden w-full min-h-11 flex items-center justify-between text-sm font-semibold text-slate-800"
+        className="md:hidden w-full min-h-11 flex items-center justify-between gap-2 rounded-md text-sm font-semibold text-foreground"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
       >
-        <span>Фільтри{activeCount > 0 ? ` (${activeCount})` : ''}</span>
-        <span aria-hidden="true">{open ? '▲' : '▼'}</span>
+        <span className="inline-flex items-center gap-2">
+          <SlidersHorizontal className="size-5 text-link" strokeWidth={ICON_STROKE} aria-hidden="true" />
+          <span>Фільтри{activeCount > 0 ? ` (${activeCount})` : ''}</span>
+        </span>
+        <ChevronDown className={`size-5 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} strokeWidth={ICON_STROKE} aria-hidden="true" />
       </button>
       <div id={panelId} className={`${open ? 'block' : 'hidden'} md:block space-y-4 mt-4 md:mt-0`}>
       {regionsError ? <ErrorState error={regionsError} onRetry={loadRegions} /> : null}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-4">
+        <div className="col-span-2 md:col-span-1">
           <label htmlFor={fid('f1')} className={labelCls}>Пошук</label>
-          <input id={fid('f1')} className={inputCls} placeholder="Марка, модель..." value={search} onChange={e => setSearch(e.target.value)} />
+          <Input id={fid('f1')} placeholder="Марка, модель..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f2')} className={labelCls}>Марка</label>
-          <input id={fid('f2')} className={inputCls} placeholder="Toyota" value={make} onChange={e => setMake(e.target.value)} />
+          <Input id={fid('f2')} placeholder="Toyota" value={make} onChange={e => setMake(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f3')} className={labelCls}>Модель</label>
-          <input id={fid('f3')} className={inputCls} placeholder="Camry" value={model} onChange={e => setModel(e.target.value)} />
+          <Input id={fid('f3')} placeholder="Camry" value={model} onChange={e => setModel(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f4')} className={labelCls}>Тип палива</label>
@@ -143,19 +152,19 @@ export default function LocalListingFilters() {
         </div>
         <div>
           <label htmlFor={fid('f5')} className={labelCls}>Рік від</label>
-          <input id={fid('f5')} className={inputCls} type="number" placeholder="2010" value={yearMin} onChange={e => setYearMin(e.target.value)} />
+          <Input id={fid('f5')} type="number" placeholder="2010" value={yearMin} onChange={e => setYearMin(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f6')} className={labelCls}>Рік до</label>
-          <input id={fid('f6')} className={inputCls} type="number" placeholder="2024" value={yearMax} onChange={e => setYearMax(e.target.value)} />
+          <Input id={fid('f6')} type="number" placeholder="2024" value={yearMax} onChange={e => setYearMax(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f7')} className={labelCls}>Ціна від, $</label>
-          <input id={fid('f7')} className={inputCls} type="number" placeholder="5000" value={priceMin} onChange={e => setPriceMin(e.target.value)} />
+          <Input id={fid('f7')} type="number" placeholder="5000" value={priceMin} onChange={e => setPriceMin(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f8')} className={labelCls}>Ціна до, $</label>
-          <input id={fid('f8')} className={inputCls} type="number" placeholder="30000" value={priceMax} onChange={e => setPriceMax(e.target.value)} />
+          <Input id={fid('f8')} type="number" placeholder="30000" value={priceMax} onChange={e => setPriceMax(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f9')} className={labelCls}>КПП</label>
@@ -207,7 +216,7 @@ export default function LocalListingFilters() {
         </div>
         <div>
           <label htmlFor={fid('f13')} className={labelCls}>Пробіг до, км</label>
-          <input id={fid('f13')} className={inputCls} type="number" placeholder="200000" value={mileageMax} onChange={e => setMileageMax(e.target.value)} />
+          <Input id={fid('f13')} type="number" placeholder="200000" value={mileageMax} onChange={e => setMileageMax(e.target.value)} />
         </div>
         <div>
           <label htmlFor={fid('f14')} className={labelCls}>Сортування</label>
@@ -219,21 +228,15 @@ export default function LocalListingFilters() {
           </select>
         </div>
       </div>
-      <div className="flex gap-3">
-        <button
-          onClick={apply}
-          className="bg-blue-700 hover:bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-semibold transition-colors"
-        >
+      <div className="flex flex-wrap gap-3 border-t pt-4">
+        <Button type="button" onClick={apply} className="px-6 font-semibold">
           Застосувати
-        </button>
-        <button
-          onClick={reset}
-          className="border border-slate-300 hover:bg-slate-50 text-slate-600 px-4 py-2 rounded-lg text-sm transition-colors"
-        >
+        </Button>
+        <Button type="button" variant="outline" onClick={reset}>
           Скинути
-        </button>
+        </Button>
       </div>
       </div>
-    </div>
+    </Card>
   );
 }

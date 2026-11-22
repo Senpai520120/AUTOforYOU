@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Manrope } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import Header from '@/components/layout/Header';
@@ -11,6 +12,13 @@ import { C2CProvider } from '@/components/c2c/C2CProvider';
 import { getC2CFlags } from '@/lib/c2c';
 import { hasLandings } from '@/lib/landings';
 import { SITE_URL } from '@/lib/config';
+
+// Manrope (OFL): змінний шрифт, кирилиця; next/font сам підбирає fallback з size-adjust (без CLS).
+const manrope = Manrope({
+  subsets: ['latin', 'cyrillic'],
+  display: 'swap',
+  variable: '--font-manrope',
+});
 
 // Шапка/меню залежать від прапорців C2C (задача 6.7): рендер на кожен запит,
 // інакше під час збірки (backend недоступний) запечеться «розділ закрито».
@@ -40,8 +48,8 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [c2c, landings] = await Promise.all([getC2CFlags(), hasLandings()]);
   return (
-    <html lang="uk" className="h-full">
-      <body className="min-h-full flex flex-col bg-slate-50 antialiased">
+    <html lang="uk" className={`${manrope.variable} h-full`}>
+      <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
         <AuthProvider>
           <C2CProvider flags={c2c}>
           <AttributionCapture />

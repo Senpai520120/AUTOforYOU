@@ -1,5 +1,6 @@
 'use client';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { LocalListing } from '@/lib/types';
@@ -17,11 +18,17 @@ import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { PHONE_BLOCK_ID, usePhoneReveal } from '@/lib/usePhoneReveal';
 import { useC2C } from '@/components/c2c/C2CProvider';
 import ListingCheckTips from '@/components/local/ListingCheckTips';
+import {
+  CalendarDays, CarFront, ChevronRight, Cog, Fuel, Gauge, MapPin, Pencil, Phone, Settings2, ShieldCheck, Star,
+} from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { ICON_STROKE } from '@/lib/utils';
 
 const WRITE_BLOCK_ID = 'write-seller-block';
 
 const PLACEHOLDER_SVG =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%2394a3b8'%3EФото відсутнє%3C/text%3E%3C/svg%3E";
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%23475569'%3EФото відсутнє%3C/text%3E%3C/svg%3E";
 
 const FUEL_LABELS: Record<string, string> = {
   petrol: 'Бензин', diesel: 'Дизель', electric: 'Електро', hybrid: 'Гібрид', gas: 'Газ',
@@ -72,21 +79,21 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
   const price = Number(listing.price).toLocaleString('uk-UA');
 
   const specs = [
-    { label: 'Рік', value: listing.year },
-    { label: 'Пробіг', value: `${listing.mileage_km.toLocaleString()} км` },
-    { label: 'Паливо', value: FUEL_LABELS[listing.fuel_type] ?? listing.fuel_type },
-    { label: 'КПП', value: TRANSMISSION_LABELS[listing.transmission] ?? listing.transmission },
-    { label: 'Кузов', value: BODY_LABELS[listing.body_type] ?? listing.body_type },
-    { label: 'Стан', value: CONDITION_LABELS[listing.condition] ?? listing.condition },
-    listing.engine_cc ? { label: "Об'єм двигуна", value: `${(listing.engine_cc / 1000).toFixed(1)} л (${listing.engine_cc} куб.см)` } : null,
-  ].filter(Boolean) as { label: string; value: string | number }[];
+    { label: 'Рік', value: listing.year, Icon: CalendarDays },
+    { label: 'Пробіг', value: `${listing.mileage_km.toLocaleString()} км`, Icon: Gauge },
+    { label: 'Паливо', value: FUEL_LABELS[listing.fuel_type] ?? listing.fuel_type, Icon: Fuel },
+    { label: 'КПП', value: TRANSMISSION_LABELS[listing.transmission] ?? listing.transmission, Icon: Settings2 },
+    { label: 'Кузов', value: BODY_LABELS[listing.body_type] ?? listing.body_type, Icon: CarFront },
+    { label: 'Стан', value: CONDITION_LABELS[listing.condition] ?? listing.condition, Icon: ShieldCheck },
+    listing.engine_cc ? { label: "Об'єм двигуна", value: `${(listing.engine_cc / 1000).toFixed(1)} л (${listing.engine_cc} куб.см)`, Icon: Cog } : null,
+  ].filter(Boolean) as { label: string; value: string | number; Icon: typeof Gauge }[];
 
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/ua" className="hover:text-blue-700">{CATALOG_LABEL}</Link>
-        <span>/</span>
+      <div className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
+        <Link href="/ua" className="inline-flex min-h-11 items-center underline-offset-4 hover:text-link hover:underline">{CATALOG_LABEL}</Link>
+        <ChevronRight className="size-4" strokeWidth={ICON_STROKE} aria-hidden="true" />
         <span>{listing.make} {listing.model}</span>
       </div>
 
@@ -99,7 +106,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Gallery */}
         <div>
-          <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-muted">
             <Image
               src={mainImg}
               alt={`${listing.make} ${listing.model} ${listing.year}`}
@@ -107,6 +114,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               className="object-cover"
               sizes="(max-width: 1024px) 100vw, 50vw"
               priority
+              unoptimized={isLocalMediaUrl(mainImg)}
               onError={() => markFailed(activeSrc)}
             />
           </div>
@@ -118,7 +126,8 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                 <button
                   key={img.id || i}
                   onClick={() => setActiveImg(i)}
-                  className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-colors ${i === activeImg ? 'border-blue-600' : 'border-transparent'}`}
+                  aria-current={i === activeImg ? 'true' : undefined}
+                  className={`relative size-16 flex-shrink-0 overflow-hidden rounded-md border-2 transition-colors ${i === activeImg ? 'border-primary' : 'border-transparent hover:border-input'}`}
                 >
                   <Image
                     src={failedSrcs.has(thumbSrc) ? PLACEHOLDER_SVG : thumbSrc}
@@ -126,6 +135,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                     fill
                     className="object-cover"
                     sizes="64px"
+                    unoptimized={isLocalMediaUrl(thumbSrc)}
                     onError={() => markFailed(thumbSrc)}
                   />
                 </button>
@@ -137,45 +147,53 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
 
         {/* Info panel */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
             {listing.make} {listing.model} {listing.year}
           </h1>
-          <div className="mt-1 text-sm text-slate-500">
+          <p className="mt-2 inline-flex items-center gap-1 text-sm text-muted-foreground">
+            <MapPin className="size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
             {listing.city_name}, {listing.region_name}
-          </div>
+          </p>
 
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900">
+            <span className="text-4xl font-extrabold tracking-tight text-foreground">
               {price} {listing.currency}
             </span>
             {listing.price_type === 'negotiable' && (
-              <span className="text-slate-500 text-sm">— торг</span>
+              <span className="text-muted-foreground text-sm">— торг</span>
             )}
           </div>
 
-          <div className="mt-6 bg-slate-50 rounded-xl p-4 space-y-2">
-            {specs.map(s => (
-              <div key={s.label} className="flex justify-between text-sm">
-                <span className="text-slate-500">{s.label}</span>
-                <span className="font-medium text-slate-900">{s.value}</span>
-              </div>
-            ))}
-          </div>
+          <Card className="mt-6 gap-0 p-4">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+              {specs.map(s => (
+                <div key={s.label} className="flex items-center justify-between gap-3 border-b border-border pb-2 sm:flex-col sm:items-start sm:justify-start sm:gap-0.5">
+                  <dt className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <s.Icon className="size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                    {s.label}
+                  </dt>
+                  <dd className="font-semibold text-foreground">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
 
-          <div className="mt-4 p-4 bg-blue-50 rounded-xl">
-            <div className="text-sm text-slate-600 flex flex-wrap items-center gap-1.5">
-              <span>Продавець: <strong>{listing.owner_name}</strong></span>
+          <Card className="mt-4 gap-0 border-primary/30 bg-primary/5 p-4">
+            <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-1.5">
+              <span>Продавець: <strong className="text-foreground">{listing.owner_name}</strong></span>
               {listing.seller_type === 'dealer' && (
-                <span data-testid="verified-dealer" className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">✓ {VERIFIED_DEALER_LABEL}</span>
+                <span data-testid="verified-dealer" className="rounded-full bg-link/10 px-2 py-0.5 text-xs font-semibold text-link">✓ {VERIFIED_DEALER_LABEL}</span>
               )}
               {listing.seller_has_badge && (
-                <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-semibold">✓ Перевірений продавець</span>
+                <span className="rounded-full bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground">
+                  ✓ Перевірений продавець
+                </span>
               )}
               <ChannelBadge channel={listing.source_channel} />
             </div>
             {listing.seller_has_badge && listing.seller_avg_rating && (
-              <div className="mt-1 text-xs text-slate-500 flex items-center gap-1">
-                <span className="text-amber-400">{'★'.repeat(Math.round(listing.seller_avg_rating))}{'☆'.repeat(5 - Math.round(listing.seller_avg_rating))}</span>
+              <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
+                <Star className="size-4 fill-warning text-warning-foreground" strokeWidth={ICON_STROKE} aria-hidden="true" />
                 <span>{listing.seller_avg_rating.toFixed(1)}</span>
                 {listing.seller_deal_count ? <span>· {listing.seller_deal_count} угод</span> : null}
               </div>
@@ -184,12 +202,12 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
             {!isOwner && <ScamWarningBanner className="mt-3" />}
             <div className="mt-3" id={PHONE_BLOCK_ID}>
               {phone ? (
-                <a
-                  href={`tel:${phone}`}
-                  className="block bg-green-700 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
-                >
-                  {phone}
-                </a>
+                <Button asChild size="lg" className="w-full bg-success text-success-foreground text-base font-semibold hover:bg-success/90">
+                  <a href={`tel:${phone}`}>
+                    <Phone strokeWidth={ICON_STROKE} aria-hidden="true" />
+                    {phone}
+                  </a>
+                </Button>
               ) : !user ? (
                 <GuestPhoneReveal
                   listingId={listing.id}
@@ -198,17 +216,14 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                   onPhone={phoneReveal.onGuestPhone}
                 />
               ) : (
-                <button
-                  onClick={phoneReveal.reveal}
-                  disabled={phoneLoading}
-                  className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
-                >
+                <Button type="button" size="lg" onClick={phoneReveal.reveal} disabled={phoneLoading} className="w-full font-semibold">
+                  <Phone strokeWidth={ICON_STROKE} aria-hidden="true" />
                   {phoneLoading ? 'Завантаження...' : 'Показати телефон'}
-                </button>
+                </Button>
               )}
-              {phoneError && <p className="mt-1 text-xs text-red-500">{phoneError}</p>}
+              {phoneError && <p role="alert" className="mt-1 text-xs text-destructive">{phoneError}</p>}
             </div>
-          </div>
+          </Card>
 
           {social && !isOwner && listing.status === 'active' && (
             <div className="mt-3" id={WRITE_BLOCK_ID}>
@@ -218,12 +233,12 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
 
           {social && isOwner && (
             <div className="mt-3 flex gap-2">
-              <Link
-                href={`/local/${listing.id}/edit`}
-                className="flex-1 border border-blue-600 text-blue-700 hover:bg-blue-50 font-semibold py-2 rounded-lg text-center text-sm transition-colors"
-              >
-                Редагувати
-              </Link>
+              <Button asChild variant="outline" className="flex-1 border-primary font-semibold text-primary hover:bg-primary/5 hover:text-primary">
+                <Link href={`/local/${listing.id}/edit`}>
+                  <Pencil strokeWidth={ICON_STROKE} aria-hidden="true" />
+                  Редагувати
+                </Link>
+              </Button>
             </div>
           )}
 
@@ -237,10 +252,10 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
 
       {listing.description && (
         <div className="mt-8">
-          <h2 className="font-semibold text-slate-900 mb-2">Опис</h2>
-          <div className="bg-white border border-slate-100 rounded-xl p-4 text-sm text-slate-700 whitespace-pre-line">
+          <h2 className="mb-3 text-lg font-bold text-foreground">Опис</h2>
+          <Card className="gap-0 p-4 text-sm text-foreground whitespace-pre-line">
             {listing.description}
-          </div>
+          </Card>
         </div>
       )}
 
@@ -253,7 +268,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
               key: 'call',
               node: phone ? (
                 <a href={`tel:${phone}`} onClick={countBarClick}
-                  className={`${mobileBarButtonClass} bg-green-700 text-white hover:bg-green-600`}>
+                  className={`${mobileBarButtonClass} bg-success text-success-foreground hover:bg-success/90`}>
                   {MOBILE_BAR_LABELS.call}
                 </a>
               ) : (
@@ -261,7 +276,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                   type="button"
                   onClick={() => { countBarClick(); void phoneReveal.reveal(); }}
                   disabled={phoneLoading}
-                  className={`${mobileBarButtonClass} bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-60`}
+                  className={`${mobileBarButtonClass} bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60`}
                 >
                   {phoneLoading ? 'Завантаження...' : MOBILE_BAR_LABELS.call}
                 </button>
@@ -278,7 +293,7 @@ export default function LocalListingDetail({ listing }: { listing: LocalListing 
                       countBarClick();
                       document.querySelector<HTMLButtonElement>(`#${WRITE_BLOCK_ID} button`)?.click();
                     }}
-                    className={`${mobileBarButtonClass} bg-green-700 text-white hover:bg-green-600`}
+                    className={`${mobileBarButtonClass} border border-primary bg-card text-primary hover:bg-primary/5`}
                   >
                     {MOBILE_BAR_LABELS.write}
                   </button>

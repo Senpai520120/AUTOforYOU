@@ -62,10 +62,22 @@ test.describe('Фото оголошень у серверному HTML (10.3) @
   test('адреса фото публічна, без внутрішнього хоста бекенду', async ({ request }) => {
     const html = await (await request.get('/ua')).text();
     // e2e_seed кладе фото в оголошення: без цього перевірка нижче пройшла б порожньою.
-    expect(html).toContain('%2Fmedia%2F');
+    // Локальні фото (localhost) — unoptimized: прямий /media/; віддалені — через /_next/image (%2Fmedia%2F).
+    expect(html).toMatch(/(?:%2Fmedia%2F|\/media\/)/);
     // Сервер Next ходить в API через http://backend:8000; ця адреса не має потрапити в HTML.
     expect(html).not.toContain('backend:8000');
     expect(html).not.toContain('backend%3A8000');
+  });
+
+  test('фото оголошення на /ua справді завантажується (локальне медіа, unoptimized)', async ({ page }) => {
+    await page.goto('/ua');
+    // Маркер [E2E] лежить в описанні, у картці його не видно: беремо першу картку з фото з /media/.
+    const img = page.locator('article img[src*="/media/"]').first();
+    await expect(img).toBeVisible();
+    await expect(img).not.toHaveAttribute('src', /^data:/);
+    await expect
+      .poll(() => img.evaluate((el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0);
   });
 
   test('фото, що не завантажилось, не зациклює запити', async ({ page }) => {
@@ -73,6 +85,8 @@ test.describe('Фото оголошень у серверному HTML (10.3) @
     // Оптимізоване фото йде через /_next/image, unoptimized — напряму з /media/ або S3/R2.
     let imageRequests = 0;
     const failImage = async (route: Route) => {
+      // Шрифти next/font лежать у /_next/static/media/ — це не фото, їх не рахуємо (11.13).
+      if (route.request().url().includes('/_next/static/')) return route.continue();
       imageRequests += 1;
       await route.fulfill({ status: 404, body: '' });
     };

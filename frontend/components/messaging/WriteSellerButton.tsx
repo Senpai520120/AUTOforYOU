@@ -8,6 +8,10 @@ import EmailNotVerified from '@/components/ui/EmailNotVerified';
 import ScamWarningBanner from '@/components/trust/ScamWarningBanner';
 import { isEmailNotVerified } from '@/lib/email-verify';
 import { ApiError, getErrorMessage } from '@/lib/errors';
+import { CircleAlert, MessageCircle } from 'lucide-react';
+import { Button } from '@/components/shadcn/button';
+import { Textarea } from '@/components/shadcn/textarea';
+import { ICON_STROKE } from '@/lib/utils';
 
 interface Props {
   listingType: 'local' | 'imported';
@@ -59,44 +63,39 @@ export default function WriteSellerButton({ listingType, listingId, label }: Pro
 
   return (
     <>
-      <button
-        onClick={handleOpen}
-        className="w-full bg-green-700 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
-      >
+      <Button type="button" variant="outline" onClick={handleOpen}
+        className="w-full border-primary font-semibold text-primary hover:bg-primary/5 hover:text-primary">
+        <MessageCircle strokeWidth={ICON_STROKE} aria-hidden="true" />
         {btnLabel}
-      </button>
+      </Button>
 
       {open && (
         <Modal title={btnLabel} onClose={closeModal}>
           <div>
             {notVerified && <EmailNotVerified className="mb-3" />}
             {error && (
-              <div role="alert" className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</div>
+              <div role="alert" className="mb-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={ICON_STROKE} aria-hidden="true" />
+                {error}
+              </div>
             )}
             {listingType === 'local' && <ScamWarningBanner className="mb-3" />}
-            <textarea
+            <Textarea
               value={text}
               onChange={e => setText(e.target.value)}
               aria-label="Ваше перше повідомлення"
               placeholder="Ваше перше повідомлення…"
               rows={4}
               autoFocus
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="resize-none"
             />
             <div className="flex gap-2 mt-4">
-              <button
-                onClick={closeModal}
-                className="flex-1 border border-slate-300 text-slate-600 hover:border-slate-400 py-2 rounded-xl text-sm transition-colors"
-              >
+              <Button type="button" variant="outline" onClick={closeModal} className="flex-1">
                 Скасувати
-              </button>
-              <button
-                onClick={handleSend}
-                disabled={!text.trim() || loading}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold py-2 rounded-xl text-sm transition-colors"
-              >
+              </Button>
+              <Button type="button" onClick={handleSend} disabled={!text.trim() || loading} className="flex-1 font-semibold">
                 {loading ? 'Надсилаю…' : 'Надіслати'}
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>

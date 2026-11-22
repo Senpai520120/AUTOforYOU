@@ -2776,6 +2776,10 @@ components:
           pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
           readOnly: true
           nullable: true
+        total_usd_full:
+          type: string
+          nullable: true
+          readOnly: true
         total_uah:
           type: string
           format: decimal
@@ -2954,6 +2958,7 @@ components:
       - status_display
       - total_uah
       - total_usd
+      - total_usd_full
       - updated_at
       - utm
       - utm_source
@@ -3012,6 +3017,10 @@ components:
           pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
           readOnly: true
           nullable: true
+        total_usd_full:
+          type: string
+          nullable: true
+          readOnly: true
         total_uah:
           type: string
           format: decimal
@@ -3072,6 +3081,7 @@ components:
       - status_display
       - total_uah
       - total_usd
+      - total_usd_full
       - utm_source
     BrokerStatusChange:
       type: object

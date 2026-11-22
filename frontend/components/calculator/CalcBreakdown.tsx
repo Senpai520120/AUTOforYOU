@@ -5,24 +5,27 @@ import LeadCta from '@/components/leads/LeadCta';
 import { percentFromDecimal } from '@/lib/calc-errors';
 import { ExclusionsList, FeesFreshness } from '@/components/ui/CalcNotes';
 import { formatUah, formatUsd } from '@/lib/format';
+import { Badge } from '@/components/shadcn/badge';
+import { Info } from 'lucide-react';
+import { ICON_STROKE } from '@/lib/utils';
 
 const PENDING = 'уточнюється менеджером';
 
 function PendingRow({ label }: { label: string }) {
   return (
-    <tr className="border-b border-slate-100">
-      <td className="py-2 text-slate-700 text-sm">{label}</td>
-      <td colSpan={2} className="py-2 text-right text-sm text-slate-500 italic">{PENDING}</td>
+    <tr className="border-b border-border">
+      <td className="py-2.5 pr-3 text-card-foreground text-sm">{label}</td>
+      <td colSpan={2} className="py-2.5 text-right text-sm text-muted-foreground italic">{PENDING}</td>
     </tr>
   );
 }
 
 function Row({ label, usd, uah }: { label: string; usd?: string; uah?: string }) {
   return (
-    <tr className="border-b border-slate-100">
-      <td className="py-2 text-slate-700 text-sm">{label}</td>
-      <td className="py-2 text-right font-mono text-sm">{usd ? formatUsd(usd) : '—'}</td>
-      <td className="py-2 text-right font-mono text-sm text-slate-500">{uah ? formatUah(uah) : '—'}</td>
+    <tr className="border-b border-border">
+      <td className="py-2.5 pr-3 text-card-foreground text-sm">{label}</td>
+      <td className="py-2.5 text-right font-mono text-sm">{usd ? formatUsd(usd) : '—'}</td>
+      <td className="py-2.5 text-right font-mono text-sm text-muted-foreground">{uah ? formatUah(uah) : '—'}</td>
     </tr>
   );
 }
@@ -39,13 +42,21 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
   // Q5: м'яка позначка — поки є демо-ставки або правило не звірене з брокером.
   const showEstimateNote = result.is_demo || !result.rules_confirmed;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 mt-2" data-testid="calc-result">
+    <div className="bg-card text-card-foreground border border-border rounded-xl shadow-sm p-6 md:p-8 mt-6" data-testid="calc-result">
       <DemoBanner show={result.is_demo} title={result.demo_banner.title} text={result.demo_banner.text} />
-      <h3 className="font-bold text-lg text-slate-900 mb-4">Деталізація вартості «під ключ»</h3>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h3 className="font-bold text-xl text-card-foreground">Деталізація вартості «під ключ»</h3>
+        {result.is_estimate && (
+          <Badge variant="outline" data-testid="calc-estimate-badge" className="border-warning bg-warning/15 text-foreground font-semibold">
+            <Info strokeWidth={ICON_STROKE} aria-hidden="true" />
+            Орієнтовно
+          </Badge>
+        )}
+      </div>
       <div className="overflow-x-auto" data-testid="calc-breakdown-scroll">
       <table className="w-full">
         <thead>
-          <tr className="text-xs text-slate-500 uppercase">
+          <tr className="text-xs text-muted-foreground uppercase tracking-wide">
             <th className="text-left pb-2">Стаття</th>
             <th className="text-right pb-2">USD</th>
             <th className="text-right pb-2">UAH</th>
@@ -70,17 +81,17 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
             : b.broker_services.map(s => <Row key={s.title} label={s.title} usd={s.amount_usd} />)}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-blue-800">
-            <td className="pt-3 font-bold text-blue-900 text-lg">
+          <tr className="border-t-2 border-primary">
+            <td className="pt-4 font-bold text-primary text-lg">
               РАЗОМ
-              <span className="block text-xs font-normal text-slate-500">
+              <span className="block text-xs font-normal text-muted-foreground">
                 (з митом, акцизом, ПДВ і пенсійним збором), орієнтовно
               </span>
             </td>
-            <td className="pt-3 text-right font-extrabold text-blue-900 text-lg font-mono" data-testid="calc-total-usd">
+            <td className="pt-4 text-right font-extrabold text-primary text-2xl font-mono" data-testid="calc-total-usd">
               {formatUsd(b.total_usd_full ?? b.total_usd)}
             </td>
-            <td className="pt-3 text-right font-extrabold text-slate-600 text-base font-mono">
+            <td className="pt-4 text-right font-bold text-muted-foreground text-base font-mono">
               {formatUah(b.total_uah)}
             </td>
           </tr>
@@ -88,10 +99,10 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
       </table>
       </div>
       <LeadCta className="mt-4 w-full sm:w-auto" />
-      <p className="text-xs text-amber-700 mt-4 bg-amber-50 rounded p-2">
+      <p className="text-xs text-foreground mt-4 bg-warning/15 border border-warning rounded-md p-2">
         #{result.calculation_id} · {result.warning}
       </p>
-      <p className="text-xs text-slate-500 mt-2" data-testid="calc-estimate-note">
+      <p className="text-xs text-muted-foreground mt-2" data-testid="calc-estimate-note">
         {showEstimateNote && result.estimate_note}
         {result.rates_updated_on && <> Ставки оновлено: {formatDate(result.rates_updated_on)}.</>}
         {result.exchange_rate_date && <> Курс НБУ на {formatDate(result.exchange_rate_date)}.</>}
@@ -101,7 +112,7 @@ export default function CalcBreakdown({ result, listingId, onNewCalculation }: P
       <ExclusionsList items={result.exclusions} />
       <div className="mt-6">
         {result.is_estimate && (
-          <p className="text-sm text-slate-600 mb-3">Сума орієнтовна: точну вартість підтвердить брокер.</p>
+          <p className="text-sm text-muted-foreground mb-3">Сума орієнтовна: точну вартість підтвердить брокер.</p>
         )}
         <LeadForm key={result.calculation_id} source="calculator" calculationId={result.calculation_id}
           listingId={listingId} onNew={onNewCalculation} />

@@ -65,7 +65,7 @@ test.describe('Подача: ліміти і підтвердження (8.5)', 
     await page.getByRole('checkbox', { name: /правилами/ }).check();
     await page.getByRole('checkbox', { name: /не в розшуку/ }).check();
     await expect(page.getByTestId('description-counter')).toHaveText(`${config.description_max + 1} / ${config.description_max}`);
-    await expect(page.getByTestId('description-counter')).toHaveClass(/text-red-600/);
+    await expect(page.getByTestId('description-counter')).toHaveClass(/text-destructive/);
     await expect(page.getByRole('button', { name: 'Надіслати на модерацію' })).toBeDisabled();
   });
 

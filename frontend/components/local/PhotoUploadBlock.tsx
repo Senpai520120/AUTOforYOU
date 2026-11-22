@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import Image from 'next/image';
+import { isLocalMediaUrl } from '@/lib/media';
 import { localApi } from '@/api/local';
 import { LocalConfig, LocalListingImage } from '@/lib/types';
 import { ApiError, firstDataMessage } from '@/lib/errors';
@@ -70,19 +71,19 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
   return (
     <div className="space-y-3">
       {missing && (
-        <p role="status" className="text-xs text-amber-800 bg-amber-100 border border-amber-300 rounded px-2 py-1">
+        <p role="status" className="text-xs text-foreground bg-warning/15 border border-warning rounded px-2 py-1">
           {missing}, щоб оголошення пройшло модерацію.
         </p>
       )}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-slate-700">
+        <p className="text-sm font-medium text-foreground">
           Фото ({photoHint(config, images.length)})
         </p>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading || images.length >= config.max_photos}
-          className="text-sm bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 transition-colors"
+          className="text-sm bg-link/10 hover:bg-link/20 disabled:opacity-50 text-link border border-link/30 rounded-lg px-3 py-1.5 transition-colors"
         >
           {uploading ? 'Завантаження...' : '+ Додати фото'}
         </button>
@@ -97,7 +98,7 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
       </div>
 
       {error && (
-        <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <p role="alert" className="text-xs text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-3 py-2">
           {error}
         </p>
       )}
@@ -106,7 +107,7 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="w-full border-2 border-dashed border-slate-200 rounded-xl h-32 flex flex-col items-center justify-center gap-2 text-slate-400 cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
+          className="w-full border-2 border-dashed border-border rounded-xl h-32 flex flex-col items-center justify-center gap-2 text-muted-foreground cursor-pointer hover:border-link/50 hover:text-link transition-colors"
         >
           <span className="text-3xl" aria-hidden="true">📷</span>
           <span className="text-sm">Клацніть, щоб додати фото ({photoHint(config, 0).split(' · ').slice(1).join(', ')})</span>
@@ -114,16 +115,17 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {images.map((img, idx) => (
-            <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200">
+            <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-border">
               <Image
                 src={imgSrc(img)}
                 alt={`Фото ${idx + 1} з ${images.length}`}
                 fill
                 className="object-cover"
                 sizes="150px"
+                unoptimized={isLocalMediaUrl(imgSrc(img))}
               />
               {img.is_primary && (
-                <span className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
                   Головне
                 </span>
               )}
@@ -133,7 +135,7 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
                     type="button"
                     title="Зробити головним"
                     onClick={() => handleSetPrimary(img.id)}
-                    className="bg-white/90 hover:bg-white text-blue-700 text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
+                    className="bg-card/90 hover:bg-card text-link text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
                   >
                     Гол.
                   </button>
@@ -142,7 +144,7 @@ export default function PhotoUploadBlock({ listingId, config, initial = [], onCh
                   type="button"
                   title="Видалити"
                   onClick={() => handleDelete(img.id)}
-                  className="bg-white/90 hover:bg-white text-red-600 text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
+                  className="bg-card/90 hover:bg-card text-destructive text-xs font-semibold px-2 py-1 min-h-8 min-w-8 rounded"
                 >
                   ✕
                 </button>

@@ -1,5 +1,6 @@
 'use client';
 import Modal from '@/components/ui/Modal';
+import { Button } from '@/components/shadcn/button';
 
 interface Props {
   open: boolean;
@@ -19,14 +20,14 @@ export default function ConfirmDialog({
   if (!open) return null;
   return (
     <Modal title={title} onClose={onCancel} maxWidth="max-w-sm">
-      {message && <p className="text-sm text-slate-600">{message}</p>}
+      {message && <p className="text-sm text-muted-foreground">{message}</p>}
       <div className="flex justify-end gap-3 mt-5">
-        <button autoFocus type="button" onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">
+        <Button autoFocus type="button" variant="outline" onClick={onCancel}>
           {cancelLabel}
-        </button>
-        <button type="button" disabled={busy} onClick={onConfirm} className="px-4 py-2 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+        </Button>
+        <Button type="button" variant="destructive" disabled={busy} onClick={onConfirm} className="font-semibold">
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

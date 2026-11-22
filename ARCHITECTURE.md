@@ -90,7 +90,7 @@ docker compose down -v               # зупинити + видалити да�
 ### Обмеження локального Docker
 - Бот без `TELEGRAM_BOT_TOKEN`: exit 0, не рестартує, решта стеку працює
 - LiqPay sandbox: потребує публічного URL для webhook (ngrok у dev)
-- SSL: nginx.conf містить закоментований SSL-блок — для деплою з реальним сертифікатом
+- SSL: TLS задається через `TLS_MODE` у `.env`, конфіг збирається з `nginx/templates/`
 
 ---
 
@@ -356,7 +356,7 @@ region, city, mileage_max, search (make/model/description), ordering (-created_a
   - Требует: `npx playwright install chromium` + работающий фронт (`npm run dev`) + бэкенд (`runserver`)
   - Запуск: `npm run test:e2e` (из `frontend/`)
 - **Итог**: 199 backend-тестов OK; TypeScript 0 ошибок
-- **Блокер перед продом**: живая проверка LiqPay в sandbox на публичном URL (см. `docs/PRODUCTION_ROADMAP.md`)
+- **Блокер перед продом**: живая проверка LiqPay в sandbox на публичном URL (см. `docs/archive/PRODUCTION_ROADMAP.md`)
 
 ## Юридические страницы (промт 13)
 - **Шаблоны**: `/terms`, `/privacy`, `/cookies` — три отдельные Next.js Server Component страницы на украинском языке. Каждая начинается с янтарного баннера «Шаблон — потребує перевірки юристом». **Перед продакшеном: юридическая проверка обязательна.**
