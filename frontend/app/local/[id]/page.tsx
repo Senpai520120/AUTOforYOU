@@ -7,7 +7,7 @@ import { localListingLd } from '@/lib/jsonld';
 import JsonLd from '@/components/seo/JsonLd';
 import { isC2CEnabled } from '@/lib/c2c';
 import { INTERNAL_API_URL } from '@/lib/config.server';
-import { publicMedia } from '@/lib/server-api';
+import { publicMedia, ssrKeyHeaders } from '@/lib/server-api';
 
 const API = INTERNAL_API_URL;
 
@@ -15,7 +15,7 @@ async function getListing(id: string): Promise<LocalListing | null> {
   // Не число — нічого не питаємо в API (як sellers/[id]).
   if (!/^\d{1,10}$/.test(id)) return null;
   try {
-    const res = await fetch(`${API}/api/v1/local/listings/${id}/`, { next: { revalidate: 60 } });
+    const res = await fetch(`${API}/api/v1/local/listings/${id}/`, { headers: ssrKeyHeaders(), next: { revalidate: 60 } });
     if (!res.ok) return null;
     return publicMedia(await res.json());
   } catch {
