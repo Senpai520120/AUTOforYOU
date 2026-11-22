@@ -542,3 +542,224 @@ test.describe('SEO: /calculator - текст, canonical, noindex (9.54)', () => 
     await expect(page.getByTestId('how-link-prigon')).toHaveAttribute('href', '/prigon');
   });
 });
+
+// ─── JSON-LD Car + Offer (задача 12.1) ───────────────────────────────────────
+
+test.describe('JSON-LD Car + Offer: побудова без браузера (12.1)', () => {
+  const VIN = '1HGCM82633A004352';
+  const base = {
+    make: 'Toyota', model: 'Camry', year: 2018, mileageKm: 120000, fuelType: 'petrol', transmission: 'auto',
+    condition: 'used', price: '12500.00', currency: 'USD', url: 'https://example.test/local/7', availability: 'InStock' as const,
+  };
+
+  test('локальне оголошення: повна форма Car + Offer', async () => {
+    const { buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    expect(buildVehicleOfferLd(base)).toEqual({
+      '@context': 'https://schema.org', '@type': 'Car', name: 'Toyota Camry 2018',
+      brand: { '@type': 'Brand', name: 'Toyota' }, model: 'Camry', vehicleModelDate: '2018',
+      mileageFromOdometer: { '@type': 'QuantitativeValue', value: 120000, unitCode: 'KMT' },
+      fuelType: 'Gasoline', vehicleTransmission: 'Automatic', itemCondition: 'https://schema.org/UsedCondition',
+      url: 'https://example.test/local/7',
+      offers: { '@type': 'Offer', price: '12500.00', priceCurrency: 'USD',
+        availability: 'https://schema.org/InStock', url: 'https://example.test/local/7' },
+    });
+  });
+
+  test('лот: Car з VIN і PreOrder, без КПП й стану', async () => {
+    const { buildVehicleOfferLd, lotAvailability } = await import('../lib/jsonld-core');
+    const ld = buildVehicleOfferLd({ make: 'Honda', model: 'Accord', year: 2019, mileageKm: 50000, fuelType: 'hybrid',
+      vin: VIN, price: '8000.00', currency: 'EUR', url: 'https://example.test/listings/5-honda-accord-2019',
+      availability: lotAvailability('in_transit') })!;
+    expect(ld.vehicleIdentificationNumber).toBe(VIN);
+    expect(ld.fuelType).toBe('Hybrid');
+    expect(ld).not.toHaveProperty('vehicleTransmission');
+    expect(ld).not.toHaveProperty('itemCondition');
+    expect(ld.offers).toMatchObject({ priceCurrency: 'EUR', availability: 'https://schema.org/PreOrder' });
+  });
+
+  test('VIN: лише повний з 17 символів; маскований, короткий і з I/O/Q опускаються', async () => {
+    const { buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    expect(buildVehicleOfferLd({ ...base, vin: VIN })).toHaveProperty('vehicleIdentificationNumber', VIN);
+    for (const bad of ['1HGCM82633A****', '1HGCM82633A00435', '1HGCM82633A0043522', '1HGCM82633A00435I', '', '  ']) {
+      expect(buildVehicleOfferLd({ ...base, vin: bad }), bad).not.toHaveProperty('vehicleIdentificationNumber');
+    }
+  });
+
+  test('availability: статуси місцевих і лотів; hidden/pending → null, билдер повертає null', async () => {
+    const { localAvailability, lotAvailability, buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    expect(localAvailability('active')).toBe('InStock');
+    expect(localAvailability('sold')).toBe('OutOfStock');
+    for (const s of ['hidden', 'pending', 'draft', 'rejected', 'expired', 'zzz', '', null, undefined]) {
+      expect(localAvailability(s), String(s)).toBeNull();
+    }
+    expect(lotAvailability('in_stock')).toBe('InStock');
+    expect(lotAvailability('in_transit')).toBe('PreOrder');
+    expect(lotAvailability('sold')).toBe('OutOfStock');
+    expect(lotAvailability('zzz')).toBeNull();
+    expect(buildVehicleOfferLd({ ...base, availability: localAvailability('hidden') })).toBeNull();
+    expect(buildVehicleOfferLd({ ...base, availability: localAvailability('pending') })).toBeNull();
+  });
+
+  test('без availability (лендинг): Offer без цього поля, року й пробігу', async () => {
+    const { buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    const ld = buildVehicleOfferLd({ make: 'Kia', model: 'Sportage', price: '30000.50', currency: 'USD', url: 'https://example.test/prigon/k' })!;
+    expect(ld.name).toBe('Kia Sportage');
+    for (const k of ['vehicleModelDate', 'mileageFromOdometer', 'vehicleIdentificationNumber']) expect(ld).not.toHaveProperty(k);
+    expect(ld.offers).not.toHaveProperty('availability');
+  });
+
+  test('ціна: рядок з API лишається як є, 0 / мінус / NaN / сміття → null', async () => {
+    const { buildVehicleOfferLd, normalizePrice } = await import('../lib/jsonld-core');
+    expect(buildVehicleOfferLd(base)!.offers).toHaveProperty('price', '12500.00');
+    expect(normalizePrice('12500')).toBe('12500');
+    expect(normalizePrice(1234.5)).toBe('1234.5');
+    // Рядок не проходить через float: хвіст точності зберігається.
+    expect(normalizePrice('9007199254740993.10')).toBe('9007199254740993.10');
+    for (const bad of ['0', '0.00', '-5', NaN, Infinity, -1, 0, '1e5', '12,5', '', 'abc']) {
+      expect(normalizePrice(bad), String(bad)).toBeNull();
+      expect(buildVehicleOfferLd({ ...base, price: bad }), String(bad)).toBeNull();
+    }
+  });
+
+  test('невідома валюта, порожні марка/модель або відносна адреса → null', async () => {
+    const { buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    expect(buildVehicleOfferLd({ ...base, currency: 'GBP' })).toBeNull();
+    expect(buildVehicleOfferLd({ ...base, currency: '' })).toBeNull();
+    expect(buildVehicleOfferLd({ ...base, make: '  ' })).toBeNull();
+    expect(buildVehicleOfferLd({ ...base, model: '' })).toBeNull();
+    expect(buildVehicleOfferLd({ ...base, url: '/local/7' })).toBeNull();
+  });
+
+  test('невідоме паливо/КПП/стан і від’ємний пробіг: ключів немає, порожніх значень немає', async () => {
+    const { buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    const ld = buildVehicleOfferLd({ ...base, fuelType: 'steam', transmission: 'x', condition: 'x', mileageKm: -1, year: null })!;
+    for (const k of ['fuelType', 'vehicleTransmission', 'itemCondition', 'mileageFromOdometer', 'vehicleModelDate']) {
+      expect(ld).not.toHaveProperty(k);
+    }
+    expect(buildVehicleOfferLd({ ...base, mileageKm: 0 })).toHaveProperty('mileageFromOdometer.value', 0);
+    expect(noEmpty(ld)).toBe(true);
+    expect(noEmpty(buildVehicleOfferLd({ ...base, vin: VIN }))).toBe(true);
+  });
+
+  test('паливо/КПП/стан: усі значення словників', async () => {
+    const { buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    const fuel = { petrol: 'Gasoline', diesel: 'Diesel', electric: 'Electric', hybrid: 'Hybrid', gas: 'LPG' };
+    for (const [k, v] of Object.entries(fuel)) expect(buildVehicleOfferLd({ ...base, fuelType: k })!.fuelType).toBe(v);
+    const gear = { auto: 'Automatic', manual: 'Manual', cvt: 'CVT', robot: 'Automated manual' };
+    for (const [k, v] of Object.entries(gear)) expect(buildVehicleOfferLd({ ...base, transmission: k })!.vehicleTransmission).toBe(v);
+    const cond = { new: 'NewCondition', used: 'UsedCondition', damaged: 'DamagedCondition' };
+    for (const [k, v] of Object.entries(cond)) {
+      expect(buildVehicleOfferLd({ ...base, condition: k })!.itemCondition).toBe(`https://schema.org/${v}`);
+    }
+  });
+
+  test('</script> у марці/моделі екранується в jsonLdString', async () => {
+    const { buildVehicleOfferLd, jsonLdString } = await import('../lib/jsonld-core');
+    const evil = '</script><script>alert(1)</script>';
+    const text = jsonLdString(buildVehicleOfferLd({ ...base, make: evil, model: evil })!);
+    for (const ch of ['<', '>', '&']) expect(text).not.toContain(ch);
+    expect(JSON.parse(text).brand.name).toBe(evil);
+  });
+
+  test('зайві поля продавця у вході (через cast) у розмітку не потрапляють', async () => {
+    const { buildVehicleOfferLd } = await import('../lib/jsonld-core');
+    const dirty = { ...base, owner_name: 'Іван Петренко', contact_phone: '+380671112233', city_name: 'Київ',
+      seller_id: 4242, description: 'Дзвоніть Іванові' } as unknown as Parameters<typeof buildVehicleOfferLd>[0];
+    const text = JSON.stringify(buildVehicleOfferLd(dirty));
+    for (const s of ['Іван', '+380671112233', 'Київ', '4242', 'Дзвоніть', 'owner_name', 'contact_phone']) {
+      expect(text).not.toContain(s);
+    }
+  });
+});
+
+test.describe('SEO: JSON-LD Vehicle/Offer (12.1)', () => {
+  test.use({ storageState: GUEST });
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(consentInit);
+  });
+  const cars = async (page: import('@playwright/test').Page) =>
+    (await ldBlocks(page)).filter((b) => b['@type'] === 'Car');
+
+  test('/local/[id]: один Car, ціна й валюта з API, InStock, без даних продавця', async ({ page, request }) => {
+    test.skip(!c2c, 'C2C вимкнено');
+    test.skip(!localIds.length, 'немає активних місцевих оголошень');
+    const res = await request.get(`/api/v1/local/listings/${localIds[0]}/`);
+    expect(res.status()).toBe(200);
+    const api = await res.json();
+    await page.goto(`/local/${api.id}`);
+    const found = await cars(page);
+    expect(found).toHaveLength(1);
+    const car = found[0];
+    expect(noEmpty(car)).toBe(true);
+    const offer = car.offers as Ld;
+    expect(offer['@type']).toBe('Offer');
+    expect(offer.priceCurrency).toBe(api.currency);
+    expect(Number(offer.price)).toBe(Number(api.price));
+    expect(offer.availability).toBe('https://schema.org/InStock');
+    expect(new URL(car.url as string).pathname).toBe(`/local/${api.id}`);
+    expect(car).not.toHaveProperty('vehicleIdentificationNumber');
+    const text = JSON.stringify(car);
+    for (const v of [api.owner_name, api.city_name, api.region_name, api.contact_phone, '+380671112233', api.description]) {
+      if (v) expect(text).not.toContain(String(v));
+    }
+    expect(text).not.toMatch(/seller_id|owner_name|contact_phone/);
+  });
+
+  test('/listings/[slug]: Car з VIN з API, availability за статусом', async ({ page, request }) => {
+    test.skip(!lots, 'модуль лотів вимкнено');
+    test.skip(!lotSlugs.length, 'немає лотів у наявності чи дорозі');
+    const { id, slug } = lotSlugs[0];
+    const api = await (await request.get(`/api/v1/listings/${id}/`)).json();
+    await page.goto(`/listings/${slug}`);
+    const found = await cars(page);
+    expect(found).toHaveLength(1);
+    const car = found[0];
+    expect(noEmpty(car)).toBe(true);
+    const vin = api.vehicle_detail.vin as string;
+    if (/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) expect(car.vehicleIdentificationNumber).toBe(vin);
+    else expect(car).not.toHaveProperty('vehicleIdentificationNumber');
+    const expected = { in_stock: 'InStock', in_transit: 'PreOrder', sold: 'OutOfStock' }[api.status as string];
+    expect((car.offers as Ld).availability).toBe(`https://schema.org/${expected}`);
+    expect((car.offers as Ld).priceCurrency).toBe(api.currency);
+  });
+
+  test('/prigon/[slug]: Car + Offer з ціною розрахунку, без availability, VIN і пробігу', async ({ page, request }) => {
+    const list = await (await request.get('/api/v1/landings/')).json();
+    const slug = (list.results ?? list)[0]?.slug as string | undefined;
+    test.skip(!slug, 'у стеку немає опублікованих сторінок моделей');
+    const api = await (await request.get(`/api/v1/landings/${slug}/`)).json();
+    await page.goto(`/prigon/${slug}`);
+    const found = await cars(page);
+    expect(found).toHaveLength(1);
+    const car = found[0];
+    expect(noEmpty(car)).toBe(true);
+    const offer = car.offers as Ld;
+    expect(offer.priceCurrency).toBe('USD');
+    expect(Number(offer.price)).toBe(Number(api.calculation.total_usd_full ?? api.calculation.total_usd));
+    expect(offer).not.toHaveProperty('availability');
+    for (const k of ['vehicleIdentificationNumber', 'mileageFromOdometer', 'vehicleModelDate']) expect(car).not.toHaveProperty(k);
+    // Хлібні крихти лишаються поруч.
+    expect((await ldBlocks(page)).some((b) => b['@type'] === 'BreadcrumbList')).toBe(true);
+  });
+
+  test('/local/[id]: pending-оголошення (seller і staff з cookie, гість) — Car немає', async ({ browser, request, api, asRole }) => {
+    test.skip(!c2c, 'C2C вимкнено');
+    // Pending [E2E] Toyota Camry належить seller (e2e_seed); id беремо з його кабінету.
+    const seller = await api('seller');
+    const body = await (await seller.get('/api/v1/local/my-listings/')).json();
+    const items: { id: number; status: string; description: string }[] = Array.isArray(body) ? body : body.results;
+    const hidden = items.find((l) => l.description.startsWith('[E2E]') && !['active', 'sold'].includes(l.status));
+    test.skip(!hidden, 'у сиді немає непублічного [E2E]-оголошення');
+    // Анонімний API не віддає його: 404.
+    expect((await request.get(`/api/v1/local/listings/${hidden!.id}/`)).status()).toBe(404);
+    for (const state of [GUEST, asRole('seller'), asRole('staff')]) {
+      const ctx = await browser.newContext({ storageState: state });
+      const page = await ctx.newPage();
+      await page.addInitScript(consentInit);
+      const resp = await page.goto(`/local/${hidden!.id}`);
+      expect(resp?.status()).toBe(404);
+      expect(await cars(page)).toHaveLength(0);
+      await ctx.close();
+    }
+  });
+});
