@@ -63,7 +63,7 @@ export default function MyLocalListingsPage() {
   const load = useCallback(() => {
     setFetching(true);
     setLoadError(null);
-    localApi
+    void localApi
       .myListings()
       .then(data => setListings(data.results))
       .catch(setLoadError)

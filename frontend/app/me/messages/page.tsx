@@ -182,7 +182,7 @@ export default function MessagesPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(); }
   };
 
   // На < md тред і список не стоять поруч: «назад» скидає активний діалог і ?conv=.

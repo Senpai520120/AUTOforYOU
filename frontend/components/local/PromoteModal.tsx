@@ -37,7 +37,7 @@ export default function PromoteModal({ listingId, listingTitle, defaultType, onC
   const loadTariffs = useCallback(() => {
     setLoading(true);
     setLoadError(null);
-    localApi.tariffs()
+    void localApi.tariffs()
       .then(data => {
         setTariffs(data);
         const first = defaultType ? data.find(t => t.type === defaultType) : data[0];

@@ -28,16 +28,14 @@ export function reportError(error: { message?: string; digest?: string }) {
   if (typeof window === 'undefined') return;
   const api = API_URL;
   const body = JSON.stringify(buildReport(error, window.location.pathname));
-  try {
-    // keepalive: звіт іде, навіть якщо користувач одразу перейде на іншу сторінку.
-    void fetch(`${api}${ENDPOINT}`, {
-      method: 'POST',
-      body,
-      headers: { 'Content-Type': 'application/json' },
-      keepalive: true,
-      credentials: 'omit',
-    }).catch(() => undefined);
-  } catch {
-    // звіт про помилку не повинен сам ламати сторінку
-  }
+  // keepalive: звіт іде, навіть якщо користувач одразу перейде на іншу сторінку.
+  // Мережеву помилку fetch повертає як rejected promise, а не синхронний throw,
+  // тому достатньо .catch: звіт про помилку не повинен сам ламати сторінку.
+  void fetch(`${api}${ENDPOINT}`, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/json' },
+    keepalive: true,
+    credentials: 'omit',
+  }).catch(() => undefined);
 }

@@ -1,27 +1,36 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/use-require-auth';
 import { listingsApi } from '@/api/listings';
 import { Listing, PaginatedResponse } from '@/lib/types';
 import ListingCard from '@/components/listings/ListingCard';
 import Spinner from '@/components/ui/Spinner';
+import ErrorState from '@/components/ui/ErrorState';
 import Link from 'next/link';
 
 export default function B2BPage() {
   const { user, loading } = useRequireAuth();
   const [data, setData] = useState<PaginatedResponse<Listing> | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   const canAccess = user && (user.is_verified_dealer || user.is_admin_role);
+
+  const load = useCallback(() => {
+    setFetching(true);
+    setError(null);
+    // Без .catch збій завантаження був би unhandled rejection і порожньою дошкою «лотів немає».
+    void listingsApi.b2bBoard({}).then(setData).catch(setError).finally(() => setFetching(false));
+  }, []);
 
   useEffect(() => {
     if (!loading && user && !canAccess) { setFetching(false); return; }
     if (user && canAccess) {
-      listingsApi.b2bBoard({}).then(setData).finally(() => setFetching(false));
+      load();
     } else if (!loading) {
       setFetching(false);
     }
-  }, [user, loading, canAccess]);
+  }, [user, loading, canAccess, load]);
 
   if (loading || fetching) return <div className="flex justify-center py-20"><Spinner /></div>;
 
@@ -37,6 +46,15 @@ export default function B2BPage() {
             До кабінету
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-2xl font-bold text-foreground mb-6">B2B-дошка</h1>
+        <ErrorState error={error} onRetry={load} />
       </div>
     );
   }

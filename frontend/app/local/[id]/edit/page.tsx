@@ -23,7 +23,7 @@ export default function EditLocalListingPage() {
     setFetching(true);
     setError(null);
     // 10-Q1: ендпоінт власника віддає його телефон; чуже оголошення - 404 (10-S5).
-    localApi.ownerDetail(id).then(setListing).catch(setError).finally(() => setFetching(false));
+    void localApi.ownerDetail(id).then(setListing).catch(setError).finally(() => setFetching(false));
   }, [id]);
 
   useEffect(() => {
