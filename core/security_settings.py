@@ -15,7 +15,7 @@ _TRUE = ('true', '1', 'yes')
 
 def _flag(env: Mapping, name: str, default: bool) -> bool:
     raw = env.get(name)
-    if raw is None or str(raw).strip() == '':
+    if raw is None or not str(raw).strip():
         return default
     return str(raw).strip().lower() in _TRUE
 
@@ -33,8 +33,13 @@ def _hsts_max_age(env: Mapping) -> int:
     return value
 
 
-def build_security_settings(env: Mapping, *, debug: bool = False, testing: bool = False,
-                            auth_cookie_secure: bool = True) -> dict:
+def build_security_settings(
+    env: Mapping,
+    *,  # pragma: no mutate (`*` -> `/` эквивалентен: флаги всегда передаются по имени)
+    debug: bool = False,
+    testing: bool = False,
+    auth_cookie_secure: bool = True,
+) -> dict:
     """Настройки заголовков безопасности по окружению.
 
     В dev и в тест-раннере возвращает пустой словарь: там всё идёт по HTTP.
@@ -54,12 +59,12 @@ def build_security_settings(env: Mapping, *, debug: bool = False, testing: bool 
     # Django в них НЕ редиректит: SSR Next ходит в http://backend:8000 без X-Forwarded-Proto и
     # получил бы 301 на https://backend:8000 (страницы остались бы без данных). Пустой режим =
     # прежнее поведение (старый .env без TLS_MODE): редирект включён, если не выключен явно.
-    redirect_default = mode == ''
+    redirect_default = not mode
     ssl_redirect = _flag(env, 'SECURE_SSL_REDIRECT', redirect_default)
     tls_front = mode in ('selfsigned', 'letsencrypt', 'external')
     # HSTS в Django дублирует nginx (тот скрывает заголовок апстрима и ставит свой): нужен для
     # check --deploy и прямого доступа к backend по https.
-    hsts_seconds = _hsts_max_age(env) if (tls_front or (mode == '' and ssl_redirect)) else 0
+    hsts_seconds = _hsts_max_age(env) if (tls_front or (not mode and ssl_redirect)) else 0
 
     if (tls_front or ssl_redirect) and not auth_cookie_secure:
         # Флаг стенда без TLS (.env.e2e) не должен попасть на прод с HTTPS.

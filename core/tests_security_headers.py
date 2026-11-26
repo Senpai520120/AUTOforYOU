@@ -119,6 +119,35 @@ class BuildSecuritySettingsTests(SimpleTestCase):
         with self.assertRaisesMessage(ValueError, 'HSTS_MAX_AGE'):
             build_security_settings({'TLS_MODE': 'letsencrypt', 'HSTS_MAX_AGE': 'год'})
 
+    # Тесты ниже добавлены по выжившим мутантам cosmic-ray (scripts/mutation.sh security).
+    def test_hsts_max_age_zero_is_allowed_negative_fails(self):
+        cfg = build_security_settings({'TLS_MODE': 'letsencrypt', 'HSTS_MAX_AGE': '0'})
+        self.assertEqual(cfg['SECURE_HSTS_SECONDS'], 0)
+        with self.assertRaisesMessage(ValueError, 'не может быть отрицательным'):
+            build_security_settings({'TLS_MODE': 'letsencrypt', 'HSTS_MAX_AGE': '-1'})
+
+    def test_empty_flag_value_falls_back_to_default(self):
+        # SECURE_SSL_REDIRECT= (пустая строка в .env) = не задан, а не «false».
+        cfg = build_security_settings({'SECURE_SSL_REDIRECT': ''})
+        self.assertIs(cfg['SECURE_SSL_REDIRECT'], True)
+
+    def test_off_mode_with_explicit_redirect_has_no_hsts(self):
+        cfg = build_security_settings({'TLS_MODE': 'off', 'SECURE_SSL_REDIRECT': 'true'})
+        self.assertIs(cfg['SECURE_SSL_REDIRECT'], True)
+        self.assertEqual(cfg['SECURE_HSTS_SECONDS'], 0)
+
+    def test_w008_silenced_only_when_tls_front_does_redirect(self):
+        self.assertEqual(build_security_settings({'TLS_MODE': 'letsencrypt'})['SILENCED_SYSTEM_CHECKS'],
+                         ['security.W008'])
+        self.assertEqual(build_security_settings({'TLS_MODE': 'off'})['SILENCED_SYSTEM_CHECKS'], [])
+        self.assertEqual(build_security_settings({'TLS_MODE': 'letsencrypt', 'SECURE_SSL_REDIRECT': 'true'})
+                         ['SILENCED_SYSTEM_CHECKS'], [])
+
+    def test_nosniff_and_frame_deny_always_on(self):
+        cfg = build_security_settings({'TLS_MODE': 'off'})
+        self.assertIs(cfg['SECURE_CONTENT_TYPE_NOSNIFF'], True)
+        self.assertEqual(cfg['X_FRAME_OPTIONS'], 'DENY')
+
 
 class CsrfOriginsTests(SimpleTestCase):
     def test_from_domain_https(self):
@@ -132,6 +161,13 @@ class CsrfOriginsTests(SimpleTestCase):
 
     def test_localhost_site_url_gives_nothing(self):
         self.assertEqual(csrf_origins_from_site('', 'http://localhost', ''), [])
+
+    def test_selfsigned_domain_is_https(self):
+        self.assertEqual(csrf_origins_from_site('example.com', '', 'selfsigned'), ['https://example.com'])
+
+    def test_site_url_host_before_localhost_alphabetically_is_kept(self):
+        # Сравнение с 'localhost' - строгое равенство, а не по алфавиту.
+        self.assertEqual(csrf_origins_from_site('', 'https://example.com', ''), ['https://example.com'])
 
 
 class CheckDeployTests(SimpleTestCase):
