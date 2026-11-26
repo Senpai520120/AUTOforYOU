@@ -35,7 +35,7 @@ export default function SavedSearchesPage() {
   const load = useCallback(() => {
     setBusy(true);
     setError(null);
-    getSavedSearches().then(setItems).catch(setError).finally(() => setBusy(false));
+    void getSavedSearches().then(setItems).catch(setError).finally(() => setBusy(false));
   }, []);
 
   useEffect(() => {

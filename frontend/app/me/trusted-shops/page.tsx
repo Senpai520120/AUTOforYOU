@@ -27,7 +27,7 @@ export default function TrustedShopsPage() {
   const load = useCallback(() => {
     setFetching(true);
     setError(null);
-    meApi.trustedShops.list().then(d => setShops(d.results)).catch(setError).finally(() => setFetching(false));
+    void meApi.trustedShops.list().then(d => setShops(d.results)).catch(setError).finally(() => setFetching(false));
   }, []);
 
   useEffect(() => {

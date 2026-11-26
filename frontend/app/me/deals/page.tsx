@@ -140,7 +140,7 @@ export default function MyDealsPage() {
   const load = useCallback(() => {
     setFetching(true);
     setLoadError(null);
-    dealsApi.list()
+    void dealsApi.list()
       .then(setDeals)
       .catch(setLoadError)
       .finally(() => setFetching(false));

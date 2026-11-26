@@ -18,7 +18,7 @@ export default function MyCalculationsPage() {
   const load = useCallback(() => {
     setFetching(true);
     setError(null);
-    pricingApi.myCalculations().then(setData).catch(setError).finally(() => setFetching(false));
+    void pricingApi.myCalculations().then(setData).catch(setError).finally(() => setFetching(false));
   }, []);
 
   useEffect(() => {

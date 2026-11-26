@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { reportError } from '@/lib/reportError';
 
-export default function Error({
+export default function ErrorPage({
   error,
   reset,
 }: {

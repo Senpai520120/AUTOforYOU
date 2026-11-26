@@ -36,7 +36,7 @@ export default function MyShipmentsPage() {
   const load = useCallback(() => {
     setFetching(true);
     setError(null);
-    meApi.shipments().then(d => setShipments(d.results)).catch(setError).finally(() => setFetching(false));
+    void meApi.shipments().then(d => setShipments(d.results)).catch(setError).finally(() => setFetching(false));
   }, []);
 
   useEffect(() => {

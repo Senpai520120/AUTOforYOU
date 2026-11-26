@@ -63,7 +63,7 @@ export default function LocalListingFilters() {
   useEffect(() => {
     if (!initialCity || !initialRegion) return;
     let alive = true;
-    localApi.cities(Number(initialRegion))
+    void localApi.cities(Number(initialRegion))
       .then((rows) => rows.find((c) => String(c.id) === initialCity))
       .catch(() => undefined)
       .then((c) => {

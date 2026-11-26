@@ -27,7 +27,7 @@ export default function FavoritesPage() {
   const load = useCallback(() => {
     setBusy(true);
     setError(null);
-    getFavorites().then(setItems).catch(setError).finally(() => setBusy(false));
+    void getFavorites().then(setItems).catch(setError).finally(() => setBusy(false));
   }, []);
 
   useEffect(() => {

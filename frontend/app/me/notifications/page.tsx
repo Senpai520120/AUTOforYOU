@@ -34,7 +34,7 @@ export default function NotificationsPage() {
   const load = useCallback(() => {
     setBusy(true);
     setError(null);
-    getNotifications(1)
+    void getNotifications(1)
       .then(data => { setItems(data.results); setPage(1); setHasMore(Boolean(data.next)); })
       .catch(setError)
       .finally(() => setBusy(false));

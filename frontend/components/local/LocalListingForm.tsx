@@ -237,7 +237,7 @@ export default function LocalListingForm({ initial, listingId }: Props) {
   const loadRegions = useCallback(() => {
     setRegionsError(null);
     setRegionsLoaded(false);
-    localApi.config()
+    void localApi.config()
       .then(setConfig)
       .catch(setRegionsError)
       .finally(() => setRegionsLoaded(true));
