@@ -19,6 +19,8 @@ _enabled = False
 _SENSITIVE_HEADERS = {
     'authorization', 'cookie', 'x-csrftoken', 'set-cookie', 'proxy-authorization', 'referer',
     'x-forwarded-for', 'x-real-ip', 'x-api-key',
+    # 12.4: общий секрет SSR и IP посетителя (по ним можно подделать доверенный запрос / это ПДн).
+    'x-ssr-key', 'x-ssr-client-ip',
 }
 # Query после пути в любой строке события (repr запроса, URL в крошках и спанах): ?q=Иван+Петренко и т.п.
 _QUERY_RE = re.compile(r'(/[^\s\'"?#<>]*)\?[^\s\'"<>]*')
@@ -51,7 +53,7 @@ def _clean_request(request: dict) -> dict:
         request['url'] = scrub(request['url'].split('?', 1)[0])
     headers = request.get('headers') or {}
     request['headers'] = {
-        k: _scrub_value(v) for k, v in headers.items() if k.lower() not in _SENSITIVE_HEADERS
+        k: _scrub_value(v) for k, v in headers.items() if k.lower().replace('_', '-').removeprefix('http-') not in _SENSITIVE_HEADERS
     }
     return request
 

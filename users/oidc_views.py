@@ -16,10 +16,12 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions
 from rest_framework.exceptions import Throttled
-from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from core.ssr import SsrAwareAnonThrottle
 
 from . import oidc
 from .cookies import clear_auth_cookies, set_auth_cookies, set_sso_hint_cookie
@@ -70,7 +72,7 @@ class _OidcView(APIView):
 @extend_schema(tags=['auth'], summary='SSO: перейти на вход Keycloak', request=None, responses={302: None, 404: None})
 class OidcStartView(_OidcView):
     # Лимит и без nginx (dev, прямой доступ к backend). Не scope login: иначе один вход тратит две попытки.
-    throttle_classes = [AnonRateThrottle]
+    throttle_classes = [SsrAwareAnonThrottle]
 
     def get(self, request):
         url, flow = oidc.build_auth_request(safe_next(request.query_params.get('next')))
@@ -90,7 +92,7 @@ class OidcStartView(_OidcView):
     request=None, responses={302: None, 404: None},
 )
 class OidcCallbackView(_OidcView):
-    throttle_classes = [ScopedRateThrottle, AnonRateThrottle]
+    throttle_classes = [ScopedRateThrottle, SsrAwareAnonThrottle]
     throttle_scope = 'login'
 
     def get(self, request):

@@ -23,10 +23,11 @@ from rest_framework.exceptions import NotAuthenticated, NotFound, PermissionDeni
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, UserRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from core.c2c import payments_enabled
+from core.ssr import SsrAwareAnonThrottle
 from core.uploads import (
     ImageUploadError,
     allowed_formats,
@@ -162,7 +163,7 @@ class LocalListingListCreateView(generics.ListCreateAPIView):
     # права по методу в get_permissions: GET - AllowAny, POST - IsAuthenticated
     filter_backends = [LocalListingFilter]
     # 8.5: общие anon/user + лимит подачи (час и сутки), действует только на POST
-    throttle_classes = [AnonRateThrottle, UserRateThrottle, ListingCreateThrottle, ListingCreateDailyThrottle]
+    throttle_classes = [SsrAwareAnonThrottle, UserRateThrottle, ListingCreateThrottle, ListingCreateDailyThrottle]
 
     def check_throttles(self, request):
         for throttle in self.get_throttles():

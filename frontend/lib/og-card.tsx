@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 import { SITE_NAME } from '@/lib/site';
 import { INTERNAL_API_URL } from '@/lib/config.server';
+import { ssrKeyHeaders } from '@/lib/server-api';
 
 /**
  * Генерація OG-картинок (задача 6.3b).
@@ -162,7 +163,7 @@ export async function fetchPublicJson<T>(
   revalidate = 60,
 ): Promise<{ kind: 'ok'; data: T } | { kind: 'missing' } | { kind: 'error' }> {
   try {
-    const res = await fetch(`${apiUrl}${path}`, { next: { revalidate } });
+    const res = await fetch(`${apiUrl}${path}`, { headers: ssrKeyHeaders(), next: { revalidate } });
     if (res.status === 404) return { kind: 'missing' };
     if (!res.ok) return { kind: 'error' };
     return { kind: 'ok', data: (await res.json()) as T };

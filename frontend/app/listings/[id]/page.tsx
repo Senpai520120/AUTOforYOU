@@ -9,7 +9,7 @@ import JsonLd from '@/components/seo/JsonLd';
 import { isModuleEnabled, requireModule } from '@/lib/site-settings';
 import { listingSlug } from '@/lib/utils';
 import { INTERNAL_API_URL } from '@/lib/config.server';
-import { publicMedia } from '@/lib/server-api';
+import { publicMedia, ssrKeyHeaders } from '@/lib/server-api';
 
 const apiUrl = INTERNAL_API_URL;
 
@@ -17,6 +17,7 @@ const apiUrl = INTERNAL_API_URL;
 const getListing = cache(async (id: number): Promise<Listing | null> => {
   try {
     const res = await fetch(`${apiUrl}/api/v1/listings/${id}/`, {
+      headers: ssrKeyHeaders(),
       next: { revalidate: 300 },
     });
     if (res.status === 404) return null;

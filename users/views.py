@@ -21,12 +21,13 @@ from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, BaseThrottle, ScopedRateThrottle, UserRateThrottle
+from rest_framework.throttling import BaseThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from core.ssr import SsrAwareAnonThrottle
 from integrations.base import MODE_DEMO
 from integrations.captcha import captcha_public_config, require_captcha
 from integrations.email import EMAIL_UNAVAILABLE_DETAIL, EmailProvider, email_configured
@@ -101,7 +102,7 @@ class CookieTokenObtainView(TokenObtainPairView):
     serializer_class = TokenObtainPairSerializer
     parser_classes = [JSONParser]
     # Scoped-лимит по IP поверх общих anon/user (значения — THROTTLE_LOGIN_RATE).
-    throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
+    throttle_classes = [ScopedRateThrottle, SsrAwareAnonThrottle, UserRateThrottle]
     throttle_scope = 'login'
 
     def post(self, request, *args, **kwargs):
@@ -160,7 +161,7 @@ class CookieTokenObtainView(TokenObtainPairView):
 class CookieTokenRefreshView(TokenRefreshView):
     serializer_class = TokenRefreshSerializer
     parser_classes = [JSONParser]
-    throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
+    throttle_classes = [ScopedRateThrottle, SsrAwareAnonThrottle, UserRateThrottle]
     throttle_scope = 'refresh'
 
     def post(self, request, *args, **kwargs):
@@ -236,7 +237,7 @@ class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
-    throttle_classes = [ScopedRateThrottle, AnonRateThrottle, UserRateThrottle]
+    throttle_classes = [ScopedRateThrottle, SsrAwareAnonThrottle, UserRateThrottle]
     throttle_scope = 'register'
 
     def create(self, request, *args, **kwargs):
@@ -338,7 +339,7 @@ class PasswordResetRequestView(APIView):
     permission_classes = [permissions.AllowAny]
     authentication_classes = []  # гость; чужая cookie-сессия не должна требовать CSRF
     parser_classes = [JSONParser]
-    throttle_classes = [ScopedRateThrottle, AnonRateThrottle]
+    throttle_classes = [ScopedRateThrottle, SsrAwareAnonThrottle]
     throttle_scope = 'password_reset'
 
     def post(self, request):
@@ -373,7 +374,7 @@ class PasswordResetConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
     parser_classes = [JSONParser]
-    throttle_classes = [ScopedRateThrottle, AnonRateThrottle]
+    throttle_classes = [ScopedRateThrottle, SsrAwareAnonThrottle]
     throttle_scope = 'password_reset'  # капчи нет: токен из письма - секрет и одноразовый
 
     def post(self, request):

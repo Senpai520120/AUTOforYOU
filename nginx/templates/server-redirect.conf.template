@@ -17,6 +17,9 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto https;
+        # 12.4: как в proxy-common.conf - X-SSR-* снаружи не пропускаем.
+        proxy_set_header X-SSR-Key "";
+        proxy_set_header X-SSR-Client-IP "";
         proxy_hide_header X-Frame-Options;
         proxy_hide_header X-Content-Type-Options;
         proxy_hide_header Referrer-Policy;

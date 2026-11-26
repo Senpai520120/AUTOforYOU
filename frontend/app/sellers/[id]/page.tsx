@@ -5,7 +5,7 @@ import LocalListingCard from '@/components/local/LocalListingCard';
 import EmptyState from '@/components/ui/EmptyState';
 import { sellerPath } from '@/api/sellers';
 import { INTERNAL_API_URL } from '@/lib/config.server';
-import { publicMedia } from '@/lib/server-api';
+import { publicMedia, ssrVisitorHeaders } from '@/lib/server-api';
 import { isC2CEnabled } from '@/lib/c2c';
 import { buildMetadata } from '@/lib/seo';
 import { SELLER_NOT_FOUND, VERIFIED_DEALER_LABEL, memberSinceLabel } from '@/lib/labels';
@@ -22,7 +22,7 @@ type Loaded = { kind: 'ok'; seller: SellerProfile } | { kind: 'not-found' } | { 
 async function loadSeller(id: string, page: number): Promise<Loaded> {
   if (!/^\d{1,10}$/.test(id)) return { kind: 'not-found' };
   try {
-    const res = await fetch(`${INTERNAL_API_URL}${sellerPath(id, page)}`, { cache: 'no-store' });
+    const res = await fetch(`${INTERNAL_API_URL}${sellerPath(id, page)}`, { headers: await ssrVisitorHeaders(), cache: 'no-store' });
     if (res.status === 404) return { kind: 'not-found' };
     if (!res.ok) return { kind: 'error' };
     return { kind: 'ok', seller: publicMedia((await res.json()) as SellerProfile) };

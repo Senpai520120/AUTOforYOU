@@ -5,7 +5,7 @@
  * у другому чесна помилка, а не порожній розрахунок. Кеш fetch — LANDING_REVALIDATE_SECONDS (.env).
  */
 import { INTERNAL_API_URL } from '@/lib/config.server';
-import { publicMedia } from '@/lib/server-api';
+import { publicMedia, ssrKeyHeaders } from '@/lib/server-api';
 import type { LandingDetail, LandingListItem } from '@/lib/types';
 
 const DEFAULT_REVALIDATE = 60;
@@ -26,6 +26,7 @@ export type LandingResult = { status: 'ok'; data: LandingDetail } | { status: 'n
 export async function getLanding(slug: string): Promise<LandingResult> {
   try {
     const res = await fetch(`${INTERNAL_API_URL}/api/v1/landings/${encodeURIComponent(slug)}/`, {
+      headers: ssrKeyHeaders(),
       next: { revalidate: landingRevalidate() },
     });
     if (res.status === 404) return { status: 'notfound' };
@@ -39,7 +40,7 @@ export async function getLanding(slug: string): Promise<LandingResult> {
 /** Опубліковані сторінки. null — API недоступне (sitemap і блоки не падають). */
 export async function getLandingList(revalidate = landingRevalidate()): Promise<LandingListItem[] | null> {
   try {
-    const res = await fetch(`${INTERNAL_API_URL}/api/v1/landings/`, { next: { revalidate } });
+    const res = await fetch(`${INTERNAL_API_URL}/api/v1/landings/`, { headers: ssrKeyHeaders(), next: { revalidate } });
     if (!res.ok) return null;
     const data = publicMedia((await res.json()) as { results: LandingListItem[] });
     return data.results;

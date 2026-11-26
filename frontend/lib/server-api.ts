@@ -10,8 +10,36 @@
  * INTERNAL_API_URL задається в Docker (http://backend:8000).
  */
 import { cache } from 'react';
-import { INTERNAL_API_URL as apiUrl } from '@/lib/config.server';
+import { INTERNAL_API_URL as apiUrl, SSR_INTERNAL_KEY } from '@/lib/config.server';
 import { API_URL } from '@/lib/config';
+
+/**
+ * Заголовки довіреного SSR-запиту (задача 12.4). Дві функції, бо заголовки входять у ключ fetch-кеша Next:
+ *
+ * - ssrKeyHeaders() — тільки ключ. Для кешованих запитів (fetchJson, лендінги, OG): без IP і без headers(),
+ *   тож кеш спільний для всіх відвідувачів і не росте з кожним IP. Backend рахує їх в окремому спільному
+ *   scope `ssr_shared` (високий ліміт).
+ * - ssrVisitorHeaders() — ключ + справжній IP відвідувача (x-real-ip ставить nginx). Тільки для no-store
+ *   запитів (serverGetAuthed, sellers/[id]): ліміт рахується по відвідувачу, кеш не страждає.
+ *
+ * Ключ не заданий або коротший за 32 символи — порожньо. Поза контекстом запиту IP немає — тільки ключ.
+ */
+export function ssrKeyHeaders(): Record<string, string> {
+  return SSR_INTERNAL_KEY.length < 32 ? {} : { 'X-SSR-Key': SSR_INTERNAL_KEY };
+}
+
+export async function ssrVisitorHeaders(): Promise<Record<string, string>> {
+  const headers = ssrKeyHeaders();
+  if (!headers['X-SSR-Key']) return headers;
+  try {
+    const { headers: requestHeaders } = await import('next/headers');
+    const ip = (await requestHeaders()).get('x-real-ip')?.trim();
+    if (ip) headers['X-SSR-Client-IP'] = ip;
+  } catch {
+    // немає контексту запиту
+  }
+  return headers;
+}
 
 const INTERNAL_MEDIA = `${apiUrl}/media/`;
 const PUBLIC_MEDIA = `${API_URL.replace(/\/+$/, '')}/media/`;
@@ -62,6 +90,7 @@ export const SERVER_FETCH_TIMEOUT_MS = 5000;
 const fetchJson = cache(async (path: string, revalidate: number): Promise<unknown> => {
   try {
     const res = await fetch(`${apiUrl}${path}`, {
+      headers: ssrKeyHeaders(),
       next: { revalidate },
       signal: AbortSignal.timeout(SERVER_FETCH_TIMEOUT_MS),
     });
@@ -100,7 +129,7 @@ export async function serverGetAuthed<T>(path: string): Promise<T | null> {
     // JWT — base64url і крапки; інше значення не підставляємо в заголовок.
     if (!access || !/^[\w.-]+$/.test(access)) return null;
     const res = await fetch(`${apiUrl}${path}`, {
-      headers: { Cookie: `${ACCESS_COOKIE}=${access}` },
+      headers: { Cookie: `${ACCESS_COOKIE}=${access}`, ...(await ssrVisitorHeaders()) },
       cache: 'no-store',
       signal: AbortSignal.timeout(SERVER_FETCH_TIMEOUT_MS),
     });
