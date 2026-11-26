@@ -1,0 +1,26 @@
+# Покрытие backend-тестов. CI: coverage run manage.py test && coverage report.
+# Порог fail_under - чуть ниже замера при введении (2026-11-26: 97.5%). Только поднимать (не опускать
+# ради зелёного CI: упал - значит новый код пришёл без тестов).
+[run]
+source = .
+branch = false
+omit =
+    */migrations/*
+    */tests/*
+    */tests.py
+    */test_*.py
+    tests/*
+    manage.py
+    core/asgi.py
+    core/wsgi.py
+    frontend/*
+    scripts/*
+    docs/*
+    .venv/*
+    */site-packages/*
+
+[report]
+fail_under = 97
+skip_empty = true
+show_missing = false
+precision = 1
