@@ -40,6 +40,7 @@ _SHELL_ARGS = 'параметр вызова скрипта из командн�
 _CONTAINER_INTERNAL = 'путь/имя внутри контейнера, задаётся Dockerfile или docker-compose.yml, менять не нужно'
 _NGINX_INTERNAL = 'внутренняя переменная entrypoint nginx (подстановка в шаблон), не настройка'
 _SERVER_SETUP = 'параметр server-setup.sh на сервере до появления .env, описан в DEPLOY_NOTES.md'
+_DEV_TOOLS = 'параметр dev-инструмента (scripts/mutation.sh, scripts/sonar.sh), не настройка сайта'
 
 SHELL_EXCLUDED = {}
 for _names, _reason in (
@@ -53,6 +54,8 @@ for _names, _reason in (
       'PGHOST', 'PGDATABASE', 'PORT', 'TZ'), _CONTAINER_INTERNAL),
     (('INTERNAL_HOST', 'NGINX_CONF_OUT', 'NGINX_GEN', 'NGINX_SRC', 'SERVER_NAMES', 'SSL_CERT_DIR', 'CSP_VALUE',
       'CSP_HEADER_NAME'), _NGINX_INTERNAL),
+    (('MUTATION_DIR', 'MUTATION_MAX_SURVIVAL', 'MUTATION_PORT_BASE', 'MUTATION_WORKERS', 'SONAR_HOST_URL',
+      'SONAR_TOKEN'), _DEV_TOOLS),
 ):
     for _name in _names:
         SHELL_EXCLUDED[_name] = _reason

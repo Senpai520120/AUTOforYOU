@@ -1,0 +1,18 @@
+# Мутационное тестирование (cosmic-ray), запуск: scripts/mutation.sh security
+[cosmic-ray]
+module-path = "core/security_settings.py"
+timeout = 300.0
+excluded-modules = []
+test-command = "python manage.py test --failfast core.tests_security_headers"
+
+[cosmic-ray.distributor]
+name = "local"
+
+# Бессмысленные для Decimal/str мутанты: битовые операции, **, %, // падают TypeError
+# сразу и только раздувают прогон. Сравнения ==/</> с is/is not — то же самое.
+[cosmic-ray.filters.operators-filter]
+exclude-operators = [
+    "core/ReplaceBinaryOperator_.*_(BitXor|BitOr|BitAnd|LShift|RShift|Pow|FloorDiv|Mod)$",
+    "core/ReplaceBinaryOperator_(Pow|Mod|FloorDiv)_.*",
+    "core/ReplaceComparisonOperator_(Eq|NotEq|Lt|LtE|Gt|GtE)_(Is|IsNot)$",
+]

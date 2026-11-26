@@ -1,0 +1,68 @@
+# Мутационное тестирование (cosmic-ray) критичных модулей. Долго (калькулятор - часы),
+# поэтому не на каждом PR: раз в неделю, вручную (Actions -> Mutation testing -> Run) и на PR,
+# которые меняют саму настройку мутаций (тогда только быстрый модуль security).
+# Локально: bash scripts/mutation.sh <calculator|security|liqpay>.
+name: Mutation testing
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"   # воскресенье 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      module:
+        description: "Модуль (all | calculator | security | liqpay)"
+        default: all
+  pull_request:
+    branches: [main]
+    paths:
+      - "mutation/**"
+      - "scripts/mutation.sh"
+      - ".github/workflows/mutation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    name: Mutation (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(github.event_name == 'pull_request' && '["security"]' || (github.event_name == 'workflow_dispatch' && inputs.module != 'all') && format('["{0}"]', inputs.module) || '["security","liqpay","calculator"]') }}
+    env:
+      LIQPAY_PUBLIC_KEY: dummy
+      LIQPAY_PRIVATE_KEY: dummy
+      # Порог выживших мутантов, % (2026-11-26: calculator 11.6, security 0, liqpay 0).
+      # Поднимать планку - снижать число.
+      MUTATION_MAX_SURVIVAL: "15"
+      # У раннера ubuntu-latest 4 vCPU: 4 воркера, каждый в своей копии репо.
+      MUTATION_WORKERS: "4"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install cosmic-ray==8.9.0
+      - name: Run cosmic-ray
+        env:
+          MODULE: ${{ matrix.module }}
+        run: bash scripts/mutation.sh "$MODULE"
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-${{ matrix.module }}
+          path: .mutation/${{ matrix.module }}.html
+          if-no-files-found: ignore
+          retention-days: 30

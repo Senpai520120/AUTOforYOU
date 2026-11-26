@@ -90,3 +90,6 @@ infra/terraform/.terraform/
 *.tfstate
 *.tfstate.*
 infra/terraform/terraform.tfvars
+.mutation/
+coverage.xml
+.scannerwork/
