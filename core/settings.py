@@ -835,6 +835,20 @@ from core.security_settings import build_security_settings, csrf_origins_from_si
 
 _security = build_security_settings(os.environ, debug=DEBUG, testing=_TESTING, auth_cookie_secure=AUTH_COOKIE_SECURE)
 globals().update(_security)
+# Осознанно заглушённые проверки (CI гоняет check --deploy --fail-level WARNING):
+# - security.W005/W021: HSTS includeSubDomains и preload выключены по умолчанию до решения
+#   владельца (аудит 01-S18: preload почти необратим для домена). Включаются флагами
+#   HSTS_INCLUDE_SUBDOMAINS / HSTS_PRELOAD в .env.
+# - drf_spectacular.W001/W002: качество OpenAPI-схемы (коллизии имён enum, APIView без
+#   serializer_class), не безопасность.
+#   Схему стережёт шаг CI «OpenAPI schema is up to date», команда spectacular печатает их сама.
+SILENCED_SYSTEM_CHECKS = [
+    *_security.get('SILENCED_SYSTEM_CHECKS', []),
+    'security.W005',
+    'security.W021',
+    'drf_spectacular.W001',
+    'drf_spectacular.W002',
+]
 # CSRF_TRUSTED_ORIGINS не задан явно - собираем из DOMAIN/SITE_URL (нужно /admin/ по https за прокси).
 if not DEBUG and not _TESTING and not os.environ.get('CSRF_TRUSTED_ORIGINS', '').strip():
     CSRF_TRUSTED_ORIGINS = csrf_origins_from_site(

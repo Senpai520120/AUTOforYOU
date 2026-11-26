@@ -66,12 +66,35 @@ jobs:
           ruff check .
       - name: Django system check
         run: python manage.py check
+      # Прод-подобное окружение: DEBUG=false, TLS как на сервере (letsencrypt).
+      # Предупреждение = падение. Осознанно заглушённые проверки - SILENCED_SYSTEM_CHECKS
+      # в core/settings.py с объяснением. Redis здесь не нужен: проверка смотрит только
+      # на тип кэша, без подключения. Ключи Turnstile - фиктивные, не тестовые Cloudflare.
+      # NUM_PROXIES=0: без SSR_INTERNAL_KEY за прокси ловился бы core.W001 (задача 12.4).
+      - name: Django deploy check (prod-like settings)
+        env:
+          DEBUG: "false"
+          SECRET_KEY: ci-deploy-check-key-long-enough-and-random-0f6c2b9e4d7a1835
+          ALLOWED_HOSTS: example.com,www.example.com
+          DOMAIN: example.com
+          SITE_URL: https://example.com
+          TLS_MODE: letsencrypt
+          NUM_PROXIES: "0"
+          REDIS_URL: redis://localhost:6379/0
+          TURNSTILE_SITE_KEY: ci-deploy-check-site-key
+          TURNSTILE_SECRET_KEY: ci-deploy-check-secret-key
+        run: python manage.py check --deploy --fail-level WARNING
       - name: Missing migrations check
         run: python manage.py makemigrations --check --dry-run
       - name: Run migrations
         run: python manage.py migrate --no-input
-      - name: Run tests
-        run: python manage.py test --verbosity=2
+      # Порог покрытия - fail_under в .coveragerc.
+      - name: Run tests with coverage
+        run: |
+          pip install coverage==7.16.0
+          coverage run manage.py test --verbosity=2
+      - name: Coverage threshold
+        run: coverage report
 
       # openapi.yaml отставал от кода: описывал 13 путей из 60 и версию 1.0.0
       # вместо 2.0.0. Проверка не даёт схеме разъехаться снова.
