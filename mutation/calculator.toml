@@ -3,7 +3,7 @@
 module-path = "pricing/calculator.py"
 timeout = 300.0
 excluded-modules = []
-test-command = "python manage.py test --failfast pricing.tests pricing.tests_correctness pricing.tests_fee_tables pricing.tests_fee_options pricing.tests_hybrid_excise pricing.tests_review_1116 pricing.tests_ua_delivery pricing.tests_resilience pricing.tests_mutation_survivors"
+test-command = "python manage.py test --failfast pricing.tests pricing.tests_correctness pricing.tests_fee_tables pricing.tests_fee_options pricing.tests_hybrid_excise pricing.tests_review_1116 pricing.tests_ua_delivery pricing.tests_resilience pricing.tests_mutation_survivors pricing.tests_calc_options_mutation"
 
 [cosmic-ray.distributor]
 name = "local"
