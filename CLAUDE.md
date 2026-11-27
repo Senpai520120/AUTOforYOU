@@ -82,7 +82,7 @@ Python 3.12, Django 6.x, DRF, SimpleJWT, Pillow, PostgreSQL (sqlite3 в dev), CO
 - Каждый новый/исправленный тест проверяется мутацией: сломать код — тест красный — откатить.
 - На каждый эндпоинт с личными данными — тесты 401 (аноним) и 403/404 (чужой), бриф §3.
 - Для функций без UI — Django-тесты с моками внешних API (бриф §5 п. 3).
-- Мутации (cosmic-ray): `bash scripts/mutation.sh <calculator|security|liqpay>` (`MUTATION_WORKERS=N` - параллельно), в CI - `mutation.yml` раз в неделю. Эквивалентный мутант - переписать строку без эквивалентной формы, а не глушить.
+- Мутации (cosmic-ray): `bash scripts/mutation.sh <конфиг>`, конфиги - `mutation/*.toml` (калькулятор, security_settings, LiqPay-клиент и колбэк, платежи, доступ/блокировка входа, SSO, сделки, антиспам, права подачи). `MUTATION_WORKERS=N` - параллельно (копии вне репо), в CI - `mutation.yml` раз в неделю. Тесты против выживших - `tests_mutation_survivors.py`/`tests_*_mutation.py` рядом с модулем. Эквивалентный мутант (строки-перечисления `==` vs `<=`, вторая линия защиты) перечислить в PR; переписать строку - только если это проще и не трогает деньги/права.
 - SonarQube локально (контейнер `sonarqube`, :9000): `SONAR_TOKEN=… bash scripts/sonar.sh`, выжившие мутанты - через `scripts/mutation_to_sonar.py`.
 - Хуки pre-commit/pre-push стоят (`requirements-dev.txt`, `.pre-commit-config.yaml`, `scripts/hooks/`): ruff, check, миграции, LF, eslint, tsc.
 - Агенты не используют `--no-verify`: упал хук — чинить причину.

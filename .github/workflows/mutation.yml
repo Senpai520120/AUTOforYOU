@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       module:
-        description: "Модуль (all | calculator | security | liqpay)"
+        description: "Модуль (all | calculator | security | liqpay | payments | access | deals | antispam | sso | callback | posting)"
         default: all
   pull_request:
     branches: [main]
@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: ${{ fromJSON(github.event_name == 'pull_request' && '["security"]' || (github.event_name == 'workflow_dispatch' && inputs.module != 'all') && format('["{0}"]', inputs.module) || '["security","liqpay","calculator"]') }}
+        module: ${{ fromJSON(github.event_name == 'pull_request' && '["security"]' || (github.event_name == 'workflow_dispatch' && inputs.module != 'all') && format('["{0}"]', inputs.module) || '["security","liqpay","calculator","payments","access","deals","antispam","sso","callback","posting"]') }}
     env:
       LIQPAY_PUBLIC_KEY: dummy
       LIQPAY_PRIVATE_KEY: dummy

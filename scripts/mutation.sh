@@ -15,18 +15,19 @@
 # Отчёт: .mutation/<name>.html. Окружение - как у тестов (CLAUDE.md).
 set -euo pipefail
 
-name="${1:?Укажите модуль: calculator | security | liqpay}"
+name="${1:?Укажите модуль: имя конфига из mutation/ (calculator, security, liqpay, payments, access, deals, antispam, sso, callback, posting)}"
 cfg="mutation/${name}.toml"
 [ -f "$cfg" ] || { echo "Нет конфига $cfg" >&2; exit 2; }
 
-module="$(sed -n 's/^module-path = "\(.*\)"/\1/p' "$cfg")"
+# module-path - строка или список: все пути в кавычках из этой строки.
+read -r -a modules <<< "$(grep '^module-path' "$cfg" | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ' ')"
 out="${MUTATION_DIR:-.mutation}"
 db="${out}/${name}.sqlite"
 workers="${MUTATION_WORKERS:-1}"
 mkdir -p "$out"
 
-if ! git diff --quiet -- "$module" || ! git diff --cached --quiet -- "$module"; then
-    echo "В $module есть незакоммиченные правки: cosmic-ray мутирует файл на месте. Закоммитьте их." >&2
+if ! git diff --quiet -- "${modules[@]}" || ! git diff --cached --quiet -- "${modules[@]}"; then
+    echo "В ${modules[*]} есть незакоммиченные правки: cosmic-ray мутирует файл на месте. Закоммитьте их." >&2
     exit 2
 fi
 
@@ -37,12 +38,17 @@ export DATABASE_URL="" REDIS_URL="" TELEGRAM_BOT_TOKEN=""
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 
 worker_pids=()
+# Копии воркеров - вне проекта: тесты, сканирующие репозиторий (test_bot_constructed_only_in_provider,
+# шаблоны .env), иначе находят в них «лишние» файлы и роняют baseline.
+wdir="$(mktemp -d "${TMPDIR:-/tmp}/afy-mutation-XXXXXX")"
 cleanup() {
     for pid in "${worker_pids[@]:-}"; do [ -n "$pid" ] && kill "$pid" 2>/dev/null || true; done
     for i in $(seq 1 "$workers"); do
-        [ -d "${out}/workers/w${i}" ] && git worktree remove --force "${out}/workers/w${i}" 2>/dev/null || true
+        [ -d "${wdir}/w${i}" ] && git worktree remove --force "${wdir}/w${i}" 2>/dev/null || true
     done
-    git checkout -- "$module"
+    git checkout -- "${modules[@]}"
+    git worktree prune
+    rm -rf "$wdir"
 }
 trap cleanup EXIT
 
@@ -59,8 +65,8 @@ if [ "$workers" -gt 1 ]; then
     urls=""
     for i in $(seq 1 "$workers"); do
         port=$((${MUTATION_PORT_BASE:-9800} + i))
-        git worktree add --force --detach "${out}/workers/w${i}" HEAD > /dev/null
-        (cd "${out}/workers/w${i}" && exec cosmic-ray http-worker --port "$port") > "${out}/worker${i}.log" 2>&1 &
+        git worktree add --force --detach "${wdir}/w${i}" HEAD > /dev/null
+        (cd "${wdir}/w${i}" && exec cosmic-ray http-worker --port "$port") > "${out}/worker${i}.log" 2>&1 &
         worker_pids+=("$!")
         urls="${urls:+${urls}, }\"http://127.0.0.1:${port}\""
     done

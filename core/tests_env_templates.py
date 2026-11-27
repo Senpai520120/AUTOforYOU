@@ -55,7 +55,7 @@ for _names, _reason in (
     (('INTERNAL_HOST', 'NGINX_CONF_OUT', 'NGINX_GEN', 'NGINX_SRC', 'SERVER_NAMES', 'SSL_CERT_DIR', 'CSP_VALUE',
       'CSP_HEADER_NAME'), _NGINX_INTERNAL),
     (('MUTATION_DIR', 'MUTATION_MAX_SURVIVAL', 'MUTATION_PORT_BASE', 'MUTATION_WORKERS', 'SONAR_HOST_URL',
-      'SONAR_TOKEN'), _DEV_TOOLS),
+      'SONAR_TOKEN', 'TMPDIR'), _DEV_TOOLS),
 ):
     for _name in _names:
         SHELL_EXCLUDED[_name] = _reason
